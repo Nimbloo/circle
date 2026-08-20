@@ -3,7 +3,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ActivityItem } from '@/mock-data/issue-details';
-import { useWorkspaceStore } from '@/store/workspace-store';
+import { api } from '@/lib/client';
 import {
    Ban,
    CircleDot,
@@ -17,6 +17,7 @@ import {
    Unlock,
 } from 'lucide-react';
 import { ReactNode, useState } from 'react';
+import { toast } from 'sonner';
 import { ContentBlocks } from './content-blocks';
 
 const EVENT_ICONS: Record<string, ReactNode> = {
@@ -77,29 +78,36 @@ function CommentCard({ item }: { item: Extract<ActivityItem, { kind: 'comment' }
 }
 
 /**
- * Issue activity: interleaved events and comments, plus a local
- * comment composer (comments are kept in memory only).
+ * Issue activity: interleaved events and comments, plus a comment composer
+ * que persiste via api.issues.addComment; após o POST o pai refetch o detail
+ * (`onCommentAdded`), então o feed reflete o comentário real.
  */
-export function ActivityFeed({ activity }: { activity: ActivityItem[] }) {
-   const [items, setItems] = useState<ActivityItem[]>(activity);
+export function ActivityFeed({
+   activity,
+   issueId,
+   onCommentAdded,
+}: {
+   activity: ActivityItem[];
+   issueId?: string;
+   onCommentAdded?: () => void;
+}) {
    const [draft, setDraft] = useState('');
-   const users = useWorkspaceStore((s) => s.users);
-   const currentUser = users[0];
+   const [submitting, setSubmitting] = useState(false);
+   const items = activity;
 
-   const submitComment = () => {
+   const submitComment = async () => {
       const text = draft.trim();
-      if (!text) return;
-      setItems((previous) => [
-         ...previous,
-         {
-            kind: 'comment',
-            id: `local-${previous.length}`,
-            actor: currentUser,
-            timeAgo: 'just now',
-            body: [{ type: 'paragraph', text }],
-         },
-      ]);
-      setDraft('');
+      if (!text || !issueId || submitting) return;
+      setSubmitting(true);
+      try {
+         await api.issues.addComment(issueId, text);
+         setDraft('');
+         onCommentAdded?.();
+      } catch {
+         toast.error('Could not post the comment');
+      } finally {
+         setSubmitting(false);
+      }
    };
 
    return (
@@ -128,17 +136,22 @@ export function ActivityFeed({ activity }: { activity: ActivityItem[] }) {
                onChange={(event) => setDraft(event.target.value)}
                onKeyDown={(event) => {
                   if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-                     submitComment();
+                     void submitComment();
                   }
                }}
                placeholder="Leave a comment..."
                rows={2}
-               className="w-full resize-none bg-transparent outline-none text-sm placeholder:text-muted-foreground"
+               disabled={submitting}
+               className="w-full resize-none bg-transparent outline-none text-sm placeholder:text-muted-foreground disabled:opacity-60"
             />
             <div className="flex items-center justify-between">
                <Plus className="size-4 text-muted-foreground" />
-               <Button size="xs" onClick={submitComment} disabled={!draft.trim()}>
-                  Comment
+               <Button
+                  size="xs"
+                  onClick={() => void submitComment()}
+                  disabled={!draft.trim() || submitting || !issueId}
+               >
+                  {submitting ? 'Posting…' : 'Comment'}
                </Button>
             </div>
          </div>

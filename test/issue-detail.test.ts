@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { makeTestDb } from './helpers/db';
-import { seedTeam } from './helpers/fixtures';
+import { seedTeam, seedUser } from './helpers/fixtures';
+import { listInbox } from '@/lib/api/notifications';
 import { createIssue } from '@/lib/api/issues';
 import {
    getIssueDetail,
@@ -60,6 +61,20 @@ describe('issue detail / comments / activity', () => {
       // pelo menos: 1 evento "created" + 1 comment
       expect(feed.some((f) => f.kind === 'event' && f.event === 'created')).toBe(true);
       expect(feed.some((f) => f.kind === 'comment')).toBe(true);
+   });
+
+   it('notifies mentioned users (@slug) in a comment', async () => {
+      const db = await makeTestDb();
+      await seedTeam(db, 'CORE');
+      const bob = await seedUser(db, { name: 'Bob', email: 'bob@nimbloo.ai' });
+      const issue = await createIssue(
+         db,
+         { teamId: 'CORE', title: 'X', statusId: 'to-do', priorityId: 'low' },
+         ME
+      );
+      await addComment(db, issue.id, 'oi @bob pode revisar?', ME);
+      const inbox = await listInbox(db, bob);
+      expect(inbox.some((n) => n.type === 'mention')).toBe(true);
    });
 
    it('adds and removes relations by kind (sub/related/blocked_by)', async () => {

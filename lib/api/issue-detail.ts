@@ -193,13 +193,33 @@ export async function addComment(
    const now = new Date();
    await db.insert(commentT).values({ id, issueId, authorId: author.id, body, createdAt: now });
 
-   // Notifica o responsável da issue (se não for o próprio autor do comentário)
+   // @mentions: resolve os slugs (prefixo do e-mail) citados no corpo e notifica.
+   const slugs = [
+      ...new Set((body.match(/@([a-z0-9._-]+)/gi) ?? []).map((m) => m.slice(1).toLowerCase())),
+   ];
+   const mentioned = slugs.length
+      ? await db.select().from(appUser).where(inArray(appUser.slug, slugs))
+      : [];
+   const mentionedIds = new Set<string>();
+   for (const u of mentioned) {
+      if (u.id === author.id) continue;
+      mentionedIds.add(u.id);
+      await dispatchNotification(db, {
+         type: 'mention',
+         issueId,
+         recipientId: u.id,
+         actorId: author.id,
+         content: `${author.name} mencionou você em um comentário`,
+      });
+   }
+
+   // Notifica o responsável (se não for o próprio autor nem já mencionado acima)
    const [iss] = await db
       .select({ assigneeId: issueT.assigneeId })
       .from(issueT)
       .where(eq(issueT.id, issueId))
       .limit(1);
-   if (iss?.assigneeId && iss.assigneeId !== author.id) {
+   if (iss?.assigneeId && iss.assigneeId !== author.id && !mentionedIds.has(iss.assigneeId)) {
       await dispatchNotification(db, {
          type: 'comment',
          issueId,
