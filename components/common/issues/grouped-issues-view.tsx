@@ -7,12 +7,14 @@ import { priorities } from '@/mock-data/priorities';
 import { Status } from '@/mock-data/status';
 import { useDisplaySettingsStore } from '@/store/display-settings-store';
 import { useFilterStore } from '@/store/filter-store';
+import { useBulkSelectionStore } from '@/store/bulk-selection-store';
 import { Box, ChevronDown, User, X } from 'lucide-react';
-import { FC, useMemo, useState } from 'react';
+import { FC, useEffect, useMemo, useState } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { GroupIssues, IssueGroupDescriptor } from './group-issues';
 import { CustomDragLayer } from './issue-grid';
+import { BulkActionsBar } from './bulk-actions-bar';
 
 interface GroupedIssuesViewProps {
    /** Issues to display (after the filter bar has been applied). */
@@ -132,6 +134,10 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
    const { grouping, ordering, completedIssues, showEmptyGroups } = useDisplaySettingsStore();
    const { filters } = useFilterStore();
    const hasActiveFilters = filters.length > 0;
+
+   // Limpa a seleção em lote ao desmontar (troca de view).
+   const clearSelection = useBulkSelectionStore((s) => s.clear);
+   useEffect(() => () => clearSelection(), [clearSelection]);
 
    const groups = useMemo<GroupEntry[]>(() => {
       const hideDone = (list: Issue[]) =>
@@ -253,11 +259,14 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
       const boardGroups = hasActiveFilters
          ? groups.filter((entry) => entry.issues.length > 0)
          : groups.filter((entry) => showEmptyGroups || entry.issues.length > 0);
-      const hiddenGroups = hasActiveFilters ? groups.filter((entry) => entry.issues.length === 0) : [];
+      const hiddenGroups = hasActiveFilters
+         ? groups.filter((entry) => entry.issues.length === 0)
+         : [];
 
       return (
          <DndProvider backend={HTML5Backend}>
             <CustomDragLayer />
+            <BulkActionsBar />
             <div className="h-full flex flex-col">
                <div className="flex-1 min-h-0 overflow-x-auto">
                   <div className="flex h-full gap-3 px-2 py-2 min-w-max">
@@ -293,6 +302,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
    return (
       <DndProvider backend={HTML5Backend}>
          <CustomDragLayer />
+         <BulkActionsBar />
          <div className="h-full overflow-y-auto">
             {listGroups.length === 0 && !showFooter && (
                <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">

@@ -3,6 +3,9 @@
 import { Issue } from '@/mock-data/issues';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useDisplaySettingsStore } from '@/store/display-settings-store';
+import { useBulkSelectionStore } from '@/store/bulk-selection-store';
+import { cn } from '@/lib/utils';
+import { Check } from 'lucide-react';
 import { format } from 'date-fns';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -21,14 +24,35 @@ export function IssueLine({ issue, layoutId = false }: { issue: Issue; layoutId?
    const { displayProperties } = useDisplaySettingsStore();
    const getCycleById = useWorkspaceStore((s) => s.getCycleById);
    const cycle = displayProperties.cycle && issue.cycleId ? getCycleById(issue.cycleId) : undefined;
+   const selected = useBulkSelectionStore((s) => s.selected.has(issue.id));
+   const anySelected = useBulkSelectionStore((s) => s.selected.size > 0);
+   const toggleSelected = useBulkSelectionStore((s) => s.toggle);
 
    return (
       <ContextMenu>
          <ContextMenuTrigger asChild>
             <motion.div
                {...(layoutId && { layoutId: `issue-line-${issue.identifier}` })}
-               className="w-full flex items-center justify-start h-11 px-6 hover:bg-sidebar/50"
+               className={cn(
+                  'group/line w-full flex items-center justify-start h-11 px-6 hover:bg-sidebar/50',
+                  selected && 'bg-primary/5'
+               )}
             >
+               <button
+                  type="button"
+                  onClick={() => toggleSelected(issue.id)}
+                  aria-label={selected ? 'Deselect issue' : 'Select issue'}
+                  aria-pressed={selected}
+                  className={cn(
+                     'mr-1.5 shrink-0 size-4 rounded border flex items-center justify-center transition-opacity',
+                     selected
+                        ? 'bg-primary border-primary text-primary-foreground opacity-100'
+                        : 'border-border text-transparent opacity-0 group-hover/line:opacity-100',
+                     anySelected && 'opacity-100'
+                  )}
+               >
+                  <Check className="size-3" />
+               </button>
                <div className="flex items-center gap-0.5">
                   {displayProperties.priority && (
                      <PrioritySelector priority={issue.priority} issueId={issue.id} />

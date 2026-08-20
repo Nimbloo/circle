@@ -61,8 +61,15 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
       removeIssueLabel,
       updateIssueProject,
       updateIssue,
+      deleteIssue,
       getIssueById,
    } = useIssuesStore();
+
+   const handleDelete = () => {
+      if (!issueId) return;
+      deleteIssue(issueId);
+      toast.success('Issue deleted');
+   };
 
    const handleStatusChange = (statusId: string) => {
       if (!issueId) return;
@@ -348,7 +355,7 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
 
          <ContextMenuSeparator />
 
-         <ContextMenuItem variant="destructive">
+         <ContextMenuItem variant="destructive" onClick={handleDelete}>
             <Trash2 className="size-4" /> Delete...
             <ContextMenuShortcut>⌘⌫</ContextMenuShortcut>
          </ContextMenuItem>
