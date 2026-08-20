@@ -1,11 +1,13 @@
 'use client';
 
-import { getIssueDetail } from '@/mock-data/issue-details';
+import type { IssueDetail } from '@/mock-data/issue-details';
+import { adaptIssueDetail } from '@/lib/adapters-issue-detail';
+import { api } from '@/lib/client';
 import { useIssuesStore } from '@/store/issues-store';
 import { Paperclip, Plus, SmilePlus } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AssigneeUser } from '../assignee-user';
 import { ActivityFeed } from './activity-feed';
 import { ContentBlocks } from './content-blocks';
@@ -24,9 +26,29 @@ export default function IssueDetails() {
       [issues, issueId]
    );
 
-   const detail = useMemo(() => (issue ? getIssueDetail(issue) : null), [issue]);
+   const [detail, setDetail] = useState<IssueDetail | null>(null);
+   const [loading, setLoading] = useState(true);
 
-   if (!issue || !detail) {
+   useEffect(() => {
+      if (!issue) return;
+      let active = true;
+      setLoading(true);
+      Promise.all([api.issues.detail(issue.id), api.issues.activity(issue.id)])
+         .then(([detailDto, activity]) => {
+            if (active) setDetail(adaptIssueDetail(detailDto, activity));
+         })
+         .catch(() => {
+            if (active) setDetail(null);
+         })
+         .finally(() => {
+            if (active) setLoading(false);
+         });
+      return () => {
+         active = false;
+      };
+   }, [issue]);
+
+   if (!issue) {
       return (
          <div className="flex flex-col items-center justify-center h-full gap-2 text-sm text-muted-foreground">
             <p>Issue {issueId} not found.</p>
@@ -37,8 +59,16 @@ export default function IssueDetails() {
       );
    }
 
+   if (loading || !detail) {
+      return (
+         <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+            {loading ? 'Loading…' : 'Could not load issue details.'}
+         </div>
+      );
+   }
+
    const subIssues = (detail.subIssueIds ?? [])
-      .map((identifier) => issues.find((candidate) => candidate.identifier === identifier))
+      .map((id) => issues.find((candidate) => candidate.id === id))
       .filter((candidate) => candidate !== undefined);
 
    return (

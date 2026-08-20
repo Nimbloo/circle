@@ -240,12 +240,15 @@ export { ImagePlaceholder, VideoPlaceholder };
 export function IssueRefRow({ identifier }: { identifier: string }) {
    const { orgId } = useParams<{ orgId: string }>();
    const { issues } = useIssuesStore();
-   const issue = issues.find((candidate) => candidate.identifier === identifier);
+   // `identifier` pode vir como id (relações da API) ou como identifier (blocos de texto).
+   const issue = issues.find(
+      (candidate) => candidate.id === identifier || candidate.identifier === identifier
+   );
    if (!issue) return null;
 
    return (
       <Link
-         href={`/${orgId ?? 'lndev-ui'}/issue/${identifier}`}
+         href={`/${orgId ?? 'lndev-ui'}/issue/${issue.identifier}`}
          className="flex items-center gap-2 py-1 text-sm hover:bg-sidebar/50 rounded px-1.5 -mx-1.5 min-w-0"
       >
          <issue.status.icon />

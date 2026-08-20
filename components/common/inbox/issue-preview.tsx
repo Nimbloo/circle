@@ -7,13 +7,16 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { getNotificationIcon } from '@/lib/notification-utils';
-import { getIssueDetail } from '@/mock-data/issue-details';
+import type { IssueDetail } from '@/mock-data/issue-details';
+import { adaptIssueDetail } from '@/lib/adapters-issue-detail';
+import { api } from '@/lib/client';
 import { InboxItem } from '@/mock-data/inbox';
 import { useIssuesStore } from '@/store/issues-store';
 import { useNotificationsStore } from '@/store/notifications-store';
 import { ArrowUpRight, Check, Paperclip, Send } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { NotificationBox } from './icons/motification-box';
 
 interface IssuePreviewProps {
@@ -30,6 +33,31 @@ export default function IssuePreview({ notification, onMarkAsRead }: IssuePrevie
    const { orgId } = useParams<{ orgId: string }>();
    const { getUnreadCount } = useNotificationsStore();
    const { issues } = useIssuesStore();
+
+   // Issue viva atrás da notificação (para status/assignee/labels em tempo real).
+   const issue = notification
+      ? issues.find((candidate) => candidate.identifier === notification.identifier)
+      : undefined;
+   const issueDetailId = issue?.id;
+
+   const [detail, setDetail] = useState<IssueDetail | null>(null);
+   useEffect(() => {
+      if (!issueDetailId) {
+         setDetail(null);
+         return;
+      }
+      let active = true;
+      Promise.all([api.issues.detail(issueDetailId), api.issues.activity(issueDetailId)])
+         .then(([detailDto, activity]) => {
+            if (active) setDetail(adaptIssueDetail(detailDto, activity));
+         })
+         .catch(() => {
+            if (active) setDetail(null);
+         });
+      return () => {
+         active = false;
+      };
+   }, [issueDetailId]);
 
    if (!notification) {
       const unreadCount = getUnreadCount();
@@ -48,9 +76,7 @@ export default function IssuePreview({ notification, onMarkAsRead }: IssuePrevie
    }
 
    // Live issue from the store (falls back to the notification snapshot).
-   const issue = issues.find((candidate) => candidate.identifier === notification.identifier);
    const displayIssue = issue ?? notification;
-   const detail = getIssueDetail(displayIssue);
 
    return (
       <div className="flex flex-col h-full overflow-hidden">
@@ -142,7 +168,7 @@ export default function IssuePreview({ notification, onMarkAsRead }: IssuePrevie
 
                   {/* Real description */}
                   <div className="mt-6">
-                     <ContentBlocks blocks={detail.description} />
+                     <ContentBlocks blocks={detail?.description ?? []} />
                   </div>
 
                   {/* Comment composer */}
@@ -164,7 +190,7 @@ export default function IssuePreview({ notification, onMarkAsRead }: IssuePrevie
                </div>
             </div>
 
-            {issue && (
+            {issue && detail && (
                <aside className="hidden xl:block w-64 shrink-0 border-l overflow-y-auto bg-container px-4 py-5">
                   <IssuePropertiesPanel issue={issue} detail={detail} />
                </aside>
