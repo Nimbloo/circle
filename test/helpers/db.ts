@@ -11,8 +11,9 @@ import { seedCatalogs } from '@/db/seed-catalogs';
  */
 export async function makeTestDb(withCatalogs = true): Promise<Db> {
    const client = new PGlite();
-   const db = drizzle(client, { schema }) as unknown as Db;
-   await migrate(db, { migrationsFolder: './db/migrations' });
+   const pgliteDb = drizzle(client, { schema });
+   await migrate(pgliteDb, { migrationsFolder: './db/migrations' });
+   const db = pgliteDb as unknown as Db;
    if (withCatalogs) {
       await seedCatalogs(db);
    }
