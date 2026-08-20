@@ -1,20 +1,26 @@
 'use client';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
 import { ActivityItem } from '@/mock-data/issue-details';
+import { api } from '@/lib/client';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { CommentComposer } from './comment-composer';
 import {
    Ban,
    CircleDot,
    GitPullRequestArrow,
    Link2,
+   Pencil,
    PenLine,
    RefreshCcw,
    SmilePlus,
    Tag,
+   Trash2,
    Unlock,
 } from 'lucide-react';
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
+import { toast } from 'sonner';
 import { ContentBlocks } from './content-blocks';
 
 const EVENT_ICONS: Record<string, ReactNode> = {
@@ -43,9 +49,61 @@ function EventRow({ item }: { item: Extract<ActivityItem, { kind: 'event' }> }) 
    );
 }
 
-function CommentCard({ item }: { item: Extract<ActivityItem, { kind: 'comment' }> }) {
+/** Junta os parágrafos de um comentário em texto plano (para edição). */
+function blocksToText(blocks: Extract<ActivityItem, { kind: 'comment' }>['body']): string {
+   return blocks
+      .map((b) => (b.type === 'paragraph' ? b.text : ''))
+      .filter(Boolean)
+      .join('\n\n');
+}
+
+function CommentCard({
+   item,
+   canManage,
+   onChanged,
+}: {
+   item: Extract<ActivityItem, { kind: 'comment' }>;
+   canManage: boolean;
+   onChanged?: () => void;
+}) {
+   const [editing, setEditing] = useState(false);
+   const [draft, setDraft] = useState('');
+   const [busy, setBusy] = useState(false);
+
+   const startEdit = () => {
+      setDraft(blocksToText(item.body));
+      setEditing(true);
+   };
+
+   const save = async () => {
+      const text = draft.trim();
+      if (!text || busy) return;
+      setBusy(true);
+      try {
+         await api.comments.update(item.id, text);
+         setEditing(false);
+         onChanged?.();
+      } catch {
+         toast.error('Could not save the comment');
+      } finally {
+         setBusy(false);
+      }
+   };
+
+   const remove = async () => {
+      setBusy(true);
+      try {
+         await api.comments.remove(item.id);
+         onChanged?.();
+      } catch {
+         toast.error('Could not delete the comment');
+      } finally {
+         setBusy(false);
+      }
+   };
+
    return (
-      <div className="my-2 rounded-lg border border-border/60 bg-container p-3.5">
+      <div className="group/comment my-2 rounded-lg border border-border/60 bg-container p-3.5">
          <div className="flex items-center gap-2 mb-1.5">
             <Avatar className="size-5">
                <AvatarImage src={item.actor.avatarUrl} alt={item.actor.name} />
@@ -53,10 +111,58 @@ function CommentCard({ item }: { item: Extract<ActivityItem, { kind: 'comment' }
             </Avatar>
             <span className="text-sm font-medium">{item.actor.name}</span>
             <span className="text-xs text-muted-foreground">{item.timeAgo}</span>
+            {canManage && !editing && (
+               <div className="ml-auto flex items-center gap-1 opacity-0 group-hover/comment:opacity-100">
+                  <button
+                     type="button"
+                     onClick={startEdit}
+                     aria-label="Edit comment"
+                     className="text-muted-foreground hover:text-foreground"
+                  >
+                     <Pencil className="size-3.5" />
+                  </button>
+                  <button
+                     type="button"
+                     onClick={() => void remove()}
+                     disabled={busy}
+                     aria-label="Delete comment"
+                     className="text-muted-foreground hover:text-red-500 disabled:opacity-40"
+                  >
+                     <Trash2 className="size-3.5" />
+                  </button>
+               </div>
+            )}
          </div>
-         <div className="text-sm [&_p]:my-1.5">
-            <ContentBlocks blocks={item.body} />
-         </div>
+
+         {editing ? (
+            <div className="flex flex-col gap-2">
+               <textarea
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  rows={2}
+                  disabled={busy}
+                  className="w-full resize-none rounded-md border bg-transparent p-2 text-sm outline-none focus:ring-1 focus:ring-accent disabled:opacity-60"
+               />
+               <div className="flex items-center justify-end gap-2">
+                  <Button
+                     size="xs"
+                     variant="ghost"
+                     onClick={() => setEditing(false)}
+                     disabled={busy}
+                  >
+                     Cancel
+                  </Button>
+                  <Button size="xs" onClick={() => void save()} disabled={!draft.trim() || busy}>
+                     Save
+                  </Button>
+               </div>
+            </div>
+         ) : (
+            <div className="text-sm [&_p]:my-1.5">
+               <ContentBlocks blocks={item.body} />
+            </div>
+         )}
+
          <div className="flex items-center gap-1.5 mt-1">
             {item.reactions?.map((reaction) => (
                <span
@@ -89,6 +195,7 @@ export function ActivityFeed({
    onCommentAdded?: () => void;
 }) {
    const items = activity;
+   const meId = useWorkspaceStore((s) => s.me?.id);
 
    return (
       <div className="mt-10">
@@ -104,7 +211,12 @@ export function ActivityFeed({
                item.kind === 'event' ? (
                   <EventRow key={item.id} item={item} />
                ) : (
-                  <CommentCard key={item.id} item={item} />
+                  <CommentCard
+                     key={item.id}
+                     item={item}
+                     canManage={!!meId && item.actor.id === meId}
+                     onChanged={onCommentAdded}
+                  />
                )
             )}
          </div>
