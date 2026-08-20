@@ -16,6 +16,7 @@ import {
 import { getOrCreateUser } from './users';
 import { rankAfter, firstRank, rankBetween } from './rank';
 import { ApiError } from './errors';
+import { dispatchNotification } from './notify';
 
 // ── Tipos de DTO (espelham o tipo Issue do frontend) ────────────────
 type StatusRow = typeof statusT.$inferSelect;
@@ -363,19 +364,34 @@ export async function updateIssue(
       events.push({ event: 'cycle', text: `changed cycle` });
    if (events.length) {
       const now = new Date();
-      await db
-         .insert(activityEvent)
-         .values(
-            events.map((e) => ({
-               id: randomUUID(),
-               issueId: id,
-               actorId: actor.id,
-               event: e.event,
-               text: e.text,
-               createdAt: now,
-            }))
-         );
+      await db.insert(activityEvent).values(
+         events.map((e) => ({
+            id: randomUUID(),
+            issueId: id,
+            actorId: actor.id,
+            event: e.event,
+            text: e.text,
+            createdAt: now,
+         }))
+      );
    }
+
+   // Notifica o novo responsável (in-app + Slack/Email best-effort)
+   if (
+      patch.assigneeId !== undefined &&
+      patch.assigneeId &&
+      patch.assigneeId !== prev.assigneeId &&
+      patch.assigneeId !== actor.id
+   ) {
+      await dispatchNotification(db, {
+         type: 'assignment',
+         issueId: id,
+         recipientId: patch.assigneeId,
+         actorId: actor.id,
+         content: `${actor.name} atribuiu esta issue a você`,
+      });
+   }
+
    return getIssue(db, id);
 }
 

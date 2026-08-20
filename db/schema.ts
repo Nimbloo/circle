@@ -394,6 +394,31 @@ export const documentFolder = pgTable('document_folder', {
    icon: varchar('icon', { length: 16 }),
 });
 
+// ── Reviews (PRs do GitHub — ingeridos via API) ───────────────────
+export const review = pgTable(
+   'review',
+   {
+      id: varchar('id', { length: 128 }).primaryKey(), // repo#prNumber
+      title: varchar('title', { length: 512 }).notNull(),
+      status: varchar('status', { length: 16 }).notNull(), // open|merged|closed
+      repo: varchar('repo', { length: 196 }).notNull(),
+      prNumber: integer('pr_number').notNull(),
+      url: varchar('url', { length: 512 }),
+      author: varchar('author', { length: 128 }),
+      targetBranch: varchar('target_branch', { length: 196 }),
+      sourceBranch: varchar('source_branch', { length: 196 }),
+      additions: integer('additions').notNull().default(0),
+      deletions: integer('deletions').notNull().default(0),
+      resolvesIdentifier: varchar('resolves_identifier', { length: 32 }),
+      resolvesTitle: varchar('resolves_title', { length: 512 }),
+      checksPassed: integer('checks_passed').notNull().default(0),
+      checksTotal: integer('checks_total').notNull().default(0),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+      syncedAt: timestamp('synced_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_review_status').on(t.status)]
+);
+
 export const teamDocument = pgTable('team_document', {
    id: varchar('id', { length: 36 }).primaryKey(),
    folderId: varchar('folder_id', { length: 64 })

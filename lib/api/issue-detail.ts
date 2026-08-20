@@ -12,6 +12,7 @@ import {
    appUser,
 } from '@/db/schema';
 import { getOrCreateUser } from './users';
+import { dispatchNotification } from './notify';
 import type { UserRef } from './issues';
 
 function userRef(
@@ -136,6 +137,23 @@ export async function addComment(
    const id = randomUUID();
    const now = new Date();
    await db.insert(commentT).values({ id, issueId, authorId: author.id, body, createdAt: now });
+
+   // Notifica o responsável da issue (se não for o próprio autor do comentário)
+   const [iss] = await db
+      .select({ assigneeId: issueT.assigneeId })
+      .from(issueT)
+      .where(eq(issueT.id, issueId))
+      .limit(1);
+   if (iss?.assigneeId && iss.assigneeId !== author.id) {
+      await dispatchNotification(db, {
+         type: 'comment',
+         issueId,
+         recipientId: iss.assigneeId,
+         actorId: author.id,
+         content: `${author.name} comentou nesta issue`,
+      });
+   }
+
    return { id, author: userRef(author), body, createdAt: now.toISOString(), reactions: [] };
 }
 
