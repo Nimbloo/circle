@@ -4,10 +4,10 @@
  * project). Mesclamos por id — os componentes seguem recebendo o tipo `Issue`/`Project`
  * rico, sem mudança. Para dados demo (= os próprios mock-data) tudo resolve com ícone.
  */
-import { Circle } from 'lucide-react';
+import { Circle, Cuboid } from 'lucide-react';
 import { status as statusCatalog, Status } from '@/mock-data/status';
 import { priorities as priorityCatalog, Priority } from '@/mock-data/priorities';
-import { projects as projectCatalog, Project } from '@/mock-data/projects';
+import { projects as projectCatalog, health as healthCatalog, Project } from '@/mock-data/projects';
 import { users as userCatalog, User } from '@/mock-data/users';
 import type { Issue } from '@/mock-data/issues';
 import type { IssueDto, UserRef, ProjectRef } from '@/lib/api/issues';
@@ -55,8 +55,29 @@ export function adaptUser(u: UserRef): User {
    );
 }
 
-function adaptProject(p: ProjectRef): Project | undefined {
-   return projectById.get(p.id);
+const DEFAULT_HEALTH = healthCatalog.find((h) => h.id === 'no-update') ?? healthCatalog[0];
+
+/**
+ * ProjectRef (embutido na issue) -> Project. Resolve pelo catálogo local se existir
+ * (dados demo); senão sintetiza um Project fino a partir do ref (id/name/ícone) com
+ * defaults seguros. Independente de ordem de hydrate (não consulta o workspace store).
+ */
+function adaptProject(p: ProjectRef): Project {
+   const known = projectById.get(p.id);
+   if (known) return known;
+   return {
+      id: p.id,
+      name: p.name,
+      status: statusCatalog[0],
+      icon: Cuboid,
+      percentComplete: 0,
+      startDate: '',
+      lead: {} as User,
+      priority: priorityCatalog[0],
+      health: DEFAULT_HEALTH,
+      teamId: '',
+      labels: [],
+   };
 }
 
 /** IssueDto (backend) -> Issue (frontend, com ícones dos catálogos). */

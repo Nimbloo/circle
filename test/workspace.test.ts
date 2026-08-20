@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { makeTestDb } from './helpers/db';
-import { seedDemo } from '@/db/seed-demo';
+import { seedWorkspaceFixture } from './helpers/fixtures';
 import { bootstrapWorkspace } from '@/lib/api/workspace';
 
 describe('workspace bootstrap', () => {
    it('returns all reference data stitched (teams with members+projects, cycles, etc.)', async () => {
       const db = await makeTestDb();
-      await seedDemo(db);
-      const ws = await bootstrapWorkspace(db, 'ln@example.com');
+      const fx = await seedWorkspaceFixture(db);
+      const ws = await bootstrapWorkspace(db, fx.ownerEmail);
 
       expect(ws.statuses.length).toBe(13);
       expect(ws.teams.length).toBeGreaterThan(0);
@@ -16,6 +16,9 @@ describe('workspace bootstrap', () => {
       expect(ws.cycles.length).toBeGreaterThan(0);
       expect(ws.initiatives.length).toBeGreaterThan(0);
       expect(ws.views.length).toBeGreaterThan(0);
+
+      // o usuário corrente é resolvido pelo email
+      expect(ws.me.email).toBe(fx.ownerEmail);
 
       // times vêm costurados com members e projects
       const core = ws.teams.find((t) => t.id === 'CORE');

@@ -5,11 +5,9 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import { issueCreatorIndex } from '@/mock-data/issues';
 import { User } from '@/mock-data/users';
 import { cn } from '@/lib/utils';
 import { useIssuesStore } from '@/store/issues-store';
-import { useWorkspaceStore } from '@/store/workspace-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useSearchStore } from '@/store/search-store';
 import { BarChart3, ChevronRight, PanelRight, SearchIcon, Star } from 'lucide-react';
@@ -122,15 +120,10 @@ export default function Header({ member }: { member: User }) {
    const [activeTab] = useQueryState('tab', parseAsString.withDefault('assigned'));
    const { issues } = useIssuesStore();
    const { openPanel, togglePanel } = useRightPanelStore();
-   const users = useWorkspaceStore((s) => s.users);
 
-   const memberIndex = Math.max(
-      0,
-      users.findIndex((candidate) => candidate.id === member.id)
-   );
    const count =
       activeTab === 'created'
-         ? issues.filter((issue) => issueCreatorIndex(issue, users.length) === memberIndex).length
+         ? issues.filter((issue) => issue.createdById === member.id).length
          : issues.filter((issue) => issue.assignee?.id === member.id).length;
 
    return (

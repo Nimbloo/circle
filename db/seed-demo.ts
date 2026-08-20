@@ -37,6 +37,10 @@ function ts(dateish: string | undefined): Date {
 }
 
 export async function seedDemo(db: Db): Promise<void> {
+   // Sem dados demo (mock-data zerado por padrão) -> no-op seguro. O app é API-driven;
+   // seedDemo só popula algo quando os mock-data são reintroduzidos manualmente (dev).
+   if (users.length === 0) return;
+
    const defaultTeam = teams[0]?.id ?? 'CORE';
    const projectIds = new Set(projects.map((p) => p.id));
 
@@ -61,12 +65,19 @@ export async function seedDemo(db: Db): Promise<void> {
       .onConflictDoNothing();
 
    // 2) Teams
-   await db
-      .insert(team)
-      .values(
-         teams.map((t) => ({ id: t.id, name: t.name, icon: t.icon, color: t.color, issueSeq: 0 }))
-      )
-      .onConflictDoNothing();
+   if (teams.length)
+      await db
+         .insert(team)
+         .values(
+            teams.map((t) => ({
+               id: t.id,
+               name: t.name,
+               icon: t.icon,
+               color: t.color,
+               issueSeq: 0,
+            }))
+         )
+         .onConflictDoNothing();
 
    // 3) Team members (de team.members)
    const memberRows = teams.flatMap((t) =>
@@ -87,48 +98,50 @@ export async function seedDemo(db: Db): Promise<void> {
       for (const pid of ini.projectIds ?? [])
          if (projectIds.has(pid)) projectInitiative.set(pid, ini.id);
    }
-   await db
-      .insert(initiative)
-      .values(
-         initiatives.map((i) => ({
-            id: i.id,
-            slug: i.id,
-            name: i.name,
-            description: i.description ?? null,
-            icon: i.icon ?? null,
-            status: i.status,
-            priorityId: i.priority.id,
-            ownerId: i.owner?.id ?? null,
-            target: i.target ?? null,
-            healthId: i.health.id,
-            createdAt: ts(i.createdAt),
-         }))
-      )
-      .onConflictDoNothing();
+   if (initiatives.length)
+      await db
+         .insert(initiative)
+         .values(
+            initiatives.map((i) => ({
+               id: i.id,
+               slug: i.id,
+               name: i.name,
+               description: i.description ?? null,
+               icon: i.icon ?? null,
+               status: i.status,
+               priorityId: i.priority.id,
+               ownerId: i.owner?.id ?? null,
+               target: i.target ?? null,
+               healthId: i.health.id,
+               createdAt: ts(i.createdAt),
+            }))
+         )
+         .onConflictDoNothing();
 
    // 5) Projects
-   await db
-      .insert(project)
-      .values(
-         projects.map((p) => ({
-            id: p.id,
-            name: p.name,
-            statusId: p.status.id,
-            iconKey: null,
-            percentComplete: p.percentComplete,
-            startDate: p.startDate ?? null,
-            targetDate: p.targetDate ?? null,
-            leadId: p.lead?.id ?? null,
-            priorityId: p.priority.id,
-            healthId: p.health.id,
-            teamId: p.teamId,
-            initiativeId: projectInitiative.get(p.id) ?? null,
-            healthUpdatedAt: null,
-            createdAt: ts(p.startDate),
-            updatedAt: ts(p.startDate),
-         }))
-      )
-      .onConflictDoNothing();
+   if (projects.length)
+      await db
+         .insert(project)
+         .values(
+            projects.map((p) => ({
+               id: p.id,
+               name: p.name,
+               statusId: p.status.id,
+               iconKey: null,
+               percentComplete: p.percentComplete,
+               startDate: p.startDate ?? null,
+               targetDate: p.targetDate ?? null,
+               leadId: p.lead?.id ?? null,
+               priorityId: p.priority.id,
+               healthId: p.health.id,
+               teamId: p.teamId,
+               initiativeId: projectInitiative.get(p.id) ?? null,
+               healthUpdatedAt: null,
+               createdAt: ts(p.startDate),
+               updatedAt: ts(p.startDate),
+            }))
+         )
+         .onConflictDoNothing();
 
    // 6) Project labels
    const projLabelRows = projects.flatMap((p) =>
@@ -153,46 +166,48 @@ export async function seedDemo(db: Db): Promise<void> {
          .onConflictDoNothing();
 
    // 8) Cycles
-   await db
-      .insert(cycle)
-      .values(
-         cycles.map((c) => ({
-            id: c.id,
-            number: c.number,
-            name: c.name,
-            teamId: c.teamId,
-            status: c.status,
-            startDate: c.startDate,
-            endDate: c.endDate,
-            capacity: c.capacity,
-         }))
-      )
-      .onConflictDoNothing();
+   if (cycles.length)
+      await db
+         .insert(cycle)
+         .values(
+            cycles.map((c) => ({
+               id: c.id,
+               number: c.number,
+               name: c.name,
+               teamId: c.teamId,
+               status: c.status,
+               startDate: c.startDate,
+               endDate: c.endDate,
+               capacity: c.capacity,
+            }))
+         )
+         .onConflictDoNothing();
    const cycleIds = new Set(cycles.map((c) => c.id));
 
    // 9) Issues
    const projectTeam = new Map(projects.map((p) => [p.id, p.teamId]));
-   await db
-      .insert(issue)
-      .values(
-         issues.map((i) => ({
-            id: i.id,
-            identifier: i.identifier,
-            teamId: i.project ? (projectTeam.get(i.project.id) ?? defaultTeam) : defaultTeam,
-            title: i.title,
-            statusId: i.status.id,
-            priorityId: i.priority.id,
-            assigneeId: i.assignee?.id ?? null,
-            createdById: null,
-            projectId: i.project?.id ?? null,
-            cycleId: i.cycleId && cycleIds.has(i.cycleId) ? i.cycleId : null,
-            rank: i.rank,
-            dueDate: i.dueDate ?? null,
-            createdAt: ts(i.createdAt),
-            updatedAt: ts(i.createdAt),
-         }))
-      )
-      .onConflictDoNothing();
+   if (issues.length)
+      await db
+         .insert(issue)
+         .values(
+            issues.map((i) => ({
+               id: i.id,
+               identifier: i.identifier,
+               teamId: i.project ? (projectTeam.get(i.project.id) ?? defaultTeam) : defaultTeam,
+               title: i.title,
+               statusId: i.status.id,
+               priorityId: i.priority.id,
+               assigneeId: i.assignee?.id ?? null,
+               createdById: null,
+               projectId: i.project?.id ?? null,
+               cycleId: i.cycleId && cycleIds.has(i.cycleId) ? i.cycleId : null,
+               rank: i.rank,
+               dueDate: i.dueDate ?? null,
+               createdAt: ts(i.createdAt),
+               updatedAt: ts(i.createdAt),
+            }))
+         )
+         .onConflictDoNothing();
 
    // 10) Issue labels + descrição
    const issueLabelRows = issues.flatMap((i) =>
@@ -220,24 +235,25 @@ export async function seedDemo(db: Db): Promise<void> {
    if (relRows.length) await db.insert(issueRelation).values(relRows).onConflictDoNothing();
 
    // 11) Views
-   await db
-      .insert(savedView)
-      .values(
-         views.map((v) => ({
-            id: v.id,
-            slug: v.id,
-            name: v.name,
-            description: v.description ?? null,
-            icon: v.icon ?? null,
-            type: v.type,
-            teamId: v.teamId ?? null,
-            ownerId: v.owner.id,
-            filter: JSON.stringify(v.filter ?? {}),
-            createdAt: ts(v.createdAt),
-            updatedAt: ts(v.updatedAt),
-         }))
-      )
-      .onConflictDoNothing();
+   if (views.length)
+      await db
+         .insert(savedView)
+         .values(
+            views.map((v) => ({
+               id: v.id,
+               slug: v.id,
+               name: v.name,
+               description: v.description ?? null,
+               icon: v.icon ?? null,
+               type: v.type,
+               teamId: v.teamId ?? null,
+               ownerId: v.owner.id,
+               filter: JSON.stringify(v.filter ?? {}),
+               createdAt: ts(v.createdAt),
+               updatedAt: ts(v.updatedAt),
+            }))
+         )
+         .onConflictDoNothing();
 
    // 12) Documents (folder default no time principal)
    await db
@@ -280,7 +296,7 @@ export async function seedDemo(db: Db): Promise<void> {
       read: idx % 2 === 0,
       createdAt: ts(i.createdAt),
    }));
-   await db.insert(notification).values(notifRows).onConflictDoNothing();
+   if (notifRows.length) await db.insert(notification).values(notifRows).onConflictDoNothing();
 }
 
 function dedupPairs<T>(rows: T[], keyOf: (r: T) => string): T[] {

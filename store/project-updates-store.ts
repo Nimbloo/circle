@@ -1,6 +1,39 @@
 import { create } from 'zustand';
 import { ProjectUpdate, ProjectUpdateHealth } from '@/mock-data/project-details';
-import { users } from '@/mock-data/users';
+import type { User } from '@/mock-data/users';
+import { useWorkspaceStore } from '@/store/workspace-store';
+
+/** Autor da update = usuário corrente (SSO); do workspace store, com fallback mínimo. */
+function currentAuthor(): User {
+   const ws = useWorkspaceStore.getState();
+   const me = ws.me;
+   const full = me ? ws.getUserById(me.id) : undefined;
+   if (full) return full;
+   if (me) {
+      return {
+         id: me.id,
+         name: me.name,
+         email: me.email,
+         avatarUrl: me.avatarUrl ?? '',
+         status: 'online',
+         role: me.role as User['role'],
+         joinedDate: new Date().toISOString().slice(0, 10),
+         teamIds: me.teamIds,
+         timezone: 'UTC',
+      };
+   }
+   return {
+      id: 'me',
+      name: 'You',
+      email: '',
+      avatarUrl: '',
+      status: 'online',
+      role: 'Member',
+      joinedDate: new Date().toISOString().slice(0, 10),
+      teamIds: [],
+      timezone: 'UTC',
+   };
+}
 
 interface ProjectUpdatesState {
    /** Updates posted at runtime, newest first, keyed by project id. */
@@ -20,7 +53,7 @@ export const useProjectUpdatesStore = create<ProjectUpdatesState>((set) => ({
       set((state) => {
          const update: ProjectUpdate = {
             id: `posted-${nextId++}`,
-            author: users[0],
+            author: currentAuthor(),
             date: new Date().toISOString().slice(0, 10),
             health,
             blocks: text

@@ -1,16 +1,19 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { createColumnConfigHelper } from '@/components/data-table-filter/core/filters';
 import type { ColumnOption, FiltersState } from '@/components/data-table-filter/core/types';
 import { multiOptionFilterFn, optionFilterFn } from '@/components/data-table-filter/lib/filter-fns';
-import { cycles, cycleStatusLabel } from '@/mock-data/cycles';
+import { cycleStatusLabel } from '@/mock-data/cycles';
+import type { Cycle } from '@/mock-data/cycles';
 import { Issue } from '@/mock-data/issues';
 import { labels } from '@/mock-data/labels';
 import { priorities } from '@/mock-data/priorities';
 import { status, StatusCategory } from '@/mock-data/status';
-import { projects } from '@/mock-data/projects';
-import { users } from '@/mock-data/users';
+import type { Project } from '@/mock-data/projects';
+import type { User } from '@/mock-data/users';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import {
    BarChart3,
    CircleCheck,
@@ -21,9 +24,7 @@ import {
    Tag,
 } from 'lucide-react';
 
-/* -------------------------------------------------------------------------- */
-/*                                Option lists                                */
-/* -------------------------------------------------------------------------- */
+/* ------------------------- Options fixas (catálogos) ------------------------ */
 
 const statusOptions: ColumnOption[] = status.map((item) => ({
    value: item.id,
@@ -46,24 +47,6 @@ const statusTypeOptions: ColumnOption[] = STATUS_TYPES.map((item) => ({
    icon: <CircleDashed className="size-4 text-muted-foreground" />,
 }));
 
-const assigneeOptions: ColumnOption[] = [
-   {
-      value: 'unassigned',
-      label: 'Unassigned',
-      icon: <CircleUserRound className="size-4 text-muted-foreground" />,
-   },
-   ...users.map((user) => ({
-      value: user.id,
-      label: user.name,
-      icon: (
-         <Avatar className="size-4">
-            <AvatarImage src={user.avatarUrl} alt={user.name} />
-            <AvatarFallback>{user.name[0]}</AvatarFallback>
-         </Avatar>
-      ),
-   })),
-];
-
 const priorityOptions: ColumnOption[] = priorities.map((priority) => ({
    value: priority.id,
    label: priority.name,
@@ -76,110 +59,144 @@ const labelOptions: ColumnOption[] = labels.map((label) => ({
    icon: <span className="size-2.5 rounded-full" style={{ backgroundColor: label.color }} />,
 }));
 
-const projectOptions: ColumnOption[] = projects.map((project) => ({
-   value: project.id,
-   label: project.name,
-   icon: <project.icon className="size-4 text-muted-foreground" />,
-}));
+/* ---------------------- Options dinâmicas (do workspace) -------------------- */
 
-const cycleOptions: ColumnOption[] = [
-   {
-      value: 'no-cycle',
-      label: 'No cycle',
-      icon: <RefreshCcw className="size-4 text-muted-foreground" />,
-   },
-   ...cycles.map((cycle) => ({
-      value: cycle.id,
-      label: `${cycle.name} (${cycleStatusLabel[cycle.status]})`,
-      icon: <RefreshCcw className="size-4 text-muted-foreground" />,
-   })),
-];
+function assigneeOptions(users: User[]): ColumnOption[] {
+   return [
+      {
+         value: 'unassigned',
+         label: 'Unassigned',
+         icon: <CircleUserRound className="size-4 text-muted-foreground" />,
+      },
+      ...users.map((user) => ({
+         value: user.id,
+         label: user.name,
+         icon: (
+            <Avatar className="size-4">
+               <AvatarImage src={user.avatarUrl} alt={user.name} />
+               <AvatarFallback>{user.name[0]}</AvatarFallback>
+            </Avatar>
+         ),
+      })),
+   ];
+}
 
-/* -------------------------------------------------------------------------- */
-/*                              Column definitions                            */
-/* -------------------------------------------------------------------------- */
+function projectOptions(projects: Project[]): ColumnOption[] {
+   return projects.map((project) => ({
+      value: project.id,
+      label: project.name,
+      icon: <project.icon className="size-4 text-muted-foreground" />,
+   }));
+}
+
+function cycleOptions(cycles: Cycle[]): ColumnOption[] {
+   return [
+      {
+         value: 'no-cycle',
+         label: 'No cycle',
+         icon: <RefreshCcw className="size-4 text-muted-foreground" />,
+      },
+      ...cycles.map((cycle) => ({
+         value: cycle.id,
+         label: `${cycle.name} (${cycleStatusLabel[cycle.status]})`,
+         icon: <RefreshCcw className="size-4 text-muted-foreground" />,
+      })),
+   ];
+}
+
+/* ---------------------------- Column definitions --------------------------- */
 
 const dtf = createColumnConfigHelper<Issue>();
 
-/**
- * Filterable issue columns for the bazza/ui data-table-filter component.
- * Accessors return the raw values the filter functions compare against.
- */
-export const issueFilterColumns = [
-   dtf
-      .option()
-      .id('status')
-      .accessor((issue: Issue) => issue.status.id)
-      .displayName('Status')
-      .icon(CircleCheck)
-      .options(statusOptions)
-      .build(),
-   dtf
-      .option()
-      .id('statusType')
-      .accessor((issue: Issue) => issue.status.category)
-      .displayName('Status type')
-      .icon(CircleDashed)
-      .options(statusTypeOptions)
-      .build(),
-   dtf
-      .option()
-      .id('assignee')
-      .accessor((issue: Issue) => issue.assignee?.id ?? 'unassigned')
-      .displayName('Assignee')
-      .icon(CircleUserRound)
-      .options(assigneeOptions)
-      .build(),
-   dtf
-      .option()
-      .id('priority')
-      .accessor((issue: Issue) => issue.priority.id)
-      .displayName('Priority')
-      .icon(BarChart3)
-      .options(priorityOptions)
-      .build(),
-   dtf
-      .multiOption()
-      .id('labels')
-      .accessor((issue: Issue) => issue.labels.map((label) => label.id))
-      .displayName('Labels')
-      .icon(Tag)
-      .options(labelOptions)
-      .build(),
-   dtf
-      .option()
-      .id('project')
-      .accessor((issue: Issue) => issue.project?.id ?? '')
-      .displayName('Project')
-      .icon(Folder)
-      .options(projectOptions)
-      .build(),
-   dtf
-      .option()
-      .id('cycle')
-      .accessor((issue: Issue) => (issue.cycleId === '' ? 'no-cycle' : issue.cycleId))
-      .displayName('Cycle')
-      .icon(RefreshCcw)
-      .options(cycleOptions)
-      .build(),
-] as const;
+/** Constrói as colunas de filtro; options dinâmicas vêm do workspace (vazias no build p/ applyIssueFilters). */
+function buildIssueFilterColumns(users: User[], projects: Project[], cycles: Cycle[]) {
+   return [
+      dtf
+         .option()
+         .id('status')
+         .accessor((i: Issue) => i.status.id)
+         .displayName('Status')
+         .icon(CircleCheck)
+         .options(statusOptions)
+         .build(),
+      dtf
+         .option()
+         .id('statusType')
+         .accessor((i: Issue) => i.status.category)
+         .displayName('Status type')
+         .icon(CircleDashed)
+         .options(statusTypeOptions)
+         .build(),
+      dtf
+         .option()
+         .id('assignee')
+         .accessor((i: Issue) => i.assignee?.id ?? 'unassigned')
+         .displayName('Assignee')
+         .icon(CircleUserRound)
+         .options(assigneeOptions(users))
+         .build(),
+      dtf
+         .option()
+         .id('priority')
+         .accessor((i: Issue) => i.priority.id)
+         .displayName('Priority')
+         .icon(BarChart3)
+         .options(priorityOptions)
+         .build(),
+      dtf
+         .multiOption()
+         .id('labels')
+         .accessor((i: Issue) => i.labels.map((l) => l.id))
+         .displayName('Labels')
+         .icon(Tag)
+         .options(labelOptions)
+         .build(),
+      dtf
+         .option()
+         .id('project')
+         .accessor((i: Issue) => i.project?.id ?? '')
+         .displayName('Project')
+         .icon(Folder)
+         .options(projectOptions(projects))
+         .build(),
+      dtf
+         .option()
+         .id('cycle')
+         .accessor((i: Issue) => (i.cycleId === '' ? 'no-cycle' : i.cycleId))
+         .displayName('Cycle')
+         .icon(RefreshCcw)
+         .options(cycleOptions(cycles))
+         .build(),
+   ];
+}
 
-const columnById = new Map<string, (typeof issueFilterColumns)[number]>(
-   issueFilterColumns.map((column) => [column.id, column])
+/** Colunas com os accessors (options dinâmicas vazias) — usado por applyIssueFilters. */
+const accessorColumns = buildIssueFilterColumns([], [], []);
+const columnById = new Map<string, (typeof accessorColumns)[number]>(
+   accessorColumns.map((column) => [column.id, column])
 );
 
+/** Hook: colunas com options completas (do workspace) para a UI de filtro. */
+export function useIssueFilterColumns() {
+   const users = useWorkspaceStore((s) => s.users);
+   const projects = useWorkspaceStore((s) => s.projects);
+   const cycles = useWorkspaceStore((s) => s.cycles);
+   return useMemo(
+      () => buildIssueFilterColumns(users, projects, cycles),
+      [users, projects, cycles]
+   );
+}
+
 /**
- * Applies a bazza/ui FiltersState to a list of issues, honoring the
- * operator of each filter (is / is not / include / exclude / …).
+ * Aplica um FiltersState (bazza/ui) a uma lista de issues, honrando o operador
+ * de cada filtro. Data-independente (usa só os accessors).
  */
 export function applyIssueFilters(issues: Issue[], filters: FiltersState): Issue[] {
    if (filters.length === 0) return issues;
-
    return issues.filter((issue) =>
       filters.every((filter) => {
          const column = columnById.get(filter.columnId);
          if (!column) return true;
-
          const value = column.accessor(issue);
          switch (filter.type) {
             case 'option':

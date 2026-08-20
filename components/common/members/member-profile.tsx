@@ -7,7 +7,7 @@ import { IssueFilterBar } from '@/components/common/issues/issue-filter-bar';
 import { SearchIssues } from '@/components/common/issues/search-issues';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Issue, issueCreatorIndex } from '@/mock-data/issues';
+import { Issue } from '@/mock-data/issues';
 import { labels } from '@/mock-data/labels';
 import { priorities } from '@/mock-data/priorities';
 import { statusUserColors, User } from '@/mock-data/users';
@@ -108,22 +108,16 @@ export default function MemberProfile({ member }: { member: User }) {
    const { openPanel } = useRightPanelStore();
    const projects = useWorkspaceStore((s) => s.projects);
    const teams = useWorkspaceStore((s) => s.teams);
-   const users = useWorkspaceStore((s) => s.users);
 
    const isSearching = isSearchOpen && searchQuery.trim() !== '';
    const isViewTypeGrid = viewType === 'grid';
 
-   const memberIndex = Math.max(
-      0,
-      users.findIndex((candidate) => candidate.id === member.id)
-   );
-
    const scopedIssues = useMemo(() => {
       if (activeTab === 'created') {
-         return issues.filter((issue) => issueCreatorIndex(issue, users.length) === memberIndex);
+         return issues.filter((issue) => issue.createdById === member.id);
       }
       return issues.filter((issue) => issue.assignee?.id === member.id);
-   }, [issues, activeTab, member.id, memberIndex, users.length]);
+   }, [issues, activeTab, member.id]);
 
    const displayedIssues = useMemo(
       () => applyIssueFilters(scopedIssues, filters),

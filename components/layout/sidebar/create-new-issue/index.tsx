@@ -19,7 +19,7 @@ import { PrioritySelector } from './priority-selector';
 import { AssigneeSelector } from './assignee-selector';
 import { ProjectSelector } from './project-selector';
 import { LabelSelector } from './label-selector';
-import { ranks } from '@/mock-data/issues';
+import { LexoRank } from '@/lib/utils';
 import { DialogTitle } from '@radix-ui/react-dialog';
 
 export function CreateNewIssue() {
@@ -55,7 +55,8 @@ export function CreateNewIssue() {
          cycleId: '',
          project: undefined,
          subissues: [],
-         rank: ranks[ranks.length - 1],
+         // Rank otimista; o servidor reatribui o rank real no re-hydrate após o POST.
+         rank: new LexoRank('a3c').toString(),
       };
    }, [defaultStatus, generateUniqueIdentifier]);
 

@@ -1,10 +1,18 @@
-import { InboxItem, inboxItems as mockNotifications, NotificationType } from '@/mock-data/inbox';
+import { InboxItem, NotificationType } from '@/mock-data/inbox';
+import type { Issue } from '@/mock-data/issues';
+import type { NotificationDto } from '@/lib/api/notifications';
+import { adaptUser } from '@/lib/adapters';
+import { api } from '@/lib/client';
+import { useIssuesStore } from '@/store/issues-store';
 import { create } from 'zustand';
 
 interface NotificationsState {
    // Data
    notifications: InboxItem[];
    selectedNotification: InboxItem | undefined;
+
+   // Hydration
+   hydrate: () => Promise<void>;
 
    // Actions
    setSelectedNotification: (notification: InboxItem | undefined) => void;
@@ -23,10 +31,58 @@ interface NotificationsState {
    getUnreadCount: () => number;
 }
 
+/** Tempo relativo compacto ("2h", "1d") a partir de um ISO — igual ao formato do inbox. */
+function relativeTime(iso: string): string {
+   const then = new Date(iso).getTime();
+   const diff = Math.max(0, Date.now() - then);
+   const min = Math.floor(diff / 60000);
+   if (min < 1) return 'now';
+   if (min < 60) return `${min}m`;
+   const hours = Math.floor(min / 60);
+   if (hours < 24) return `${hours}h`;
+   const days = Math.floor(hours / 24);
+   if (days < 7) return `${days}d`;
+   return `${Math.floor(days / 7)}w`;
+}
+
+/**
+ * NotificationDto (API) -> InboxItem (que estende Issue). A notificação referencia
+ * uma issue real que já vive no issues-store; mesclamos com ela para o preview.
+ * Itens sem issue conhecida são descartados (sem preview a mostrar).
+ */
+function adaptNotification(dto: NotificationDto, issueById: Map<string, Issue>): InboxItem | null {
+   const issue = dto.issue ? issueById.get(dto.issue.id) : undefined;
+   if (!issue) return null;
+   const user = dto.actor ? adaptUser(dto.actor) : issue.assignee;
+   if (!user) return null;
+   return {
+      ...issue,
+      id: dto.id,
+      content: dto.content ?? '',
+      type: dto.type as NotificationType,
+      user,
+      timestamp: relativeTime(dto.createdAt),
+      read: dto.read,
+   };
+}
+
 export const useNotificationsStore = create<NotificationsState>((set, get) => ({
-   // Initial state
-   notifications: mockNotifications,
+   // Initial state — vazio; populado via hydrate() a partir da API.
+   notifications: [],
    selectedNotification: undefined,
+
+   hydrate: async () => {
+      try {
+         const dtos = await api.inbox.list();
+         const issueById = new Map(useIssuesStore.getState().issues.map((i) => [i.id, i]));
+         const items = dtos
+            .map((dto) => adaptNotification(dto, issueById))
+            .filter((item): item is InboxItem => item !== null);
+         set({ notifications: items });
+      } catch {
+         // Degradação graciosa — mantém o estado atual se a API falhar.
+      }
+   },
 
    // Actions
    setSelectedNotification: (notification: InboxItem | undefined) => {
@@ -43,6 +99,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
                ? { ...state.selectedNotification, read: true }
                : state.selectedNotification,
       }));
+      void api.inbox.setRead(id, true).catch(() => {});
    },
 
    markAllAsRead: () => {
@@ -55,6 +112,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
             ? { ...state.selectedNotification, read: true }
             : undefined,
       }));
+      void api.inbox.readAll().catch(() => {});
    },
 
    markAsUnread: (id: string) => {
@@ -67,6 +125,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
                ? { ...state.selectedNotification, read: false }
                : state.selectedNotification,
       }));
+      void api.inbox.setRead(id, false).catch(() => {});
    },
 
    // Filters
