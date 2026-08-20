@@ -45,6 +45,7 @@ export function adaptUser(u: UserRef): User {
          id: u.id,
          name: u.name,
          email: u.email,
+         slug: u.slug,
          avatarUrl: u.avatarUrl ?? '',
          status: 'offline',
          role: 'Member',

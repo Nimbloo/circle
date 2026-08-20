@@ -3,6 +3,8 @@ export interface User {
    name: string;
    avatarUrl: string;
    email: string;
+   /** Slug do backend (prefixo do e-mail, único). Usado em @menções. */
+   slug?: string;
    status: 'online' | 'offline' | 'away';
    role: 'Member' | 'Admin' | 'Guest' | 'Application';
    joinedDate: string;

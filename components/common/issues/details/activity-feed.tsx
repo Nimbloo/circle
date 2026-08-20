@@ -1,23 +1,20 @@
 'use client';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
 import { ActivityItem } from '@/mock-data/issue-details';
-import { api } from '@/lib/client';
+import { CommentComposer } from './comment-composer';
 import {
    Ban,
    CircleDot,
    GitPullRequestArrow,
    Link2,
    PenLine,
-   Plus,
    RefreshCcw,
    SmilePlus,
    Tag,
    Unlock,
 } from 'lucide-react';
-import { ReactNode, useState } from 'react';
-import { toast } from 'sonner';
+import { ReactNode } from 'react';
 import { ContentBlocks } from './content-blocks';
 
 const EVENT_ICONS: Record<string, ReactNode> = {
@@ -91,24 +88,7 @@ export function ActivityFeed({
    issueId?: string;
    onCommentAdded?: () => void;
 }) {
-   const [draft, setDraft] = useState('');
-   const [submitting, setSubmitting] = useState(false);
    const items = activity;
-
-   const submitComment = async () => {
-      const text = draft.trim();
-      if (!text || !issueId || submitting) return;
-      setSubmitting(true);
-      try {
-         await api.issues.addComment(issueId, text);
-         setDraft('');
-         onCommentAdded?.();
-      } catch {
-         toast.error('Could not post the comment');
-      } finally {
-         setSubmitting(false);
-      }
-   };
 
    return (
       <div className="mt-10">
@@ -129,32 +109,7 @@ export function ActivityFeed({
             )}
          </div>
 
-         {/* Composer */}
-         <div className="mt-3 rounded-lg border border-border/60 bg-container p-3 flex flex-col gap-2">
-            <textarea
-               value={draft}
-               onChange={(event) => setDraft(event.target.value)}
-               onKeyDown={(event) => {
-                  if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-                     void submitComment();
-                  }
-               }}
-               placeholder="Leave a comment..."
-               rows={2}
-               disabled={submitting}
-               className="w-full resize-none bg-transparent outline-none text-sm placeholder:text-muted-foreground disabled:opacity-60"
-            />
-            <div className="flex items-center justify-between">
-               <Plus className="size-4 text-muted-foreground" />
-               <Button
-                  size="xs"
-                  onClick={() => void submitComment()}
-                  disabled={!draft.trim() || submitting || !issueId}
-               >
-                  {submitting ? 'Posting…' : 'Comment'}
-               </Button>
-            </div>
-         </div>
+         {issueId && <CommentComposer issueId={issueId} onPosted={() => onCommentAdded?.()} />}
       </div>
    );
 }

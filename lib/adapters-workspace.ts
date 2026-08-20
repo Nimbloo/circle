@@ -57,6 +57,7 @@ export function adaptMemberToUser(m: MemberDto): User {
       id: m.id,
       name: m.name,
       email: m.email,
+      slug: m.slug,
       avatarUrl: m.avatarUrl ?? '',
       status: (m.presence as User['status']) ?? 'offline',
       role: (m.role as User['role']) ?? 'Member',
