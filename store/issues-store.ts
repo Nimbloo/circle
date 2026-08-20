@@ -5,6 +5,9 @@ import { Project } from '@/mock-data/projects';
 import { Status } from '@/mock-data/status';
 import { User } from '@/mock-data/users';
 import { create } from 'zustand';
+import { api } from '@/lib/client';
+import { adaptIssues } from '@/lib/adapters';
+import type { CreateIssueInput, UpdateIssueInput, IssueListOptions } from '@/lib/api/issues';
 
 interface FilterOptions {
    status?: string[];
@@ -17,19 +20,19 @@ interface FilterOptions {
 }
 
 interface IssuesState {
-   // Data
    issues: Issue[];
    issuesByStatus: Record<string, Issue[]>;
+   loading: boolean;
 
-   //
+   /** Carrega as issues da API (opcionalmente escopadas) e substitui o estado. */
+   hydrate: (opts?: IssueListOptions) => Promise<void>;
+
    getAllIssues: () => Issue[];
 
-   // Actions
    addIssue: (issue: Issue) => void;
    updateIssue: (id: string, updatedIssue: Partial<Issue>) => void;
    deleteIssue: (id: string) => void;
 
-   // Filters
    filterByStatus: (statusId: string) => Issue[];
    filterByPriority: (priorityId: string) => Issue[];
    filterByAssignee: (userId: string | null) => Issue[];
@@ -39,43 +42,73 @@ interface IssuesState {
    searchIssues: (query: string) => Issue[];
    filterIssues: (filters: FilterOptions) => Issue[];
 
-   // Status management
    updateIssueStatus: (issueId: string, newStatus: Status) => void;
-
-   // Priority management
    updateIssuePriority: (issueId: string, newPriority: Priority) => void;
-
-   // Assignee management
    updateIssueAssignee: (issueId: string, newAssignee: User | null) => void;
-
-   // Labels management
    addIssueLabel: (issueId: string, label: LabelInterface) => void;
    removeIssueLabel: (issueId: string, labelId: string) => void;
-
-   // Project management
    updateIssueProject: (issueId: string, newProject: Project | undefined) => void;
 
-   // Utility functions
    getIssueById: (id: string) => Issue | undefined;
 }
 
-export const useIssuesStore = create<IssuesState>((set, get) => ({
-   // Initial state
-   issues: mockIssues.sort((a, b) => b.rank.localeCompare(a.rank)),
-   issuesByStatus: groupIssuesByStatus(mockIssues),
+const sortByRank = (issues: Issue[]) => [...issues].sort((a, b) => b.rank.localeCompare(a.rank));
 
-   //
+/** Mapeia um Partial<Issue> (objetos ricos) para o patch da API (ids). */
+function toUpdateInput(updated: Partial<Issue>): UpdateIssueInput {
+   const patch: UpdateIssueInput = {};
+   if ('title' in updated) patch.title = updated.title;
+   if ('status' in updated) patch.statusId = updated.status?.id;
+   if ('priority' in updated) patch.priorityId = updated.priority?.id;
+   if ('assignee' in updated) patch.assigneeId = updated.assignee ? updated.assignee.id : null;
+   if ('project' in updated) patch.projectId = updated.project ? updated.project.id : null;
+   if ('cycleId' in updated) patch.cycleId = updated.cycleId;
+   if ('dueDate' in updated) patch.dueDate = updated.dueDate ?? null;
+   return patch;
+}
+
+export const useIssuesStore = create<IssuesState>((set, get) => ({
+   // Estado inicial = mock (render instantâneo / fallback); hydrate() troca pela API.
+   issues: sortByRank(mockIssues),
+   issuesByStatus: groupIssuesByStatus(mockIssues),
+   loading: false,
+
+   hydrate: async (opts?: IssueListOptions) => {
+      set({ loading: true });
+      try {
+         const dtos = await api.issues.list(opts);
+         const issues = sortByRank(adaptIssues(dtos));
+         set({ issues, issuesByStatus: groupIssuesByStatus(issues), loading: false });
+      } catch {
+         // mantém o estado atual (mock ou anterior) se a API falhar
+         set({ loading: false });
+      }
+   },
+
    getAllIssues: () => get().issues,
 
-   // Actions
    addIssue: (issue: Issue) => {
+      // otimista
       set((state) => {
          const newIssues = [...state.issues, issue];
-         return {
-            issues: newIssues,
-            issuesByStatus: groupIssuesByStatus(newIssues),
-         };
+         return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
       });
+      const input: CreateIssueInput = {
+         teamId: (issue.project as { teamId?: string } | undefined)?.teamId ?? 'CORE',
+         title: issue.title,
+         statusId: issue.status.id,
+         priorityId: issue.priority.id,
+         assigneeId: issue.assignee?.id ?? null,
+         projectId: issue.project?.id ?? null,
+         cycleId: issue.cycleId || null,
+         labelIds: issue.labels.map((l) => l.id),
+         dueDate: issue.dueDate ?? null,
+      };
+      // após criar, re-hidrata p/ obter identifier/rank gerados no servidor
+      api.issues
+         .create(input)
+         .then(() => get().hydrate())
+         .catch(() => undefined);
    },
 
    updateIssue: (id: string, updatedIssue: Partial<Issue>) => {
@@ -83,165 +116,91 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          const newIssues = state.issues.map((issue) =>
             issue.id === id ? { ...issue, ...updatedIssue } : issue
          );
-
-         return {
-            issues: newIssues,
-            issuesByStatus: groupIssuesByStatus(newIssues),
-         };
+         return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
       });
+      api.issues.update(id, toUpdateInput(updatedIssue)).catch(() => undefined);
    },
 
    deleteIssue: (id: string) => {
       set((state) => {
          const newIssues = state.issues.filter((issue) => issue.id !== id);
-         return {
-            issues: newIssues,
-            issuesByStatus: groupIssuesByStatus(newIssues),
-         };
+         return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
       });
+      api.issues.remove(id).catch(() => undefined);
    },
 
-   // Filters
-   filterByStatus: (statusId: string) => {
-      return get().issues.filter((issue) => issue.status.id === statusId);
-   },
+   filterByStatus: (statusId) => get().issues.filter((i) => i.status.id === statusId),
+   filterByPriority: (priorityId) => get().issues.filter((i) => i.priority.id === priorityId),
+   filterByAssignee: (userId) =>
+      userId === null
+         ? get().issues.filter((i) => i.assignee === null)
+         : get().issues.filter((i) => i.assignee?.id === userId),
+   filterByLabel: (labelId) => get().issues.filter((i) => i.labels.some((l) => l.id === labelId)),
+   filterByProject: (projectId) => get().issues.filter((i) => i.project?.id === projectId),
+   filterByCycle: (cycleId) => get().issues.filter((i) => i.cycleId === cycleId),
 
-   filterByPriority: (priorityId: string) => {
-      return get().issues.filter((issue) => issue.priority.id === priorityId);
-   },
-
-   filterByAssignee: (userId: string | null) => {
-      if (userId === null) {
-         return get().issues.filter((issue) => issue.assignee === null);
-      }
-      return get().issues.filter((issue) => issue.assignee?.id === userId);
-   },
-
-   filterByLabel: (labelId: string) => {
-      return get().issues.filter((issue) => issue.labels.some((label) => label.id === labelId));
-   },
-
-   filterByProject: (projectId: string) => {
-      return get().issues.filter((issue) => issue.project?.id === projectId);
-   },
-
-   filterByCycle: (cycleId: string) => {
-      return get().issues.filter((issue) => issue.cycleId === cycleId);
-   },
-
-   searchIssues: (query: string) => {
-      const lowerCaseQuery = query.toLowerCase();
+   searchIssues: (query) => {
+      const q = query.toLowerCase();
       return get().issues.filter(
-         (issue) =>
-            issue.title.toLowerCase().includes(lowerCaseQuery) ||
-            issue.identifier.toLowerCase().includes(lowerCaseQuery)
+         (i) => i.title.toLowerCase().includes(q) || i.identifier.toLowerCase().includes(q)
       );
    },
 
    filterIssues: (filters: FilterOptions) => {
-      let filteredIssues = get().issues;
-
-      // Filter by status
-      if (filters.status && filters.status.length > 0) {
-         filteredIssues = filteredIssues.filter((issue) =>
-            filters.status!.includes(issue.status.id)
-         );
-      }
-
-      // Filter by assignee
-      if (filters.assignee && filters.assignee.length > 0) {
-         filteredIssues = filteredIssues.filter((issue) => {
-            if (filters.assignee!.includes('unassigned')) {
-               // If 'unassigned' is selected and the issue has no assignee
-               if (issue.assignee === null) {
-                  return true;
-               }
-            }
-            // Check if the issue's assignee is in the selected assignees
-            return issue.assignee && filters.assignee!.includes(issue.assignee.id);
+      let out = get().issues;
+      if (filters.status?.length) out = out.filter((i) => filters.status!.includes(i.status.id));
+      if (filters.assignee?.length) {
+         out = out.filter((i) => {
+            if (filters.assignee!.includes('unassigned') && i.assignee === null) return true;
+            return i.assignee && filters.assignee!.includes(i.assignee.id);
          });
       }
-
-      // Filter by priority
-      if (filters.priority && filters.priority.length > 0) {
-         filteredIssues = filteredIssues.filter((issue) =>
-            filters.priority!.includes(issue.priority.id)
-         );
-      }
-
-      // Filter by labels
-      if (filters.labels && filters.labels.length > 0) {
-         filteredIssues = filteredIssues.filter((issue) =>
-            issue.labels.some((label) => filters.labels!.includes(label.id))
-         );
-      }
-
-      // Filter by project
-      if (filters.project && filters.project.length > 0) {
-         filteredIssues = filteredIssues.filter(
-            (issue) => issue.project && filters.project!.includes(issue.project.id)
-         );
-      }
-
-      // Filter by cycle ('no-cycle' matches issues outside any cycle)
-      if (filters.cycle && filters.cycle.length > 0) {
-         filteredIssues = filteredIssues.filter((issue) => {
-            if (filters.cycle!.includes('no-cycle') && issue.cycleId === '') {
-               return true;
-            }
-            return filters.cycle!.includes(issue.cycleId);
+      if (filters.priority?.length)
+         out = out.filter((i) => filters.priority!.includes(i.priority.id));
+      if (filters.labels?.length)
+         out = out.filter((i) => i.labels.some((l) => filters.labels!.includes(l.id)));
+      if (filters.project?.length)
+         out = out.filter((i) => i.project && filters.project!.includes(i.project.id));
+      if (filters.cycle?.length) {
+         out = out.filter((i) => {
+            if (filters.cycle!.includes('no-cycle') && i.cycleId === '') return true;
+            return filters.cycle!.includes(i.cycleId);
          });
       }
+      if (filters.statusType?.length)
+         out = out.filter((i) => filters.statusType!.includes(i.status.category));
+      return out;
+   },
 
-      // Filter by status type (status category)
-      if (filters.statusType && filters.statusType.length > 0) {
-         filteredIssues = filteredIssues.filter((issue) =>
-            filters.statusType!.includes(issue.status.category)
+   updateIssueStatus: (issueId, newStatus) => get().updateIssue(issueId, { status: newStatus }),
+   updateIssuePriority: (issueId, newPriority) =>
+      get().updateIssue(issueId, { priority: newPriority }),
+   updateIssueAssignee: (issueId, newAssignee) =>
+      get().updateIssue(issueId, { assignee: newAssignee }),
+
+   addIssueLabel: (issueId, label) => {
+      const issue = get().getIssueById(issueId);
+      if (!issue) return;
+      set((state) => {
+         const newIssues = state.issues.map((i) =>
+            i.id === issueId ? { ...i, labels: [...i.labels, label] } : i
          );
-      }
-
-      return filteredIssues;
+         return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
+      });
+      api.issues.addLabel(issueId, label.id).catch(() => undefined);
    },
 
-   // Status management
-   updateIssueStatus: (issueId: string, newStatus: Status) => {
-      get().updateIssue(issueId, { status: newStatus });
+   removeIssueLabel: (issueId, labelId) => {
+      set((state) => {
+         const newIssues = state.issues.map((i) =>
+            i.id === issueId ? { ...i, labels: i.labels.filter((l) => l.id !== labelId) } : i
+         );
+         return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
+      });
+      api.issues.removeLabel(issueId, labelId).catch(() => undefined);
    },
 
-   // Priority management
-   updateIssuePriority: (issueId: string, newPriority: Priority) => {
-      get().updateIssue(issueId, { priority: newPriority });
-   },
+   updateIssueProject: (issueId, newProject) => get().updateIssue(issueId, { project: newProject }),
 
-   // Assignee management
-   updateIssueAssignee: (issueId: string, newAssignee: User | null) => {
-      get().updateIssue(issueId, { assignee: newAssignee });
-   },
-
-   // Labels management
-   addIssueLabel: (issueId: string, label: LabelInterface) => {
-      const issue = get().getIssueById(issueId);
-      if (issue) {
-         const updatedLabels = [...issue.labels, label];
-         get().updateIssue(issueId, { labels: updatedLabels });
-      }
-   },
-
-   removeIssueLabel: (issueId: string, labelId: string) => {
-      const issue = get().getIssueById(issueId);
-      if (issue) {
-         const updatedLabels = issue.labels.filter((label) => label.id !== labelId);
-         get().updateIssue(issueId, { labels: updatedLabels });
-      }
-   },
-
-   // Project management
-   updateIssueProject: (issueId: string, newProject: Project | undefined) => {
-      get().updateIssue(issueId, { project: newProject });
-   },
-
-   // Utility functions
-   getIssueById: (id: string) => {
-      return get().issues.find((issue) => issue.id === id);
-   },
+   getIssueById: (id) => get().issues.find((i) => i.id === id),
 }));

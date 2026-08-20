@@ -3,6 +3,7 @@ import { AppSidebar } from '@/components/layout/sidebar/app-sidebar';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { CreateIssueModalProvider } from '@/components/common/issues/create-issue-modal-provider';
 import { CommandPalette } from '@/components/layout/command-palette';
+import { DataHydrator } from '@/components/layout/data-hydrator';
 import { cn } from '@/lib/utils';
 
 interface MainLayoutProps {
@@ -34,6 +35,7 @@ export default function MainLayout({ children, header, headersNumber = 2 }: Main
    };
    return (
       <SidebarProvider>
+         <DataHydrator />
          <CreateIssueModalProvider />
          <CommandPalette />
          <AppSidebar />
