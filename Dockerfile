@@ -28,6 +28,8 @@ RUN addgroup -g 1001 -S nimbloo && adduser -u 1001 -S nimbloo -G nimbloo
 COPY --from=build --chown=nimbloo:nimbloo /app/.next/standalone ./
 COPY --from=build --chown=nimbloo:nimbloo /app/.next/static ./.next/static
 COPY --from=build --chown=nimbloo:nimbloo /app/public ./public
+# Migrations SQL (aplicadas no boot via instrumentation.ts com drizzle-orm/pg — deps de prod).
+COPY --from=build --chown=nimbloo:nimbloo /app/db/migrations ./db/migrations
 USER nimbloo
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
