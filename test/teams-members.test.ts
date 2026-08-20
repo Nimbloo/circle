@@ -1,7 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
-import { listTeams, getTeam, listTeamMembers } from '@/lib/api/teams';
+import {
+   listTeams,
+   getTeam,
+   listTeamMembers,
+   createTeam,
+   addTeamMember,
+   removeTeamMember,
+} from '@/lib/api/teams';
 import { listMembers, getMember } from '@/lib/api/members';
 
 async function workspace() {
@@ -52,6 +59,37 @@ describe('teams', () => {
       expect((await getTeam(db, 'CORE'))?.name).toBe('Core');
       const members = await listTeamMembers(db, 'CORE');
       expect(members).toHaveLength(2);
+   });
+
+   it('creates a team (uppercases the key, rejects duplicates and bad keys)', async () => {
+      const { db } = await workspace();
+      const dto = await createTeam(db, { id: 'ops', name: 'Operations' });
+      expect(dto.id).toBe('OPS');
+      expect(dto.name).toBe('Operations');
+      await expect(createTeam(db, { id: 'CORE', name: 'x' })).rejects.toThrow();
+      await expect(createTeam(db, { id: '1bad', name: 'x' })).rejects.toThrow();
+   });
+
+   it('adds a member by email (provisioning) and removes it', async () => {
+      const { db } = await workspace();
+      await addTeamMember(db, 'DESIGN', 'carol@nimbloo.ai');
+      let members = await listTeamMembers(db, 'DESIGN');
+      expect(members.some((m) => m.email === 'carol@nimbloo.ai')).toBe(true);
+
+      // idempotente
+      await addTeamMember(db, 'DESIGN', 'carol@nimbloo.ai');
+      members = await listTeamMembers(db, 'DESIGN');
+      expect(members.filter((m) => m.email === 'carol@nimbloo.ai')).toHaveLength(1);
+
+      const carol = members.find((m) => m.email === 'carol@nimbloo.ai')!;
+      await removeTeamMember(db, 'DESIGN', carol.id);
+      members = await listTeamMembers(db, 'DESIGN');
+      expect(members.some((m) => m.email === 'carol@nimbloo.ai')).toBe(false);
+   });
+
+   it('rejects adding a member to a non-existent team', async () => {
+      const { db } = await workspace();
+      await expect(addTeamMember(db, 'NOPE', 'x@nimbloo.ai')).rejects.toThrow();
    });
 });
 

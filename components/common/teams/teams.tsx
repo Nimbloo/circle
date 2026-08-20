@@ -7,6 +7,7 @@ import { useMemo } from 'react';
 import { Filter } from '@/components/layout/headers/teams/filter';
 import TeamLine from './team-line';
 import { TeamsDisplayOptions } from './teams-display-options';
+import { NewTeamButton } from './new-team-button';
 
 export default function Teams() {
    const allTeams = useWorkspaceStore((s) => s.teams);
@@ -49,6 +50,7 @@ export default function Teams() {
                {displayed.length} {displayed.length === 1 ? 'team' : 'teams'}
             </span>
             <div className="flex items-center gap-1">
+               <NewTeamButton />
                <Filter />
                <TeamsDisplayOptions />
             </div>

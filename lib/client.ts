@@ -9,7 +9,7 @@ import type {
    UpdateIssueInput,
 } from '@/lib/api/issues';
 import type { ProjectDto } from '@/lib/api/projects';
-import type { TeamDto } from '@/lib/api/teams';
+import type { TeamDto, CreateTeamInput } from '@/lib/api/teams';
 import type { MemberDto } from '@/lib/api/members';
 import type { CycleDto } from '@/lib/api/cycles';
 import type { InitiativeDto } from '@/lib/api/initiatives';
@@ -115,7 +115,12 @@ export const api = {
    teams: {
       list: (q = '') => get<TeamDto[]>(`/teams${q}`),
       get: (key: string) => get<TeamDto>(`/teams/${key}`),
+      create: (input: CreateTeamInput) => post<TeamDto>('/teams', input),
       members: (key: string) => get<MemberDto[]>(`/teams/${key}/members`),
+      addMember: (key: string, email: string) =>
+         post<MemberDto[]>(`/teams/${key}/members`, { email }),
+      removeMember: (key: string, userId: string) =>
+         del<MemberDto[]>(`/teams/${key}/members/${userId}`),
       issues: (key: string, opts?: IssueListOptions) =>
          get<IssueDto[]>(`/teams/${key}/issues${issueQuery(opts)}`),
       cycles: (key: string) => get<CycleDto[]>(`/teams/${key}/cycles`),

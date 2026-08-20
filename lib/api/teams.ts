@@ -1,6 +1,8 @@
-import { eq, count } from 'drizzle-orm';
+import { eq, count, and } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { team as teamT, teamMember, appUser, project as projectT } from '@/db/schema';
+import { getOrCreateUser } from './users';
+import { ApiError } from './errors';
 
 type TeamRow = typeof teamT.$inferSelect;
 
@@ -113,4 +115,49 @@ export async function listTeamMembers(db: Db, teamId: string) {
       .from(teamMember)
       .innerJoin(appUser, eq(teamMember.userId, appUser.id))
       .where(eq(teamMember.teamId, teamId));
+}
+
+export interface CreateTeamInput {
+   id: string;
+   name: string;
+   icon?: string | null;
+   color?: string | null;
+}
+
+/** Cria um time. A key (id) vira o prefixo do identifier das issues (<KEY>-<n>). */
+export async function createTeam(db: Db, input: CreateTeamInput): Promise<TeamDto> {
+   const id = input.id.trim().toUpperCase();
+   if (!/^[A-Z][A-Z0-9]{1,15}$/.test(id))
+      throw new ApiError(
+         400,
+         "Key inválida (2-16 letras/números começando por letra, ex.: 'CORE')"
+      );
+   const existing = await db.select({ id: teamT.id }).from(teamT).where(eq(teamT.id, id)).limit(1);
+   if (existing.length) throw new ApiError(409, `Team '${id}' já existe`);
+   await db.insert(teamT).values({
+      id,
+      name: input.name.trim(),
+      icon: input.icon?.trim() || '📋',
+      color: input.color?.trim() || '#6e7bdb',
+      issueSeq: 0,
+   });
+   return (await getTeam(db, id))!;
+}
+
+/** Adiciona (idempotente) um membro ao time pelo e-mail — provisiona o usuário se novo. */
+export async function addTeamMember(db: Db, teamId: string, email: string): Promise<void> {
+   const t = await db.select({ id: teamT.id }).from(teamT).where(eq(teamT.id, teamId)).limit(1);
+   if (!t.length) throw new ApiError(404, `Team '${teamId}' não existe`);
+   const user = await getOrCreateUser(db, email);
+   await db
+      .insert(teamMember)
+      .values({ teamId, userId: user.id, joined: true })
+      .onConflictDoNothing();
+}
+
+/** Remove um membro do time. */
+export async function removeTeamMember(db: Db, teamId: string, userId: string): Promise<void> {
+   await db
+      .delete(teamMember)
+      .where(and(eq(teamMember.teamId, teamId), eq(teamMember.userId, userId)));
 }
