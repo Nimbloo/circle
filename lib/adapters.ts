@@ -73,7 +73,8 @@ function adaptProject(p: ProjectRef): Project {
       icon: Cuboid,
       percentComplete: 0,
       startDate: '',
-      lead: {} as User,
+      // Ref de projeto embutido na issue não carrega lead — null honesto (Project.lead: User|null).
+      lead: null,
       priority: priorityCatalog[0],
       health: DEFAULT_HEALTH,
       teamId: '',

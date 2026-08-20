@@ -2,6 +2,7 @@
 
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
+import { IterationCcw } from 'lucide-react';
 import { Fragment } from 'react';
 import CycleLine from './cycle-line';
 import { CycleBurnupChart, CycleProgressLegend } from './cycle-burnup-chart';
@@ -12,6 +13,24 @@ import { CycleBurnupChart, CycleProgressLegend } from './cycle-burnup-chart';
  */
 export default function Cycles() {
    const cycles = useWorkspaceStore((s) => s.cycles);
+
+   if (cycles.length === 0) {
+      return (
+         <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
+            <div className="flex size-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
+               <IterationCcw className="size-6" />
+            </div>
+            <div className="flex flex-col gap-1">
+               <p className="text-sm font-medium">No cycles yet</p>
+               <p className="max-w-xs text-sm text-muted-foreground">
+                  Cycles focus your team over short, time-boxed windows. They show up here once a
+                  team turns them on.
+               </p>
+            </div>
+         </div>
+      );
+   }
+
    return (
       <div className="w-full py-4">
          {cycles.map((cycle) => (

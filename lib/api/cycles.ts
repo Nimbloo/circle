@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { cycle as cycleT, issue as issueT, status as statusT, team as teamT } from '@/db/schema';
 import { ApiError } from './errors';
@@ -127,9 +127,13 @@ export async function getCycleByStatus(
    teamId: string,
    status: 'current' | 'upcoming'
 ): Promise<CycleDto | null> {
-   const rows = await db.select().from(cycleT).where(eq(cycleT.teamId, teamId)).limit(50);
-   const match = rows.find((r) => r.status === status);
-   if (!match) return null;
+   const rows = await db
+      .select()
+      .from(cycleT)
+      .where(and(eq(cycleT.teamId, teamId), eq(cycleT.status, status)))
+      .limit(1);
+   if (rows.length === 0) return null;
+   const match = rows[0];
    const aggs = await aggregatesByCycle(db, [match.id]);
    return toDto(match, aggs.get(match.id) ?? { scope: 0, started: 0, completed: 0 });
 }

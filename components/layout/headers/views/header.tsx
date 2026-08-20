@@ -1,8 +1,7 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
+import { CreateViewButton } from '@/components/common/views/create-view-dialog';
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import { Plus } from 'lucide-react';
 
 export default function Header() {
    return (
@@ -11,9 +10,7 @@ export default function Header() {
             <SidebarTrigger />
             <span className="text-sm font-medium">Views</span>
          </div>
-         <Button size="xs" variant="ghost">
-            <Plus className="size-4" />
-         </Button>
+         <CreateViewButton />
       </div>
    );
 }

@@ -15,6 +15,7 @@ import { Plus, X } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 
 export type RelationKind = 'sub' | 'related' | 'blocked_by';
 
@@ -60,6 +61,8 @@ export function RelationEditor({
       try {
          await api.issues.addRelation(issueId, relatedId, kind);
          onChanged();
+      } catch {
+         toast.error('Could not add the relation');
       } finally {
          setBusy(false);
       }
@@ -70,6 +73,8 @@ export function RelationEditor({
       try {
          await api.issues.removeRelation(issueId, relatedId, kind);
          onChanged();
+      } catch {
+         toast.error('Could not remove the relation');
       } finally {
          setBusy(false);
       }

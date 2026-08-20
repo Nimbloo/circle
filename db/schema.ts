@@ -77,7 +77,10 @@ export const teamMember = pgTable(
          .references(() => appUser.id),
       joined: boolean('joined').notNull().default(true),
    },
-   (t) => [primaryKey({ columns: [t.teamId, t.userId] })]
+   (t) => [
+      primaryKey({ columns: [t.teamId, t.userId] }),
+      index('idx_team_member_user').on(t.userId),
+   ]
 );
 
 // ─────────────────────────────────────────────────────────────
@@ -101,31 +104,38 @@ export const initiative = pgTable('initiative', {
    createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
-export const project = pgTable('project', {
-   id: varchar('id', { length: 36 }).primaryKey(),
-   name: varchar('name', { length: 196 }).notNull(),
-   statusId: varchar('status_id', { length: 64 })
-      .notNull()
-      .references(() => status.id),
-   iconKey: varchar('icon_key', { length: 64 }),
-   percentComplete: integer('percent_complete').notNull().default(0),
-   startDate: date('start_date'),
-   targetDate: date('target_date'),
-   leadId: varchar('lead_id', { length: 36 }).references(() => appUser.id),
-   priorityId: varchar('priority_id', { length: 64 })
-      .notNull()
-      .references(() => priority.id),
-   healthId: varchar('health_id', { length: 64 })
-      .notNull()
-      .references(() => health.id),
-   teamId: varchar('team_id', { length: 16 })
-      .notNull()
-      .references(() => team.id),
-   initiativeId: varchar('initiative_id', { length: 36 }).references(() => initiative.id),
-   healthUpdatedAt: timestamp('health_updated_at'),
-   createdAt: timestamp('created_at').notNull().defaultNow(),
-   updatedAt: timestamp('updated_at').notNull().defaultNow(),
-});
+export const project = pgTable(
+   'project',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      name: varchar('name', { length: 196 }).notNull(),
+      statusId: varchar('status_id', { length: 64 })
+         .notNull()
+         .references(() => status.id),
+      iconKey: varchar('icon_key', { length: 64 }),
+      percentComplete: integer('percent_complete').notNull().default(0),
+      startDate: date('start_date'),
+      targetDate: date('target_date'),
+      leadId: varchar('lead_id', { length: 36 }).references(() => appUser.id),
+      priorityId: varchar('priority_id', { length: 64 })
+         .notNull()
+         .references(() => priority.id),
+      healthId: varchar('health_id', { length: 64 })
+         .notNull()
+         .references(() => health.id),
+      teamId: varchar('team_id', { length: 16 })
+         .notNull()
+         .references(() => team.id),
+      initiativeId: varchar('initiative_id', { length: 36 }).references(() => initiative.id),
+      healthUpdatedAt: timestamp('health_updated_at'),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+      updatedAt: timestamp('updated_at').notNull().defaultNow(),
+   },
+   (t) => [
+      index('idx_project_team').on(t.teamId),
+      index('idx_project_initiative').on(t.initiativeId),
+   ]
+);
 
 export const projectLabel = pgTable(
    'project_label',
@@ -156,18 +166,22 @@ export const initiativeProject = pgTable(
 // ─────────────────────────────────────────────────────────────
 // Cycles / Issues
 // ─────────────────────────────────────────────────────────────
-export const cycle = pgTable('cycle', {
-   id: varchar('id', { length: 36 }).primaryKey(),
-   number: integer('number').notNull(),
-   name: varchar('name', { length: 96 }).notNull(),
-   teamId: varchar('team_id', { length: 16 })
-      .notNull()
-      .references(() => team.id),
-   status: varchar('status', { length: 16 }).notNull(), // planned|upcoming|current|completed
-   startDate: date('start_date').notNull(),
-   endDate: date('end_date').notNull(),
-   capacity: integer('capacity').notNull().default(0),
-});
+export const cycle = pgTable(
+   'cycle',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      number: integer('number').notNull(),
+      name: varchar('name', { length: 96 }).notNull(),
+      teamId: varchar('team_id', { length: 16 })
+         .notNull()
+         .references(() => team.id),
+      status: varchar('status', { length: 16 }).notNull(), // planned|upcoming|current|completed
+      startDate: date('start_date').notNull(),
+      endDate: date('end_date').notNull(),
+      capacity: integer('capacity').notNull().default(0),
+   },
+   (t) => [index('idx_cycle_team').on(t.teamId)]
+);
 
 export const issue = pgTable(
    'issue',
@@ -200,6 +214,7 @@ export const issue = pgTable(
       index('idx_issue_project').on(t.projectId),
       index('idx_issue_cycle').on(t.cycleId),
       index('idx_issue_assignee').on(t.assigneeId),
+      index('idx_issue_created_by').on(t.createdById),
       index('idx_issue_rank').on(t.rank),
    ]
 );
@@ -214,7 +229,10 @@ export const issueLabel = pgTable(
          .notNull()
          .references(() => label.id),
    },
-   (t) => [primaryKey({ columns: [t.issueId, t.labelId] })]
+   (t) => [
+      primaryKey({ columns: [t.issueId, t.labelId] }),
+      index('idx_issue_label_label').on(t.labelId),
+   ]
 );
 
 export const issueContent = pgTable('issue_content', {
@@ -237,7 +255,10 @@ export const issueRelation = pgTable(
          .references(() => issue.id),
       kind: varchar('kind', { length: 16 }).notNull(), // sub|related|blocked_by
    },
-   (t) => [index('idx_issue_relation_issue').on(t.issueId)]
+   (t) => [
+      index('idx_issue_relation_issue').on(t.issueId),
+      index('idx_issue_relation_related').on(t.relatedId),
+   ]
 );
 
 export const issuePrLink = pgTable('issue_pr_link', {
@@ -297,21 +318,25 @@ export const activityEvent = pgTable(
 // ─────────────────────────────────────────────────────────────
 // Views / Notifications / Project detail / Documents
 // ─────────────────────────────────────────────────────────────
-export const savedView = pgTable('saved_view', {
-   id: varchar('id', { length: 36 }).primaryKey(),
-   slug: varchar('slug', { length: 96 }).notNull(),
-   name: varchar('name', { length: 196 }).notNull(),
-   description: text('description'),
-   icon: varchar('icon', { length: 16 }),
-   type: varchar('type', { length: 16 }).notNull(), // issue|project
-   teamId: varchar('team_id', { length: 16 }).references(() => team.id),
-   ownerId: varchar('owner_id', { length: 36 })
-      .notNull()
-      .references(() => appUser.id),
-   filter: text('filter').notNull(), // ViewFilter (json)
-   createdAt: timestamp('created_at').notNull().defaultNow(),
-   updatedAt: timestamp('updated_at').notNull().defaultNow(),
-});
+export const savedView = pgTable(
+   'saved_view',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      slug: varchar('slug', { length: 96 }).notNull(),
+      name: varchar('name', { length: 196 }).notNull(),
+      description: text('description'),
+      icon: varchar('icon', { length: 16 }),
+      type: varchar('type', { length: 16 }).notNull(), // issue|project
+      teamId: varchar('team_id', { length: 16 }).references(() => team.id),
+      ownerId: varchar('owner_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      filter: text('filter').notNull(), // ViewFilter (json)
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+      updatedAt: timestamp('updated_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_saved_view_owner').on(t.ownerId), index('idx_saved_view_team').on(t.teamId)]
+);
 
 export const notification = pgTable(
    'notification',

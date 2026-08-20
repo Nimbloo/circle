@@ -67,17 +67,23 @@ export function CreateNewIssue() {
       setAddIssueForm(createDefaultData());
    }, [createDefaultData]);
 
-   const createIssue = () => {
+   const createIssue = async () => {
       if (!addIssueForm.title) {
          toast.error('Title is required');
          return;
       }
-      toast.success('Issue created');
-      addIssue(addIssueForm);
-      if (!createMore) {
-         closeModal();
+      try {
+         // addIssue faz o set otimista e resolve só após o create + re-hydrate no servidor.
+         await addIssue(addIssueForm);
+         toast.success('Issue created');
+         if (!createMore) {
+            closeModal();
+         }
+         setAddIssueForm(createDefaultData());
+      } catch {
+         // A issue otimista já foi revertida no store; mantém o modal aberto p/ retry.
+         toast.error('Falha ao criar a issue');
       }
-      setAddIssueForm(createDefaultData());
    };
 
    return (

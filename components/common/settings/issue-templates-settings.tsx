@@ -23,9 +23,20 @@ export default function IssueTemplatesSettings() {
                <SettingsRow
                   title={`${TEMPLATES.length} issue templates`}
                   trailing={
-                     <Button size="icon" variant="ghost" className="size-7">
-                        <Plus className="size-4" />
-                     </Button>
+                     <div className="flex items-center gap-2">
+                        <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                           Soon
+                        </span>
+                        <Button
+                           size="icon"
+                           variant="ghost"
+                           className="size-7"
+                           disabled
+                           aria-label="New template"
+                        >
+                           <Plus className="size-4" />
+                        </Button>
+                     </div>
                   }
                />
                {TEMPLATES.map((template) => (

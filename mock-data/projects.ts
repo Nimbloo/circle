@@ -35,7 +35,8 @@ export interface Project {
    startDate: string;
    /** Planned completion date (Linear "Target date"). */
    targetDate?: string;
-   lead: User;
+   /** Project lead. `null` quando a issue/projeto não tem lead definido (dado da API). */
+   lead: User | null;
    priority: Priority;
    health: Health;
    /** Owning team (see mock-data/teams.ts). */

@@ -105,9 +105,12 @@ function ProjectsSection({ initiative }: { initiative: Initiative }) {
                      </span>
                      <span className="hidden md:block w-12 shrink-0">
                         <Avatar className="size-5">
-                           <AvatarImage src={project.lead.avatarUrl} alt={project.lead.name} />
+                           <AvatarImage
+                              src={project.lead?.avatarUrl}
+                              alt={project.lead?.name ?? ''}
+                           />
                            <AvatarFallback className="text-[9px]">
-                              {project.lead.name[0]}
+                              {project.lead?.name[0] ?? '—'}
                            </AvatarFallback>
                         </Avatar>
                      </span>

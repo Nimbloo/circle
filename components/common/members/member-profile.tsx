@@ -11,7 +11,7 @@ import { Issue } from '@/mock-data/issues';
 import { labels } from '@/mock-data/labels';
 import { priorities } from '@/mock-data/priorities';
 import { statusUserColors, User } from '@/mock-data/users';
-import { displayOrderedStatus } from '@/mock-data/status';
+import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
@@ -108,6 +108,7 @@ export default function MemberProfile({ member }: { member: User }) {
    const { openPanel } = useRightPanelStore();
    const projects = useWorkspaceStore((s) => s.projects);
    const teams = useWorkspaceStore((s) => s.teams);
+   const displayOrderedStatus = useDisplayOrderedStatuses();
 
    const isSearching = isSearchOpen && searchQuery.trim() !== '';
    const isViewTypeGrid = viewType === 'grid';
@@ -130,7 +131,7 @@ export default function MemberProfile({ member }: { member: User }) {
    );
 
    const memberProjects = useMemo(() => {
-      const led = projects.filter((project) => project.lead.id === member.id);
+      const led = projects.filter((project) => project.lead?.id === member.id);
       const fromIssues = displayedIssues
          .map((issue) => issue.project)
          .filter((project): project is NonNullable<typeof project> => Boolean(project));

@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { SlidersHorizontal, CheckCheck, ArrowUpDown } from 'lucide-react';
+import { SlidersHorizontal, CheckCheck, ArrowUpDown, InboxIcon } from 'lucide-react';
 import NotificationPreview from './issue-preview';
 import IssueLine from './issue-line';
 import { SidebarTrigger } from '@/components/ui/sidebar';
@@ -49,10 +49,10 @@ export default function Inbox() {
             if (!a.read && b.read) return -1;
             if (a.read && !b.read) return 1;
          }
-         // Sort by timestamp (newest first by default)
+         // Ordena pelo ISO cru (sortAt); timestamp é string relativa só p/ exibir.
          return ordering === 'newest'
-            ? new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-            : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+            ? new Date(b.sortAt).getTime() - new Date(a.sortAt).getTime()
+            : new Date(a.sortAt).getTime() - new Date(b.sortAt).getTime();
       });
 
    const listPane = (
@@ -69,12 +69,13 @@ export default function Inbox() {
                   size="xs"
                   onClick={markAllAsRead}
                   disabled={getUnreadNotifications().length === 0}
+                  aria-label="Mark all as read"
                >
                   <CheckCheck className="w-4 h-4" />
                </Button>
                <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                     <Button variant="ghost" size="xs">
+                     <Button variant="ghost" size="xs" aria-label="Inbox options">
                         <SlidersHorizontal className="w-4 h-4" />
                      </Button>
                   </DropdownMenuTrigger>
@@ -147,16 +148,31 @@ export default function Inbox() {
             </div>
          </div>
          <div className="w-full flex flex-col items-center justify-start overflow-y-scroll h-[calc(100%-40px)] pb-0.25">
-            {filteredNotifications.map((notification) => (
-               <IssueLine
-                  key={notification.id}
-                  notification={notification}
-                  isSelected={selectedNotification?.id === notification.id}
-                  onClick={() => setSelectedNotification(notification)}
-                  showId={showId}
-                  showStatusIcon={showStatusIcon}
-               />
-            ))}
+            {filteredNotifications.length === 0 ? (
+               <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-24 text-center">
+                  <div className="flex size-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
+                     <InboxIcon className="size-6" />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                     <p className="text-sm font-medium">All caught up</p>
+                     <p className="max-w-xs text-sm text-muted-foreground">
+                        You have no notifications right now. New mentions and updates will land
+                        here.
+                     </p>
+                  </div>
+               </div>
+            ) : (
+               filteredNotifications.map((notification) => (
+                  <IssueLine
+                     key={notification.id}
+                     notification={notification}
+                     isSelected={selectedNotification?.id === notification.id}
+                     onClick={() => setSelectedNotification(notification)}
+                     showId={showId}
+                     showStatusIcon={showStatusIcon}
+                  />
+               ))
+            )}
          </div>
       </>
    );

@@ -6,7 +6,7 @@ import { IssueFilterBar } from '@/components/common/issues/issue-filter-bar';
 import { adaptProjectDetail, emptyProjectDetail } from '@/lib/adapters-project-detail';
 import { api } from '@/lib/client';
 import type { ProjectDetail } from '@/mock-data/project-details';
-import { displayOrderedStatus } from '@/mock-data/status';
+import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -23,6 +23,7 @@ export default function ProjectIssues({ projectId }: ProjectIssuesProps) {
    const loaded = useWorkspaceStore((s) => s.loaded);
    const { issues: allIssues } = useIssuesStore();
    const { filters } = useFilterStore();
+   const displayOrderedStatus = useDisplayOrderedStatuses();
 
    const [detail, setDetail] = useState<ProjectDetail>(() => emptyProjectDetail(projectId));
    useEffect(() => {

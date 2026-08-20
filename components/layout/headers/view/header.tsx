@@ -40,6 +40,7 @@ export default function Header() {
                   size="xs"
                   variant={openPanel === 'insights' ? 'secondary' : 'ghost'}
                   onClick={() => togglePanel('insights')}
+                  aria-label="Toggle insights"
                >
                   <BarChart3 className="size-4" />
                </Button>

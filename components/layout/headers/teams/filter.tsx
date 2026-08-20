@@ -117,6 +117,7 @@ export function Filter() {
                         size="icon"
                         className="size-6"
                         onClick={() => setActive(null)}
+                        aria-label="Back"
                      >
                         <ChevronRight className="size-4 rotate-180" />
                      </Button>
@@ -146,6 +147,7 @@ export function Filter() {
                         size="icon"
                         className="size-6"
                         onClick={() => setActive(null)}
+                        aria-label="Back"
                      >
                         <ChevronRight className="size-4 rotate-180" />
                      </Button>
@@ -175,6 +177,7 @@ export function Filter() {
                         size="icon"
                         className="size-6"
                         onClick={() => setActive(null)}
+                        aria-label="Back"
                      >
                         <ChevronRight className="size-4 rotate-180" />
                      </Button>

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    initiative as initT,
@@ -207,6 +207,11 @@ export async function createInitiative(
             .insert(initiativeProject)
             .values(input.projectIds.map((projectId) => ({ initiativeId: id, projectId })))
             .onConflictDoNothing();
+         // Mantém project.initiativeId em sincronia com a tabela de vínculo.
+         await tx
+            .update(projectT)
+            .set({ initiativeId: id })
+            .where(inArray(projectT.id, input.projectIds));
       }
    });
    return (await getInitiative(db, id))!;
@@ -221,6 +226,7 @@ export interface UpdateInitiativeInput {
    healthId?: string;
    ownerId?: string | null;
    target?: string | null;
+   projectIds?: string[];
 }
 
 export async function updateInitiative(
@@ -243,7 +249,36 @@ export async function updateInitiative(
    ] as const) {
       if (patch[k] !== undefined) set[k] = patch[k];
    }
-   if (Object.keys(set).length) await db.update(initT).set(set).where(eq(initT.id, id));
+   await db.transaction(async (tx) => {
+      if (Object.keys(set).length) await tx.update(initT).set(set).where(eq(initT.id, id));
+      // Reconciliação initiative↔project: substitui o conjunto de vínculos e
+      // mantém project.initiativeId dos dois lados sempre consistente.
+      if (patch.projectIds !== undefined) {
+         const old = await tx
+            .select({ projectId: initiativeProject.projectId })
+            .from(initiativeProject)
+            .where(eq(initiativeProject.initiativeId, id));
+         const oldIds = old.map((l) => l.projectId);
+         await tx.delete(initiativeProject).where(eq(initiativeProject.initiativeId, id));
+         // Limpa a back-reference dos projetos que apontavam para esta initiative.
+         if (oldIds.length) {
+            await tx
+               .update(projectT)
+               .set({ initiativeId: null })
+               .where(and(inArray(projectT.id, oldIds), eq(projectT.initiativeId, id)));
+         }
+         if (patch.projectIds.length) {
+            await tx
+               .insert(initiativeProject)
+               .values(patch.projectIds.map((projectId) => ({ initiativeId: id, projectId })))
+               .onConflictDoNothing();
+            await tx
+               .update(projectT)
+               .set({ initiativeId: id })
+               .where(inArray(projectT.id, patch.projectIds));
+         }
+      }
+   });
    return getInitiative(db, id);
 }
 

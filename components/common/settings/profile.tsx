@@ -9,8 +9,19 @@ import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './sha
 
 /** Personal "Profile" settings. */
 export default function Profile() {
-   const users = useWorkspaceStore((s) => s.users);
-   const me = users[0];
+   const me = useWorkspaceStore((s) => s.me);
+
+   if (!me) {
+      return (
+         <SettingsShell title="Profile">
+            <SettingsSection>
+               <SettingsCard>
+                  <SettingsRow title="Loading…" />
+               </SettingsCard>
+            </SettingsSection>
+         </SettingsShell>
+      );
+   }
 
    return (
       <SettingsShell title="Profile">
@@ -20,7 +31,7 @@ export default function Profile() {
                   title="Profile picture"
                   trailing={
                      <Avatar className="size-9">
-                        <AvatarImage src={me.avatarUrl} alt={me.name} />
+                        <AvatarImage src={me.avatarUrl ?? undefined} alt={me.name} />
                         <AvatarFallback>{me.name[0]}</AvatarFallback>
                      </Avatar>
                   }

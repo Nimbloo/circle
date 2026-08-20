@@ -105,6 +105,45 @@ describe('issues', () => {
       expect(found[0].title).toBe('Login bug');
    });
 
+   it('filters by label', async () => {
+      const db = await setup();
+      await createIssue(
+         db,
+         {
+            teamId: 'CORE',
+            title: 'Bug one',
+            statusId: 'to-do',
+            priorityId: 'low',
+            labelIds: ['bug'],
+         },
+         ME
+      );
+      await createIssue(
+         db,
+         {
+            teamId: 'CORE',
+            title: 'Feature one',
+            statusId: 'to-do',
+            priorityId: 'low',
+            labelIds: ['feature'],
+         },
+         ME
+      );
+      await createIssue(
+         db,
+         { teamId: 'CORE', title: 'No labels', statusId: 'to-do', priorityId: 'low' },
+         ME
+      );
+
+      const bugs = await listIssues(db, { labels: ['bug'] });
+      expect(bugs).toHaveLength(1);
+      expect(bugs[0].title).toBe('Bug one');
+
+      // multi-label = OR (issue com qualquer um dos labels)
+      const either = await listIssues(db, { labels: ['bug', 'feature'] });
+      expect(either.map((i) => i.title).sort()).toEqual(['Bug one', 'Feature one']);
+   });
+
    it('filters by statusType (category) expanding to status ids', async () => {
       const db = await setup();
       await createIssue(
@@ -201,15 +240,13 @@ describe('issues', () => {
 
       // comment + reação
       const commentId = randomUUID();
-      await db
-         .insert(comment)
-         .values({
-            id: commentId,
-            issueId: target.id,
-            authorId,
-            body: 'oi',
-            createdAt: new Date(),
-         });
+      await db.insert(comment).values({
+         id: commentId,
+         issueId: target.id,
+         authorId,
+         body: 'oi',
+         createdAt: new Date(),
+      });
       await db.insert(commentReaction).values({ commentId, emoji: '👍', userId: authorId });
 
       // relações nas DUAS direções

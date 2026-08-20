@@ -18,9 +18,9 @@ const UpdateSchema = z.object({
 export async function PATCH(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      requireEmail(req);
+      const email = requireEmail(req);
       const patch = UpdateSchema.parse(await req.json());
-      const okd = await updateDocument(db, id, patch);
+      const okd = await updateDocument(db, id, patch, email);
       return okd ? ok({ id }) : notFound(`Documento '${id}' não encontrado`);
    });
 }
@@ -28,8 +28,8 @@ export async function PATCH(req: Request, { params }: Params) {
 export async function DELETE(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      requireEmail(req);
-      const removed = await deleteDocument(db, id);
+      const email = requireEmail(req);
+      const removed = await deleteDocument(db, id, email);
       return removed ? ok({ deleted: true }) : notFound(`Documento '${id}' não encontrado`);
    });
 }

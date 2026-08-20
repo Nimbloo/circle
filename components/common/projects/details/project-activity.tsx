@@ -202,7 +202,8 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
                         <div className="flex gap-6">
                            <span className="w-20">Lead</span>
                            <span>
-                              <span className="text-foreground">{project.lead.name}</span> assigned
+                              <span className="text-foreground">{project.lead?.name ?? '—'}</span>{' '}
+                              assigned
                            </span>
                         </div>
                         <div className="flex gap-6">

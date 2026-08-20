@@ -4,6 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ActivityItem } from '@/mock-data/issue-details';
 import { api } from '@/lib/client';
+import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { CommentComposer } from './comment-composer';
 import {
@@ -22,6 +23,9 @@ import {
 import { ReactNode, useState } from 'react';
 import { toast } from 'sonner';
 import { ContentBlocks } from './content-blocks';
+
+/** Reação enriquecida com o server-truth `reactedByMe` (o DTO carrega o campo). */
+type ReactionView = { emoji: string; count: number; reactedByMe?: boolean };
 
 const EVENT_ICONS: Record<string, ReactNode> = {
    created: <PenLine className="size-3.5" />,
@@ -71,15 +75,26 @@ function CommentCard({
    const [busy, setBusy] = useState(false);
    const [picking, setPicking] = useState(false);
 
+   // `reactedByMe` é server-truth (vem do DTO). O tipo do mock-data ainda não
+   // modela o campo, então lemos as reações por esta view enriquecida.
+   const reactions = (item.reactions ?? []) as ReactionView[];
+   const didReact = (emoji: string) =>
+      reactions.find((r) => r.emoji === emoji)?.reactedByMe ?? false;
+
    const react = async (emoji: string) => {
       if (busy) return;
+      const reacted = didReact(emoji);
       setBusy(true);
       try {
-         await api.comments.addReaction(item.id, emoji);
+         if (reacted) {
+            await api.comments.removeReaction(item.id, emoji);
+         } else {
+            await api.comments.addReaction(item.id, emoji);
+         }
          setPicking(false);
-         onChanged?.();
+         onChanged?.(); // refetch do detail → estado reflete o server-truth
       } catch {
-         toast.error('Could not add the reaction');
+         toast.error(reacted ? 'Could not remove the reaction' : 'Could not add the reaction');
       } finally {
          setBusy(false);
       }
@@ -179,13 +194,19 @@ function CommentCard({
          )}
 
          <div className="flex items-center gap-1.5 mt-1">
-            {item.reactions?.map((reaction) => (
+            {reactions.map((reaction) => (
                <button
                   key={reaction.emoji}
                   type="button"
                   onClick={() => void react(reaction.emoji)}
                   disabled={busy}
-                  className="inline-flex items-center gap-1 text-xs bg-accent/60 border border-border/60 rounded-full px-2 py-0.5 hover:bg-accent disabled:opacity-40"
+                  aria-pressed={reaction.reactedByMe}
+                  className={cn(
+                     'inline-flex items-center gap-1 text-xs border rounded-full px-2 py-0.5 disabled:opacity-40',
+                     reaction.reactedByMe
+                        ? 'bg-primary/15 border-primary/40 hover:bg-primary/20'
+                        : 'bg-accent/60 border-border/60 hover:bg-accent'
+                  )}
                >
                   {reaction.emoji} {reaction.count}
                </button>

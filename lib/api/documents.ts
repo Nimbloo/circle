@@ -3,6 +3,7 @@ import { eq, inArray, asc } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { documentFolder, teamDocument, appUser } from '@/db/schema';
 import { getOrCreateUser } from './users';
+import { isAdmin } from './auth';
 import type { UserRef } from './issues';
 import { ApiError } from './errors';
 
@@ -93,18 +94,16 @@ export async function createDocument(
    const creator = await getOrCreateUser(db, creatorEmail);
    const id = randomUUID();
    const now = new Date();
-   await db
-      .insert(teamDocument)
-      .values({
-         id,
-         folderId: input.folderId,
-         name: input.name,
-         icon: input.icon ?? null,
-         creatorId: creator.id,
-         pinned: input.pinned ?? false,
-         createdAt: now,
-         updatedAt: now,
-      });
+   await db.insert(teamDocument).values({
+      id,
+      folderId: input.folderId,
+      name: input.name,
+      icon: input.icon ?? null,
+      creatorId: creator.id,
+      pinned: input.pinned ?? false,
+      createdAt: now,
+      updatedAt: now,
+   });
    return {
       id,
       folderId: input.folderId,
@@ -123,11 +122,27 @@ export async function createDocument(
    };
 }
 
+/** Só o criador do documento (ou um admin) pode alterá-lo/removê-lo (403). */
+async function assertDocumentOwner(db: Db, id: string, actorEmail: string): Promise<boolean> {
+   const rows = await db
+      .select({ creatorId: teamDocument.creatorId })
+      .from(teamDocument)
+      .where(eq(teamDocument.id, id))
+      .limit(1);
+   if (rows.length === 0) return false;
+   const me = await getOrCreateUser(db, actorEmail);
+   if (rows[0].creatorId !== me.id && !isAdmin(actorEmail))
+      throw new ApiError(403, 'Apenas o criador do documento pode alterá-lo');
+   return true;
+}
+
 export async function updateDocument(
    db: Db,
    id: string,
-   patch: { name?: string; icon?: string | null; pinned?: boolean }
+   patch: { name?: string; icon?: string | null; pinned?: boolean },
+   actorEmail: string
 ): Promise<boolean> {
+   if (!(await assertDocumentOwner(db, id, actorEmail))) return false;
    const set: Record<string, unknown> = { updatedAt: new Date() };
    if (patch.name !== undefined) set.name = patch.name;
    if (patch.icon !== undefined) set.icon = patch.icon;
@@ -140,7 +155,8 @@ export async function updateDocument(
    return res.length > 0;
 }
 
-export async function deleteDocument(db: Db, id: string): Promise<boolean> {
+export async function deleteDocument(db: Db, id: string, actorEmail: string): Promise<boolean> {
+   if (!(await assertDocumentOwner(db, id, actorEmail))) return false;
    const res = await db
       .delete(teamDocument)
       .where(eq(teamDocument.id, id))

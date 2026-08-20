@@ -154,11 +154,17 @@ export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) 
                   <span>{project.priority.name}</span>
                </PropertyRow>
                <PropertyRow label="Lead">
-                  <Avatar className="size-5">
-                     <AvatarImage src={project.lead.avatarUrl} alt={project.lead.name} />
-                     <AvatarFallback>{project.lead.name[0]}</AvatarFallback>
-                  </Avatar>
-                  <span className="truncate max-w-40">{project.lead.name}</span>
+                  {project.lead ? (
+                     <>
+                        <Avatar className="size-5">
+                           <AvatarImage src={project.lead.avatarUrl} alt={project.lead.name} />
+                           <AvatarFallback>{project.lead.name[0]}</AvatarFallback>
+                        </Avatar>
+                        <span className="truncate max-w-40">{project.lead.name}</span>
+                     </>
+                  ) : (
+                     <span className="text-muted-foreground">—</span>
+                  )}
                </PropertyRow>
                <PropertyRow label="Members">
                   {members.length > 0 ? (

@@ -7,7 +7,9 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 
 /**
  * Hidrata os stores de domínio a partir da API no mount (client-side).
- * Se a API falhar, os stores mantêm o estado inicial — degradação graciosa.
+ * Se o hydrate das issues falhar, o store seta `error: true` (não engole o erro):
+ * o board mostra o estado de falha com botão "Tentar de novo". O estado inicial
+ * (mock) é mantido como fallback de render.
  * O inbox depende das issues (o preview reusa a issue viva), então hidrata depois.
  */
 export function DataHydrator() {

@@ -18,17 +18,17 @@ export async function GET(req: Request) {
 }
 
 const CreateSchema = z.object({
-   teamId: z.string().min(1),
-   title: z.string().min(1),
-   statusId: z.string().min(1),
-   priorityId: z.string().min(1),
-   assigneeId: z.string().nullish(),
-   projectId: z.string().nullish(),
-   cycleId: z.string().nullish(),
-   labelIds: z.array(z.string()).optional(),
-   dueDate: z.string().nullish(),
-   estimate: z.number().int().min(0).nullish(),
-   description: z.string().nullish(),
+   teamId: z.string().min(1).max(16),
+   title: z.string().min(1).max(512),
+   statusId: z.string().min(1).max(64),
+   priorityId: z.string().min(1).max(64),
+   assigneeId: z.string().max(36).nullish(),
+   projectId: z.string().max(36).nullish(),
+   cycleId: z.string().max(36).nullish(),
+   labelIds: z.array(z.string().max(64)).optional(),
+   dueDate: z.string().date().nullish(),
+   estimate: z.number().int().min(0).max(1000).nullish(),
+   description: z.string().max(10000).nullish(),
 });
 
 export async function POST(req: Request) {

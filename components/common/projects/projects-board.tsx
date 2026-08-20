@@ -65,16 +65,14 @@ function ProjectCard({ project }: { project: Project }) {
                   {project.percentComplete}%
                </span>
             )}
-            {displayProperties.priority && (
-               <project.priority.icon className="size-3.5 shrink-0" />
-            )}
+            {displayProperties.priority && <project.priority.icon className="size-3.5 shrink-0" />}
             {displayProperties.targetDate && project.targetDate && (
                <span className="inline-flex items-center gap-1">
                   <Calendar className="size-3" />
                   {format(parseISO(project.targetDate), 'MMM d')}
                </span>
             )}
-            {displayProperties.lead && (
+            {displayProperties.lead && project.lead && (
                <Avatar className="size-4 ml-auto shrink-0">
                   <AvatarImage src={project.lead.avatarUrl} alt={project.lead.name} />
                   <AvatarFallback>{project.lead.name[0]}</AvatarFallback>

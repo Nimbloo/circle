@@ -18,16 +18,16 @@ export async function GET(_req: Request, { params }: Params) {
 }
 
 const UpdateSchema = z.object({
-   name: z.string().min(1).optional(),
-   statusId: z.string().optional(),
-   priorityId: z.string().optional(),
-   healthId: z.string().optional(),
-   leadId: z.string().nullish(),
-   iconKey: z.string().nullish(),
+   name: z.string().min(1).max(196).optional(),
+   statusId: z.string().max(64).optional(),
+   priorityId: z.string().max(64).optional(),
+   healthId: z.string().max(64).optional(),
+   leadId: z.string().max(36).nullish(),
+   iconKey: z.string().max(64).nullish(),
    percentComplete: z.number().int().min(0).max(100).optional(),
-   startDate: z.string().nullish(),
-   targetDate: z.string().nullish(),
-   initiativeId: z.string().nullish(),
+   startDate: z.string().date().nullish(),
+   targetDate: z.string().date().nullish(),
+   initiativeId: z.string().max(36).nullish(),
 });
 
 export async function PATCH(req: Request, { params }: Params) {

@@ -236,6 +236,14 @@ export async function createProject(db: Db, input: CreateProjectInput): Promise<
             .values(input.labelIds.map((labelId) => ({ projectId: id, labelId })))
             .onConflictDoNothing();
       }
+      // Mantém a tabela de vínculo em sincronia com project.initiativeId.
+      if (input.initiativeId) {
+         await tx.delete(initiativeProject).where(eq(initiativeProject.projectId, id));
+         await tx
+            .insert(initiativeProject)
+            .values({ initiativeId: input.initiativeId, projectId: id })
+            .onConflictDoNothing();
+      }
    });
    return (await getProject(db, id))!;
 }
@@ -281,7 +289,19 @@ export async function updateProject(
    }
    if (patch.healthId !== undefined && patch.healthId !== existing[0].healthId)
       set.healthUpdatedAt = new Date();
-   await db.update(projectT).set(set).where(eq(projectT.id, id));
+   await db.transaction(async (tx) => {
+      await tx.update(projectT).set(set).where(eq(projectT.id, id));
+      // Reconciliação initiative↔project: substitui o vínculo antigo pelo novo.
+      if (patch.initiativeId !== undefined) {
+         await tx.delete(initiativeProject).where(eq(initiativeProject.projectId, id));
+         if (patch.initiativeId !== null) {
+            await tx
+               .insert(initiativeProject)
+               .values({ initiativeId: patch.initiativeId, projectId: id })
+               .onConflictDoNothing();
+         }
+      }
+   });
    return getProject(db, id);
 }
 

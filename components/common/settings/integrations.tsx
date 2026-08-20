@@ -76,13 +76,7 @@ function IntegrationCard({ integration }: { integration: Integration }) {
    );
 }
 
-function CategorySection({
-   label,
-   items,
-}: {
-   label: string;
-   items: Integration[];
-}) {
+function CategorySection({ label, items }: { label: string; items: Integration[] }) {
    const [expanded, setExpanded] = useState(false);
    const visible = expanded ? items : items.slice(0, VISIBLE_PER_CATEGORY);
    return (
@@ -157,12 +151,7 @@ export default function Integrations() {
             ) : (
                <>
                   <section className="flex flex-col gap-3">
-                     <div className="flex items-center justify-between">
-                        <h2 className="text-base font-medium">Enabled</h2>
-                        <button className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-                           View all
-                        </button>
-                     </div>
+                     <h2 className="text-base font-medium">Enabled</h2>
                      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
                         {ENABLED_INTEGRATIONS.map((integration) => (
                            <button

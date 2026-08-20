@@ -26,12 +26,19 @@ function userRef(
       : null;
 }
 
+export interface ReactionDto {
+   emoji: string;
+   count: number;
+   /** true se o USUÁRIO ATUAL reagiu com este emoji (server-truth p/ o toggle). */
+   reactedByMe: boolean;
+}
+
 export interface CommentDto {
    id: string;
    author: UserRef | null;
    body: string;
    createdAt: string;
-   reactions: { emoji: string; count: number }[];
+   reactions: ReactionDto[];
 }
 
 export interface ActivityItem {
@@ -42,7 +49,7 @@ export interface ActivityItem {
    event?: string;
    text?: string;
    body?: string;
-   reactions?: { emoji: string; count: number }[];
+   reactions?: ReactionDto[];
 }
 
 export interface IssueDetailDto {
@@ -62,23 +69,31 @@ async function loadUsers(db: Db, ids: string[]) {
    return new Map(rows.map((u) => [u.id, u]));
 }
 
-async function reactionsByComment(db: Db, commentIds: string[]) {
-   const map = new Map<string, { emoji: string; count: number }[]>();
+async function reactionsByComment(db: Db, commentIds: string[], meUserId?: string) {
+   const map = new Map<string, ReactionDto[]>();
    if (commentIds.length === 0) return map;
    const rows = await db
       .select()
       .from(commentReaction)
       .where(inArray(commentReaction.commentId, commentIds));
-   const agg = new Map<string, Map<string, number>>();
+   const agg = new Map<string, Map<string, { count: number; reactedByMe: boolean }>>();
    for (const r of rows) {
-      const byEmoji = agg.get(r.commentId) ?? new Map<string, number>();
-      byEmoji.set(r.emoji, (byEmoji.get(r.emoji) ?? 0) + 1);
+      const byEmoji =
+         agg.get(r.commentId) ?? new Map<string, { count: number; reactedByMe: boolean }>();
+      const cur = byEmoji.get(r.emoji) ?? { count: 0, reactedByMe: false };
+      cur.count += 1;
+      if (meUserId && r.userId === meUserId) cur.reactedByMe = true;
+      byEmoji.set(r.emoji, cur);
       agg.set(r.commentId, byEmoji);
    }
    for (const [cid, byEmoji] of agg)
       map.set(
          cid,
-         [...byEmoji.entries()].map(([emoji, count]) => ({ emoji, count }))
+         [...byEmoji.entries()].map(([emoji, { count, reactedByMe }]) => ({
+            emoji,
+            count,
+            reactedByMe,
+         }))
       );
    return map;
 }
@@ -157,12 +172,18 @@ export async function removeRelation(
    return getIssueDetail(db, issueId);
 }
 
-export async function listComments(db: Db, issueId: string): Promise<CommentDto[]> {
+export async function listComments(
+   db: Db,
+   issueId: string,
+   meEmail?: string
+): Promise<CommentDto[]> {
    const comments = await db
       .select()
       .from(commentT)
       .where(eq(commentT.issueId, issueId))
       .orderBy(asc(commentT.createdAt));
+   // Resolve o "me" pelo mesmo helper usado p/ autor/ator (idempotente por e-mail).
+   const meUserId = meEmail ? (await getOrCreateUser(db, meEmail)).id : undefined;
    const [users, reactions] = await Promise.all([
       loadUsers(
          db,
@@ -170,7 +191,8 @@ export async function listComments(db: Db, issueId: string): Promise<CommentDto[
       ),
       reactionsByComment(
          db,
-         comments.map((c) => c.id)
+         comments.map((c) => c.id),
+         meUserId
       ),
    ]);
    return comments.map((c) => ({
@@ -188,6 +210,13 @@ export async function addComment(
    body: string,
    actorEmail: string
 ): Promise<CommentDto> {
+   const [iss] = await db
+      .select({ assigneeId: issueT.assigneeId })
+      .from(issueT)
+      .where(eq(issueT.id, issueId))
+      .limit(1);
+   if (!iss) throw new ApiError(404, `Issue '${issueId}' não encontrada`);
+
    const author = await getOrCreateUser(db, actorEmail);
    const id = randomUUID();
    const now = new Date();
@@ -200,34 +229,31 @@ export async function addComment(
    const mentioned = slugs.length
       ? await db.select().from(appUser).where(inArray(appUser.slug, slugs))
       : [];
-   const mentionedIds = new Set<string>();
-   for (const u of mentioned) {
-      if (u.id === author.id) continue;
-      mentionedIds.add(u.id);
-      await dispatchNotification(db, {
+   const mentionedIds = new Set(mentioned.filter((u) => u.id !== author.id).map((u) => u.id));
+
+   const notifications: Promise<void>[] = [...mentionedIds].map((recipientId) =>
+      dispatchNotification(db, {
          type: 'mention',
          issueId,
-         recipientId: u.id,
+         recipientId,
          actorId: author.id,
          content: `${author.name} mencionou você em um comentário`,
-      });
-   }
+      })
+   );
 
    // Notifica o responsável (se não for o próprio autor nem já mencionado acima)
-   const [iss] = await db
-      .select({ assigneeId: issueT.assigneeId })
-      .from(issueT)
-      .where(eq(issueT.id, issueId))
-      .limit(1);
-   if (iss?.assigneeId && iss.assigneeId !== author.id && !mentionedIds.has(iss.assigneeId)) {
-      await dispatchNotification(db, {
-         type: 'comment',
-         issueId,
-         recipientId: iss.assigneeId,
-         actorId: author.id,
-         content: `${author.name} comentou nesta issue`,
-      });
+   if (iss.assigneeId && iss.assigneeId !== author.id && !mentionedIds.has(iss.assigneeId)) {
+      notifications.push(
+         dispatchNotification(db, {
+            type: 'comment',
+            issueId,
+            recipientId: iss.assigneeId,
+            actorId: author.id,
+            content: `${author.name} comentou nesta issue`,
+         })
+      );
    }
+   await Promise.all(notifications);
 
    return { id, author: userRef(author), body, createdAt: now.toISOString(), reactions: [] };
 }
@@ -281,10 +307,14 @@ export async function deleteComment(
 }
 
 /** Feed unificado: eventos + comentários, ordenado por data. */
-export async function listActivity(db: Db, issueId: string): Promise<ActivityItem[]> {
+export async function listActivity(
+   db: Db,
+   issueId: string,
+   meEmail?: string
+): Promise<ActivityItem[]> {
    const [events, comments] = await Promise.all([
       db.select().from(activityEvent).where(eq(activityEvent.issueId, issueId)),
-      listComments(db, issueId),
+      listComments(db, issueId, meEmail),
    ]);
    const users = await loadUsers(db, events.map((e) => e.actorId).filter(Boolean) as string[]);
 

@@ -1,6 +1,8 @@
 import { db } from '@/db';
 import { ok } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
+import { isAdmin } from '@/lib/api/auth';
+import { ApiError } from '@/lib/api/errors';
 import { listTeamMembers, removeTeamMember } from '@/lib/api/teams';
 
 export const runtime = 'nodejs';
@@ -12,7 +14,8 @@ type Params = { params: Promise<{ teamKey: string; userId: string }> };
 export async function DELETE(req: Request, { params }: Params) {
    return handle(async () => {
       const { teamKey, userId } = await params;
-      requireEmail(req);
+      const email = requireEmail(req);
+      if (!isAdmin(email)) throw new ApiError(403, 'Apenas administradores podem remover membros');
       await removeTeamMember(db, teamKey, userId);
       return ok(await listTeamMembers(db, teamKey));
    });

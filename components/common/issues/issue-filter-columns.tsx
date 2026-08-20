@@ -8,12 +8,13 @@ import { multiOptionFilterFn, optionFilterFn } from '@/components/data-table-fil
 import { cycleStatusLabel } from '@/mock-data/cycles';
 import type { Cycle } from '@/mock-data/cycles';
 import { Issue } from '@/mock-data/issues';
-import { labels } from '@/mock-data/labels';
-import { priorities } from '@/mock-data/priorities';
-import { status, StatusCategory } from '@/mock-data/status';
+import type { Status, StatusCategory } from '@/mock-data/status';
+import type { Priority } from '@/mock-data/priorities';
+import type { LabelInterface } from '@/mock-data/labels';
 import type { Project } from '@/mock-data/projects';
 import type { User } from '@/mock-data/users';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { useCatalogStore } from '@/store/catalog-store';
 import {
    BarChart3,
    CircleCheck,
@@ -24,13 +25,31 @@ import {
    Tag,
 } from 'lucide-react';
 
-/* ------------------------- Options fixas (catálogos) ------------------------ */
+/* ------------------------- Options dos catálogos (hidratados) --------------- */
 
-const statusOptions: ColumnOption[] = status.map((item) => ({
-   value: item.id,
-   label: item.name,
-   icon: <item.icon />,
-}));
+function statusOptionsOf(statuses: Status[]): ColumnOption[] {
+   return statuses.map((item) => ({
+      value: item.id,
+      label: item.name,
+      icon: <item.icon />,
+   }));
+}
+
+function priorityOptionsOf(priorities: Priority[]): ColumnOption[] {
+   return priorities.map((priority) => ({
+      value: priority.id,
+      label: priority.name,
+      icon: <priority.icon className="size-4 text-muted-foreground" />,
+   }));
+}
+
+function labelOptionsOf(labels: LabelInterface[]): ColumnOption[] {
+   return labels.map((label) => ({
+      value: label.id,
+      label: label.name,
+      icon: <span className="size-2.5 rounded-full" style={{ backgroundColor: label.color }} />,
+   }));
+}
 
 const STATUS_TYPES: { id: StatusCategory; name: string }[] = [
    { id: 'triage', name: 'Triage' },
@@ -45,18 +64,6 @@ const statusTypeOptions: ColumnOption[] = STATUS_TYPES.map((item) => ({
    value: item.id,
    label: item.name,
    icon: <CircleDashed className="size-4 text-muted-foreground" />,
-}));
-
-const priorityOptions: ColumnOption[] = priorities.map((priority) => ({
-   value: priority.id,
-   label: priority.name,
-   icon: <priority.icon className="size-4 text-muted-foreground" />,
-}));
-
-const labelOptions: ColumnOption[] = labels.map((label) => ({
-   value: label.id,
-   label: label.name,
-   icon: <span className="size-2.5 rounded-full" style={{ backgroundColor: label.color }} />,
 }));
 
 /* ---------------------- Options dinâmicas (do workspace) -------------------- */
@@ -108,8 +115,15 @@ function cycleOptions(cycles: Cycle[]): ColumnOption[] {
 
 const dtf = createColumnConfigHelper<Issue>();
 
-/** Constrói as colunas de filtro; options dinâmicas vêm do workspace (vazias no build p/ applyIssueFilters). */
-function buildIssueFilterColumns(users: User[], projects: Project[], cycles: Cycle[]) {
+/** Constrói as colunas de filtro; options (catálogos + workspace) vazias no build p/ applyIssueFilters. */
+function buildIssueFilterColumns(
+   users: User[],
+   projects: Project[],
+   cycles: Cycle[],
+   statuses: Status[],
+   priorities: Priority[],
+   labels: LabelInterface[]
+) {
    return [
       dtf
          .option()
@@ -117,7 +131,7 @@ function buildIssueFilterColumns(users: User[], projects: Project[], cycles: Cyc
          .accessor((i: Issue) => i.status.id)
          .displayName('Status')
          .icon(CircleCheck)
-         .options(statusOptions)
+         .options(statusOptionsOf(statuses))
          .build(),
       dtf
          .option()
@@ -141,7 +155,7 @@ function buildIssueFilterColumns(users: User[], projects: Project[], cycles: Cyc
          .accessor((i: Issue) => i.priority.id)
          .displayName('Priority')
          .icon(BarChart3)
-         .options(priorityOptions)
+         .options(priorityOptionsOf(priorities))
          .build(),
       dtf
          .multiOption()
@@ -149,7 +163,7 @@ function buildIssueFilterColumns(users: User[], projects: Project[], cycles: Cyc
          .accessor((i: Issue) => i.labels.map((l) => l.id))
          .displayName('Labels')
          .icon(Tag)
-         .options(labelOptions)
+         .options(labelOptionsOf(labels))
          .build(),
       dtf
          .option()
@@ -170,20 +184,23 @@ function buildIssueFilterColumns(users: User[], projects: Project[], cycles: Cyc
    ];
 }
 
-/** Colunas com os accessors (options dinâmicas vazias) — usado por applyIssueFilters. */
-const accessorColumns = buildIssueFilterColumns([], [], []);
+/** Colunas com os accessors (options vazias) — usado por applyIssueFilters (data-independente). */
+const accessorColumns = buildIssueFilterColumns([], [], [], [], [], []);
 const columnById = new Map<string, (typeof accessorColumns)[number]>(
    accessorColumns.map((column) => [column.id, column])
 );
 
-/** Hook: colunas com options completas (do workspace) para a UI de filtro. */
+/** Hook: colunas com options completas (catálogos hidratados + workspace) para a UI de filtro. */
 export function useIssueFilterColumns() {
    const users = useWorkspaceStore((s) => s.users);
    const projects = useWorkspaceStore((s) => s.projects);
    const cycles = useWorkspaceStore((s) => s.cycles);
+   const statuses = useCatalogStore((s) => s.statuses);
+   const priorities = useCatalogStore((s) => s.priorities);
+   const labels = useCatalogStore((s) => s.labels);
    return useMemo(
-      () => buildIssueFilterColumns(users, projects, cycles),
-      [users, projects, cycles]
+      () => buildIssueFilterColumns(users, projects, cycles, statuses, priorities, labels),
+      [users, projects, cycles, statuses, priorities, labels]
    );
 }
 

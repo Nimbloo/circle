@@ -29,9 +29,20 @@ export default function AgentPersonalization() {
                <SettingsRow
                   title="No skills created"
                   trailing={
-                     <Button size="icon" variant="ghost" className="size-7">
-                        <Plus className="size-4" />
-                     </Button>
+                     <div className="flex items-center gap-2">
+                        <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                           Soon
+                        </span>
+                        <Button
+                           size="icon"
+                           variant="ghost"
+                           className="size-7"
+                           disabled
+                           aria-label="New skill"
+                        >
+                           <Plus className="size-4" />
+                        </Button>
+                     </div>
                   }
                />
             </SettingsCard>
@@ -46,9 +57,14 @@ export default function AgentPersonalization() {
                   title="Agent MCP access disabled in this workspace"
                   muted
                   trailing={
-                     <Button size="xs" variant="ghost">
-                        Configure
-                     </Button>
+                     <div className="flex items-center gap-2">
+                        <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                           Soon
+                        </span>
+                        <Button size="xs" variant="ghost" disabled>
+                           Configure
+                        </Button>
+                     </div>
                   }
                />
             </SettingsCard>

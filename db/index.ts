@@ -10,7 +10,17 @@ const g = globalThis as unknown as { __circlePool?: Pool; __circleDb?: Db; __cir
 function prodDb(): Db {
    if (!g.__circleDb) {
       const pool =
-         g.__circlePool ?? new Pool({ connectionString: process.env.DATABASE_URL, max: 10 });
+         g.__circlePool ??
+         new Pool({
+            connectionString: process.env.DATABASE_URL,
+            max: 10,
+            // Timeouts: sem eles, uma query travada segura a conexão pra sempre →
+            // o pool esgota e o pod fica pendurado sem crashar (não pega no liveness).
+            statement_timeout: 15_000, // mata query no servidor após 15s
+            query_timeout: 15_000, // mata no cliente após 15s
+            connectionTimeoutMillis: 5_000, // desiste de pegar conexão do pool após 5s
+            idleTimeoutMillis: 30_000, // fecha conexão ociosa após 30s
+         });
       if (process.env.NODE_ENV !== 'production') g.__circlePool = pool;
       g.__circleDb = drizzle(pool, { schema });
    }

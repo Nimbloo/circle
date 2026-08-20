@@ -1,10 +1,11 @@
-import { groupIssuesByStatus, Issue, issues as mockIssues } from '@/mock-data/issues';
+import { groupIssuesByStatus, Issue } from '@/mock-data/issues';
 import { LabelInterface } from '@/mock-data/labels';
 import { Priority } from '@/mock-data/priorities';
 import { Project } from '@/mock-data/projects';
 import { Status } from '@/mock-data/status';
 import { User } from '@/mock-data/users';
 import { create } from 'zustand';
+import { toast } from 'sonner';
 import { api } from '@/lib/client';
 import { adaptIssues } from '@/lib/adapters';
 import type { CreateIssueInput, UpdateIssueInput, IssueListOptions } from '@/lib/api/issues';
@@ -23,13 +24,15 @@ interface IssuesState {
    issues: Issue[];
    issuesByStatus: Record<string, Issue[]>;
    loading: boolean;
+   /** true quando o último hydrate() falhou — o board mostra o estado de falha. */
+   error: boolean;
 
    /** Carrega as issues da API (opcionalmente escopadas) e substitui o estado. */
    hydrate: (opts?: IssueListOptions) => Promise<void>;
 
    getAllIssues: () => Issue[];
 
-   addIssue: (issue: Issue) => void;
+   addIssue: (issue: Issue) => Promise<void>;
    updateIssue: (id: string, updatedIssue: Partial<Issue>) => void;
    deleteIssue: (id: string) => void;
 
@@ -69,27 +72,30 @@ function toUpdateInput(updated: Partial<Issue>): UpdateIssueInput {
 }
 
 export const useIssuesStore = create<IssuesState>((set, get) => ({
-   // Estado inicial = mock (render instantâneo / fallback); hydrate() troca pela API.
-   issues: sortByRank(mockIssues),
-   issuesByStatus: groupIssuesByStatus(mockIssues),
+   // Estado inicial vazio; hydrate() carrega da API (o board mostra "Carregando…"
+   // enquanto isso, e o estado de erro/retry cobre a falha).
+   issues: [],
+   issuesByStatus: {},
    loading: false,
+   error: false,
 
    hydrate: async (opts?: IssueListOptions) => {
-      set({ loading: true });
+      set({ loading: true, error: false });
       try {
          const dtos = await api.issues.list(opts);
          const issues = sortByRank(adaptIssues(dtos));
-         set({ issues, issuesByStatus: groupIssuesByStatus(issues), loading: false });
+         set({ issues, issuesByStatus: groupIssuesByStatus(issues), loading: false, error: false });
       } catch {
-         // mantém o estado atual (mock ou anterior) se a API falhar
-         set({ loading: false });
+         // mantém o estado atual (mock ou anterior) e sinaliza a falha p/ o board.
+         set({ loading: false, error: true });
       }
    },
 
    getAllIssues: () => get().issues,
 
    addIssue: (issue: Issue) => {
-      // otimista
+      // Snapshot p/ rollback: a issue otimista tem id/rank falsos até o servidor responder.
+      const snapshot = { issues: get().issues, issuesByStatus: get().issuesByStatus };
       set((state) => {
          const newIssues = [...state.issues, issue];
          return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
@@ -106,29 +112,41 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          dueDate: issue.dueDate ?? null,
          estimate: issue.estimate ?? null,
       };
-      // após criar, re-hidrata p/ obter identifier/rank gerados no servidor
-      api.issues
+      // após criar, re-hidrata p/ obter identifier/rank gerados no servidor.
+      // Em falha, remove a issue otimista e propaga o erro p/ o chamador dar o toast.
+      return api.issues
          .create(input)
          .then(() => get().hydrate())
-         .catch(() => undefined);
+         .catch((err) => {
+            set(snapshot);
+            throw err;
+         });
    },
 
    updateIssue: (id: string, updatedIssue: Partial<Issue>) => {
+      const snapshot = { issues: get().issues, issuesByStatus: get().issuesByStatus };
       set((state) => {
          const newIssues = state.issues.map((issue) =>
             issue.id === id ? { ...issue, ...updatedIssue } : issue
          );
          return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
       });
-      api.issues.update(id, toUpdateInput(updatedIssue)).catch(() => undefined);
+      api.issues.update(id, toUpdateInput(updatedIssue)).catch(() => {
+         set(snapshot);
+         toast.error('Falha ao atualizar a issue');
+      });
    },
 
    deleteIssue: (id: string) => {
+      const snapshot = { issues: get().issues, issuesByStatus: get().issuesByStatus };
       set((state) => {
          const newIssues = state.issues.filter((issue) => issue.id !== id);
          return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
       });
-      api.issues.remove(id).catch(() => undefined);
+      api.issues.remove(id).catch(() => {
+         set(snapshot);
+         toast.error('Falha ao excluir a issue');
+      });
    },
 
    filterByStatus: (statusId) => get().issues.filter((i) => i.status.id === statusId),
@@ -183,23 +201,31 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
    addIssueLabel: (issueId, label) => {
       const issue = get().getIssueById(issueId);
       if (!issue) return;
+      const snapshot = { issues: get().issues, issuesByStatus: get().issuesByStatus };
       set((state) => {
          const newIssues = state.issues.map((i) =>
             i.id === issueId ? { ...i, labels: [...i.labels, label] } : i
          );
          return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
       });
-      api.issues.addLabel(issueId, label.id).catch(() => undefined);
+      api.issues.addLabel(issueId, label.id).catch(() => {
+         set(snapshot);
+         toast.error('Falha ao adicionar a label');
+      });
    },
 
    removeIssueLabel: (issueId, labelId) => {
+      const snapshot = { issues: get().issues, issuesByStatus: get().issuesByStatus };
       set((state) => {
          const newIssues = state.issues.map((i) =>
             i.id === issueId ? { ...i, labels: i.labels.filter((l) => l.id !== labelId) } : i
          );
          return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
       });
-      api.issues.removeLabel(issueId, labelId).catch(() => undefined);
+      api.issues.removeLabel(issueId, labelId).catch(() => {
+         set(snapshot);
+         toast.error('Falha ao remover a label');
+      });
    },
 
    updateIssueProject: (issueId, newProject) => get().updateIssue(issueId, { project: newProject }),

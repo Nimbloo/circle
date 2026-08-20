@@ -1,9 +1,8 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
+import { NewTeamButton } from '@/components/common/teams/new-team-button';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { Plus } from 'lucide-react';
 
 export default function HeaderNav() {
    const teams = useWorkspaceStore((s) => s.teams);
@@ -17,10 +16,7 @@ export default function HeaderNav() {
             </div>
          </div>
          <div className="flex items-center gap-2">
-            <Button className="relative" size="xs" variant="secondary">
-               <Plus className="size-4" />
-               Add team
-            </Button>
+            <NewTeamButton />
          </div>
       </div>
    );

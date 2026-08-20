@@ -2,6 +2,17 @@
 
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import {
+   AlertDialog,
+   AlertDialogAction,
+   AlertDialogCancel,
+   AlertDialogContent,
+   AlertDialogDescription,
+   AlertDialogFooter,
+   AlertDialogHeader,
+   AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { buttonVariants } from '@/components/ui/button';
+import {
    ContextMenuContent,
    ContextMenuGroup,
    ContextMenuItem,
@@ -11,6 +22,7 @@ import {
    ContextMenuSubContent,
    ContextMenuSubTrigger,
 } from '@/components/ui/context-menu';
+import { useState } from 'react';
 import {
    CircleCheck,
    User,
@@ -24,9 +36,7 @@ import {
 } from 'lucide-react';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { status } from '@/mock-data/status';
-import { priorities } from '@/mock-data/priorities';
-import { labels } from '@/mock-data/labels';
+import { useStatuses, usePriorities, useLabels } from '@/store/catalog-store';
 import { toast } from 'sonner';
 
 interface IssueContextMenuProps {
@@ -36,7 +46,11 @@ interface IssueContextMenuProps {
 export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
    const users = useWorkspaceStore((s) => s.users);
    const projects = useWorkspaceStore((s) => s.projects);
+   const status = useStatuses();
+   const priorities = usePriorities();
+   const labels = useLabels();
    const statusCompleted = status.find((s) => s.category === 'completed');
+   const [confirmOpen, setConfirmOpen] = useState(false);
 
    const {
       updateIssueStatus,
@@ -130,126 +144,154 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
    };
 
    return (
-      <ContextMenuContent className="w-64">
-         <ContextMenuGroup>
-            <ContextMenuSub>
-               <ContextMenuSubTrigger>
-                  <CircleCheck className="mr-2 size-4" /> Status
-               </ContextMenuSubTrigger>
-               <ContextMenuSubContent className="w-48">
-                  {status.map((s) => {
-                     const Icon = s.icon;
-                     return (
-                        <ContextMenuItem key={s.id} onClick={() => handleStatusChange(s.id)}>
-                           <Icon /> {s.name}
-                        </ContextMenuItem>
-                     );
-                  })}
-               </ContextMenuSubContent>
-            </ContextMenuSub>
+      <>
+         <ContextMenuContent className="w-64">
+            <ContextMenuGroup>
+               <ContextMenuSub>
+                  <ContextMenuSubTrigger>
+                     <CircleCheck className="mr-2 size-4" /> Status
+                  </ContextMenuSubTrigger>
+                  <ContextMenuSubContent className="w-48">
+                     {status.map((s) => {
+                        const Icon = s.icon;
+                        return (
+                           <ContextMenuItem key={s.id} onClick={() => handleStatusChange(s.id)}>
+                              <Icon /> {s.name}
+                           </ContextMenuItem>
+                        );
+                     })}
+                  </ContextMenuSubContent>
+               </ContextMenuSub>
 
-            <ContextMenuSub>
-               <ContextMenuSubTrigger>
-                  <User className="mr-2 size-4" /> Assignee
-               </ContextMenuSubTrigger>
-               <ContextMenuSubContent className="w-48">
-                  <ContextMenuItem onClick={() => handleAssigneeChange(null)}>
-                     <User className="size-4" /> Unassigned
-                  </ContextMenuItem>
-                  {users
-                     .filter((user) => user.teamIds.includes('CORE'))
-                     .map((user) => (
+               <ContextMenuSub>
+                  <ContextMenuSubTrigger>
+                     <User className="mr-2 size-4" /> Assignee
+                  </ContextMenuSubTrigger>
+                  <ContextMenuSubContent className="w-48">
+                     <ContextMenuItem onClick={() => handleAssigneeChange(null)}>
+                        <User className="size-4" /> Unassigned
+                     </ContextMenuItem>
+                     {users
+                        .filter((user) => user.teamIds.includes('CORE'))
+                        .map((user) => (
+                           <ContextMenuItem
+                              key={user.id}
+                              onClick={() => handleAssigneeChange(user.id)}
+                           >
+                              <Avatar className="size-4">
+                                 <AvatarImage src={user.avatarUrl} alt={user.name} />
+                                 <AvatarFallback>{user.name[0]}</AvatarFallback>
+                              </Avatar>
+                              {user.name}
+                           </ContextMenuItem>
+                        ))}
+                  </ContextMenuSubContent>
+               </ContextMenuSub>
+
+               <ContextMenuSub>
+                  <ContextMenuSubTrigger>
+                     <BarChart3 className="mr-2 size-4" /> Priority
+                  </ContextMenuSubTrigger>
+                  <ContextMenuSubContent className="w-48">
+                     {priorities.map((priority) => (
                         <ContextMenuItem
-                           key={user.id}
-                           onClick={() => handleAssigneeChange(user.id)}
+                           key={priority.id}
+                           onClick={() => handlePriorityChange(priority.id)}
                         >
-                           <Avatar className="size-4">
-                              <AvatarImage src={user.avatarUrl} alt={user.name} />
-                              <AvatarFallback>{user.name[0]}</AvatarFallback>
-                           </Avatar>
-                           {user.name}
+                           <priority.icon className="size-4" /> {priority.name}
                         </ContextMenuItem>
                      ))}
-               </ContextMenuSubContent>
-            </ContextMenuSub>
+                  </ContextMenuSubContent>
+               </ContextMenuSub>
 
-            <ContextMenuSub>
-               <ContextMenuSubTrigger>
-                  <BarChart3 className="mr-2 size-4" /> Priority
-               </ContextMenuSubTrigger>
-               <ContextMenuSubContent className="w-48">
-                  {priorities.map((priority) => (
-                     <ContextMenuItem
-                        key={priority.id}
-                        onClick={() => handlePriorityChange(priority.id)}
-                     >
-                        <priority.icon className="size-4" /> {priority.name}
+               <ContextMenuSub>
+                  <ContextMenuSubTrigger>
+                     <Tag className="mr-2 size-4" /> Labels
+                  </ContextMenuSubTrigger>
+                  <ContextMenuSubContent className="w-48">
+                     {labels.map((label) => (
+                        <ContextMenuItem key={label.id} onClick={() => handleLabelToggle(label.id)}>
+                           <span
+                              className="inline-block size-3 rounded-full"
+                              style={{ backgroundColor: label.color }}
+                              aria-hidden="true"
+                           />
+                           {label.name}
+                        </ContextMenuItem>
+                     ))}
+                  </ContextMenuSubContent>
+               </ContextMenuSub>
+
+               <ContextMenuSub>
+                  <ContextMenuSubTrigger>
+                     <Folder className="mr-2 size-4" /> Project
+                  </ContextMenuSubTrigger>
+                  <ContextMenuSubContent className="w-64">
+                     <ContextMenuItem onClick={() => handleProjectChange(null)}>
+                        <Folder className="size-4" /> No Project
                      </ContextMenuItem>
-                  ))}
-               </ContextMenuSubContent>
-            </ContextMenuSub>
+                     {projects.slice(0, 5).map((project) => (
+                        <ContextMenuItem
+                           key={project.id}
+                           onClick={() => handleProjectChange(project.id)}
+                        >
+                           <project.icon className="size-4" /> {project.name}
+                        </ContextMenuItem>
+                     ))}
+                  </ContextMenuSubContent>
+               </ContextMenuSub>
 
-            <ContextMenuSub>
-               <ContextMenuSubTrigger>
-                  <Tag className="mr-2 size-4" /> Labels
-               </ContextMenuSubTrigger>
-               <ContextMenuSubContent className="w-48">
-                  {labels.map((label) => (
-                     <ContextMenuItem key={label.id} onClick={() => handleLabelToggle(label.id)}>
-                        <span
-                           className="inline-block size-3 rounded-full"
-                           style={{ backgroundColor: label.color }}
-                           aria-hidden="true"
-                        />
-                        {label.name}
-                     </ContextMenuItem>
-                  ))}
-               </ContextMenuSubContent>
-            </ContextMenuSub>
+               <ContextMenuItem onClick={handleSetDueDate}>
+                  <CalendarClock className="size-4" /> Set due date...
+                  <ContextMenuShortcut>D</ContextMenuShortcut>
+               </ContextMenuItem>
+            </ContextMenuGroup>
 
-            <ContextMenuSub>
-               <ContextMenuSubTrigger>
-                  <Folder className="mr-2 size-4" /> Project
-               </ContextMenuSubTrigger>
-               <ContextMenuSubContent className="w-64">
-                  <ContextMenuItem onClick={() => handleProjectChange(null)}>
-                     <Folder className="size-4" /> No Project
-                  </ContextMenuItem>
-                  {projects.slice(0, 5).map((project) => (
-                     <ContextMenuItem
-                        key={project.id}
-                        onClick={() => handleProjectChange(project.id)}
-                     >
-                        <project.icon className="size-4" /> {project.name}
-                     </ContextMenuItem>
-                  ))}
-               </ContextMenuSubContent>
-            </ContextMenuSub>
+            <ContextMenuSeparator />
 
-            <ContextMenuItem onClick={handleSetDueDate}>
-               <CalendarClock className="size-4" /> Set due date...
-               <ContextMenuShortcut>D</ContextMenuShortcut>
+            {statusCompleted && (
+               <ContextMenuItem onClick={handleMarkCompleted}>
+                  <CheckCircle2 className="size-4" /> Mark as {statusCompleted.name}
+               </ContextMenuItem>
+            )}
+
+            <ContextMenuItem onClick={handleCopy}>
+               <Clipboard className="size-4" /> Copy
             </ContextMenuItem>
-         </ContextMenuGroup>
 
-         <ContextMenuSeparator />
+            <ContextMenuSeparator />
 
-         {statusCompleted && (
-            <ContextMenuItem onClick={handleMarkCompleted}>
-               <CheckCircle2 className="size-4" /> Mark as {statusCompleted.name}
+            <ContextMenuItem
+               variant="destructive"
+               onSelect={(e) => {
+                  e.preventDefault();
+                  setConfirmOpen(true);
+               }}
+            >
+               <Trash2 className="size-4" /> Delete...
+               <ContextMenuShortcut>⌘⌫</ContextMenuShortcut>
             </ContextMenuItem>
-         )}
+         </ContextMenuContent>
 
-         <ContextMenuItem onClick={handleCopy}>
-            <Clipboard className="size-4" /> Copy
-         </ContextMenuItem>
-
-         <ContextMenuSeparator />
-
-         <ContextMenuItem variant="destructive" onClick={handleDelete}>
-            <Trash2 className="size-4" /> Delete...
-            <ContextMenuShortcut>⌘⌫</ContextMenuShortcut>
-         </ContextMenuItem>
-      </ContextMenuContent>
+         <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <AlertDialogContent>
+               <AlertDialogHeader>
+                  <AlertDialogTitle>Delete issue?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                     Esta ação não pode ser desfeita. A issue será removida permanentemente.
+                  </AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                     className={buttonVariants({ variant: 'destructive' })}
+                     onClick={handleDelete}
+                  >
+                     Delete
+                  </AlertDialogAction>
+               </AlertDialogFooter>
+            </AlertDialogContent>
+         </AlertDialog>
+      </>
    );
 }

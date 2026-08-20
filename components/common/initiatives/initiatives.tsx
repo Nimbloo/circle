@@ -32,6 +32,7 @@ import {
    BadgeCheck,
    CheckIcon,
    ChevronRight,
+   Goal,
    HeartPulse,
    ListFilter,
    PanelRight,
@@ -42,6 +43,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
 import { useMemo, useState } from 'react';
+import { CreateInitiativeButton } from './create-initiative-dialog';
 import { InitiativeStatusIcon } from './initiative-status-icon';
 import { InitiativesSidePanel } from './initiatives-side-panel';
 
@@ -73,7 +75,7 @@ function InitiativesFilter() {
          }}
       >
          <PopoverTrigger asChild>
-            <Button size="xs" variant="ghost" className="relative">
+            <Button size="xs" variant="ghost" className="relative" aria-label="Filter initiatives">
                <ListFilter className="size-4" />
                {count > 0 && (
                   <span className="absolute -top-1 -right-1 size-4 rounded-full bg-primary text-primary-foreground text-[9px] inline-flex items-center justify-center">
@@ -215,7 +217,7 @@ function InitiativesDisplayOptions() {
    return (
       <Popover>
          <PopoverTrigger asChild>
-            <Button size="xs" variant="ghost">
+            <Button size="xs" variant="ghost" aria-label="Display options">
                <SlidersHorizontal className="size-4" />
             </Button>
          </PopoverTrigger>
@@ -472,6 +474,7 @@ export default function Initiatives() {
                      size="xs"
                      variant={showPanel ? 'secondary' : 'ghost'}
                      onClick={() => setShowPanel((value) => !value)}
+                     aria-label="Toggle side panel"
                   >
                      <PanelRight className="size-4" />
                   </Button>
@@ -503,34 +506,53 @@ export default function Initiatives() {
                )}
             </div>
 
-            {groups
-               ? groups.map((group) => (
-                    <div key={group.statusId}>
-                       <div className="flex items-center gap-2 px-6 h-9 text-sm font-medium bg-[color-mix(in_oklab,var(--accent)_30%,var(--container))] border-b border-border/40">
-                          <InitiativeStatusIcon status={group.statusId} />
-                          {INITIATIVE_STATUS_META[group.statusId].label}
-                          <span className="text-xs text-muted-foreground">
-                             {group.items.length}
-                          </span>
-                       </div>
-                       {group.items.map((initiative) => (
-                          <InitiativeRow
-                             key={initiative.id}
-                             initiative={initiative}
-                             orgId={orgId}
-                             showStatus={showStatus}
-                          />
-                       ))}
-                    </div>
-                 ))
-               : displayed.map((initiative) => (
-                    <InitiativeRow
-                       key={initiative.id}
-                       initiative={initiative}
-                       orgId={orgId}
-                       showStatus={showStatus}
-                    />
-                 ))}
+            {displayed.length === 0 ? (
+               <div className="flex flex-col items-center justify-center gap-4 py-24 text-center">
+                  <div className="flex size-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
+                     <Goal className="size-6" />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                     <p className="text-sm font-medium">
+                        {allInitiatives.length === 0
+                           ? 'No initiatives yet'
+                           : 'No initiatives match this view'}
+                     </p>
+                     <p className="max-w-xs text-sm text-muted-foreground">
+                        {allInitiatives.length === 0
+                           ? 'Initiatives group related projects toward a bigger goal.'
+                           : 'Try switching tabs or clearing the filters.'}
+                     </p>
+                  </div>
+                  {allInitiatives.length === 0 && <CreateInitiativeButton />}
+               </div>
+            ) : groups ? (
+               groups.map((group) => (
+                  <div key={group.statusId}>
+                     <div className="flex items-center gap-2 px-6 h-9 text-sm font-medium bg-[color-mix(in_oklab,var(--accent)_30%,var(--container))] border-b border-border/40">
+                        <InitiativeStatusIcon status={group.statusId} />
+                        {INITIATIVE_STATUS_META[group.statusId].label}
+                        <span className="text-xs text-muted-foreground">{group.items.length}</span>
+                     </div>
+                     {group.items.map((initiative) => (
+                        <InitiativeRow
+                           key={initiative.id}
+                           initiative={initiative}
+                           orgId={orgId}
+                           showStatus={showStatus}
+                        />
+                     ))}
+                  </div>
+               ))
+            ) : (
+               displayed.map((initiative) => (
+                  <InitiativeRow
+                     key={initiative.id}
+                     initiative={initiative}
+                     orgId={orgId}
+                     showStatus={showStatus}
+                  />
+               ))
+            )}
          </div>
          {showPanel && <InitiativesSidePanel initiatives={displayed} />}
       </div>

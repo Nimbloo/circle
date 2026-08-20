@@ -88,7 +88,8 @@ export function adaptProject(p: ProjectDto): Project {
               teamIds: [],
               timezone: 'UTC',
            }
-         : ({} as User),
+         : // Sem lead: null honesto (Project.lead: User|null; a UI trata com guard).
+           null,
       priority: toPriority(p.priority),
       health: toHealth(p.health),
       teamId: p.teamId,

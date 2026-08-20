@@ -30,18 +30,18 @@ export async function GET(req: Request) {
 }
 
 const CreateSchema = z.object({
-   name: z.string().min(1),
-   statusId: z.string().min(1),
-   priorityId: z.string().min(1),
-   healthId: z.string().min(1),
-   teamId: z.string().min(1),
-   leadId: z.string().nullish(),
-   iconKey: z.string().nullish(),
+   name: z.string().min(1).max(196),
+   statusId: z.string().min(1).max(64),
+   priorityId: z.string().min(1).max(64),
+   healthId: z.string().min(1).max(64),
+   teamId: z.string().min(1).max(16),
+   leadId: z.string().max(36).nullish(),
+   iconKey: z.string().max(64).nullish(),
    percentComplete: z.number().int().min(0).max(100).optional(),
-   startDate: z.string().nullish(),
-   targetDate: z.string().nullish(),
-   initiativeId: z.string().nullish(),
-   labelIds: z.array(z.string()).optional(),
+   startDate: z.string().date().nullish(),
+   targetDate: z.string().date().nullish(),
+   initiativeId: z.string().max(36).nullish(),
+   labelIds: z.array(z.string().max(64)).optional(),
 });
 
 export async function POST(req: Request) {

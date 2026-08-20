@@ -79,6 +79,11 @@ describe('issue detail / comments / activity', () => {
       expect(inbox.some((n) => n.type === 'mention')).toBe(true);
    });
 
+   it('rejeita comentário em issue inexistente (404)', async () => {
+      const { db } = await anIssue();
+      await expect(addComment(db, 'nope', 'oi', ME)).rejects.toMatchObject({ status: 404 });
+   });
+
    it('adds and removes relations by kind (sub/related/blocked_by)', async () => {
       const { db, issue } = await anIssue();
       const other = await createIssue(
@@ -111,10 +116,27 @@ describe('issue detail / comments / activity', () => {
       await addReaction(db, c.id, '👍', ME);
       await addReaction(db, c.id, '👍', 'bob@nimbloo.ai');
       let comments = await listComments(db, issue.id);
-      expect(comments[0].reactions).toEqual([{ emoji: '👍', count: 2 }]);
+      expect(comments[0].reactions).toEqual([{ emoji: '👍', count: 2, reactedByMe: false }]);
       await removeReaction(db, c.id, '👍', ME);
       comments = await listComments(db, issue.id);
-      expect(comments[0].reactions).toEqual([{ emoji: '👍', count: 1 }]);
+      expect(comments[0].reactions).toEqual([{ emoji: '👍', count: 1, reactedByMe: false }]);
+   });
+
+   it('marca reactedByMe conforme o usuário atual (server-truth)', async () => {
+      const { db, issue } = await anIssue();
+      const c = await addComment(db, issue.id, 'c', ME);
+      await addReaction(db, c.id, '👍', 'a@nimbloo.ai');
+
+      const forA = await listComments(db, issue.id, 'a@nimbloo.ai');
+      expect(forA[0].reactions).toEqual([{ emoji: '👍', count: 1, reactedByMe: true }]);
+
+      const forB = await listComments(db, issue.id, 'b@nimbloo.ai');
+      expect(forB[0].reactions).toEqual([{ emoji: '👍', count: 1, reactedByMe: false }]);
+
+      // também propaga pelo feed de atividade
+      const feedA = await listActivity(db, issue.id, 'a@nimbloo.ai');
+      const commentA = feedA.find((f) => f.kind === 'comment');
+      expect(commentA?.reactions).toEqual([{ emoji: '👍', count: 1, reactedByMe: true }]);
    });
 
    it('lets the author edit their own comment', async () => {

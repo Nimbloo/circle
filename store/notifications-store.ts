@@ -4,30 +4,40 @@ import type { NotificationDto } from '@/lib/api/notifications';
 import { adaptUser } from '@/lib/adapters';
 import { api } from '@/lib/client';
 import { useIssuesStore } from '@/store/issues-store';
+import { toast } from 'sonner';
 import { create } from 'zustand';
+
+/**
+ * InboxItem + a chave de ordenação crua. `timestamp` é uma string relativa
+ * ("2h", "1d") só para exibição; `sortAt` guarda o ISO original p/ ordenar
+ * de forma estável (new Date(timestamp) daria Invalid Date).
+ */
+export interface InboxNotification extends InboxItem {
+   sortAt: string;
+}
 
 interface NotificationsState {
    // Data
-   notifications: InboxItem[];
-   selectedNotification: InboxItem | undefined;
+   notifications: InboxNotification[];
+   selectedNotification: InboxNotification | undefined;
 
    // Hydration
    hydrate: () => Promise<void>;
 
    // Actions
-   setSelectedNotification: (notification: InboxItem | undefined) => void;
+   setSelectedNotification: (notification: InboxNotification | undefined) => void;
    markAsRead: (id: string) => void;
    markAllAsRead: () => void;
    markAsUnread: (id: string) => void;
 
    // Filters
-   getUnreadNotifications: () => InboxItem[];
-   getReadNotifications: () => InboxItem[];
-   getNotificationsByType: (type: NotificationType) => InboxItem[];
-   getNotificationsByUser: (userId: string) => InboxItem[];
+   getUnreadNotifications: () => InboxNotification[];
+   getReadNotifications: () => InboxNotification[];
+   getNotificationsByType: (type: NotificationType) => InboxNotification[];
+   getNotificationsByUser: (userId: string) => InboxNotification[];
 
    // Utility functions
-   getNotificationById: (id: string) => InboxItem | undefined;
+   getNotificationById: (id: string) => InboxNotification | undefined;
    getUnreadCount: () => number;
 }
 
@@ -50,7 +60,10 @@ function relativeTime(iso: string): string {
  * uma issue real que já vive no issues-store; mesclamos com ela para o preview.
  * Itens sem issue conhecida são descartados (sem preview a mostrar).
  */
-function adaptNotification(dto: NotificationDto, issueById: Map<string, Issue>): InboxItem | null {
+function adaptNotification(
+   dto: NotificationDto,
+   issueById: Map<string, Issue>
+): InboxNotification | null {
    const issue = dto.issue ? issueById.get(dto.issue.id) : undefined;
    if (!issue) return null;
    const user = dto.actor ? adaptUser(dto.actor) : issue.assignee;
@@ -62,6 +75,7 @@ function adaptNotification(dto: NotificationDto, issueById: Map<string, Issue>):
       type: dto.type as NotificationType,
       user,
       timestamp: relativeTime(dto.createdAt),
+      sortAt: dto.createdAt,
       read: dto.read,
    };
 }
@@ -77,7 +91,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
          const issueById = new Map(useIssuesStore.getState().issues.map((i) => [i.id, i]));
          const items = dtos
             .map((dto) => adaptNotification(dto, issueById))
-            .filter((item): item is InboxItem => item !== null);
+            .filter((item): item is InboxNotification => item !== null);
          set({ notifications: items });
       } catch {
          // Degradação graciosa — mantém o estado atual se a API falhar.
@@ -85,11 +99,15 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
    },
 
    // Actions
-   setSelectedNotification: (notification: InboxItem | undefined) => {
+   setSelectedNotification: (notification: InboxNotification | undefined) => {
       set({ selectedNotification: notification });
    },
 
    markAsRead: (id: string) => {
+      const snapshot = {
+         notifications: get().notifications,
+         selectedNotification: get().selectedNotification,
+      };
       set((state) => ({
          notifications: state.notifications.map((notification) =>
             notification.id === id ? { ...notification, read: true } : notification
@@ -99,10 +117,17 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
                ? { ...state.selectedNotification, read: true }
                : state.selectedNotification,
       }));
-      void api.inbox.setRead(id, true).catch(() => {});
+      void api.inbox.setRead(id, true).catch(() => {
+         set(snapshot);
+         toast.error('Falha ao marcar como lida');
+      });
    },
 
    markAllAsRead: () => {
+      const snapshot = {
+         notifications: get().notifications,
+         selectedNotification: get().selectedNotification,
+      };
       set((state) => ({
          notifications: state.notifications.map((notification) => ({
             ...notification,
@@ -112,10 +137,17 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
             ? { ...state.selectedNotification, read: true }
             : undefined,
       }));
-      void api.inbox.readAll().catch(() => {});
+      void api.inbox.readAll().catch(() => {
+         set(snapshot);
+         toast.error('Falha ao marcar todas como lidas');
+      });
    },
 
    markAsUnread: (id: string) => {
+      const snapshot = {
+         notifications: get().notifications,
+         selectedNotification: get().selectedNotification,
+      };
       set((state) => ({
          notifications: state.notifications.map((notification) =>
             notification.id === id ? { ...notification, read: false } : notification
@@ -125,7 +157,10 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
                ? { ...state.selectedNotification, read: false }
                : state.selectedNotification,
       }));
-      void api.inbox.setRead(id, false).catch(() => {});
+      void api.inbox.setRead(id, false).catch(() => {
+         set(snapshot);
+         toast.error('Falha ao marcar como não lida');
+      });
    },
 
    // Filters

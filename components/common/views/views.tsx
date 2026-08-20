@@ -47,7 +47,7 @@ function DisplayOptions() {
    return (
       <Popover>
          <PopoverTrigger asChild>
-            <Button size="xs" variant="ghost">
+            <Button size="xs" variant="ghost" aria-label="Display options">
                <SlidersHorizontal className="size-4" />
             </Button>
          </PopoverTrigger>
@@ -203,7 +203,7 @@ export default function Views({ teamId }: { teamId?: string }) {
                   · {team ? 'Team' : 'Workspace'}
                </span>
             </span>
-            <Button size="xs" variant="ghost">
+            <Button size="xs" variant="ghost" aria-label="New view">
                <Plus className="size-3.5" />
             </Button>
          </div>

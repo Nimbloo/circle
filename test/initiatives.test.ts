@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { makeTestDb } from './helpers/db';
 import { seedTeam } from './helpers/fixtures';
 import { initiativeProject } from '@/db/schema';
-import { createProject, getProject } from '@/lib/api/projects';
+import { createProject, getProject, updateProject } from '@/lib/api/projects';
 import {
    createInitiative,
    listInitiatives,
@@ -71,6 +71,66 @@ describe('initiatives', () => {
       expect(upd?.name).toBe('A2');
       expect(await deleteInitiative(db, init.id)).toBe(true);
       expect(await getInitiative(db, init.id)).toBeNull();
+   });
+
+   it('createProject com initiativeId aparece no projectCount da initiative (sincroniza o vínculo)', async () => {
+      const db = await setup();
+      const init = await createInitiative(db, {
+         slug: 'platform',
+         name: 'Platform',
+         priorityId: 'urgent',
+         healthId: 'on-track',
+      });
+      await createProject(db, {
+         name: 'P',
+         statusId: 'in-progress',
+         ...baseProj,
+         initiativeId: init.id,
+      });
+      const got = await getInitiative(db, init.id);
+      expect(got?.projectCount).toBe(1);
+   });
+
+   it('updateProject setando initiativeId sincroniza os dois lados', async () => {
+      const db = await setup();
+      const init = await createInitiative(db, {
+         slug: 'platform',
+         name: 'Platform',
+         priorityId: 'urgent',
+         healthId: 'on-track',
+      });
+      const p = await createProject(db, { name: 'P', statusId: 'in-progress', ...baseProj });
+      expect((await getInitiative(db, init.id))?.projectCount).toBe(0);
+
+      await updateProject(db, p.id, { initiativeId: init.id });
+      expect((await getInitiative(db, init.id))?.projectCount).toBe(1);
+
+      // desvincular limpa o join também
+      await updateProject(db, p.id, { initiativeId: null });
+      expect((await getInitiative(db, init.id))?.projectCount).toBe(0);
+   });
+
+   it('updateInitiative com projectIds sincroniza project.initiativeId dos afetados', async () => {
+      const db = await setup();
+      const init = await createInitiative(db, {
+         slug: 'platform',
+         name: 'Platform',
+         priorityId: 'urgent',
+         healthId: 'on-track',
+      });
+      const p1 = await createProject(db, { name: 'P1', statusId: 'in-progress', ...baseProj });
+      const p2 = await createProject(db, { name: 'P2', statusId: 'in-progress', ...baseProj });
+
+      await updateInitiative(db, init.id, { projectIds: [p1.id, p2.id] });
+      expect((await getProject(db, p1.id))?.initiativeId).toBe(init.id);
+      expect((await getProject(db, p2.id))?.initiativeId).toBe(init.id);
+      expect((await getInitiative(db, init.id))?.projectCount).toBe(2);
+
+      // remover p2 do conjunto limpa a back-reference dele
+      await updateInitiative(db, init.id, { projectIds: [p1.id] });
+      expect((await getProject(db, p1.id))?.initiativeId).toBe(init.id);
+      expect((await getProject(db, p2.id))?.initiativeId).toBeNull();
+      expect((await getInitiative(db, init.id))?.projectCount).toBe(1);
    });
 
    it('deleting an initiative nullifies project.initiativeId and clears links (FK safe)', async () => {

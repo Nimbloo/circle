@@ -57,6 +57,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         className="absolute top-2.5 right-2 z-10 cursor-pointer"
                         onClick={() => setOpen(!open)}
                         role="button"
+                        aria-label="Dismiss"
                      >
                         <X className="size-4" />
                      </div>
@@ -96,6 +97,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         href="https://github.com/ln-dev7/circle"
                         target="_blank"
                         rel="noopener noreferrer"
+                        aria-label="GitHub repository"
                      >
                         <RiGithubLine className="size-4" />
                      </Link>

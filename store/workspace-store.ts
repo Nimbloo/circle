@@ -15,6 +15,7 @@ import {
 } from '@/lib/adapters-workspace';
 import type { WorkspaceBootstrap } from '@/lib/api/workspace';
 import type { MeDto } from '@/lib/api/users';
+import { useCatalogStore } from '@/store/catalog-store';
 
 interface WorkspaceState {
    loaded: boolean;
@@ -62,6 +63,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
          const res = await fetch('/api/v1/workspace');
          if (!res.ok) throw new Error(`workspace ${res.status}`);
          const { data } = (await res.json()) as { data: WorkspaceBootstrap };
+         // Catálogos (status/priority/label/health) já vêm no bootstrap — populamos
+         // o catalog-store a partir daqui, sem fetch duplicado.
+         useCatalogStore.getState().setCatalogs(data);
          const users = data.members.map(adaptMemberToUser);
          const usersById = new Map(users.map((u) => [u.id, u]));
          set({

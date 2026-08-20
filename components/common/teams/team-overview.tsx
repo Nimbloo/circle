@@ -45,6 +45,10 @@ export default function TeamOverview() {
       };
    }, [teamId]);
 
+   if (!team) {
+      return <div className="p-8 text-sm text-muted-foreground">Team not found.</div>;
+   }
+
    const goToLinks = [
       { label: 'Team settings', icon: Settings, href: `/${orgId}/settings` },
       { label: 'Issues', icon: CopyMinus, href: `/${orgId}/team/${team.id}/all` },

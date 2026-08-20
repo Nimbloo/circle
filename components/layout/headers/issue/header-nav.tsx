@@ -28,6 +28,9 @@ export default function HeaderNav() {
    const previousIssue = index > 0 ? issues[index - 1] : undefined;
    const nextIssue = index >= 0 && index < issues.length - 1 ? issues[index + 1] : undefined;
 
+   // Workspace ainda sem times (bootstrap vazio/carregando) — sem breadcrumb a montar.
+   if (!team) return null;
+
    return (
       <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10 gap-4">
          <div className="flex items-center gap-2 min-w-0">

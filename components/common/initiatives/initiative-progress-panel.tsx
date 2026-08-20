@@ -67,12 +67,14 @@ export function InitiativeProgressPanel({ initiative }: { initiative: Initiative
       if (tab === 'leads') {
          const byLead = new Map<string, { label: string; avatarUrl?: string; count: number }>();
          for (const project of projects) {
-            const existing = byLead.get(project.lead.id);
+            const lead = project.lead;
+            if (!lead) continue;
+            const existing = byLead.get(lead.id);
             if (existing) existing.count += 1;
             else
-               byLead.set(project.lead.id, {
-                  label: project.lead.name,
-                  avatarUrl: project.lead.avatarUrl,
+               byLead.set(lead.id, {
+                  label: lead.name,
+                  avatarUrl: lead.avatarUrl,
                   count: 1,
                });
          }

@@ -3,6 +3,7 @@
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useTeamsFilterStore } from '@/store/team-filter-store';
 import { useTeamsDisplayStore } from '@/store/teams-display-store';
+import { Users } from 'lucide-react';
 import { useMemo } from 'react';
 import { Filter } from '@/components/layout/headers/teams/filter';
 import TeamLine from './team-line';
@@ -81,9 +82,30 @@ export default function Teams() {
          </div>
 
          <div className="w-full">
-            {displayed.map((team) => (
-               <TeamLine key={team.id} team={team} />
-            ))}
+            {displayed.length === 0 ? (
+               <div className="flex flex-col items-center justify-center gap-4 py-24 text-center">
+                  <div className="flex size-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
+                     <Users className="size-6" />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                     <p className="text-sm font-medium">
+                        {filters.membership.length > 0 || filters.identifier.length > 0
+                           ? 'No teams match your filters'
+                           : 'No teams yet'}
+                     </p>
+                     <p className="max-w-xs text-sm text-muted-foreground">
+                        {filters.membership.length > 0 || filters.identifier.length > 0
+                           ? 'Try clearing or adjusting the filters above.'
+                           : 'Teams organize issues, cycles and projects around the people working together.'}
+                     </p>
+                  </div>
+                  {filters.membership.length === 0 && filters.identifier.length === 0 && (
+                     <NewTeamButton />
+                  )}
+               </div>
+            ) : (
+               displayed.map((team) => <TeamLine key={team.id} team={team} />)
+            )}
          </div>
       </div>
    );

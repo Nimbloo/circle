@@ -22,6 +22,10 @@ import { getOrCreateUser } from './users';
 import { rankAfter, firstRank, rankBetween } from './rank';
 import { ApiError } from './errors';
 import { dispatchNotification } from './notify';
+import { getCachedCatalogs } from './catalogs';
+
+/** Teto default de linhas nas listagens (proteção; paginação por cursor fica p/ depois). */
+const DEFAULT_LIST_LIMIT = 500;
 
 // ── Tipos de DTO (espelham o tipo Issue do frontend) ────────────────
 type StatusRow = typeof statusT.$inferSelect;
@@ -91,11 +95,7 @@ interface CatalogMaps {
 }
 
 async function loadCatalogs(db: Db): Promise<CatalogMaps> {
-   const [statuses, priorities, labels] = await Promise.all([
-      db.select().from(statusT),
-      db.select().from(priorityT),
-      db.select().from(labelT),
-   ]);
+   const { statuses, priorities, labels } = await getCachedCatalogs(db);
    return {
       statuses: new Map(statuses.map((s) => [s.id, s])),
       priorities: new Map(priorities.map((p) => [p.id, p])),
@@ -110,6 +110,7 @@ function statusIdsForCategories(cats: string[], statuses: Map<string, StatusRow>
 }
 
 function buildWhere(
+   db: Db,
    opts: IssueFilter,
    statuses: Map<string, StatusRow>,
    meId?: string
@@ -123,6 +124,17 @@ function buildWhere(
    }
    if (opts.priority?.length) conds.push(inArray(issue.priorityId, opts.priority));
    if (opts.project?.length) conds.push(inArray(issue.projectId, opts.project));
+   if (opts.labels?.length) {
+      conds.push(
+         inArray(
+            issue.id,
+            db
+               .select({ id: issueLabel.issueId })
+               .from(issueLabel)
+               .where(inArray(issueLabel.labelId, opts.labels))
+         )
+      );
+   }
    if (opts.assignee?.length) {
       const wantUnassigned = opts.assignee.includes('unassigned');
       const ids = opts.assignee.filter((a) => a !== 'unassigned');
@@ -227,8 +239,13 @@ export async function listIssues(
    meId?: string
 ): Promise<IssueDto[]> {
    const cat = await loadCatalogs(db);
-   const where = buildWhere(opts, cat.statuses, meId);
-   const rows = await db.select().from(issue).where(where).orderBy(asc(issue.rank));
+   const where = buildWhere(db, opts, cat.statuses, meId);
+   const rows = await db
+      .select()
+      .from(issue)
+      .where(where)
+      .orderBy(asc(issue.rank))
+      .limit(DEFAULT_LIST_LIMIT);
    const dtos = await assemble(db, rows, cat);
    return orderRows(dtos, opts.orderBy);
 }

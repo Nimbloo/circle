@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { notification, issue as issueT, appUser } from '@/db/schema';
 import type { UserRef } from './issues';
@@ -64,21 +64,21 @@ export async function listInbox(
    const conds = [eq(notification.recipientId, recipientId)];
    if (opts.read !== undefined) conds.push(eq(notification.read, opts.read));
    if (opts.actorId) conds.push(eq(notification.actorId, opts.actorId));
-   let rows = await db
+   if (opts.type?.length) conds.push(inArray(notification.type, opts.type));
+   const rows = await db
       .select()
       .from(notification)
       .where(and(...conds))
       .orderBy(desc(notification.createdAt));
-   if (opts.type?.length) rows = rows.filter((r) => opts.type!.includes(r.type));
    return assemble(db, rows);
 }
 
 export async function unreadCount(db: Db, recipientId: string): Promise<number> {
    const rows = await db
-      .select({ id: notification.id })
+      .select({ n: count() })
       .from(notification)
       .where(and(eq(notification.recipientId, recipientId), eq(notification.read, false)));
-   return rows.length;
+   return rows[0]?.n ?? 0;
 }
 
 /** Marca uma notificação como lida/não-lida, escopada ao destinatário (anti-IDOR). */

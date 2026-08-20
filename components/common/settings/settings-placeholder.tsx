@@ -64,7 +64,16 @@ export default function SettingsPlaceholder({ config }: { config: PlaceholderCon
 
             <div className="flex items-center justify-between gap-3 mt-6">
                <Input placeholder="Filter by name..." className="w-72 h-8" />
-               {config.actionLabel && <Button size="xs">{config.actionLabel}</Button>}
+               {config.actionLabel && (
+                  <div className="flex items-center gap-2">
+                     <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        Soon
+                     </span>
+                     <Button size="xs" disabled>
+                        {config.actionLabel}
+                     </Button>
+                  </div>
+               )}
             </div>
 
             <div className="flex flex-col items-center justify-center gap-5 py-32">

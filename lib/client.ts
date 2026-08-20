@@ -8,12 +8,12 @@ import type {
    CreateIssueInput,
    UpdateIssueInput,
 } from '@/lib/api/issues';
-import type { ProjectDto } from '@/lib/api/projects';
+import type { ProjectDto, CreateProjectInput } from '@/lib/api/projects';
 import type { TeamDto, CreateTeamInput } from '@/lib/api/teams';
 import type { MemberDto } from '@/lib/api/members';
 import type { CycleDto, CreateCycleInput, UpdateCycleInput } from '@/lib/api/cycles';
-import type { InitiativeDto } from '@/lib/api/initiatives';
-import type { ViewDto } from '@/lib/api/views';
+import type { InitiativeDto, CreateInitiativeInput } from '@/lib/api/initiatives';
+import type { ViewDto, CreateViewInput } from '@/lib/api/views';
 import type { NotificationDto } from '@/lib/api/notifications';
 import type { ReviewDto } from '@/lib/api/reviews';
 import type { FolderDto } from '@/lib/api/documents';
@@ -146,6 +146,7 @@ export const api = {
    projects: {
       list: (q = '') => get<ProjectDto[]>(`/projects${q}`),
       get: (id: string) => get<ProjectDto>(`/projects/${id}`),
+      create: (input: CreateProjectInput) => post<ProjectDto>('/projects', input),
       issues: (id: string, opts?: IssueListOptions) =>
          get<IssueDto[]>(`/projects/${id}/issues${issueQuery(opts)}`),
       progress: (id: string) => get<ProjectProgress>(`/projects/${id}/progress`),
@@ -171,11 +172,13 @@ export const api = {
    initiatives: {
       list: (q = '') => get<InitiativeDto[]>(`/initiatives${q}`),
       get: (id: string) => get<InitiativeDto>(`/initiatives/${id}`),
+      create: (input: CreateInitiativeInput) => post<InitiativeDto>('/initiatives', input),
    },
 
    views: {
       list: (team?: string) => get<ViewDto[]>(`/views${team ? `?team=${team}` : ''}`),
       get: (id: string) => get<ViewDto>(`/views/${id}`),
+      create: (input: CreateViewInput) => post<ViewDto>('/views', input),
       results: (id: string) =>
          get<{ type: string; issues?: IssueDto[]; projects?: ProjectDto[] }>(
             `/views/${id}/results`

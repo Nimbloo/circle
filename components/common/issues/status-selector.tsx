@@ -11,9 +11,10 @@ import {
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useIssuesStore } from '@/store/issues-store';
-import { status as allStatus, Status } from '@/mock-data/status';
+import { Status } from '@/mock-data/status';
+import { useStatuses } from '@/store/catalog-store';
 import { CheckIcon } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import { renderStatusIcon } from '@/lib/status-utils';
 
 interface StatusSelectorProps {
@@ -24,16 +25,13 @@ interface StatusSelectorProps {
 export function StatusSelector({ status, issueId }: StatusSelectorProps) {
    const id = useId();
    const [open, setOpen] = useState<boolean>(false);
-   const [value, setValue] = useState<string>(status.id);
+   // Deriva do prop (store) — sem estado local otimista, reverte junto com o rollback.
+   const value = status.id;
 
+   const allStatus = useStatuses();
    const { updateIssueStatus, filterByStatus } = useIssuesStore();
 
-   useEffect(() => {
-      setValue(status.id);
-   }, [status.id]);
-
    const handleStatusChange = (statusId: string) => {
-      setValue(statusId);
       setOpen(false);
 
       if (issueId) {

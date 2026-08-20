@@ -5,6 +5,16 @@ import { createNotification } from './notifications';
 import { sendSlack } from './integrations/slack';
 import { sendEmail } from './integrations/mailer';
 
+/** Escapa dados de usuário antes de interpolar em HTML (previne injeção). */
+export function escapeHtml(input: string): string {
+   return input
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+}
+
 export interface NotifyInput {
    type: string; // assignment|comment|mention|status|...
    issueId: string;
@@ -37,8 +47,9 @@ export async function dispatchNotification(db: Db, input: NotifyInput): Promise<
          .limit(1);
       if (!iss) return;
 
-      const summary = `[Circle] ${iss.identifier}: ${input.content ?? input.type}`;
-      const html = `<p>${input.content ?? input.type}</p><p><strong>${iss.identifier}</strong> — ${iss.title}</p><p><a href="https://circle.nimbloo.ai">Abrir no Circle</a></p>`;
+      const rawContent = input.content ?? input.type;
+      const summary = `[Circle] ${iss.identifier}: ${rawContent}`;
+      const html = `<p>${escapeHtml(rawContent)}</p><p><strong>${escapeHtml(iss.identifier)}</strong> — ${escapeHtml(iss.title)}</p><p><a href="https://circle.nimbloo.ai">Abrir no Circle</a></p>`;
 
       await Promise.allSettled([
          sendSlack(`${summary}\n${iss.title}`),

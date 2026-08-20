@@ -3,8 +3,8 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { Issue, sortIssuesByPriority } from '@/mock-data/issues';
-import { priorities } from '@/mock-data/priorities';
 import { Status } from '@/mock-data/status';
+import { usePriorities } from '@/store/catalog-store';
 import { useDisplaySettingsStore } from '@/store/display-settings-store';
 import { useFilterStore } from '@/store/filter-store';
 import { useBulkSelectionStore } from '@/store/bulk-selection-store';
@@ -24,6 +24,47 @@ interface GroupedIssuesViewProps {
    /** Statuses to render when grouping by status (empty groups are skipped unless enabled). */
    statuses: Status[];
    isViewTypeGrid: boolean;
+   /** Hidratação em andamento — distingue "carregando" de "vazio real". */
+   loading?: boolean;
+   /** Última hidratação falhou — mostra a falha + botão de retry no lugar do vazio. */
+   error?: boolean;
+   /** Re-tenta a hidratação (usado pelo estado de falha). */
+   onRetry?: () => void;
+}
+
+/**
+ * Estado exibido quando não há nenhum grupo/issue para mostrar. Distingue
+ * carregando (hidratando) de falha (com retry) de vazio real.
+ */
+function IssuesEmptyState({
+   loading,
+   error,
+   onRetry,
+}: {
+   loading?: boolean;
+   error?: boolean;
+   onRetry?: () => void;
+}) {
+   if (error) {
+      return (
+         <div className="flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+            <span>Não foi possível carregar as issues.</span>
+            {onRetry && (
+               <button
+                  type="button"
+                  onClick={onRetry}
+                  className="px-2.5 py-1 rounded-md border text-xs font-medium hover:bg-accent/50 transition-colors"
+               >
+                  Tentar de novo
+               </button>
+            )}
+         </div>
+      );
+   }
+   if (loading) {
+      return <span className="text-sm text-muted-foreground">Carregando…</span>;
+   }
+   return <span className="text-sm text-muted-foreground">Nenhuma issue</span>;
 }
 
 interface GroupEntry {
@@ -130,9 +171,13 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
    totalIssues,
    statuses,
    isViewTypeGrid,
+   loading,
+   error,
+   onRetry,
 }) => {
    const { grouping, ordering, completedIssues, showEmptyGroups } = useDisplaySettingsStore();
    const { filters } = useFilterStore();
+   const priorities = usePriorities();
    const hasActiveFilters = filters.length > 0;
 
    // Limpa a seleção em lote ao desmontar (troca de view).
@@ -248,7 +293,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
          ...entry,
          issues: sortIssues(entry.issues, ordering),
       }));
-   }, [issues, totalIssues, statuses, grouping, ordering, completedIssues]);
+   }, [issues, totalIssues, statuses, priorities, grouping, ordering, completedIssues]);
 
    const hiddenCount = Math.max(0, totalIssues.length - issues.length);
    const showFooter = hasActiveFilters && hiddenCount > 0;
@@ -280,8 +325,8 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                      ))}
                      {hiddenGroups.length > 0 && <HiddenColumns entries={hiddenGroups} />}
                      {boardGroups.length === 0 && hiddenGroups.length === 0 && (
-                        <div className="flex items-center justify-center w-full h-40 text-sm text-muted-foreground">
-                           No issues to show.
+                        <div className="flex items-center justify-center w-full h-40">
+                           <IssuesEmptyState loading={loading} error={error} onRetry={onRetry} />
                         </div>
                      )}
                   </div>
@@ -305,8 +350,8 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
          <BulkActionsBar />
          <div className="h-full overflow-y-auto">
             {listGroups.length === 0 && !showFooter && (
-               <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">
-                  No issues to show.
+               <div className="flex items-center justify-center h-40">
+                  <IssuesEmptyState loading={loading} error={error} onRetry={onRetry} />
                </div>
             )}
             {listGroups.map((entry) => (

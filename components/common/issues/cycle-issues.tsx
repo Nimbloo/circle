@@ -2,7 +2,7 @@
 
 import { CycleDetailsPanel } from '@/components/common/cycles/cycle-details-panel';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { displayOrderedStatus } from '@/mock-data/status';
+import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { applyIssueFilters } from './issue-filter-columns';
@@ -34,6 +34,7 @@ export default function CycleIssues({ cycleView }: CycleIssuesProps) {
    const { openPanel } = useRightPanelStore();
    const getCurrentCycle = useWorkspaceStore((s) => s.getCurrentCycle);
    const getUpcomingCycle = useWorkspaceStore((s) => s.getUpcomingCycle);
+   const displayOrderedStatus = useDisplayOrderedStatuses();
 
    const cycle = cycleView === 'active' ? getCurrentCycle() : getUpcomingCycle();
 

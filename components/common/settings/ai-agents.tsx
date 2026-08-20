@@ -85,9 +85,14 @@ export default function AiAgents() {
             title="Agent integrations"
             description="Integrations available to the agent"
             action={
-               <Button size="xs" variant="secondary">
-                  Browse integrations
-               </Button>
+               <div className="flex items-center gap-2">
+                  <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                     Soon
+                  </span>
+                  <Button size="xs" variant="secondary" disabled>
+                     Browse integrations
+                  </Button>
+               </div>
             }
          >
             <SettingsCard>

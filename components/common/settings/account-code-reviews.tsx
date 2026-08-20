@@ -134,9 +134,14 @@ export default function AccountCodeReviews() {
                <SettingsRow
                   title="No signing key added"
                   trailing={
-                     <Button size="xs" variant="ghost">
-                        Add key
-                     </Button>
+                     <div className="flex items-center gap-2">
+                        <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                           Soon
+                        </span>
+                        <Button size="xs" variant="ghost" disabled>
+                           Add key
+                        </Button>
+                     </div>
                   }
                />
             </SettingsCard>

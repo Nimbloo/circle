@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm';
+import { count, eq, inArray } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    issue as issueT,
@@ -20,27 +20,27 @@ export interface IssueMatrix {
 }
 
 export async function issueMatrix(db: Db, opts: { team?: string } = {}): Promise<IssueMatrix> {
-   const [statuses, priorities, issues] = await Promise.all([
+   const [statuses, priorities, grouped] = await Promise.all([
       db.select().from(statusT),
       db.select().from(priorityT),
-      opts.team
-         ? db
-              .select({ statusId: issueT.statusId, priorityId: issueT.priorityId })
-              .from(issueT)
-              .where(eq(issueT.teamId, opts.team))
-         : db.select({ statusId: issueT.statusId, priorityId: issueT.priorityId }).from(issueT),
+      db
+         .select({ statusId: issueT.statusId, priorityId: issueT.priorityId, n: count() })
+         .from(issueT)
+         .where(opts.team ? eq(issueT.teamId, opts.team) : undefined)
+         .groupBy(issueT.statusId, issueT.priorityId),
    ]);
    const cells: Record<string, Record<string, number>> = {};
    const totalsByStatus: Record<string, number> = {};
    const totalsByPriority: Record<string, number> = {};
    let total = 0;
    for (const s of statuses) cells[s.id] = {};
-   for (const i of issues) {
-      cells[i.statusId] ??= {};
-      cells[i.statusId][i.priorityId] = (cells[i.statusId][i.priorityId] ?? 0) + 1;
-      totalsByStatus[i.statusId] = (totalsByStatus[i.statusId] ?? 0) + 1;
-      totalsByPriority[i.priorityId] = (totalsByPriority[i.priorityId] ?? 0) + 1;
-      total += 1;
+   for (const g of grouped) {
+      const n = Number(g.n);
+      cells[g.statusId] ??= {};
+      cells[g.statusId][g.priorityId] = n;
+      totalsByStatus[g.statusId] = (totalsByStatus[g.statusId] ?? 0) + n;
+      totalsByPriority[g.priorityId] = (totalsByPriority[g.priorityId] ?? 0) + n;
+      total += n;
    }
    const ordS = [...statuses].sort((a, b) => a.position - b.position);
    const ordP = [...priorities].sort((a, b) => a.sortRank - b.sortRank);

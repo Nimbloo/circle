@@ -1,9 +1,8 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
+import { CreateProjectButton } from '@/components/common/projects/create-project-dialog';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { Plus } from 'lucide-react';
 
 export default function HeaderNav() {
    const projects = useWorkspaceStore((s) => s.projects);
@@ -17,10 +16,7 @@ export default function HeaderNav() {
             </div>
          </div>
          <div className="flex items-center gap-2">
-            <Button className="relative" size="xs" variant="secondary">
-               <Plus className="size-4" />
-               <span className="hidden sm:inline ml-1">Create project</span>
-            </Button>
+            <CreateProjectButton />
          </div>
       </div>
    );

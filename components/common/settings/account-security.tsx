@@ -2,7 +2,22 @@
 
 import { Button } from '@/components/ui/button';
 import { KeyRound, Laptop, Smartphone } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
+
+/** Inert action whose backend doesn't exist yet: disabled + "Soon" marker. */
+function SoonAction({ children }: { children: ReactNode }) {
+   return (
+      <div className="flex items-center gap-2">
+         <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Soon
+         </span>
+         <Button size="xs" variant="ghost" disabled>
+            {children}
+         </Button>
+      </div>
+   );
+}
 
 /** Personal "Security & access" settings (sessions, passkeys, API keys). */
 export default function AccountSecurity() {
@@ -25,11 +40,7 @@ export default function AccountSecurity() {
             <SettingsCard>
                <SettingsRow
                   title="1 other session"
-                  trailing={
-                     <Button size="xs" variant="ghost">
-                        Revoke all
-                     </Button>
-                  }
+                  trailing={<SoonAction>Revoke all</SoonAction>}
                />
                <SettingsRow
                   icon={<Smartphone className="size-4" />}
@@ -46,11 +57,7 @@ export default function AccountSecurity() {
             <SettingsCard>
                <SettingsRow
                   title="No passkeys registered"
-                  trailing={
-                     <Button size="xs" variant="ghost">
-                        New passkey
-                     </Button>
-                  }
+                  trailing={<SoonAction>New passkey</SoonAction>}
                />
             </SettingsCard>
          </SettingsSection>
@@ -60,14 +67,7 @@ export default function AccountSecurity() {
             description="Use the GraphQL API to build your own integrations"
          >
             <SettingsCard>
-               <SettingsRow
-                  title="1 API key"
-                  trailing={
-                     <Button size="xs" variant="ghost">
-                        New API key
-                     </Button>
-                  }
-               />
+               <SettingsRow title="1 API key" trailing={<SoonAction>New API key</SoonAction>} />
                <SettingsRow
                   icon={<KeyRound className="size-4" />}
                   title={
@@ -90,11 +90,7 @@ export default function AccountSecurity() {
             <SettingsCard>
                <SettingsRow
                   title="No signing key added"
-                  trailing={
-                     <Button size="xs" variant="ghost">
-                        Add key
-                     </Button>
-                  }
+                  trailing={<SoonAction>Add key</SoonAction>}
                />
             </SettingsCard>
          </SettingsSection>

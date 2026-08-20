@@ -88,14 +88,16 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                               {project.priority.name}
                            </span>
                            <span className="inline-flex items-center gap-1.5">
-                              <Avatar className="size-4">
-                                 <AvatarImage
-                                    src={project.lead.avatarUrl}
-                                    alt={project.lead.name}
-                                 />
-                                 <AvatarFallback>{project.lead.name[0]}</AvatarFallback>
-                              </Avatar>
-                              {project.lead.name}
+                              {project.lead && (
+                                 <Avatar className="size-4">
+                                    <AvatarImage
+                                       src={project.lead.avatarUrl}
+                                       alt={project.lead.name}
+                                    />
+                                    <AvatarFallback>{project.lead.name[0]}</AvatarFallback>
+                                 </Avatar>
+                              )}
+                              {project.lead?.name ?? '—'}
                            </span>
                            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
                               {formatDay(project.startDate)}

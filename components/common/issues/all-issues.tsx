@@ -1,7 +1,8 @@
 'use client';
 
 import { Issue } from '@/mock-data/issues';
-import { getStatusesByCategory, StatusCategory, displayOrderedStatus } from '@/mock-data/status';
+import { StatusCategory } from '@/mock-data/status';
+import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { applyIssueFilters } from './issue-filter-columns';
@@ -26,22 +27,24 @@ export default function AllIssues({ categories }: AllIssuesProps) {
    const { isSearchOpen, searchQuery } = useSearchStore();
    const { viewType } = useViewStore();
    const { filters } = useFilterStore();
-   const { issues } = useIssuesStore();
+   const { issues, loading, error, hydrate } = useIssuesStore();
    const { openPanel } = useRightPanelStore();
 
    const isSearching = isSearchOpen && searchQuery.trim() !== '';
    const isViewTypeGrid = viewType === 'grid';
 
+   const displayOrderedStatus = useDisplayOrderedStatuses();
    const statuses = useMemo(
-      () => (categories ? getStatusesByCategory(categories) : displayOrderedStatus),
-      [categories]
+      () =>
+         categories
+            ? displayOrderedStatus.filter((s) => categories.includes(s.category))
+            : displayOrderedStatus,
+      [categories, displayOrderedStatus]
    );
 
    const scopedIssues = useMemo<Issue[]>(
       () =>
-         categories
-            ? issues.filter((issue) => categories.includes(issue.status.category))
-            : issues,
+         categories ? issues.filter((issue) => categories.includes(issue.status.category)) : issues,
       [issues, categories]
    );
 
@@ -70,6 +73,9 @@ export default function AllIssues({ categories }: AllIssuesProps) {
                   totalIssues={scopedIssues}
                   statuses={statuses}
                   isViewTypeGrid={isViewTypeGrid}
+                  loading={loading}
+                  error={error}
+                  onRetry={() => hydrate()}
                />
             </div>
 

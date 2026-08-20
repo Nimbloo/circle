@@ -11,9 +11,10 @@ import {
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useIssuesStore } from '@/store/issues-store';
-import { priorities, Priority } from '@/mock-data/priorities';
+import { Priority } from '@/mock-data/priorities';
+import { usePriorities } from '@/store/catalog-store';
 import { CheckIcon } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 
 interface PrioritySelectorProps {
    priority: Priority;
@@ -23,16 +24,13 @@ interface PrioritySelectorProps {
 export function PrioritySelector({ priority, issueId }: PrioritySelectorProps) {
    const id = useId();
    const [open, setOpen] = useState<boolean>(false);
-   const [value, setValue] = useState<string>(priority.id);
+   // Deriva do prop (store) — sem estado local otimista, reverte junto com o rollback.
+   const value = priority.id;
 
+   const priorities = usePriorities();
    const { filterByPriority, updateIssuePriority } = useIssuesStore();
 
-   useEffect(() => {
-      setValue(priority.id);
-   }, [priority.id]);
-
    const handlePriorityChange = (priorityId: string) => {
-      setValue(priorityId);
       setOpen(false);
 
       if (issueId) {

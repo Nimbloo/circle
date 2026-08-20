@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 type Params = { params: Promise<{ id: string }> };
 
-const CommentSchema = z.object({ body: z.string().min(1) });
+const CommentSchema = z.object({ body: z.string().min(1).max(10000) });
 
 export async function PATCH(req: Request, { params }: Params) {
    return handle(async () => {

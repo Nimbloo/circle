@@ -28,7 +28,38 @@ function titleFor(status: number): string {
    }
 }
 
-/** Envolve um handler mapeando ApiError/ZodError para ProblemDetail. */
+/**
+ * Traduz erros do Postgres (SQLSTATE) para ProblemDetail semântico em vez de 500.
+ * Cobre os casos em que a validação da borda não pegou (FK inexistente, unique,
+ * texto acima do limite da coluna, data malformada) — o contrato de erro passa a
+ * ser 400/404/409 correto, não 500 opaco. Retorna null se não for erro de DB conhecido.
+ */
+function mapDbError(e: unknown): Response | null {
+   if (!e || typeof e !== 'object' || !('code' in e)) return null;
+   const code = String((e as { code: unknown }).code);
+   switch (code) {
+      case '23503': // foreign_key_violation — id referenciado não existe
+         return problem(404, 'Not Found', 'Recurso referenciado não existe');
+      case '23505': // unique_violation
+         return problem(409, 'Conflict', 'Registro já existe');
+      case '23502': // not_null_violation
+         return problem(400, 'Bad Request', 'Campo obrigatório ausente');
+      case '23514': // check_violation
+         return problem(400, 'Bad Request', 'Valor viola restrição do banco');
+      case '22001': // string_data_right_truncation — texto acima do limite da coluna
+         return problem(400, 'Bad Request', 'Valor de texto excede o tamanho permitido');
+      case '22003': // numeric_value_out_of_range
+         return problem(400, 'Bad Request', 'Valor numérico fora do intervalo');
+      case '22007': // invalid_datetime_format
+      case '22008': // datetime_field_overflow
+      case '22P02': // invalid_text_representation (data/enum/uuid malformado)
+         return problem(400, 'Bad Request', 'Formato de valor inválido');
+      default:
+         return null;
+   }
+}
+
+/** Envolve um handler mapeando ApiError/ZodError/erros do Postgres para ProblemDetail. */
 export async function handle(fn: () => Promise<Response>): Promise<Response> {
    try {
       return await fn();
@@ -37,6 +68,8 @@ export async function handle(fn: () => Promise<Response>): Promise<Response> {
       if (e instanceof z.ZodError) {
          return problem(400, 'Bad Request', 'Payload inválido', { errors: e.flatten() });
       }
+      const dbMapped = mapDbError(e);
+      if (dbMapped) return dbMapped;
       console.error('[circle-api] erro não tratado:', e);
       return problem(500, 'Internal Server Error');
    }

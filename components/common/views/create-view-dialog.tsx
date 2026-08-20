@@ -1,0 +1,129 @@
+'use client';
+
+import { Button } from '@/components/ui/button';
+import {
+   Dialog,
+   DialogContent,
+   DialogDescription,
+   DialogFooter,
+   DialogHeader,
+   DialogTitle,
+   DialogTrigger,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+   Select,
+   SelectContent,
+   SelectItem,
+   SelectTrigger,
+   SelectValue,
+} from '@/components/ui/select';
+import { api } from '@/lib/client';
+import { useWorkspaceStore } from '@/store/workspace-store';
+import { Plus } from 'lucide-react';
+import { useState } from 'react';
+import { toast } from 'sonner';
+
+function slugify(v: string): string {
+   return v
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+}
+
+/**
+ * Cria uma saved view via api.views.create e re-hidrata o workspace.
+ * Campos obrigatórios da rota: slug, name, type, filter (começa vazio).
+ */
+export function CreateViewButton() {
+   const hydrate = useWorkspaceStore((s) => s.hydrate);
+
+   const [open, setOpen] = useState(false);
+   const [busy, setBusy] = useState(false);
+   const [name, setName] = useState('');
+   const [slug, setSlug] = useState('');
+   const [type, setType] = useState<'issue' | 'project'>('issue');
+
+   const effectiveSlug = slug.trim() || slugify(name);
+
+   const create = async () => {
+      if (!name.trim() || !effectiveSlug || busy) return;
+      setBusy(true);
+      try {
+         await api.views.create({
+            slug: effectiveSlug,
+            name: name.trim(),
+            type,
+            filter: {},
+         });
+         await hydrate();
+         setName('');
+         setSlug('');
+         setOpen(false);
+         toast.success('View created');
+      } catch {
+         toast.error('Could not create the view (slug já existe?)');
+      } finally {
+         setBusy(false);
+      }
+   };
+
+   return (
+      <Dialog open={open} onOpenChange={setOpen}>
+         <DialogTrigger asChild>
+            <Button size="xs" variant="ghost" aria-label="New view">
+               <Plus className="size-4" />
+            </Button>
+         </DialogTrigger>
+         <DialogContent>
+            <DialogHeader>
+               <DialogTitle>New view</DialogTitle>
+               <DialogDescription>Filtro salvo de issues ou projects.</DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-3">
+               <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="view-name">Name</Label>
+                  <Input
+                     id="view-name"
+                     placeholder="View name"
+                     value={name}
+                     onChange={(e) => setName(e.target.value)}
+                  />
+               </div>
+               <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="view-slug">Slug</Label>
+                  <Input
+                     id="view-slug"
+                     placeholder={slugify(name) || 'slug'}
+                     value={slug}
+                     onChange={(e) => setSlug(e.target.value)}
+                  />
+               </div>
+               <div className="flex flex-col gap-1.5">
+                  <Label>Type</Label>
+                  <Select value={type} onValueChange={(v) => setType(v as 'issue' | 'project')}>
+                     <SelectTrigger>
+                        <SelectValue />
+                     </SelectTrigger>
+                     <SelectContent>
+                        <SelectItem value="issue">Issues</SelectItem>
+                        <SelectItem value="project">Projects</SelectItem>
+                     </SelectContent>
+                  </Select>
+               </div>
+            </div>
+            <DialogFooter>
+               <Button
+                  size="sm"
+                  onClick={() => void create()}
+                  disabled={busy || !name.trim() || !effectiveSlug}
+               >
+                  Create view
+               </Button>
+            </DialogFooter>
+         </DialogContent>
+      </Dialog>
+   );
+}

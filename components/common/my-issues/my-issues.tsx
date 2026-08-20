@@ -6,7 +6,7 @@ import { GroupedIssuesView } from '@/components/common/issues/grouped-issues-vie
 import { InsightsPanel } from '@/components/common/issues/insights-panel';
 import { SearchIssues } from '@/components/common/issues/search-issues';
 import { BreakdownPanel } from './breakdown-panel';
-import { displayOrderedStatus } from '@/mock-data/status';
+import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
@@ -26,9 +26,10 @@ export default function MyIssues() {
    const { isSearchOpen, searchQuery } = useSearchStore();
    const { viewType } = useViewStore();
    const { filters } = useFilterStore();
-   const { issues } = useIssuesStore();
+   const { issues, loading, error, hydrate } = useIssuesStore();
    const { openPanel } = useRightPanelStore();
    const meId = useWorkspaceStore((s) => s.me?.id);
+   const displayOrderedStatus = useDisplayOrderedStatuses();
 
    const isSearching = isSearchOpen && searchQuery.trim() !== '';
    const isViewTypeGrid = viewType === 'grid';
@@ -60,6 +61,9 @@ export default function MyIssues() {
                   totalIssues={scopedIssues}
                   statuses={displayOrderedStatus}
                   isViewTypeGrid={isViewTypeGrid}
+                  loading={loading}
+                  error={error}
+                  onRetry={() => hydrate()}
                />
             </div>
 

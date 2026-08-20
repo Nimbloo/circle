@@ -197,7 +197,7 @@ function TimelineBar({
             style={{ left, width }}
          >
             <span className="truncate font-medium">{project.name}</span>
-            {displayProperties.lead && (
+            {displayProperties.lead && project.lead && (
                <Avatar className="size-4 shrink-0">
                   <AvatarImage src={project.lead.avatarUrl} alt={project.lead.name} />
                   <AvatarFallback>{project.lead.name[0]}</AvatarFallback>
@@ -488,7 +488,7 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
                                              className={cn('size-3 shrink-0 text-muted-foreground')}
                                           />
                                        )}
-                                       {displayProperties.lead && (
+                                       {displayProperties.lead && project.lead && (
                                           <Avatar className="size-4 shrink-0">
                                              <AvatarImage
                                                 src={project.lead.avatarUrl}

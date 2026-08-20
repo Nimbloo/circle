@@ -19,8 +19,13 @@ export default function NewTeam() {
          <SettingsSection title="Create a new team">
             <SettingsCard>
                <div className="flex items-center gap-3 p-4">
-                  <Input placeholder="Team name, e.g. Mobile" className="h-8 flex-1" />
-                  <Button size="xs">Create team</Button>
+                  <Input placeholder="Team name, e.g. Mobile" className="h-8 flex-1" disabled />
+                  <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                     Soon
+                  </span>
+                  <Button size="xs" disabled>
+                     Create team
+                  </Button>
                </div>
             </SettingsCard>
          </SettingsSection>
@@ -34,10 +39,15 @@ export default function NewTeam() {
                      title={team.name}
                      description={`${team.members.length} members · ${team.projects.length} projects`}
                      trailing={
-                        <Button size="xs" variant="secondary">
-                           <Check className="size-3.5" />
-                           Join
-                        </Button>
+                        <div className="flex items-center gap-2">
+                           <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                              Soon
+                           </span>
+                           <Button size="xs" variant="secondary" disabled>
+                              <Check className="size-3.5" />
+                              Join
+                           </Button>
+                        </div>
                      }
                   />
                ))}

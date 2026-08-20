@@ -1,7 +1,18 @@
 'use client';
 
+import {
+   AlertDialog,
+   AlertDialogAction,
+   AlertDialogCancel,
+   AlertDialogContent,
+   AlertDialogDescription,
+   AlertDialogFooter,
+   AlertDialogHeader,
+   AlertDialogTitle,
+   AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
    Command,
    CommandEmpty,
@@ -159,9 +170,33 @@ export function BulkActionsBar() {
                </PopoverContent>
             </Popover>
 
-            <Button size="xs" variant="ghost" onClick={remove}>
-               <Trash2 className="size-4 text-red-500" /> Delete
-            </Button>
+            <AlertDialog>
+               <AlertDialogTrigger asChild>
+                  <Button size="xs" variant="ghost">
+                     <Trash2 className="size-4 text-red-500" /> Delete
+                  </Button>
+               </AlertDialogTrigger>
+               <AlertDialogContent>
+                  <AlertDialogHeader>
+                     <AlertDialogTitle>
+                        Delete {ids.length} {ids.length === 1 ? 'issue' : 'issues'}?
+                     </AlertDialogTitle>
+                     <AlertDialogDescription>
+                        Esta ação não pode ser desfeita. As issues selecionadas serão removidas
+                        permanentemente.
+                     </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                     <AlertDialogCancel>Cancel</AlertDialogCancel>
+                     <AlertDialogAction
+                        className={buttonVariants({ variant: 'destructive' })}
+                        onClick={remove}
+                     >
+                        Delete
+                     </AlertDialogAction>
+                  </AlertDialogFooter>
+               </AlertDialogContent>
+            </AlertDialog>
             <span className="w-px h-5 bg-border mx-1" />
             <Button size="xs" variant="ghost" onClick={clear} aria-label="Clear selection">
                <X className="size-4" />

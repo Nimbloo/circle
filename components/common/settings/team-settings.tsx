@@ -21,10 +21,25 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import type { ReactNode } from 'react';
 import { SettingsCard, SettingsRow, SettingsSection } from './shared';
 
 interface TeamSettingsProps {
    teamId: string;
+}
+
+/** Danger-zone action whose backend doesn't exist yet: disabled + "Soon". */
+function DangerSoon({ children }: { children: ReactNode }) {
+   return (
+      <div className="flex items-center gap-2">
+         <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Soon
+         </span>
+         <Button size="xs" variant="ghost" disabled>
+            {children}
+         </Button>
+      </div>
+   );
 }
 
 /** Per-team settings page (general, workflow, AI and danger zone). */
@@ -221,31 +236,19 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
                      <SettingsRow
                         title="Leave team"
                         description="Remove yourself as a member of this team"
-                        trailing={
-                           <Button size="xs" variant="ghost">
-                              Leave team...
-                           </Button>
-                        }
+                        trailing={<DangerSoon>Leave team...</DangerSoon>}
                      />
                      <SettingsRow
                         title="Retire team"
                         description="Prevent creating and updating issues in this team while preserving all historical data"
                         muted
-                        trailing={
-                           <Button size="xs" variant="ghost">
-                              Retire...
-                           </Button>
-                        }
+                        trailing={<DangerSoon>Retire...</DangerSoon>}
                      />
                      <SettingsRow
                         title="Delete team"
                         description="Permanently delete this team and all its data, with a 30-day restoration window"
                         muted
-                        trailing={
-                           <Button size="xs" variant="ghost">
-                              Delete...
-                           </Button>
-                        }
+                        trailing={<DangerSoon>Delete...</DangerSoon>}
                      />
                   </SettingsCard>
                </SettingsSection>

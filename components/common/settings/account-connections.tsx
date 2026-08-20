@@ -49,10 +49,15 @@ export default function AccountConnections() {
                   title="Notion"
                   description="Preview issues, projects, and views within Notion"
                   trailing={
-                     <Button size="xs" variant="ghost">
-                        Connect
-                        <ArrowUpRight className="size-3.5" />
-                     </Button>
+                     <div className="flex items-center gap-2">
+                        <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                           Soon
+                        </span>
+                        <Button size="xs" variant="ghost" disabled>
+                           Connect
+                           <ArrowUpRight className="size-3.5" />
+                        </Button>
+                     </div>
                   }
                />
             </SettingsCard>
