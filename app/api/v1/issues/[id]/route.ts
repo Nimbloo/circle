@@ -25,6 +25,7 @@ const UpdateSchema = z.object({
    projectId: z.string().nullish(),
    cycleId: z.string().nullish(),
    dueDate: z.string().nullish(),
+   estimate: z.number().int().min(0).nullish(),
 });
 
 export async function PATCH(req: Request, { params }: Params) {

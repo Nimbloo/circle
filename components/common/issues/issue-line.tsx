@@ -58,6 +58,11 @@ export function IssueLine({ issue, layoutId = false }: { issue: Issue; layoutId?
                         <ProjectBadge project={issue.project} />
                      )}
                   </div>
+                  {displayProperties.estimate && issue.estimate !== undefined && (
+                     <span className="text-xs text-muted-foreground border border-border rounded-md px-1.5 py-0.5 shrink-0 hidden sm:inline-block tabular-nums">
+                        {issue.estimate}
+                     </span>
+                  )}
                   {cycle && (
                      <span className="text-xs text-muted-foreground border border-border rounded-md px-1.5 py-0.5 shrink-0 hidden lg:inline-block">
                         {cycle.name}

@@ -41,6 +41,29 @@ describe('issues', () => {
       expect(dto.createdBy?.email).toBe(ME);
       expect(dto.labels.map((l) => l.id)).toEqual(['bug']);
       expect(dto.cycleId).toBe(''); // sem ciclo = ''
+      expect(dto.estimate).toBeNull(); // sem estimativa por padrão
+   });
+
+   it('persists estimate on create and update, and can clear it', async () => {
+      const db = await setup();
+      const created = await createIssue(
+         db,
+         {
+            teamId: 'CORE',
+            title: 'Com estimativa',
+            statusId: 'to-do',
+            priorityId: 'high',
+            estimate: 5,
+         },
+         ME
+      );
+      expect(created.estimate).toBe(5);
+
+      const bumped = await updateIssue(db, created.id, { estimate: 8 }, ME);
+      expect(bumped?.estimate).toBe(8);
+
+      const cleared = await updateIssue(db, created.id, { estimate: null }, ME);
+      expect(cleared?.estimate).toBeNull();
    });
 
    it('increments identifier per team and ranks after the previous', async () => {

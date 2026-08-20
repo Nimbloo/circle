@@ -50,6 +50,7 @@ export interface IssueDto {
    labels: LabelRow[];
    rank: string;
    dueDate: string | null;
+   estimate: number | null;
    createdAt: string;
    updatedAt: string;
 }
@@ -199,6 +200,7 @@ async function assemble(
       labels: labelsByIssue.get(r.id) ?? [],
       rank: r.rank,
       dueDate: r.dueDate,
+      estimate: r.estimate,
       createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
       updatedAt: r.updatedAt instanceof Date ? r.updatedAt.toISOString() : String(r.updatedAt),
    }));
@@ -250,6 +252,7 @@ export interface CreateIssueInput {
    cycleId?: string | null;
    labelIds?: string[];
    dueDate?: string | null;
+   estimate?: number | null;
    description?: string | null;
 }
 
@@ -295,6 +298,7 @@ export async function createIssue(
       cycleId: input.cycleId || null,
       rank,
       dueDate: input.dueDate ?? null,
+      estimate: input.estimate ?? null,
       createdAt: now,
       updatedAt: now,
    });
@@ -330,6 +334,7 @@ export interface UpdateIssueInput {
    projectId?: string | null;
    cycleId?: string | null;
    dueDate?: string | null;
+   estimate?: number | null;
 }
 
 export async function updateIssue(
@@ -351,6 +356,7 @@ export async function updateIssue(
    if (patch.projectId !== undefined) set.projectId = patch.projectId;
    if (patch.cycleId !== undefined) set.cycleId = patch.cycleId || null;
    if (patch.dueDate !== undefined) set.dueDate = patch.dueDate;
+   if (patch.estimate !== undefined) set.estimate = patch.estimate;
 
    await db.update(issue).set(set).where(eq(issue.id, id));
 

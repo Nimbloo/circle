@@ -19,6 +19,7 @@ import { PrioritySelector } from './priority-selector';
 import { AssigneeSelector } from './assignee-selector';
 import { ProjectSelector } from './project-selector';
 import { LabelSelector } from './label-selector';
+import { EstimateSelector } from './estimate-selector';
 import { LexoRank } from '@/lib/utils';
 import { DialogTitle } from '@radix-ui/react-dialog';
 
@@ -144,6 +145,12 @@ export function CreateNewIssue() {
                      selectedLabels={addIssueForm.labels}
                      onChange={(newLabels) =>
                         setAddIssueForm({ ...addIssueForm, labels: newLabels })
+                     }
+                  />
+                  <EstimateSelector
+                     estimate={addIssueForm.estimate}
+                     onChange={(newEstimate) =>
+                        setAddIssueForm({ ...addIssueForm, estimate: newEstimate })
                      }
                   />
                </div>

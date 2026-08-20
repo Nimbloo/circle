@@ -27,6 +27,7 @@ const CreateSchema = z.object({
    cycleId: z.string().nullish(),
    labelIds: z.array(z.string()).optional(),
    dueDate: z.string().nullish(),
+   estimate: z.number().int().min(0).nullish(),
    description: z.string().nullish(),
 });
 

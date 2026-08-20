@@ -12,6 +12,7 @@ export type DisplayPropertyKey =
    | 'assignee'
    | 'labels'
    | 'project'
+   | 'estimate'
    | 'dueDate'
    | 'created'
    | 'cycle';
@@ -23,6 +24,7 @@ export const DISPLAY_PROPERTIES: { key: DisplayPropertyKey; label: string }[] = 
    { key: 'priority', label: 'Priority' },
    { key: 'labels', label: 'Labels' },
    { key: 'project', label: 'Project' },
+   { key: 'estimate', label: 'Estimate' },
    { key: 'dueDate', label: 'Due date' },
    { key: 'created', label: 'Created' },
    { key: 'cycle', label: 'Cycle' },
@@ -35,6 +37,7 @@ const DEFAULT_DISPLAY_PROPERTIES: Record<DisplayPropertyKey, boolean> = {
    assignee: true,
    labels: true,
    project: true,
+   estimate: true,
    dueDate: false,
    created: true,
    cycle: false,
@@ -97,6 +100,19 @@ export const useDisplaySettingsStore = create<DisplaySettingsState>()(
       {
          name: 'display-settings',
          storage: createJSONStorage(() => localStorage),
+         // Sobrepõe os defaults com o estado persistido; garante que novas
+         // display properties (ex.: estimate) apareçam para usuários antigos.
+         merge: (persisted, current) => {
+            const p = (persisted ?? {}) as Partial<DisplaySettingsState>;
+            return {
+               ...current,
+               ...p,
+               displayProperties: {
+                  ...current.displayProperties,
+                  ...(p.displayProperties ?? {}),
+               },
+            };
+         },
       }
    )
 );

@@ -20,6 +20,8 @@ export interface Issue {
    subissues?: string[];
    rank: string;
    dueDate?: string;
+   /** Pontos de estimativa (undefined = sem estimativa). */
+   estimate?: number;
    /** Id do criador (vem do backend; usado em "My issues" > Created). */
    createdById?: string;
 }

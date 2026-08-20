@@ -190,6 +190,7 @@ export const issue = pgTable(
       cycleId: varchar('cycle_id', { length: 36 }).references(() => cycle.id),
       rank: varchar('rank', { length: 64 }).notNull(), // lexorank
       dueDate: date('due_date'),
+      estimate: integer('estimate'), // pontos de estimativa (nullable = sem estimativa)
       createdAt: timestamp('created_at').notNull().defaultNow(),
       updatedAt: timestamp('updated_at').notNull().defaultNow(),
    },

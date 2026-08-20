@@ -3,6 +3,7 @@
 import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
 import { Button } from '@/components/ui/button';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { useIssuesStore } from '@/store/issues-store';
 import { IssueDetail } from '@/mock-data/issue-details';
 import { Issue } from '@/mock-data/issues';
 import { Ban, GitPullRequestArrow, Plus } from 'lucide-react';
@@ -10,6 +11,7 @@ import { AssigneeUser } from '../assignee-user';
 import { LabelBadge } from '../label-badge';
 import { PrioritySelector } from '../priority-selector';
 import { StatusSelector } from '../status-selector';
+import { EstimateSelector } from '@/components/layout/sidebar/create-new-issue/estimate-selector';
 import { IssueRefRow } from './content-blocks';
 
 interface IssuePropertiesPanelProps {
@@ -33,6 +35,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export function IssuePropertiesPanel({ issue, detail }: IssuePropertiesPanelProps) {
    const getCycleById = useWorkspaceStore((s) => s.getCycleById);
    const cycle = issue.cycleId ? getCycleById(issue.cycleId) : undefined;
+   const updateIssue = useIssuesStore((s) => s.updateIssue);
 
    return (
       <div className="flex flex-col gap-7">
@@ -56,6 +59,12 @@ export function IssuePropertiesPanel({ issue, detail }: IssuePropertiesPanelProp
                      <span className="text-sm">{cycle.name}</span>
                   </div>
                )}
+               <div className="flex items-center gap-1.5 -ml-1.5 mt-0.5">
+                  <EstimateSelector
+                     estimate={issue.estimate}
+                     onChange={(estimate) => updateIssue(issue.id, { estimate })}
+                  />
+               </div>
             </div>
          </Section>
 

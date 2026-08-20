@@ -64,6 +64,7 @@ function toUpdateInput(updated: Partial<Issue>): UpdateIssueInput {
    if ('project' in updated) patch.projectId = updated.project ? updated.project.id : null;
    if ('cycleId' in updated) patch.cycleId = updated.cycleId;
    if ('dueDate' in updated) patch.dueDate = updated.dueDate ?? null;
+   if ('estimate' in updated) patch.estimate = updated.estimate ?? null;
    return patch;
 }
 
@@ -103,6 +104,7 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          cycleId: issue.cycleId || null,
          labelIds: issue.labels.map((l) => l.id),
          dueDate: issue.dueDate ?? null,
+         estimate: issue.estimate ?? null,
       };
       // após criar, re-hidrata p/ obter identifier/rank gerados no servidor
       api.issues
