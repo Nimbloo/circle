@@ -1,10 +1,40 @@
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import type { Db } from '@/db';
-import { appUser } from '@/db/schema';
+import { appUser, teamMember } from '@/db/schema';
 import { isAdmin } from './auth';
 
 export type UserRow = typeof appUser.$inferSelect;
+
+export interface MeDto {
+   id: string;
+   slug: string;
+   name: string;
+   email: string;
+   avatarUrl: string | null;
+   role: string;
+   admin: boolean;
+   teamIds: string[];
+}
+
+/** Usuário corrente (do e-mail SSO) + times + flag admin. */
+export async function getMe(db: Db, email: string): Promise<MeDto> {
+   const user = await getOrCreateUser(db, email);
+   const teams = await db
+      .select({ teamId: teamMember.teamId })
+      .from(teamMember)
+      .where(eq(teamMember.userId, user.id));
+   return {
+      id: user.id,
+      slug: user.slug,
+      name: user.name,
+      email: user.email,
+      avatarUrl: user.avatarUrl,
+      role: user.role,
+      admin: isAdmin(user.email),
+      teamIds: teams.map((t) => t.teamId),
+   };
+}
 
 function slugFromEmail(email: string): string {
    return email
