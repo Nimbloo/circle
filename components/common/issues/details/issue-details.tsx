@@ -28,6 +28,7 @@ export default function IssueDetails() {
 
    const [detail, setDetail] = useState<IssueDetail | null>(null);
    const [loading, setLoading] = useState(true);
+   const [reloadKey, setReloadKey] = useState(0);
 
    useEffect(() => {
       if (!issue) return;
@@ -46,7 +47,7 @@ export default function IssueDetails() {
       return () => {
          active = false;
       };
-   }, [issue]);
+   }, [issue, reloadKey]);
 
    if (!issue) {
       return (
@@ -142,7 +143,11 @@ export default function IssueDetails() {
 
          {/* Properties sidebar */}
          <aside className="hidden lg:block w-80 shrink-0 border-l h-full overflow-y-auto bg-container px-5 py-6">
-            <IssuePropertiesPanel issue={issue} detail={detail} />
+            <IssuePropertiesPanel
+               issue={issue}
+               detail={detail}
+               onChanged={() => setReloadKey((k) => k + 1)}
+            />
          </aside>
       </div>
    );

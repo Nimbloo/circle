@@ -9,6 +9,8 @@ import {
    listActivity,
    addReaction,
    removeReaction,
+   addRelation,
+   removeRelation,
 } from '@/lib/api/issue-detail';
 
 const ME = 'dev@nimbloo.ai';
@@ -58,6 +60,32 @@ describe('issue detail / comments / activity', () => {
       // pelo menos: 1 evento "created" + 1 comment
       expect(feed.some((f) => f.kind === 'event' && f.event === 'created')).toBe(true);
       expect(feed.some((f) => f.kind === 'comment')).toBe(true);
+   });
+
+   it('adds and removes relations by kind (sub/related/blocked_by)', async () => {
+      const { db, issue } = await anIssue();
+      const other = await createIssue(
+         db,
+         { teamId: 'CORE', title: 'Bloqueadora', statusId: 'to-do', priorityId: 'low' },
+         ME
+      );
+
+      const afterAdd = await addRelation(db, issue.id, other.id, 'blocked_by');
+      expect(afterAdd?.blockedByIds).toEqual([other.id]);
+      expect(afterAdd?.relatedIds).toEqual([]);
+
+      // idempotente: adicionar de novo não duplica
+      const again = await addRelation(db, issue.id, other.id, 'blocked_by');
+      expect(again?.blockedByIds).toEqual([other.id]);
+
+      const afterRemove = await removeRelation(db, issue.id, other.id, 'blocked_by');
+      expect(afterRemove?.blockedByIds).toEqual([]);
+   });
+
+   it('rejects self-relation and unknown related issue', async () => {
+      const { db, issue } = await anIssue();
+      await expect(addRelation(db, issue.id, issue.id, 'related')).rejects.toThrow();
+      await expect(addRelation(db, issue.id, 'nope', 'related')).rejects.toThrow();
    });
 
    it('aggregates reactions by emoji and can remove them', async () => {

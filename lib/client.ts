@@ -98,6 +98,12 @@ export const api = {
       removeLabel: (id: string, labelId: string) =>
          del<IssueDto>(`/issues/${id}/labels/${labelId}`),
       detail: (id: string) => get<IssueDetailDto>(`/issues/${id}/detail`),
+      addRelation: (id: string, relatedId: string, kind: string) =>
+         post<IssueDetailDto>(`/issues/${id}/relations`, { relatedId, kind }),
+      removeRelation: (id: string, relatedId: string, kind: string) =>
+         del<IssueDetailDto>(
+            `/issues/${id}/relations?relatedId=${encodeURIComponent(relatedId)}&kind=${kind}`
+         ),
       activity: (id: string) => get<ActivityItem[]>(`/issues/${id}/activity`),
       comments: (id: string) => get<CommentDto[]>(`/issues/${id}/comments`),
       addComment: (id: string, body: string) =>

@@ -152,7 +152,7 @@ export function CommandPalette() {
       ? `${typeof window !== 'undefined' ? window.location.origin : ''}/${orgId}/issue/${issue.identifier}`
       : '';
    const branchName = issue
-      ? `${users[0].id}/${issue.identifier.toLowerCase()}-${issue.title
+      ? `${users[0]?.id ?? 'me'}/${issue.identifier.toLowerCase()}-${issue.title
            .toLowerCase()
            .replace(/[^a-z0-9]+/g, '-')
            .replace(/^-|-$/g, '')

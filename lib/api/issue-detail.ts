@@ -13,6 +13,7 @@ import {
 } from '@/db/schema';
 import { getOrCreateUser } from './users';
 import { dispatchNotification } from './notify';
+import { ApiError } from './errors';
 import type { UserRef } from './issues';
 
 function userRef(
@@ -100,6 +101,60 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
       blockedByIds: relations.filter((r) => r.kind === 'blocked_by').map((r) => r.relatedId),
       prLinks: prs.map((p) => ({ id: p.id, title: p.title, status: p.status })),
    };
+}
+
+export type RelationKind = 'sub' | 'related' | 'blocked_by';
+export const RELATION_KINDS: readonly RelationKind[] = ['sub', 'related', 'blocked_by'];
+
+/** Cria uma relação issueId -> relatedId (idempotente). Retorna o detail atualizado. */
+export async function addRelation(
+   db: Db,
+   issueId: string,
+   relatedId: string,
+   kind: RelationKind
+): Promise<IssueDetailDto | null> {
+   if (issueId === relatedId)
+      throw new ApiError(400, 'Uma issue não pode se relacionar consigo mesma');
+   const [a, b] = await Promise.all([
+      db.select({ id: issueT.id }).from(issueT).where(eq(issueT.id, issueId)).limit(1),
+      db.select({ id: issueT.id }).from(issueT).where(eq(issueT.id, relatedId)).limit(1),
+   ]);
+   if (a.length === 0) return null;
+   if (b.length === 0) throw new ApiError(404, `Issue relacionada '${relatedId}' não existe`);
+   const existing = await db
+      .select({ id: issueRelation.id })
+      .from(issueRelation)
+      .where(
+         and(
+            eq(issueRelation.issueId, issueId),
+            eq(issueRelation.relatedId, relatedId),
+            eq(issueRelation.kind, kind)
+         )
+      )
+      .limit(1);
+   if (existing.length === 0) {
+      await db.insert(issueRelation).values({ id: randomUUID(), issueId, relatedId, kind });
+   }
+   return getIssueDetail(db, issueId);
+}
+
+/** Remove a relação issueId -> relatedId do tipo `kind`. Retorna o detail atualizado. */
+export async function removeRelation(
+   db: Db,
+   issueId: string,
+   relatedId: string,
+   kind: RelationKind
+): Promise<IssueDetailDto | null> {
+   await db
+      .delete(issueRelation)
+      .where(
+         and(
+            eq(issueRelation.issueId, issueId),
+            eq(issueRelation.relatedId, relatedId),
+            eq(issueRelation.kind, kind)
+         )
+      );
+   return getIssueDetail(db, issueId);
 }
 
 export async function listComments(db: Db, issueId: string): Promise<CommentDto[]> {

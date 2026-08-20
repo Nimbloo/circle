@@ -13,10 +13,13 @@ import { PrioritySelector } from '../priority-selector';
 import { StatusSelector } from '../status-selector';
 import { EstimateSelector } from '@/components/layout/sidebar/create-new-issue/estimate-selector';
 import { IssueRefRow } from './content-blocks';
+import { RelationEditor } from './relation-editor';
 
 interface IssuePropertiesPanelProps {
    issue: Issue;
    detail: IssueDetail;
+   /** Quando fornecido, as relações (related/blocked-by) ficam editáveis e o pai refetch. */
+   onChanged?: () => void;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -32,7 +35,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
  * Right sidebar of the issue page: editable properties (status, priority,
  * assignee), cycle, labels, project + milestone, relations and linked PRs.
  */
-export function IssuePropertiesPanel({ issue, detail }: IssuePropertiesPanelProps) {
+export function IssuePropertiesPanel({ issue, detail, onChanged }: IssuePropertiesPanelProps) {
    const getCycleById = useWorkspaceStore((s) => s.getCycleById);
    const cycle = issue.cycleId ? getCycleById(issue.cycleId) : undefined;
    const updateIssue = useIssuesStore((s) => s.updateIssue);
@@ -92,27 +95,53 @@ export function IssuePropertiesPanel({ issue, detail }: IssuePropertiesPanelProp
             </Section>
          )}
 
-         {detail.blockedByIds && detail.blockedByIds.length > 0 && (
+         {onChanged ? (
             <Section title="Blocked by">
-               <div className="flex flex-col">
-                  {detail.blockedByIds.map((identifier) => (
-                     <div key={identifier} className="flex items-center gap-1.5 min-w-0">
-                        <Ban className="size-3.5 text-red-500 shrink-0" />
-                        <IssueRefRow identifier={identifier} />
-                     </div>
-                  ))}
-               </div>
+               <RelationEditor
+                  issueId={issue.id}
+                  kind="blocked_by"
+                  relatedIds={detail.blockedByIds ?? []}
+                  addLabel="Add blocking issue"
+                  onChanged={onChanged}
+               />
             </Section>
+         ) : (
+            detail.blockedByIds &&
+            detail.blockedByIds.length > 0 && (
+               <Section title="Blocked by">
+                  <div className="flex flex-col">
+                     {detail.blockedByIds.map((identifier) => (
+                        <div key={identifier} className="flex items-center gap-1.5 min-w-0">
+                           <Ban className="size-3.5 text-red-500 shrink-0" />
+                           <IssueRefRow identifier={identifier} />
+                        </div>
+                     ))}
+                  </div>
+               </Section>
+            )
          )}
 
-         {detail.relatedIds && detail.relatedIds.length > 0 && (
+         {onChanged ? (
             <Section title="Related">
-               <div className="flex flex-col">
-                  {detail.relatedIds.map((identifier) => (
-                     <IssueRefRow key={identifier} identifier={identifier} />
-                  ))}
-               </div>
+               <RelationEditor
+                  issueId={issue.id}
+                  kind="related"
+                  relatedIds={detail.relatedIds ?? []}
+                  addLabel="Add related issue"
+                  onChanged={onChanged}
+               />
             </Section>
+         ) : (
+            detail.relatedIds &&
+            detail.relatedIds.length > 0 && (
+               <Section title="Related">
+                  <div className="flex flex-col">
+                     {detail.relatedIds.map((identifier) => (
+                        <IssueRefRow key={identifier} identifier={identifier} />
+                     ))}
+                  </div>
+               </Section>
+            )
          )}
 
          {detail.prLinks && detail.prLinks.length > 0 && (
