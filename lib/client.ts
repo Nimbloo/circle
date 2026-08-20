@@ -11,7 +11,7 @@ import type {
 import type { ProjectDto } from '@/lib/api/projects';
 import type { TeamDto, CreateTeamInput } from '@/lib/api/teams';
 import type { MemberDto } from '@/lib/api/members';
-import type { CycleDto } from '@/lib/api/cycles';
+import type { CycleDto, CreateCycleInput, UpdateCycleInput } from '@/lib/api/cycles';
 import type { InitiativeDto } from '@/lib/api/initiatives';
 import type { ViewDto } from '@/lib/api/views';
 import type { NotificationDto } from '@/lib/api/notifications';
@@ -78,7 +78,14 @@ export const api = {
       ),
    priorities: () =>
       get<{ id: string; name: string; position: number; sortRank: number }[]>('/priorities'),
-   labels: () => get<{ id: string; name: string; color: string }[]>('/labels'),
+   labels: {
+      list: () => get<{ id: string; name: string; color: string }[]>('/labels'),
+      create: (input: { id?: string; name: string; color: string }) =>
+         post<{ id: string; name: string; color: string }>('/labels', input),
+      update: (id: string, body: { name?: string; color?: string }) =>
+         patch<{ id: string; name: string; color: string }>(`/labels/${id}`, body),
+      remove: (id: string) => del<{ deleted: boolean }>(`/labels/${id}`),
+   },
    healthStates: () =>
       get<{ id: string; name: string; color: string; description: string | null }[]>(
          '/health-states'
@@ -116,6 +123,9 @@ export const api = {
       list: (q = '') => get<TeamDto[]>(`/teams${q}`),
       get: (key: string) => get<TeamDto>(`/teams/${key}`),
       create: (input: CreateTeamInput) => post<TeamDto>('/teams', input),
+      update: (key: string, body: { name?: string; icon?: string | null; color?: string | null }) =>
+         patch<TeamDto>(`/teams/${key}`, body),
+      remove: (key: string) => del<{ deleted: boolean }>(`/teams/${key}`),
       members: (key: string) => get<MemberDto[]>(`/teams/${key}/members`),
       addMember: (key: string, email: string) =>
          post<MemberDto[]>(`/teams/${key}/members`, { email }),
@@ -130,6 +140,7 @@ export const api = {
    members: {
       list: (q = '') => get<MemberDto[]>(`/members${q}`),
       get: (id: string) => get<MemberDto>(`/members/${id}`),
+      updateRole: (id: string, role: string) => patch<MemberDto>(`/members/${id}`, { role }),
    },
 
    projects: {
@@ -140,7 +151,18 @@ export const api = {
       progress: (id: string) => get<ProjectProgress>(`/projects/${id}/progress`),
    },
 
-   cycles: { get: (id: string) => get<CycleDto>(`/cycles/${id}`) },
+   cycles: {
+      get: (id: string) => get<CycleDto>(`/cycles/${id}`),
+      create: (teamKey: string, input: CreateCycleInput) =>
+         post<CycleDto>(`/teams/${teamKey}/cycles`, input),
+      update: (id: string, body: UpdateCycleInput) => patch<CycleDto>(`/cycles/${id}`, body),
+      remove: (id: string) => del<{ deleted: boolean }>(`/cycles/${id}`),
+   },
+
+   comments: {
+      update: (id: string, body: string) => patch<CommentDto>(`/comments/${id}`, { body }),
+      remove: (id: string) => del<{ deleted: boolean }>(`/comments/${id}`),
+   },
 
    initiatives: {
       list: (q = '') => get<InitiativeDto[]>(`/initiatives${q}`),

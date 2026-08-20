@@ -1,7 +1,15 @@
 import { eq, count, and } from 'drizzle-orm';
 import type { Db } from '@/db';
-import { team as teamT, teamMember, appUser, project as projectT } from '@/db/schema';
+import {
+   team as teamT,
+   teamMember,
+   appUser,
+   project as projectT,
+   issue as issueT,
+   cycle as cycleT,
+} from '@/db/schema';
 import { getOrCreateUser } from './users';
+import { sendEmail } from './integrations/mailer';
 import { ApiError } from './errors';
 
 type TeamRow = typeof teamT.$inferSelect;
@@ -146,13 +154,32 @@ export async function createTeam(db: Db, input: CreateTeamInput): Promise<TeamDt
 
 /** Adiciona (idempotente) um membro ao time pelo e-mail — provisiona o usuário se novo. */
 export async function addTeamMember(db: Db, teamId: string, email: string): Promise<void> {
-   const t = await db.select({ id: teamT.id }).from(teamT).where(eq(teamT.id, teamId)).limit(1);
+   const t = await db
+      .select({ id: teamT.id, name: teamT.name })
+      .from(teamT)
+      .where(eq(teamT.id, teamId))
+      .limit(1);
    if (!t.length) throw new ApiError(404, `Team '${teamId}' não existe`);
    const user = await getOrCreateUser(db, email);
-   await db
+   const inserted = await db
       .insert(teamMember)
       .values({ teamId, userId: user.id, joined: true })
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning();
+
+   // Convite por e-mail (best-effort): só dispara em inserção nova e quando o
+   // remetente está configurado (CIRCLE_MAIL_FROM). Nunca quebra o fluxo.
+   if (inserted.length && process.env.CIRCLE_MAIL_FROM) {
+      try {
+         const team = t[0];
+         const html =
+            `<p>Você foi adicionado ao time <strong>${team.name}</strong> no Circle.</p>` +
+            `<p><a href="https://circle.nimbloo.ai">Acessar o Circle</a></p>`;
+         await sendEmail(user.email, `Convite: ${team.name} no Circle`, html);
+      } catch (err) {
+         console.error('[circle] convite por e-mail falhou:', err);
+      }
+   }
 }
 
 /** Remove um membro do time. */
@@ -160,4 +187,49 @@ export async function removeTeamMember(db: Db, teamId: string, userId: string): 
    await db
       .delete(teamMember)
       .where(and(eq(teamMember.teamId, teamId), eq(teamMember.userId, userId)));
+}
+
+export interface UpdateTeamInput {
+   name?: string;
+   icon?: string | null;
+   color?: string | null;
+}
+
+/** Atualização parcial (name/icon/color). Retorna o TeamDto ou null se não existir. */
+export async function updateTeam(
+   db: Db,
+   id: string,
+   patch: UpdateTeamInput
+): Promise<TeamDto | null> {
+   const existing = await db.select({ id: teamT.id }).from(teamT).where(eq(teamT.id, id)).limit(1);
+   if (existing.length === 0) return null;
+   const set: Record<string, unknown> = {};
+   if (patch.name !== undefined) set.name = patch.name.trim();
+   if (patch.icon !== undefined) set.icon = patch.icon;
+   if (patch.color !== undefined) set.color = patch.color;
+   if (Object.keys(set).length) await db.update(teamT).set(set).where(eq(teamT.id, id));
+   return getTeam(db, id);
+}
+
+/**
+ * Apaga um time. Escolha segura: recusa com 409 se o time tiver issues, projects
+ * ou cycles (evita órfãos). Se estiver vazio, remove os team_member e o team.
+ * Retorna false se o time não existir.
+ */
+export async function deleteTeam(db: Db, id: string): Promise<boolean> {
+   const existing = await db.select({ id: teamT.id }).from(teamT).where(eq(teamT.id, id)).limit(1);
+   if (existing.length === 0) return false;
+
+   const [issues, projects, cycles] = await Promise.all([
+      db.select({ n: count() }).from(issueT).where(eq(issueT.teamId, id)),
+      db.select({ n: count() }).from(projectT).where(eq(projectT.teamId, id)),
+      db.select({ n: count() }).from(cycleT).where(eq(cycleT.teamId, id)),
+   ]);
+   const total = Number(issues[0].n) + Number(projects[0].n) + Number(cycles[0].n);
+   if (total > 0)
+      throw new ApiError(409, `Team '${id}' tem issues/projects/cycles — esvazie antes de apagar`);
+
+   await db.delete(teamMember).where(eq(teamMember.teamId, id));
+   await db.delete(teamT).where(eq(teamT.id, id));
+   return true;
 }

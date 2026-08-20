@@ -232,6 +232,54 @@ export async function addComment(
    return { id, author: userRef(author), body, createdAt: now.toISOString(), reactions: [] };
 }
 
+/**
+ * Edita o corpo de um comentário. Só o AUTOR pode editar (403 caso contrário).
+ * Retorna o CommentDto atualizado (autor + reactions) ou null se não existir.
+ */
+export async function updateComment(
+   db: Db,
+   commentId: string,
+   body: string,
+   actorEmail: string
+): Promise<CommentDto | null> {
+   const rows = await db.select().from(commentT).where(eq(commentT.id, commentId)).limit(1);
+   if (rows.length === 0) return null;
+   const c = rows[0];
+   const actor = await getOrCreateUser(db, actorEmail);
+   if (c.authorId !== actor.id) throw new ApiError(403, 'Só o autor pode editar o comentário');
+   await db.update(commentT).set({ body }).where(eq(commentT.id, commentId));
+   const [users, reactions] = await Promise.all([
+      loadUsers(db, [c.authorId]),
+      reactionsByComment(db, [commentId]),
+   ]);
+   return {
+      id: c.id,
+      author: userRef(users.get(c.authorId)),
+      body,
+      createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : String(c.createdAt),
+      reactions: reactions.get(c.id) ?? [],
+   };
+}
+
+/**
+ * Exclui um comentário. Só o AUTOR pode excluir (403 caso contrário).
+ * Remove antes as reactions (FK). Retorna false se o comentário não existir.
+ */
+export async function deleteComment(
+   db: Db,
+   commentId: string,
+   actorEmail: string
+): Promise<boolean> {
+   const rows = await db.select().from(commentT).where(eq(commentT.id, commentId)).limit(1);
+   if (rows.length === 0) return false;
+   const c = rows[0];
+   const actor = await getOrCreateUser(db, actorEmail);
+   if (c.authorId !== actor.id) throw new ApiError(403, 'Só o autor pode excluir o comentário');
+   await db.delete(commentReaction).where(eq(commentReaction.commentId, commentId));
+   await db.delete(commentT).where(eq(commentT.id, commentId));
+   return true;
+}
+
 /** Feed unificado: eventos + comentários, ordenado por data. */
 export async function listActivity(db: Db, issueId: string): Promise<ActivityItem[]> {
    const [events, comments] = await Promise.all([

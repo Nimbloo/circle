@@ -1,6 +1,7 @@
 import { eq, count } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { appUser, teamMember } from '@/db/schema';
+import { ApiError } from './errors';
 
 type UserRow = typeof appUser.$inferSelect;
 
@@ -76,4 +77,25 @@ export async function getMember(db: Db, id: string): Promise<MemberDto | null> {
    if (rows.length === 0) return null;
    const counts = await teamCounts(db);
    return toDto(rows[0], counts.get(id) ?? 0);
+}
+
+export const MEMBER_ROLES = ['Member', 'Admin', 'Guest', 'Application'] as const;
+export type MemberRole = (typeof MEMBER_ROLES)[number];
+
+/** Atualiza a role do membro (valida o enum). Retorna o MemberDto ou null se não existir. */
+export async function updateMemberRole(
+   db: Db,
+   id: string,
+   role: string
+): Promise<MemberDto | null> {
+   if (!MEMBER_ROLES.includes(role as MemberRole))
+      throw new ApiError(400, `Role inválida: '${role}' (use ${MEMBER_ROLES.join('|')})`);
+   const existing = await db
+      .select({ id: appUser.id })
+      .from(appUser)
+      .where(eq(appUser.id, id))
+      .limit(1);
+   if (existing.length === 0) return null;
+   await db.update(appUser).set({ role, updatedAt: new Date() }).where(eq(appUser.id, id));
+   return getMember(db, id);
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
+import { issue } from '@/db/schema';
 import {
    listTeams,
    getTeam,
@@ -8,8 +9,10 @@ import {
    createTeam,
    addTeamMember,
    removeTeamMember,
+   updateTeam,
+   deleteTeam,
 } from '@/lib/api/teams';
-import { listMembers, getMember } from '@/lib/api/members';
+import { listMembers, getMember, updateMemberRole } from '@/lib/api/members';
 
 async function workspace() {
    const db = await makeTestDb();
@@ -91,6 +94,39 @@ describe('teams', () => {
       const { db } = await workspace();
       await expect(addTeamMember(db, 'NOPE', 'x@nimbloo.ai')).rejects.toThrow();
    });
+
+   it('updates a team (rename)', async () => {
+      const { db } = await workspace();
+      const dto = await updateTeam(db, 'CORE', { name: 'Core Team' });
+      expect(dto?.name).toBe('Core Team');
+      expect((await getTeam(db, 'CORE'))?.name).toBe('Core Team');
+      expect(await updateTeam(db, 'NOPE', { name: 'x' })).toBeNull();
+   });
+
+   it('deletes an empty team but refuses when it has issues (409)', async () => {
+      const { db, ana } = await workspace();
+      // DESIGN está vazio -> apaga (remove os team_member primeiro)
+      expect(await deleteTeam(db, 'DESIGN')).toBe(true);
+      expect(await getTeam(db, 'DESIGN')).toBeNull();
+
+      // CORE ganha uma issue -> recusa
+      await db.insert(issue).values({
+         id: 'iss-1',
+         identifier: 'CORE-1',
+         teamId: 'CORE',
+         title: 'algo',
+         statusId: 'to-do',
+         priorityId: 'medium',
+         assigneeId: ana,
+         createdById: ana,
+         projectId: null,
+         cycleId: null,
+         rank: 'a0',
+         dueDate: null,
+      });
+      await expect(deleteTeam(db, 'CORE')).rejects.toThrow();
+      expect(await getTeam(db, 'CORE')).not.toBeNull(); // segue existindo
+   });
 });
 
 describe('members', () => {
@@ -116,5 +152,15 @@ describe('members', () => {
       const { db, ana } = await workspace();
       expect((await getMember(db, ana))?.name).toBe('Ana');
       expect(await getMember(db, 'nope')).toBeNull();
+   });
+
+   it('updates a member role (validates the enum)', async () => {
+      const { db, ana } = await workspace();
+      const dto = await updateMemberRole(db, ana, 'Admin');
+      expect(dto?.role).toBe('Admin');
+      expect((await getMember(db, ana))?.role).toBe('Admin');
+
+      await expect(updateMemberRole(db, ana, 'Superuser')).rejects.toThrow();
+      expect(await updateMemberRole(db, 'nope', 'Member')).toBeNull();
    });
 });

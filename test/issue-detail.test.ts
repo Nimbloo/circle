@@ -12,6 +12,8 @@ import {
    removeReaction,
    addRelation,
    removeRelation,
+   updateComment,
+   deleteComment,
 } from '@/lib/api/issue-detail';
 
 const ME = 'dev@nimbloo.ai';
@@ -113,5 +115,40 @@ describe('issue detail / comments / activity', () => {
       await removeReaction(db, c.id, '👍', ME);
       comments = await listComments(db, issue.id);
       expect(comments[0].reactions).toEqual([{ emoji: '👍', count: 1 }]);
+   });
+
+   it('lets the author edit their own comment', async () => {
+      const { db, issue } = await anIssue();
+      const c = await addComment(db, issue.id, 'antes', ME);
+      const updated = await updateComment(db, c.id, 'depois', ME);
+      expect(updated?.body).toBe('depois');
+      const comments = await listComments(db, issue.id);
+      expect(comments[0].body).toBe('depois');
+   });
+
+   it('forbids editing a comment from another author (403)', async () => {
+      const { db, issue } = await anIssue();
+      const c = await addComment(db, issue.id, 'meu', ME);
+      await expect(updateComment(db, c.id, 'hack', 'bob@nimbloo.ai')).rejects.toThrow();
+      const comments = await listComments(db, issue.id);
+      expect(comments[0].body).toBe('meu');
+   });
+
+   it('lets the author delete their own comment', async () => {
+      const { db, issue } = await anIssue();
+      const c = await addComment(db, issue.id, 'a deletar', ME);
+      await addReaction(db, c.id, '👍', ME);
+      const ok = await deleteComment(db, c.id, ME);
+      expect(ok).toBe(true);
+      const comments = await listComments(db, issue.id);
+      expect(comments).toHaveLength(0);
+   });
+
+   it('forbids deleting a comment from another author (403)', async () => {
+      const { db, issue } = await anIssue();
+      const c = await addComment(db, issue.id, 'meu', ME);
+      await expect(deleteComment(db, c.id, 'bob@nimbloo.ai')).rejects.toThrow();
+      const comments = await listComments(db, issue.id);
+      expect(comments).toHaveLength(1);
    });
 });

@@ -1,6 +1,8 @@
-import { eq, inArray } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
+import { eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
-import { cycle as cycleT, issue as issueT, status as statusT } from '@/db/schema';
+import { cycle as cycleT, issue as issueT, status as statusT, team as teamT } from '@/db/schema';
+import { ApiError } from './errors';
 
 type CycleRow = typeof cycleT.$inferSelect;
 
@@ -130,4 +132,93 @@ export async function getCycleByStatus(
    if (!match) return null;
    const aggs = await aggregatesByCycle(db, [match.id]);
    return toDto(match, aggs.get(match.id) ?? { scope: 0, started: 0, completed: 0 });
+}
+
+// ── Mutações ─────────────────────────────────────────────────────────
+export type CycleStatus = 'planned' | 'upcoming' | 'current' | 'completed';
+
+export interface CreateCycleInput {
+   teamId: string;
+   name: string;
+   startDate: string;
+   endDate: string;
+   status?: CycleStatus;
+   capacity?: number;
+}
+
+/** Cria um ciclo no time: auto-numera (max(number)+1), valida team e datas. */
+export async function createCycle(db: Db, input: CreateCycleInput): Promise<CycleDto> {
+   const teamRows = await db.select().from(teamT).where(eq(teamT.id, input.teamId)).limit(1);
+   if (teamRows.length === 0) throw new ApiError(404, `Team '${input.teamId}' não existe`);
+
+   if (input.startDate > input.endDate) throw new ApiError(400, 'startDate deve ser <= endDate');
+
+   const maxRows = await db
+      .select({ m: sql<number | null>`max(${cycleT.number})` })
+      .from(cycleT)
+      .where(eq(cycleT.teamId, input.teamId));
+   const number = (maxRows[0]?.m ?? 0) + 1;
+
+   const id = randomUUID();
+   await db.insert(cycleT).values({
+      id,
+      number,
+      name: input.name,
+      teamId: input.teamId,
+      status: input.status ?? 'planned',
+      startDate: input.startDate,
+      endDate: input.endDate,
+      capacity: input.capacity ?? 0,
+   });
+
+   return (await getCycle(db, id))!;
+}
+
+export interface UpdateCycleInput {
+   name?: string;
+   status?: CycleStatus;
+   startDate?: string;
+   endDate?: string;
+   capacity?: number;
+}
+
+/** Patch parcial de um ciclo; valida datas resultantes. Retorna DTO ou null. */
+export async function updateCycle(
+   db: Db,
+   id: string,
+   patch: UpdateCycleInput
+): Promise<CycleDto | null> {
+   const existing = await db.select().from(cycleT).where(eq(cycleT.id, id)).limit(1);
+   if (existing.length === 0) return null;
+   const prev = existing[0];
+
+   const startDate = patch.startDate ?? prev.startDate;
+   const endDate = patch.endDate ?? prev.endDate;
+   if (startDate > endDate) throw new ApiError(400, 'startDate deve ser <= endDate');
+
+   const set: Record<string, unknown> = {};
+   if (patch.name !== undefined) set.name = patch.name;
+   if (patch.status !== undefined) set.status = patch.status;
+   if (patch.startDate !== undefined) set.startDate = patch.startDate;
+   if (patch.endDate !== undefined) set.endDate = patch.endDate;
+   if (patch.capacity !== undefined) set.capacity = patch.capacity;
+
+   if (Object.keys(set).length > 0) {
+      await db.update(cycleT).set(set).where(eq(cycleT.id, id));
+   }
+
+   return getCycle(db, id);
+}
+
+/** Desassocia as issues (cycle_id=NULL) e remove o ciclo. Retorna boolean. */
+export async function deleteCycle(db: Db, id: string): Promise<boolean> {
+   const existing = await db
+      .select({ id: cycleT.id })
+      .from(cycleT)
+      .where(eq(cycleT.id, id))
+      .limit(1);
+   if (existing.length === 0) return false;
+   await db.update(issueT).set({ cycleId: null }).where(eq(issueT.cycleId, id));
+   await db.delete(cycleT).where(eq(cycleT.id, id));
+   return true;
 }
