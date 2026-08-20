@@ -1,6 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { describe, it, expect } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
+import { issue as issueT, projectUpdate, projectMilestone } from '@/db/schema';
 import {
    createProject,
    listProjects,
@@ -86,5 +89,56 @@ describe('projects', () => {
       expect((await getProject(db, p.id))?.name).toBe('A');
       expect(await deleteProject(db, p.id)).toBe(true);
       expect(await getProject(db, p.id)).toBeNull();
+   });
+
+   it('deleting a project nullifies its issues and drops updates/milestones (FK safe)', async () => {
+      const { db, lead } = await setup();
+      const p = await createProject(db, { name: 'A', statusId: 'in-progress', ...base });
+      const issueId = randomUUID();
+      await db.insert(issueT).values({
+         id: issueId,
+         identifier: 'CORE-1',
+         teamId: 'CORE',
+         title: 'Bug',
+         statusId: 'in-progress',
+         priorityId: 'high',
+         assigneeId: lead,
+         createdById: lead,
+         projectId: p.id,
+         cycleId: null,
+         rank: 'a0',
+         createdAt: new Date(),
+         updatedAt: new Date(),
+      });
+      await db.insert(projectUpdate).values({
+         id: randomUUID(),
+         projectId: p.id,
+         authorId: lead,
+         health: 'on-track',
+         blocks: '[]',
+         createdAt: new Date(),
+      });
+      await db.insert(projectMilestone).values({ id: randomUUID(), projectId: p.id, name: 'M1' });
+
+      expect(await deleteProject(db, p.id)).toBe(true);
+      expect(await getProject(db, p.id)).toBeNull();
+
+      const issues = await db.select().from(issueT).where(eq(issueT.id, issueId));
+      expect(issues).toHaveLength(1); // issue preservada
+      expect(issues[0].projectId).toBeNull(); // vínculo nulificado
+
+      expect(
+         await db.select().from(projectUpdate).where(eq(projectUpdate.projectId, p.id))
+      ).toHaveLength(0);
+      expect(
+         await db.select().from(projectMilestone).where(eq(projectMilestone.projectId, p.id))
+      ).toHaveLength(0);
+   });
+
+   it('createProject rejeita FK de catálogo inválida com 400', async () => {
+      const { db } = await setup();
+      await expect(
+         createProject(db, { name: 'X', statusId: 'nope', ...base })
+      ).rejects.toMatchObject({ status: 400 });
    });
 });

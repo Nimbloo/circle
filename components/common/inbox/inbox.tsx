@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import {
    DropdownMenu,
    DropdownMenuContent,
-   DropdownMenuItem,
    DropdownMenuSeparator,
    DropdownMenuTrigger,
    DropdownMenuLabel,
@@ -15,14 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import {
-   MoreHorizontal,
-   SlidersHorizontal,
-   Trash2,
-   CheckCheck,
-   Archive,
-   ArrowUpDown,
-} from 'lucide-react';
+import { SlidersHorizontal, CheckCheck, ArrowUpDown } from 'lucide-react';
 import NotificationPreview from './issue-preview';
 import IssueLine from './issue-line';
 import { SidebarTrigger } from '@/components/ui/sidebar';
@@ -41,7 +33,6 @@ export default function Inbox() {
 
    const isMobile = useIsMobile();
    const [showRead, setShowRead] = useState(true);
-   const [showSnoozed, setShowSnoozed] = useState(false);
    const [showUnreadFirst, setShowUnreadFirst] = useState(false);
    const [ordering, setOrdering] = useState('newest');
    const [showId, setShowId] = useState(true);
@@ -51,7 +42,6 @@ export default function Inbox() {
    const filteredNotifications = notifications
       .filter((notification) => {
          if (!showRead && notification.read) return false;
-         // Add snoozed filter logic here when implemented
          return true;
       })
       .sort((a, b) => {
@@ -65,45 +55,12 @@ export default function Inbox() {
             : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
       });
 
-   const handleDeleteAllNotifications = () => {
-      console.log('Delete all notifications');
-   };
-
-   const handleDeleteReadNotifications = () => {
-      console.log('Delete read notifications');
-   };
-
-   const handleDeleteCompletedIssues = () => {
-      console.log('Delete notifications for completed issues');
-   };
-
    const listPane = (
       <>
          <div className="flex items-center justify-between px-4 h-10 border-b border-border">
             <div className="flex items-center gap-2">
                <SidebarTrigger className="inline-flex lg:hidden" />
                <h2 className="text-lg font-semibold">Inbox</h2>
-               <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                     <Button variant="ghost" size="xs">
-                        <MoreHorizontal className="w-4 h-4" />
-                     </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                     <DropdownMenuItem onClick={handleDeleteAllNotifications}>
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        Delete all notifications
-                     </DropdownMenuItem>
-                     <DropdownMenuItem onClick={handleDeleteReadNotifications}>
-                        <CheckCheck className="w-4 h-4 mr-2" />
-                        Delete all read notifications
-                     </DropdownMenuItem>
-                     <DropdownMenuItem onClick={handleDeleteCompletedIssues}>
-                        <Archive className="w-4 h-4 mr-2" />
-                        Delete notifications for completed issues
-                     </DropdownMenuItem>
-                  </DropdownMenuContent>
-               </DropdownMenu>
             </div>
 
             <div className="flex items-center gap-2">
@@ -142,16 +99,6 @@ export default function Inbox() {
                      <DropdownMenuSeparator />
 
                      <div className="p-2 space-y-3">
-                        <div className="flex items-center justify-between">
-                           <Label htmlFor="show-snoozed" className="text-sm">
-                              Show snoozed
-                           </Label>
-                           <Switch
-                              id="show-snoozed"
-                              checked={showSnoozed}
-                              onCheckedChange={setShowSnoozed}
-                           />
-                        </div>
                         <div className="flex items-center justify-between">
                            <Label htmlFor="show-read" className="text-sm">
                               Show read

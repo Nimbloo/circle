@@ -1,6 +1,6 @@
 import { asc, eq } from 'drizzle-orm';
 import type { Db } from '@/db';
-import { label as labelT, issueLabel } from '@/db/schema';
+import { label as labelT, issueLabel, projectLabel } from '@/db/schema';
 import { ApiError } from './errors';
 
 export interface LabelDto {
@@ -80,12 +80,15 @@ export async function updateLabel(
    return toDto({ ...existing, ...next });
 }
 
-/** Remove um label. Limpa as linhas de issue_label antes (evita violar FK). Retorna false se não existir. */
+/** Remove um label. Limpa issue_label e project_label antes (evita violar FK). Retorna false se não existir. */
 export async function deleteLabel(db: Db, id: string): Promise<boolean> {
    const existing = await getLabelRow(db, id);
    if (!existing) return false;
 
-   await db.delete(issueLabel).where(eq(issueLabel.labelId, id));
-   await db.delete(labelT).where(eq(labelT.id, id));
+   await db.transaction(async (tx) => {
+      await tx.delete(issueLabel).where(eq(issueLabel.labelId, id));
+      await tx.delete(projectLabel).where(eq(projectLabel.labelId, id));
+      await tx.delete(labelT).where(eq(labelT.id, id));
+   });
    return true;
 }

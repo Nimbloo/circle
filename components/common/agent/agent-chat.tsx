@@ -155,7 +155,7 @@ function ChatComposer({
  */
 export default function AgentChat() {
    const { chats, activeChatId, sendMessage } = useAgentChatStore();
-   const users = useWorkspaceStore((s) => s.users);
+   const me = useWorkspaceStore((s) => s.me);
    const stream = useStreamReply();
    const [bannerDismissed, setBannerDismissed] = useState(false);
    const [examplesDismissed, setExamplesDismissed] = useState(false);
@@ -247,8 +247,11 @@ export default function AgentChat() {
                               {message.content}
                            </div>
                            <Avatar className="size-6 mt-1 shrink-0">
-                              <AvatarImage src={users[0].avatarUrl} alt={users[0].name} />
-                              <AvatarFallback>{users[0].name[0]}</AvatarFallback>
+                              <AvatarImage
+                                 src={me?.avatarUrl ?? undefined}
+                                 alt={me?.name ?? 'You'}
+                              />
+                              <AvatarFallback>{(me?.name ?? 'You')[0]}</AvatarFallback>
                            </Avatar>
                         </div>
                      </div>

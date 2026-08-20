@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { describe, it, expect } from 'vitest';
 import { makeTestDb } from './helpers/db';
 import { seedTeam } from './helpers/fixtures';
+import { comment, commentReaction, issueRelation, issuePrLink, notification } from '@/db/schema';
 import {
    createIssue,
    listIssues,
@@ -181,5 +183,89 @@ describe('issues', () => {
       );
       expect(await deleteIssue(db, i.id)).toBe(true);
       expect(await getIssue(db, i.id)).toBeNull();
+   });
+
+   it('deletes issue with comments/reactions/relations(both dirs)/prLink/notification without FK error', async () => {
+      const db = await setup();
+      const target = await createIssue(
+         db,
+         { teamId: 'CORE', title: 'Target', statusId: 'to-do', priorityId: 'high' },
+         ME
+      );
+      const other = await createIssue(
+         db,
+         { teamId: 'CORE', title: 'Other', statusId: 'to-do', priorityId: 'high' },
+         ME
+      );
+      const authorId = target.createdBy!.id;
+
+      // comment + reação
+      const commentId = randomUUID();
+      await db
+         .insert(comment)
+         .values({
+            id: commentId,
+            issueId: target.id,
+            authorId,
+            body: 'oi',
+            createdAt: new Date(),
+         });
+      await db.insert(commentReaction).values({ commentId, emoji: '👍', userId: authorId });
+
+      // relações nas DUAS direções
+      await db
+         .insert(issueRelation)
+         .values({ id: randomUUID(), issueId: target.id, relatedId: other.id, kind: 'related' });
+      await db.insert(issueRelation).values({
+         id: randomUUID(),
+         issueId: other.id,
+         relatedId: target.id,
+         kind: 'blocked_by',
+      });
+
+      // link de PR
+      await db
+         .insert(issuePrLink)
+         .values({ id: randomUUID(), issueId: target.id, title: 'PR #1', status: 'open' });
+
+      // notificação
+      await db.insert(notification).values({
+         id: randomUUID(),
+         issueId: target.id,
+         actorId: authorId,
+         recipientId: authorId,
+         type: 'assignment',
+         content: 'x',
+         read: false,
+         createdAt: new Date(),
+      });
+
+      // era o bug: sem limpar dependências, o delete violava FK / deixava órfãos
+      expect(await deleteIssue(db, target.id)).toBe(true);
+      expect(await getIssue(db, target.id)).toBeNull();
+      // a issue relacionada continua íntegra (a relação inversa foi removida)
+      expect(await getIssue(db, other.id)).not.toBeNull();
+   });
+
+   it('rejects createIssue with unknown statusId', async () => {
+      const db = await setup();
+      await expect(
+         createIssue(db, { teamId: 'CORE', title: 'X', statusId: 'nope', priorityId: 'high' }, ME)
+      ).rejects.toThrow(/Status/);
+   });
+
+   it('rejects addLabel on unknown issue', async () => {
+      const db = await setup();
+      await expect(addLabel(db, 'no-such-issue', 'bug')).rejects.toThrow(/não encontrada/);
+   });
+
+   it('rejects addLabel with unknown label', async () => {
+      const db = await setup();
+      const i = await createIssue(
+         db,
+         { teamId: 'CORE', title: 'X', statusId: 'to-do', priorityId: 'low' },
+         ME
+      );
+      await expect(addLabel(db, i.id, 'no-such-label')).rejects.toThrow(/não existe/);
    });
 });

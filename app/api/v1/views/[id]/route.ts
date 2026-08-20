@@ -36,9 +36,9 @@ const UpdateSchema = z.object({
 export async function PATCH(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      requireEmail(req);
+      const email = requireEmail(req);
       const patch = UpdateSchema.parse(await req.json());
-      const dto = await updateView(db, id, patch);
+      const dto = await updateView(db, id, patch, email);
       return dto ? ok(dto) : notFound(`View '${id}' não encontrada`);
    });
 }
@@ -46,8 +46,8 @@ export async function PATCH(req: Request, { params }: Params) {
 export async function DELETE(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      requireEmail(req);
-      const removed = await deleteView(db, id);
+      const email = requireEmail(req);
+      const removed = await deleteView(db, id, email);
       return removed ? ok({ deleted: true }) : notFound(`View '${id}' não encontrada`);
    });
 }

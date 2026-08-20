@@ -52,6 +52,14 @@ describe('reviews (GitHub ingestion)', () => {
       expect(await listReviews(db)).toHaveLength(2);
    });
 
+   it('syncs many repos in parallel batches (> concorrência)', async () => {
+      const db = await makeTestDb();
+      const repos = Array.from({ length: 20 }, (_, i) => `org/repo-${i}`);
+      const n = await syncFromGitHub(db, { repos, token: 'fake', fetchImpl: fakeFetch });
+      expect(n).toBe(40); // 20 repos × 2 PRs
+      expect(await listReviews(db)).toHaveLength(40);
+   });
+
    it('gets a review by id and filters by status', async () => {
       const db = await makeTestDb();
       await syncFromGitHub(db, { repos: ['x/y'], token: 'fake', fetchImpl: fakeFetch });

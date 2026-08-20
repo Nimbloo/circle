@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { makeTestDb } from './helpers/db';
 import { seedTeam } from './helpers/fixtures';
-import { createProject } from '@/lib/api/projects';
+import { initiativeProject } from '@/db/schema';
+import { createProject, getProject } from '@/lib/api/projects';
 import {
    createInitiative,
    listInitiatives,
@@ -70,5 +71,32 @@ describe('initiatives', () => {
       expect(upd?.name).toBe('A2');
       expect(await deleteInitiative(db, init.id)).toBe(true);
       expect(await getInitiative(db, init.id)).toBeNull();
+   });
+
+   it('deleting an initiative nullifies project.initiativeId and clears links (FK safe)', async () => {
+      const db = await setup();
+      const init = await createInitiative(db, {
+         slug: 'platform',
+         name: 'Platform',
+         priorityId: 'high',
+         healthId: 'on-track',
+      });
+      const p = await createProject(db, {
+         name: 'P',
+         statusId: 'in-progress',
+         ...baseProj,
+         initiativeId: init.id,
+      });
+      await db
+         .insert(initiativeProject)
+         .values({ initiativeId: init.id, projectId: p.id })
+         .onConflictDoNothing();
+
+      expect(await deleteInitiative(db, init.id)).toBe(true);
+      expect(await getInitiative(db, init.id)).toBeNull();
+
+      const proj = await getProject(db, p.id);
+      expect(proj).not.toBeNull(); // projeto preservado
+      expect(proj?.initiativeId).toBeNull(); // vínculo direto nulificado
    });
 });

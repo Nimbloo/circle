@@ -7,6 +7,8 @@ import {
    project as projectT,
    issue as issueT,
    cycle as cycleT,
+   savedView as savedViewT,
+   documentFolder as documentFolderT,
 } from '@/db/schema';
 import { getOrCreateUser } from './users';
 import { sendEmail } from './integrations/mailer';
@@ -212,22 +214,32 @@ export async function updateTeam(
 }
 
 /**
- * Apaga um time. Escolha segura: recusa com 409 se o time tiver issues, projects
- * ou cycles (evita órfãos). Se estiver vazio, remove os team_member e o team.
- * Retorna false se o time não existir.
+ * Apaga um time. Escolha segura: recusa com 409 se o time tiver issues, projects,
+ * cycles, saved views ou document folders (todos com FK RESTRICT — evita 500/órfãos).
+ * Se estiver vazio, remove os team_member e o team. Retorna false se o time não existir.
  */
 export async function deleteTeam(db: Db, id: string): Promise<boolean> {
    const existing = await db.select({ id: teamT.id }).from(teamT).where(eq(teamT.id, id)).limit(1);
    if (existing.length === 0) return false;
 
-   const [issues, projects, cycles] = await Promise.all([
+   const [issues, projects, cycles, views, folders] = await Promise.all([
       db.select({ n: count() }).from(issueT).where(eq(issueT.teamId, id)),
       db.select({ n: count() }).from(projectT).where(eq(projectT.teamId, id)),
       db.select({ n: count() }).from(cycleT).where(eq(cycleT.teamId, id)),
+      db.select({ n: count() }).from(savedViewT).where(eq(savedViewT.teamId, id)),
+      db.select({ n: count() }).from(documentFolderT).where(eq(documentFolderT.teamId, id)),
    ]);
-   const total = Number(issues[0].n) + Number(projects[0].n) + Number(cycles[0].n);
+   const total =
+      Number(issues[0].n) +
+      Number(projects[0].n) +
+      Number(cycles[0].n) +
+      Number(views[0].n) +
+      Number(folders[0].n);
    if (total > 0)
-      throw new ApiError(409, `Team '${id}' tem issues/projects/cycles — esvazie antes de apagar`);
+      throw new ApiError(
+         409,
+         `Team '${id}' tem issues/projects/cycles/views/folders — esvazie antes de apagar`
+      );
 
    await db.delete(teamMember).where(eq(teamMember.teamId, id));
    await db.delete(teamT).where(eq(teamT.id, id));

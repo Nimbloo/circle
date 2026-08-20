@@ -162,6 +162,10 @@ export const api = {
    comments: {
       update: (id: string, body: string) => patch<CommentDto>(`/comments/${id}`, { body }),
       remove: (id: string) => del<{ deleted: boolean }>(`/comments/${id}`),
+      addReaction: (id: string, emoji: string) =>
+         post<{ ok: boolean }>(`/comments/${id}/reactions`, { emoji }),
+      removeReaction: (id: string, emoji: string) =>
+         del<{ ok: boolean }>(`/comments/${id}/reactions?emoji=${encodeURIComponent(emoji)}`),
    },
 
    initiatives: {

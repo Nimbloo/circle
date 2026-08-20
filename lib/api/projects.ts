@@ -4,6 +4,12 @@ import type { Db } from '@/db';
 import {
    project as projectT,
    projectLabel,
+   projectUpdate,
+   projectActivity,
+   projectMilestone,
+   projectResource,
+   projectDetail,
+   initiativeProject,
    issue as issueT,
    status as statusT,
    priority as priorityT,
@@ -197,31 +203,40 @@ export interface CreateProjectInput {
 
 export async function createProject(db: Db, input: CreateProjectInput): Promise<ProjectDto> {
    if (!input.name?.trim()) throw new ApiError(400, 'name é obrigatório');
+   const maps = await loadMaps(db);
+   if (!maps.statuses.has(input.statusId))
+      throw new ApiError(400, `status '${input.statusId}' inválido`);
+   if (!maps.priorities.has(input.priorityId))
+      throw new ApiError(400, `priority '${input.priorityId}' inválido`);
+   if (!maps.healths.has(input.healthId))
+      throw new ApiError(400, `health '${input.healthId}' inválido`);
    const id = randomUUID();
    const now = new Date();
-   await db.insert(projectT).values({
-      id,
-      name: input.name,
-      statusId: input.statusId,
-      priorityId: input.priorityId,
-      healthId: input.healthId,
-      teamId: input.teamId,
-      leadId: input.leadId ?? null,
-      iconKey: input.iconKey ?? null,
-      percentComplete: input.percentComplete ?? 0,
-      startDate: input.startDate ?? null,
-      targetDate: input.targetDate ?? null,
-      initiativeId: input.initiativeId ?? null,
-      healthUpdatedAt: null,
-      createdAt: now,
-      updatedAt: now,
+   await db.transaction(async (tx) => {
+      await tx.insert(projectT).values({
+         id,
+         name: input.name,
+         statusId: input.statusId,
+         priorityId: input.priorityId,
+         healthId: input.healthId,
+         teamId: input.teamId,
+         leadId: input.leadId ?? null,
+         iconKey: input.iconKey ?? null,
+         percentComplete: input.percentComplete ?? 0,
+         startDate: input.startDate ?? null,
+         targetDate: input.targetDate ?? null,
+         initiativeId: input.initiativeId ?? null,
+         healthUpdatedAt: null,
+         createdAt: now,
+         updatedAt: now,
+      });
+      if (input.labelIds?.length) {
+         await tx
+            .insert(projectLabel)
+            .values(input.labelIds.map((labelId) => ({ projectId: id, labelId })))
+            .onConflictDoNothing();
+      }
    });
-   if (input.labelIds?.length) {
-      await db
-         .insert(projectLabel)
-         .values(input.labelIds.map((labelId) => ({ projectId: id, labelId })))
-         .onConflictDoNothing();
-   }
    return (await getProject(db, id))!;
 }
 
@@ -277,7 +292,17 @@ export async function deleteProject(db: Db, id: string): Promise<boolean> {
       .where(eq(projectT.id, id))
       .limit(1);
    if (existing.length === 0) return false;
-   await db.delete(projectLabel).where(eq(projectLabel.projectId, id));
-   await db.delete(projectT).where(eq(projectT.id, id));
+   await db.transaction(async (tx) => {
+      // issue.projectId é RESTRICT e nullable: desvincula em vez de deletar as issues.
+      await tx.update(issueT).set({ projectId: null }).where(eq(issueT.projectId, id));
+      await tx.delete(projectLabel).where(eq(projectLabel.projectId, id));
+      await tx.delete(projectUpdate).where(eq(projectUpdate.projectId, id));
+      await tx.delete(projectActivity).where(eq(projectActivity.projectId, id));
+      await tx.delete(projectMilestone).where(eq(projectMilestone.projectId, id));
+      await tx.delete(projectResource).where(eq(projectResource.projectId, id));
+      await tx.delete(projectDetail).where(eq(projectDetail.projectId, id));
+      await tx.delete(initiativeProject).where(eq(initiativeProject.projectId, id));
+      await tx.delete(projectT).where(eq(projectT.id, id));
+   });
    return true;
 }

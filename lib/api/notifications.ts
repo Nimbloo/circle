@@ -81,11 +81,17 @@ export async function unreadCount(db: Db, recipientId: string): Promise<number> 
    return rows.length;
 }
 
-export async function setRead(db: Db, id: string, read: boolean): Promise<boolean> {
+/** Marca uma notificação como lida/não-lida, escopada ao destinatário (anti-IDOR). */
+export async function setRead(
+   db: Db,
+   id: string,
+   read: boolean,
+   recipientId: string
+): Promise<boolean> {
    const res = await db
       .update(notification)
       .set({ read })
-      .where(eq(notification.id, id))
+      .where(and(eq(notification.id, id), eq(notification.recipientId, recipientId)))
       .returning({ id: notification.id });
    return res.length > 0;
 }

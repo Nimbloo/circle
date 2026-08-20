@@ -6,6 +6,11 @@ import {
    issueLabel,
    issueContent,
    activityEvent,
+   issueRelation,
+   issuePrLink,
+   comment,
+   commentReaction,
+   notification,
    status as statusT,
    priority as priorityT,
    label as labelT,
@@ -267,60 +272,79 @@ export async function createIssue(
    const teamRows = await db.select().from(teamT).where(eq(teamT.id, input.teamId)).limit(1);
    if (teamRows.length === 0) throw new ApiError(400, `Team '${input.teamId}' não existe`);
 
-   // identifier: incremento atômico do contador do time
-   const seqRes = await db
-      .update(teamT)
-      .set({ issueSeq: sql`${teamT.issueSeq} + 1` })
-      .where(eq(teamT.id, input.teamId))
-      .returning({ seq: teamT.issueSeq });
-   const identifier = `${input.teamId}-${seqRes[0].seq}`;
-
-   // rank: após o maior rank existente
-   const maxRankRows = await db
-      .select({ r: issue.rank })
-      .from(issue)
-      .orderBy(sql`${issue.rank} DESC`)
+   // valida FKs de catálogo antes do insert (senão a FK estoura como 500)
+   const statusRows = await db
+      .select({ id: statusT.id })
+      .from(statusT)
+      .where(eq(statusT.id, input.statusId))
       .limit(1);
-   const rank = maxRankRows.length ? rankAfter(maxRankRows[0].r) : firstRank();
+   if (statusRows.length === 0) throw new ApiError(400, `Status '${input.statusId}' não existe`);
+   const priorityRows = await db
+      .select({ id: priorityT.id })
+      .from(priorityT)
+      .where(eq(priorityT.id, input.priorityId))
+      .limit(1);
+   if (priorityRows.length === 0)
+      throw new ApiError(400, `Priority '${input.priorityId}' não existe`);
 
    const id = randomUUID();
    const now = new Date();
-   await db.insert(issue).values({
-      id,
-      identifier,
-      teamId: input.teamId,
-      title: input.title,
-      statusId: input.statusId,
-      priorityId: input.priorityId,
-      assigneeId: input.assigneeId ?? null,
-      createdById: actor.id,
-      projectId: input.projectId ?? null,
-      cycleId: input.cycleId || null,
-      rank,
-      dueDate: input.dueDate ?? null,
-      estimate: input.estimate ?? null,
-      createdAt: now,
-      updatedAt: now,
-   });
 
-   if (input.description) {
-      await db
-         .insert(issueContent)
-         .values({ issueId: id, description: input.description, milestone: null });
-   }
-   if (input.labelIds?.length) {
-      await db
-         .insert(issueLabel)
-         .values(input.labelIds.map((labelId) => ({ issueId: id, labelId })))
-         .onConflictDoNothing();
-   }
-   await db.insert(activityEvent).values({
-      id: randomUUID(),
-      issueId: id,
-      actorId: actor.id,
-      event: 'created',
-      text: 'created the issue',
-      createdAt: now,
+   // Atômico: incremento do contador + issue + content + labels + evento.
+   await db.transaction(async (tx) => {
+      // identifier: incremento atômico do contador do time
+      const seqRes = await tx
+         .update(teamT)
+         .set({ issueSeq: sql`${teamT.issueSeq} + 1` })
+         .where(eq(teamT.id, input.teamId))
+         .returning({ seq: teamT.issueSeq });
+      const identifier = `${input.teamId}-${seqRes[0].seq}`;
+
+      // rank: após o maior rank existente
+      const maxRankRows = await tx
+         .select({ r: issue.rank })
+         .from(issue)
+         .orderBy(sql`${issue.rank} DESC`)
+         .limit(1);
+      const rank = maxRankRows.length ? rankAfter(maxRankRows[0].r) : firstRank();
+
+      await tx.insert(issue).values({
+         id,
+         identifier,
+         teamId: input.teamId,
+         title: input.title,
+         statusId: input.statusId,
+         priorityId: input.priorityId,
+         assigneeId: input.assigneeId ?? null,
+         createdById: actor.id,
+         projectId: input.projectId ?? null,
+         cycleId: input.cycleId || null,
+         rank,
+         dueDate: input.dueDate ?? null,
+         estimate: input.estimate ?? null,
+         createdAt: now,
+         updatedAt: now,
+      });
+
+      if (input.description) {
+         await tx
+            .insert(issueContent)
+            .values({ issueId: id, description: input.description, milestone: null });
+      }
+      if (input.labelIds?.length) {
+         await tx
+            .insert(issueLabel)
+            .values(input.labelIds.map((labelId) => ({ issueId: id, labelId })))
+            .onConflictDoNothing();
+      }
+      await tx.insert(activityEvent).values({
+         id: randomUUID(),
+         issueId: id,
+         actorId: actor.id,
+         event: 'created',
+         text: 'created the issue',
+         createdAt: now,
+      });
    });
 
    return (await getIssue(db, id))!;
@@ -404,10 +428,32 @@ export async function updateIssue(
 export async function deleteIssue(db: Db, id: string): Promise<boolean> {
    const existing = await db.select({ id: issue.id }).from(issue).where(eq(issue.id, id)).limit(1);
    if (existing.length === 0) return false;
-   await db.delete(activityEvent).where(eq(activityEvent.issueId, id));
-   await db.delete(issueLabel).where(eq(issueLabel.issueId, id));
-   await db.delete(issueContent).where(eq(issueContent.issueId, id));
-   await db.delete(issue).where(eq(issue.id, id));
+
+   // Atômico: limpa todas as dependências (FKs) antes de remover a issue.
+   await db.transaction(async (tx) => {
+      // reações das comments desta issue → comments
+      const comments = await tx
+         .select({ id: comment.id })
+         .from(comment)
+         .where(eq(comment.issueId, id));
+      const commentIds = comments.map((c) => c.id);
+      if (commentIds.length) {
+         await tx.delete(commentReaction).where(inArray(commentReaction.commentId, commentIds));
+      }
+      await tx.delete(comment).where(eq(comment.issueId, id));
+
+      // relações nas DUAS direções (issueId e relatedId)
+      await tx
+         .delete(issueRelation)
+         .where(or(eq(issueRelation.issueId, id), eq(issueRelation.relatedId, id)));
+
+      await tx.delete(issuePrLink).where(eq(issuePrLink.issueId, id));
+      await tx.delete(notification).where(eq(notification.issueId, id));
+      await tx.delete(activityEvent).where(eq(activityEvent.issueId, id));
+      await tx.delete(issueLabel).where(eq(issueLabel.issueId, id));
+      await tx.delete(issueContent).where(eq(issueContent.issueId, id));
+      await tx.delete(issue).where(eq(issue.id, id));
+   });
    return true;
 }
 
@@ -436,6 +482,16 @@ export async function reorderIssue(
 }
 
 export async function addLabel(db: Db, id: string, labelId: string): Promise<IssueDto | null> {
+   // valida issue e label antes do insert (senão a FK estoura como 500)
+   const issueRows = await db.select({ id: issue.id }).from(issue).where(eq(issue.id, id)).limit(1);
+   if (issueRows.length === 0) throw new ApiError(404, `Issue '${id}' não encontrada`);
+   const labelRows = await db
+      .select({ id: labelT.id })
+      .from(labelT)
+      .where(eq(labelT.id, labelId))
+      .limit(1);
+   if (labelRows.length === 0) throw new ApiError(400, `Label '${labelId}' não existe`);
+
    await db.insert(issueLabel).values({ issueId: id, labelId }).onConflictDoNothing();
    return getIssue(db, id);
 }

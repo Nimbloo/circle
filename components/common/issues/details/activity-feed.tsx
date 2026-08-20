@@ -69,6 +69,21 @@ function CommentCard({
    const [editing, setEditing] = useState(false);
    const [draft, setDraft] = useState('');
    const [busy, setBusy] = useState(false);
+   const [picking, setPicking] = useState(false);
+
+   const react = async (emoji: string) => {
+      if (busy) return;
+      setBusy(true);
+      try {
+         await api.comments.addReaction(item.id, emoji);
+         setPicking(false);
+         onChanged?.();
+      } catch {
+         toast.error('Could not add the reaction');
+      } finally {
+         setBusy(false);
+      }
+   };
 
    const startEdit = () => {
       setDraft(blocksToText(item.body));
@@ -165,16 +180,40 @@ function CommentCard({
 
          <div className="flex items-center gap-1.5 mt-1">
             {item.reactions?.map((reaction) => (
-               <span
+               <button
                   key={reaction.emoji}
-                  className="inline-flex items-center gap-1 text-xs bg-accent/60 border border-border/60 rounded-full px-2 py-0.5"
+                  type="button"
+                  onClick={() => void react(reaction.emoji)}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1 text-xs bg-accent/60 border border-border/60 rounded-full px-2 py-0.5 hover:bg-accent disabled:opacity-40"
                >
                   {reaction.emoji} {reaction.count}
-               </span>
+               </button>
             ))}
-            <button className="text-muted-foreground hover:text-foreground">
+            <button
+               type="button"
+               onClick={() => setPicking((value) => !value)}
+               disabled={busy}
+               aria-label="Add reaction"
+               className="text-muted-foreground hover:text-foreground disabled:opacity-40"
+            >
                <SmilePlus className="size-3.5" />
             </button>
+            {picking && (
+               <div className="flex items-center gap-1 rounded-full border bg-container px-1.5 py-0.5 shadow-xs">
+                  {['👍', '❤️', '🎉'].map((emoji) => (
+                     <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => void react(emoji)}
+                        disabled={busy}
+                        className="text-sm transition-transform hover:scale-125 disabled:opacity-40"
+                     >
+                        {emoji}
+                     </button>
+                  ))}
+               </div>
+            )}
          </div>
       </div>
    );

@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { makeTestDb } from './helpers/db';
 import { seedWorkspaceFixture } from './helpers/fixtures';
 import { listLabels, createLabel, updateLabel, deleteLabel } from '@/lib/api/labels';
-import { issueLabel } from '@/db/schema';
+import { issueLabel, projectLabel } from '@/db/schema';
 import { ApiError } from '@/lib/api/errors';
 
 describe('labels CRUD', () => {
@@ -60,5 +60,18 @@ describe('labels CRUD', () => {
       expect(joins).toHaveLength(0);
 
       expect(await deleteLabel(db, 'temp')).toBe(false);
+   });
+
+   it('deleta label usado por project: limpa project_label', async () => {
+      const db = await makeTestDb();
+      const { projectId } = await seedWorkspaceFixture(db);
+
+      await createLabel(db, { id: 'temp', name: 'Temporário', color: 'yellow' });
+      await db.insert(projectLabel).values({ projectId, labelId: 'temp' });
+
+      expect(await deleteLabel(db, 'temp')).toBe(true);
+
+      const joins = await db.select().from(projectLabel).where(eq(projectLabel.labelId, 'temp'));
+      expect(joins).toHaveLength(0);
    });
 });

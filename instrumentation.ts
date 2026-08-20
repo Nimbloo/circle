@@ -19,6 +19,10 @@ export async function register() {
       await seedCatalogs(getDb());
       console.log('[circle] migrations aplicadas + catálogos semeados');
    } catch (err) {
+      // Fail-fast: migration/seed quebrado NÃO deve subir o pod como "verde".
+      // Rethrow derruba o boot -> com a readinessProbe no /api/readyz (que toca o
+      // DB), o rollout trava e o pod antigo segue servindo (sem deploy silencioso).
       console.error('[circle] falha ao migrar/semear no boot:', err);
+      throw err;
    }
 }

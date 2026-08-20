@@ -33,7 +33,6 @@ import {
    Inbox,
    Layers,
    Link2,
-   PackagePlus,
    SquarePen,
    Tags,
    Type,
@@ -306,16 +305,6 @@ export function CommandPalette() {
                               <CircleDot className="text-muted-foreground" />
                               Move to cycle…
                               <Keys keys={['⇧', 'C']} />
-                           </CommandItem>
-                           <CommandItem
-                              onSelect={() => {
-                                 toast.success('Added to the next release');
-                                 close();
-                              }}
-                           >
-                              <PackagePlus className="text-muted-foreground" />
-                              Add to release…
-                              <Keys keys={['⌥', 'R']} />
                            </CommandItem>
                            <CommandItem
                               onSelect={() => {

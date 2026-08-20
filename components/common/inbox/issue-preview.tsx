@@ -5,7 +5,6 @@ import { IssuePropertiesPanel } from '@/components/common/issues/details/issue-p
 import { LabelBadge } from '@/components/common/issues/label-badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { getNotificationIcon } from '@/lib/notification-utils';
 import type { IssueDetail } from '@/mock-data/issue-details';
 import { adaptIssueDetail } from '@/lib/adapters-issue-detail';
@@ -13,7 +12,7 @@ import { api } from '@/lib/client';
 import { InboxItem } from '@/mock-data/inbox';
 import { useIssuesStore } from '@/store/issues-store';
 import { useNotificationsStore } from '@/store/notifications-store';
-import { ArrowUpRight, Check, Paperclip, Send } from 'lucide-react';
+import { ArrowUpRight, Check } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -169,23 +168,6 @@ export default function IssuePreview({ notification, onMarkAsRead }: IssuePrevie
                   {/* Real description */}
                   <div className="mt-6">
                      <ContentBlocks blocks={detail?.description ?? []} />
-                  </div>
-
-                  {/* Comment composer */}
-                  <div className="relative w-full flex flex-col mt-10">
-                     <Textarea
-                        className="w-full rounded-lg border px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent pb-14 resize-none"
-                        placeholder="Leave a comment..."
-                        rows={3}
-                     />
-                     <div className="absolute right-3 bottom-3 flex items-center gap-3">
-                        <Button size="icon" variant="ghost">
-                           <Paperclip className="w-4 h-4" />
-                        </Button>
-                        <Button size="icon" variant="secondary">
-                           <Send className="w-4 h-4" />
-                        </Button>
-                     </div>
                   </div>
                </div>
             </div>

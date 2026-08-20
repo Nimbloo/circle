@@ -69,11 +69,32 @@ describe('views', () => {
       const db = await base();
       const v = await createView(db, { slug: 's', name: 'V', type: 'issue', filter: {} }, ME);
       expect(await listViews(db)).toHaveLength(1);
-      const upd = await updateView(db, v.id, { name: 'V2', filter: { unassigned: true } });
+      const upd = await updateView(db, v.id, { name: 'V2', filter: { unassigned: true } }, ME);
       expect(upd?.name).toBe('V2');
       expect(upd?.filter.unassigned).toBe(true);
-      expect(await deleteView(db, v.id)).toBe(true);
+      expect(await deleteView(db, v.id, ME)).toBe(true);
       expect(await getView(db, v.id)).toBeNull();
+   });
+
+   it('does not let a non-owner edit or delete a view (IDOR -> 403)', async () => {
+      const db = await base();
+      await seedUser(db, { name: 'Owner', email: ME });
+      const other = 'other@nimbloo.ai';
+      const v = await createView(db, { slug: 's', name: 'V', type: 'issue', filter: {} }, ME);
+
+      await expect(updateView(db, v.id, { name: 'Hacked' }, other)).rejects.toThrow();
+      await expect(deleteView(db, v.id, other)).rejects.toThrow();
+      // permanece intacta
+      expect((await getView(db, v.id))?.name).toBe('V');
+
+      // o dono consegue
+      expect((await updateView(db, v.id, { name: 'V2' }, ME))?.name).toBe('V2');
+   });
+
+   it('returns null (404) when editing/deleting a view that does not exist', async () => {
+      const db = await base();
+      expect(await updateView(db, 'nope', { name: 'x' }, ME)).toBeNull();
+      expect(await deleteView(db, 'nope', ME)).toBe(false);
    });
 });
 
@@ -106,10 +127,25 @@ describe('inbox / notifications', () => {
       expect(inbox).toHaveLength(2);
       expect(inbox[0].issue?.identifier).toBe('CORE-1');
 
-      await setRead(db, n1, true);
+      await setRead(db, n1, true, me);
       expect(await unreadCount(db, me)).toBe(1);
       expect(await markAllRead(db, me)).toBe(1);
       expect(await unreadCount(db, me)).toBe(0);
+   });
+
+   it('does not let user A mark user B notification as read (IDOR)', async () => {
+      const db = await base();
+      const a = await seedUser(db, { name: 'A', email: 'a@nimbloo.ai' });
+      const b = await seedUser(db, { name: 'B', email: 'b@nimbloo.ai' });
+      const nb = await createNotification(db, { recipientId: b, type: 'comment' });
+
+      // A tenta marcar a notificação de B -> nada atualizado (escopo por dono)
+      expect(await setRead(db, nb, true, a)).toBe(false);
+      expect(await unreadCount(db, b)).toBe(1); // segue não-lida
+
+      // O dono (B) consegue
+      expect(await setRead(db, nb, true, b)).toBe(true);
+      expect(await unreadCount(db, b)).toBe(0);
    });
 });
 

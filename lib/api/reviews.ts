@@ -112,61 +112,70 @@ export async function syncFromGitHub(db: Db, opts: SyncOptions = {}): Promise<nu
    if (!token) throw new ApiError(400, 'GITHUB_TOKEN não configurado');
    if (repos.length === 0) throw new ApiError(400, 'CIRCLE_GITHUB_REPOS não configurado');
 
+   // Paraleliza o fetch/upsert dos repos em lotes (~86 repos ⇒ evita timeout
+   // do fetch sequencial). Concorrência limitada p/ não estourar rate limit.
+   const CONCURRENCY = 8;
    let count = 0;
-   for (const repo of repos) {
-      const res = await doFetch(
-         `https://api.github.com/repos/${repo}/pulls?state=all&per_page=50`,
-         {
-            headers: {
-               'authorization': `Bearer ${token}`,
-               'accept': 'application/vnd.github+json',
-               'user-agent': 'circle-nimbloo',
+   for (let i = 0; i < repos.length; i += CONCURRENCY) {
+      const batch = repos.slice(i, i + CONCURRENCY);
+      const counts = await Promise.all(batch.map((repo) => syncRepo(db, repo, token, doFetch)));
+      count += counts.reduce((a, b) => a + b, 0);
+   }
+   return count;
+}
+
+/** Puxa os PRs de um repo e faz upsert. Retorna quantos foram sincronizados. */
+async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike): Promise<number> {
+   const res = await doFetch(`https://api.github.com/repos/${repo}/pulls?state=all&per_page=50`, {
+      headers: {
+         'authorization': `Bearer ${token}`,
+         'accept': 'application/vnd.github+json',
+         'user-agent': 'circle-nimbloo',
+      },
+   });
+   if (!res.ok) return 0;
+   const prs = (await res.json()) as GitHubPr[];
+   if (!Array.isArray(prs) || prs.length === 0) return 0;
+
+   const rows = prs.map((pr) => {
+      const resolvesId = parseResolves(pr.title);
+      return {
+         id: `${repo}#${pr.number}`,
+         title: pr.title,
+         status: statusOf(pr),
+         repo,
+         prNumber: pr.number,
+         url: pr.html_url ?? null,
+         author: pr.user?.login ?? null,
+         targetBranch: pr.base?.ref ?? null,
+         sourceBranch: pr.head?.ref ?? null,
+         additions: pr.additions ?? 0,
+         deletions: pr.deletions ?? 0,
+         resolvesIdentifier: resolvesId,
+         resolvesTitle: resolvesId ? pr.title : null,
+         checksPassed: 0,
+         checksTotal: 0,
+         createdAt: new Date(pr.created_at),
+         syncedAt: new Date(),
+      };
+   });
+
+   let count = 0;
+   for (const row of rows) {
+      await db
+         .insert(review)
+         .values(row)
+         .onConflictDoUpdate({
+            target: review.id,
+            set: {
+               title: row.title,
+               status: row.status,
+               additions: row.additions,
+               deletions: row.deletions,
+               syncedAt: row.syncedAt,
             },
-         }
-      );
-      if (!res.ok) continue;
-      const prs = (await res.json()) as GitHubPr[];
-      if (!Array.isArray(prs) || prs.length === 0) continue;
-
-      const rows = prs.map((pr) => {
-         const resolvesId = parseResolves(pr.title);
-         return {
-            id: `${repo}#${pr.number}`,
-            title: pr.title,
-            status: statusOf(pr),
-            repo,
-            prNumber: pr.number,
-            url: pr.html_url ?? null,
-            author: pr.user?.login ?? null,
-            targetBranch: pr.base?.ref ?? null,
-            sourceBranch: pr.head?.ref ?? null,
-            additions: pr.additions ?? 0,
-            deletions: pr.deletions ?? 0,
-            resolvesIdentifier: resolvesId,
-            resolvesTitle: resolvesId ? pr.title : null,
-            checksPassed: 0,
-            checksTotal: 0,
-            createdAt: new Date(pr.created_at),
-            syncedAt: new Date(),
-         };
-      });
-
-      for (const row of rows) {
-         await db
-            .insert(review)
-            .values(row)
-            .onConflictDoUpdate({
-               target: review.id,
-               set: {
-                  title: row.title,
-                  status: row.status,
-                  additions: row.additions,
-                  deletions: row.deletions,
-                  syncedAt: row.syncedAt,
-               },
-            });
-         count += 1;
-      }
+         });
+      count += 1;
    }
    return count;
 }

@@ -182,26 +182,33 @@ export async function createInitiative(
 ): Promise<InitiativeDto> {
    if (!input.name?.trim() || !input.slug?.trim())
       throw new ApiError(400, 'slug e name são obrigatórios');
+   const maps = await loadMaps(db);
+   if (!maps.priorities.has(input.priorityId))
+      throw new ApiError(400, `priority '${input.priorityId}' inválido`);
+   if (!maps.healths.has(input.healthId))
+      throw new ApiError(400, `health '${input.healthId}' inválido`);
    const id = randomUUID();
-   await db.insert(initT).values({
-      id,
-      slug: input.slug,
-      name: input.name,
-      description: input.description ?? null,
-      icon: input.icon ?? null,
-      status: input.status ?? 'planned',
-      priorityId: input.priorityId,
-      ownerId: input.ownerId ?? null,
-      target: input.target ?? null,
-      healthId: input.healthId,
-      createdAt: new Date(),
+   await db.transaction(async (tx) => {
+      await tx.insert(initT).values({
+         id,
+         slug: input.slug,
+         name: input.name,
+         description: input.description ?? null,
+         icon: input.icon ?? null,
+         status: input.status ?? 'planned',
+         priorityId: input.priorityId,
+         ownerId: input.ownerId ?? null,
+         target: input.target ?? null,
+         healthId: input.healthId,
+         createdAt: new Date(),
+      });
+      if (input.projectIds?.length) {
+         await tx
+            .insert(initiativeProject)
+            .values(input.projectIds.map((projectId) => ({ initiativeId: id, projectId })))
+            .onConflictDoNothing();
+      }
    });
-   if (input.projectIds?.length) {
-      await db
-         .insert(initiativeProject)
-         .values(input.projectIds.map((projectId) => ({ initiativeId: id, projectId })))
-         .onConflictDoNothing();
-   }
    return (await getInitiative(db, id))!;
 }
 
@@ -243,8 +250,12 @@ export async function updateInitiative(
 export async function deleteInitiative(db: Db, id: string): Promise<boolean> {
    const existing = await db.select({ id: initT.id }).from(initT).where(eq(initT.id, id)).limit(1);
    if (existing.length === 0) return false;
-   await db.delete(initiativeProject).where(eq(initiativeProject.initiativeId, id));
-   await db.delete(initT).where(eq(initT.id, id));
+   await db.transaction(async (tx) => {
+      await tx.delete(initiativeProject).where(eq(initiativeProject.initiativeId, id));
+      // project.initiativeId é RESTRICT e nullable: desvincula os projetos antes de deletar.
+      await tx.update(projectT).set({ initiativeId: null }).where(eq(projectT.initiativeId, id));
+      await tx.delete(initT).where(eq(initT.id, id));
+   });
    return true;
 }
 

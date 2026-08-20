@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
 import { issue } from '@/db/schema';
@@ -13,6 +13,9 @@ import {
    deleteTeam,
 } from '@/lib/api/teams';
 import { listMembers, getMember, updateMemberRole } from '@/lib/api/members';
+import { createView } from '@/lib/api/views';
+import { createFolder } from '@/lib/api/documents';
+import { isAdmin } from '@/lib/api/auth';
 
 async function workspace() {
    const db = await makeTestDb();
@@ -127,6 +130,26 @@ describe('teams', () => {
       await expect(deleteTeam(db, 'CORE')).rejects.toThrow();
       expect(await getTeam(db, 'CORE')).not.toBeNull(); // segue existindo
    });
+
+   it('refuses to delete a team that still has a saved view (FK RESTRICT)', async () => {
+      const { db, ana } = await workspace();
+      await createView(
+         db,
+         { slug: 'v', name: 'V', type: 'issue', filter: {}, teamId: 'DESIGN' },
+         'ana@nimbloo.ai'
+      );
+      // DESIGN não está mais "vazio" -> recusa 409 em vez de estourar 500 no FK
+      await expect(deleteTeam(db, 'DESIGN')).rejects.toThrow();
+      expect(await getTeam(db, 'DESIGN')).not.toBeNull();
+      void ana;
+   });
+
+   it('refuses to delete a team that still has a document folder (FK RESTRICT)', async () => {
+      const { db } = await workspace();
+      await createFolder(db, { teamId: 'DESIGN', name: 'Specs' });
+      await expect(deleteTeam(db, 'DESIGN')).rejects.toThrow();
+      expect(await getTeam(db, 'DESIGN')).not.toBeNull();
+   });
 });
 
 describe('members', () => {
@@ -162,5 +185,31 @@ describe('members', () => {
 
       await expect(updateMemberRole(db, ana, 'Superuser')).rejects.toThrow();
       expect(await updateMemberRole(db, 'nope', 'Member')).toBeNull();
+   });
+});
+
+// A escalada de privilégio é barrada no route handler (members/[id] PATCH):
+// `if (!isAdmin(email)) throw new ApiError(403, ...)`. Como o vitest deste
+// sandbox não resolve `next/server` (usado pelo route), validamos aqui a
+// função-porteiro `isAdmin` — a decisão de allow/deny que o gate consome.
+describe('member role escalation gate (isAdmin)', () => {
+   const prevAdmins = process.env.CIRCLE_ADMIN_EMAILS;
+   afterEach(() => {
+      if (prevAdmins === undefined) delete process.env.CIRCLE_ADMIN_EMAILS;
+      else process.env.CIRCLE_ADMIN_EMAILS = prevAdmins;
+   });
+
+   it('denies a non-admin (would 403) and allows only allowlisted admins', () => {
+      process.env.CIRCLE_ADMIN_EMAILS = 'boss@nimbloo.ai';
+      // não-admin -> gate lança 403 (PATCH role bloqueado)
+      expect(isAdmin('bob@nimbloo.ai')).toBe(false);
+      // admin da allowlist -> passa (case-insensitive)
+      expect(isAdmin('boss@nimbloo.ai')).toBe(true);
+      expect(isAdmin('BOSS@nimbloo.ai')).toBe(true);
+   });
+
+   it('treats everyone as non-admin when the allowlist is empty', () => {
+      delete process.env.CIRCLE_ADMIN_EMAILS;
+      expect(isAdmin('bob@nimbloo.ai')).toBe(false);
    });
 });

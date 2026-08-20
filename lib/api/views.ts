@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { savedView } from '@/db/schema';
 import { getOrCreateUser } from './users';
+import { isAdmin } from './auth';
 import { listIssues, type IssueDto } from './issues';
 import { listProjects, type ProjectDto } from './projects';
 import { ApiError } from './errors';
@@ -111,17 +112,27 @@ export interface UpdateViewInput {
    filter?: ViewFilter;
 }
 
-export async function updateView(
-   db: Db,
-   id: string,
-   patch: UpdateViewInput
-): Promise<ViewDto | null> {
+/** Verifica se o ator é dono da view (ou admin); 404 se não existir, 403 se não autorizado. */
+async function assertViewOwner(db: Db, id: string, actorEmail: string): Promise<boolean> {
    const existing = await db
-      .select({ id: savedView.id })
+      .select({ ownerId: savedView.ownerId })
       .from(savedView)
       .where(eq(savedView.id, id))
       .limit(1);
-   if (existing.length === 0) return null;
+   if (existing.length === 0) return false;
+   const me = await getOrCreateUser(db, actorEmail);
+   if (existing[0].ownerId !== me.id && !isAdmin(actorEmail))
+      throw new ApiError(403, 'Apenas o dono da view (ou admin)');
+   return true;
+}
+
+export async function updateView(
+   db: Db,
+   id: string,
+   patch: UpdateViewInput,
+   actorEmail: string
+): Promise<ViewDto | null> {
+   if (!(await assertViewOwner(db, id, actorEmail))) return null;
    const set: Record<string, unknown> = { updatedAt: new Date() };
    if (patch.name !== undefined) set.name = patch.name;
    if (patch.description !== undefined) set.description = patch.description;
@@ -131,13 +142,8 @@ export async function updateView(
    return getView(db, id);
 }
 
-export async function deleteView(db: Db, id: string): Promise<boolean> {
-   const existing = await db
-      .select({ id: savedView.id })
-      .from(savedView)
-      .where(eq(savedView.id, id))
-      .limit(1);
-   if (existing.length === 0) return false;
+export async function deleteView(db: Db, id: string, actorEmail: string): Promise<boolean> {
+   if (!(await assertViewOwner(db, id, actorEmail))) return false;
    await db.delete(savedView).where(eq(savedView.id, id));
    return true;
 }
