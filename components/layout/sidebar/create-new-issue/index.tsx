@@ -8,8 +8,7 @@ import { Label } from '@/components/ui/label';
 import { RiEditLine } from '@remixicon/react';
 import { useState, useEffect, useCallback } from 'react';
 import { Issue } from '@/mock-data/issues';
-import { priorities } from '@/mock-data/priorities';
-import { status } from '@/mock-data/status';
+import { usePriorities, useStatuses } from '@/store/catalog-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
 import { toast } from 'sonner';
@@ -27,6 +26,8 @@ export function CreateNewIssue() {
    const [createMore, setCreateMore] = useState<boolean>(false);
    const { isOpen, defaultStatus, openModal, closeModal } = useCreateIssueStore();
    const { addIssue, getAllIssues } = useIssuesStore();
+   const status = useStatuses();
+   const priorities = usePriorities();
 
    const generateUniqueIdentifier = useCallback(() => {
       const identifiers = getAllIssues().map((issue) => issue.identifier);
@@ -59,7 +60,7 @@ export function CreateNewIssue() {
          // Rank otimista; o servidor reatribui o rank real no re-hydrate após o POST.
          rank: new LexoRank('a3c').toString(),
       };
-   }, [defaultStatus, generateUniqueIdentifier]);
+   }, [defaultStatus, generateUniqueIdentifier, status, priorities]);
 
    const [addIssueForm, setAddIssueForm] = useState<Issue>(createDefaultData());
 

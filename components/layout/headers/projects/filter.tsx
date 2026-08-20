@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { health as allHealth } from '@/mock-data/projects';
-import { priorities } from '@/mock-data/priorities';
+import { usePriorities } from '@/store/catalog-store';
 import { useProjectsFilterStore } from '@/store/projects-filter-store';
 import { useState } from 'react';
 import {
@@ -29,6 +29,7 @@ type FilterType = 'health' | 'priority' | 'sort';
 export function Filter() {
    const [open, setOpen] = useState(false);
    const [active, setActive] = useState<FilterType | null>(null);
+   const priorities = usePriorities();
 
    const { filters, sort, toggleFilter, clearFilters, getActiveFiltersCount, setSort } =
       useProjectsFilterStore();

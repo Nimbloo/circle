@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { status } from '@/mock-data/status';
+import { useStatuses } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import {
    Bot,
@@ -47,6 +47,7 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
    const { orgId } = useParams<{ orgId: string }>();
    const teams = useWorkspaceStore((s) => s.teams);
    const getCyclesByTeam = useWorkspaceStore((s) => s.getCyclesByTeam);
+   const status = useStatuses();
    const team = teams.find((candidate) => candidate.id === teamId);
 
    if (!team) {

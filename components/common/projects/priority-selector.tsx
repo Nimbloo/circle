@@ -10,7 +10,8 @@ import {
    CommandList,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { priorities, Priority } from '@/mock-data/priorities';
+import type { Priority } from '@/mock-data/priorities';
+import { usePriorities } from '@/store/catalog-store';
 import { CheckIcon } from 'lucide-react';
 import { useId, useState } from 'react';
 
@@ -21,6 +22,7 @@ interface PrioritySelectorProps {
 
 export function PrioritySelector({ priority, onPriorityChange }: PrioritySelectorProps) {
    const id = useId();
+   const priorities = usePriorities();
    const [open, setOpen] = useState<boolean>(false);
    const [value, setValue] = useState<string>(priority.id);
 

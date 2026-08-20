@@ -11,10 +11,8 @@ import {
 } from '@/components/ui/command';
 import { formatCycleDateRange } from '@/mock-data/cycles';
 import { Issue } from '@/mock-data/issues';
-import { labels as allLabels } from '@/mock-data/labels';
-import { priorities } from '@/mock-data/priorities';
-import { status as allStatus } from '@/mock-data/status';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useLabels, usePriorities, useStatuses } from '@/store/catalog-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -93,6 +91,9 @@ export function CommandPalette() {
       updateIssue,
    } = useIssuesStore();
    const { openModal } = useCreateIssueStore();
+   const allStatus = useStatuses();
+   const priorities = usePriorities();
+   const allLabels = useLabels();
    const cycles = useWorkspaceStore((s) => s.cycles);
    const allProjects = useWorkspaceStore((s) => s.projects);
    const teams = useWorkspaceStore((s) => s.teams);

@@ -22,8 +22,7 @@ import {
    CommandList,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { priorities } from '@/mock-data/priorities';
-import { status as allStatus } from '@/mock-data/status';
+import { usePriorities, useStatuses } from '@/store/catalog-store';
 import { useBulkSelectionStore } from '@/store/bulk-selection-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -38,6 +37,8 @@ export function BulkActionsBar() {
    const selected = useBulkSelectionStore((s) => s.selected);
    const clear = useBulkSelectionStore((s) => s.clear);
    const users = useWorkspaceStore((s) => s.users);
+   const allStatus = useStatuses();
+   const priorities = usePriorities();
    const { updateIssueStatus, updateIssuePriority, updateIssueAssignee, deleteIssue } =
       useIssuesStore();
 

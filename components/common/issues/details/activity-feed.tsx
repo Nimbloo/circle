@@ -2,7 +2,7 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { ActivityItem } from '@/mock-data/issue-details';
+import { ActivityItem, CommentReaction } from '@/mock-data/issue-details';
 import { api } from '@/lib/client';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -23,9 +23,6 @@ import {
 import { ReactNode, useState } from 'react';
 import { toast } from 'sonner';
 import { ContentBlocks } from './content-blocks';
-
-/** Reação enriquecida com o server-truth `reactedByMe` (o DTO carrega o campo). */
-type ReactionView = { emoji: string; count: number; reactedByMe?: boolean };
 
 const EVENT_ICONS: Record<string, ReactNode> = {
    created: <PenLine className="size-3.5" />,
@@ -75,9 +72,8 @@ function CommentCard({
    const [busy, setBusy] = useState(false);
    const [picking, setPicking] = useState(false);
 
-   // `reactedByMe` é server-truth (vem do DTO). O tipo do mock-data ainda não
-   // modela o campo, então lemos as reações por esta view enriquecida.
-   const reactions = (item.reactions ?? []) as ReactionView[];
+   // `reactedByMe` é server-truth (vem do DTO), agora modelado em CommentReaction.
+   const reactions: CommentReaction[] = item.reactions ?? [];
    const didReact = (emoji: string) =>
       reactions.find((r) => r.emoji === emoji)?.reactedByMe ?? false;
 

@@ -4,14 +4,15 @@ import { GroupedIssuesView } from '@/components/common/issues/grouped-issues-vie
 import { InsightsPanel } from '@/components/common/issues/insights-panel';
 import ProjectsList from '@/components/common/projects/projects-list';
 import { ProjectGroup } from '@/components/common/projects/projects';
-import { status as allStatus } from '@/mock-data/status';
 import { filterIssuesForView, filterProjectsForView, View } from '@/mock-data/views';
+import { useStatuses } from '@/store/catalog-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useMemo } from 'react';
 
 function IssueViewBody({ view }: { view: View }) {
    const { openPanel } = useRightPanelStore();
+   const allStatus = useStatuses();
    const issues = useMemo(() => filterIssuesForView(view), [view]);
 
    return (

@@ -8,10 +8,8 @@ import { SearchIssues } from '@/components/common/issues/search-issues';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Issue } from '@/mock-data/issues';
-import { labels } from '@/mock-data/labels';
-import { priorities } from '@/mock-data/priorities';
 import { statusUserColors, User } from '@/mock-data/users';
-import { useDisplayOrderedStatuses } from '@/store/catalog-store';
+import { useDisplayOrderedStatuses, useLabels, usePriorities } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
@@ -109,6 +107,8 @@ export default function MemberProfile({ member }: { member: User }) {
    const projects = useWorkspaceStore((s) => s.projects);
    const teams = useWorkspaceStore((s) => s.teams);
    const displayOrderedStatus = useDisplayOrderedStatuses();
+   const labels = useLabels();
+   const priorities = usePriorities();
 
    const isSearching = isSearchOpen && searchQuery.trim() !== '';
    const isViewTypeGrid = viewType === 'grid';
@@ -160,7 +160,7 @@ export default function MemberProfile({ member }: { member: User }) {
             count: counts.get(label.id) ?? 0,
          }))
          .sort((a, b) => b.count - a.count);
-   }, [displayedIssues]);
+   }, [displayedIssues, labels]);
 
    const priorityRows = useMemo<BreakdownRow[]>(() => {
       const counts = countBy(displayedIssues, (issue) => [issue.priority.id]);
@@ -173,7 +173,7 @@ export default function MemberProfile({ member }: { member: User }) {
             count: counts.get(priority.id) ?? 0,
          }))
          .sort((a, b) => b.count - a.count);
-   }, [displayedIssues]);
+   }, [displayedIssues, priorities]);
 
    const projectRows = useMemo<BreakdownRow[]>(() => {
       const counts = countBy(displayedIssues, (issue) => (issue.project ? [issue.project.id] : []));

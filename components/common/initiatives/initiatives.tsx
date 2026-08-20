@@ -20,8 +20,8 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { Initiative, INITIATIVE_STATUS_META, InitiativeStatus } from '@/mock-data/initiatives';
-import { priorities } from '@/mock-data/priorities';
 import { health as allHealth } from '@/mock-data/projects';
+import { usePriorities } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { InitiativesFilterType, useInitiativesFilterStore } from '@/store/initiatives-filter-store';
 import {
@@ -61,6 +61,7 @@ function InitiativesFilter() {
    const [open, setOpen] = useState(false);
    const [active, setActive] = useState<InitiativesFilterType | null>(null);
    const users = useWorkspaceStore((s) => s.users);
+   const priorities = usePriorities();
    const { filters, toggleFilter, clearFilters, getActiveFiltersCount } =
       useInitiativesFilterStore();
 

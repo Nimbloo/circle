@@ -10,8 +10,8 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { Issue } from '@/mock-data/issues';
-import { priorities } from '@/mock-data/priorities';
-import { Status, workflowOrderedStatus } from '@/mock-data/status';
+import type { Status } from '@/mock-data/status';
+import { usePriorities, useWorkflowOrderedStatuses } from '@/store/catalog-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { X } from 'lucide-react';
 import { useMemo } from 'react';
@@ -38,6 +38,7 @@ interface InsightsPanelProps {
 
 /** Custom X axis tick rendering the status icon under each bar. */
 function StatusTick(props: { x?: number; y?: number; payload?: { value: string } }) {
+   const workflowOrderedStatus = useWorkflowOrderedStatuses();
    const { x = 0, y = 0, payload } = props;
    const currentStatus = workflowOrderedStatus.find((s) => s.id === payload?.value);
    if (!currentStatus) return <g />;
@@ -57,6 +58,8 @@ function StatusTick(props: { x?: number; y?: number; payload?: { value: string }
 export function InsightsPanel({ issues }: InsightsPanelProps) {
    const { closePanel } = useRightPanelStore();
    const { isActive, toggle } = usePanelFilter();
+   const workflowOrderedStatus = useWorkflowOrderedStatuses();
+   const priorities = usePriorities();
 
    const rows = useMemo<InsightsRow[]>(() => {
       return workflowOrderedStatus
@@ -71,7 +74,7 @@ export function InsightsPanel({ issues }: InsightsPanelProps) {
             return { status: s, total: statusIssues.length, byPriority };
          })
          .filter((row) => row.total > 0);
-   }, [issues]);
+   }, [issues, workflowOrderedStatus, priorities]);
 
    const chartData = useMemo(
       () =>
