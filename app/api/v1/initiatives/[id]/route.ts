@@ -1,0 +1,48 @@
+import { z } from 'zod';
+import { db } from '@/db';
+import { ok, notFound } from '@/lib/api/response';
+import { handle, requireEmail } from '@/lib/api/http';
+import { getInitiative, updateInitiative, deleteInitiative } from '@/lib/api/initiatives';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+type Params = { params: Promise<{ id: string }> };
+
+export async function GET(_req: Request, { params }: Params) {
+   return handle(async () => {
+      const { id } = await params;
+      const dto = await getInitiative(db, id);
+      return dto ? ok(dto) : notFound(`Initiative '${id}' não encontrada`);
+   });
+}
+
+const UpdateSchema = z.object({
+   name: z.string().min(1).optional(),
+   description: z.string().nullish(),
+   icon: z.string().nullish(),
+   status: z.string().optional(),
+   priorityId: z.string().optional(),
+   healthId: z.string().optional(),
+   ownerId: z.string().nullish(),
+   target: z.string().nullish(),
+});
+
+export async function PATCH(req: Request, { params }: Params) {
+   return handle(async () => {
+      const { id } = await params;
+      requireEmail(req);
+      const patch = UpdateSchema.parse(await req.json());
+      const dto = await updateInitiative(db, id, patch);
+      return dto ? ok(dto) : notFound(`Initiative '${id}' não encontrada`);
+   });
+}
+
+export async function DELETE(req: Request, { params }: Params) {
+   return handle(async () => {
+      const { id } = await params;
+      requireEmail(req);
+      const removed = await deleteInitiative(db, id);
+      return removed ? ok({ deleted: true }) : notFound(`Initiative '${id}' não encontrada`);
+   });
+}

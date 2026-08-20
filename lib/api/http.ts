@@ -43,7 +43,7 @@ export async function handle(fn: () => Promise<Response>): Promise<Response> {
 }
 
 /** Lê um parâmetro multivalorado: repetido (?x=a&x=b) ou CSV (?x=a,b). */
-function multi(sp: URLSearchParams, key: string): string[] | undefined {
+export function multi(sp: URLSearchParams, key: string): string[] | undefined {
    const all = sp.getAll(key);
    if (all.length === 0) return undefined;
    const flat = all
