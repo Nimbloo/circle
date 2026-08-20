@@ -1,13 +1,14 @@
 'use client';
 
-import { users as allUsers } from '@/mock-data/users';
 import MemberLine from './member-line';
 import { useMembersFilterStore } from '@/store/members-filter-store';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { ArrowDown } from 'lucide-react';
 import { useMemo } from 'react';
 
 export default function Members() {
    const { filters, sort } = useMembersFilterStore();
+   const allUsers = useWorkspaceStore((s) => s.users);
 
    const displayed = useMemo(() => {
       let list = allUsers.slice();
@@ -39,7 +40,7 @@ export default function Members() {
       };
 
       return list.sort(compare);
-   }, [filters, sort]);
+   }, [allUsers, filters, sort]);
 
    return (
       <div className="w-full">

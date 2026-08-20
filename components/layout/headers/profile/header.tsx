@@ -6,9 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { issueCreatorIndex } from '@/mock-data/issues';
-import { User, users } from '@/mock-data/users';
+import { User } from '@/mock-data/users';
 import { cn } from '@/lib/utils';
 import { useIssuesStore } from '@/store/issues-store';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useSearchStore } from '@/store/search-store';
 import { BarChart3, ChevronRight, PanelRight, SearchIcon, Star } from 'lucide-react';
@@ -121,6 +122,7 @@ export default function Header({ member }: { member: User }) {
    const [activeTab] = useQueryState('tab', parseAsString.withDefault('assigned'));
    const { issues } = useIssuesStore();
    const { openPanel, togglePanel } = useRightPanelStore();
+   const users = useWorkspaceStore((s) => s.users);
 
    const memberIndex = Math.max(
       0,
@@ -177,7 +179,9 @@ export default function Header({ member }: { member: User }) {
                </Button>
                <Button
                   size="xs"
-                  variant={openPanel !== 'hidden' && openPanel !== 'insights' ? 'secondary' : 'ghost'}
+                  variant={
+                     openPanel !== 'hidden' && openPanel !== 'insights' ? 'secondary' : 'ghost'
+                  }
                   onClick={() => togglePanel('hidden')}
                   aria-label="Toggle profile panel"
                >

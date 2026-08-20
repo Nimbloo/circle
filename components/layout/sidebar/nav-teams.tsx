@@ -33,10 +33,11 @@ import {
    SidebarMenuSubButton,
    SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
-import { teams } from '@/mock-data/teams';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { RiDonutChartFill } from '@remixicon/react';
 
 export function NavTeams() {
+   const teams = useWorkspaceStore((s) => s.teams);
    const joinedTeams = teams.filter((t) => t.joined);
    return (
       <SidebarGroup>

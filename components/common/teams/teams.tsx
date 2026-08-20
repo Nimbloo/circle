@@ -1,6 +1,6 @@
 'use client';
 
-import { teams as allTeams } from '@/mock-data/teams';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { useTeamsFilterStore } from '@/store/team-filter-store';
 import { useTeamsDisplayStore } from '@/store/teams-display-store';
 import { useMemo } from 'react';
@@ -9,6 +9,7 @@ import TeamLine from './team-line';
 import { TeamsDisplayOptions } from './teams-display-options';
 
 export default function Teams() {
+   const allTeams = useWorkspaceStore((s) => s.teams);
    const { filters } = useTeamsFilterStore();
    const { ordering, displayProperties } = useTeamsDisplayStore();
 
@@ -38,7 +39,7 @@ export default function Teams() {
          }
       };
       return list.sort(compare);
-   }, [filters, ordering]);
+   }, [allTeams, filters, ordering]);
 
    return (
       <div className="w-full">

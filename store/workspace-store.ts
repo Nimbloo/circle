@@ -14,10 +14,12 @@ import {
    adaptView,
 } from '@/lib/adapters-workspace';
 import type { WorkspaceBootstrap } from '@/lib/api/workspace';
+import type { MeDto } from '@/lib/api/users';
 
 interface WorkspaceState {
    loaded: boolean;
    loading: boolean;
+   me: MeDto | null;
    projects: Project[];
    teams: Team[];
    users: User[];
@@ -45,6 +47,7 @@ interface WorkspaceState {
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
    loaded: false,
    loading: false,
+   me: null,
    projects: [],
    teams: [],
    users: [],
@@ -62,6 +65,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
          const users = data.members.map(adaptMemberToUser);
          const usersById = new Map(users.map((u) => [u.id, u]));
          set({
+            me: data.me,
             projects: data.projects.map(adaptProject),
             teams: data.teams.map(adaptTeam),
             users,

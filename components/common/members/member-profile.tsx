@@ -10,15 +10,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Issue, issueCreatorIndex } from '@/mock-data/issues';
 import { labels } from '@/mock-data/labels';
 import { priorities } from '@/mock-data/priorities';
-import { projects } from '@/mock-data/projects';
-import { teams } from '@/mock-data/teams';
-import { statusUserColors, User, users } from '@/mock-data/users';
+import { statusUserColors, User } from '@/mock-data/users';
 import { displayOrderedStatus } from '@/mock-data/status';
 import { useFilterStore } from '@/store/filter-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useSearchStore } from '@/store/search-store';
 import { useViewStore } from '@/store/view-store';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { parseAsString, useQueryState } from 'nuqs';
 import { useEffect, useMemo, useState } from 'react';
@@ -107,6 +106,9 @@ export default function MemberProfile({ member }: { member: User }) {
    const { viewType } = useViewStore();
    const { filters } = useFilterStore();
    const { openPanel } = useRightPanelStore();
+   const projects = useWorkspaceStore((s) => s.projects);
+   const teams = useWorkspaceStore((s) => s.teams);
+   const users = useWorkspaceStore((s) => s.users);
 
    const isSearching = isSearchOpen && searchQuery.trim() !== '';
    const isViewTypeGrid = viewType === 'grid';
@@ -121,7 +123,7 @@ export default function MemberProfile({ member }: { member: User }) {
          return issues.filter((issue) => issueCreatorIndex(issue, users.length) === memberIndex);
       }
       return issues.filter((issue) => issue.assignee?.id === member.id);
-   }, [issues, activeTab, member.id, memberIndex]);
+   }, [issues, activeTab, member.id, memberIndex, users.length]);
 
    const displayedIssues = useMemo(
       () => applyIssueFilters(scopedIssues, filters),
@@ -130,7 +132,7 @@ export default function MemberProfile({ member }: { member: User }) {
 
    const memberTeams = useMemo(
       () => teams.filter((team) => member.teamIds.includes(team.id)),
-      [member.teamIds]
+      [teams, member.teamIds]
    );
 
    const memberProjects = useMemo(() => {
@@ -145,7 +147,7 @@ export default function MemberProfile({ member }: { member: User }) {
          return true;
       });
       return merged;
-   }, [displayedIssues, member.id]);
+   }, [projects, displayedIssues, member.id]);
 
    const labelRows = useMemo<BreakdownRow[]>(() => {
       const counts = countBy(displayedIssues, (issue) => issue.labels.map((label) => label.id));
@@ -179,9 +181,7 @@ export default function MemberProfile({ member }: { member: User }) {
    }, [displayedIssues]);
 
    const projectRows = useMemo<BreakdownRow[]>(() => {
-      const counts = countBy(displayedIssues, (issue) =>
-         issue.project ? [issue.project.id] : []
-      );
+      const counts = countBy(displayedIssues, (issue) => (issue.project ? [issue.project.id] : []));
       return projects
          .filter((project) => counts.has(project.id))
          .map((project) => ({
@@ -191,7 +191,7 @@ export default function MemberProfile({ member }: { member: User }) {
             count: counts.get(project.id) ?? 0,
          }))
          .sort((a, b) => b.count - a.count);
-   }, [displayedIssues]);
+   }, [projects, displayedIssues]);
 
    const teamRows = useMemo<BreakdownRow[]>(
       () =>
@@ -218,126 +218,129 @@ export default function MemberProfile({ member }: { member: User }) {
       <div className="w-full h-full flex flex-col overflow-hidden">
          <IssueFilterBar />
          <div className="flex-1 min-h-0 w-full flex overflow-hidden">
-         {/* Issues */}
-         <div className="flex-1 min-w-0 h-full overflow-hidden">
-            <GroupedIssuesView
-               issues={displayedIssues}
-               totalIssues={scopedIssues}
-               statuses={displayOrderedStatus}
-               isViewTypeGrid={isViewTypeGrid}
-            />
-         </div>
-
-         {openPanel === 'insights' && (
-            <aside className="hidden lg:flex w-[420px] shrink-0 border-l h-full overflow-hidden bg-container">
-               <InsightsPanel issues={displayedIssues} />
-            </aside>
-         )}
-
-         {/* Profile panel */}
-         {openPanel !== 'hidden' && openPanel !== 'insights' && (
-         <aside className="hidden lg:flex flex-col w-[340px] shrink-0 border-l h-full overflow-y-auto bg-container">
-            <div className="px-5 pt-5 pb-4 border-b">
-               <div className="flex items-center gap-3">
-                  <div className="relative">
-                     <Avatar className="size-11">
-                        <AvatarImage src={member.avatarUrl} alt={member.name} />
-                        <AvatarFallback>{member.name[0]}</AvatarFallback>
-                     </Avatar>
-                     <span
-                        className="border-background absolute -end-0.5 -bottom-0.5 size-3 rounded-full border-2"
-                        style={{ backgroundColor: statusUserColors[member.status] }}
-                     />
-                  </div>
-                  <div className="min-w-0">
-                     <h2 className="text-base font-semibold truncate">{member.name}</h2>
-                     <p className="text-xs text-muted-foreground truncate">
-                        {member.name} · {presenceLabel[member.status]}
-                     </p>
-                  </div>
-               </div>
+            {/* Issues */}
+            <div className="flex-1 min-w-0 h-full overflow-hidden">
+               <GroupedIssuesView
+                  issues={displayedIssues}
+                  totalIssues={scopedIssues}
+                  statuses={displayOrderedStatus}
+                  isViewTypeGrid={isViewTypeGrid}
+               />
             </div>
 
-            <div className="px-5 py-4 border-b flex flex-col gap-2.5 text-sm">
-               <div className="flex items-start justify-between gap-4">
-                  <span className="text-muted-foreground shrink-0">Email</span>
-                  <span className="truncate">{member.email}</span>
-               </div>
-               <div className="flex items-start justify-between gap-4">
-                  <span className="text-muted-foreground shrink-0">Local time</span>
-                  <span>{localTime ?? '—'}</span>
-               </div>
-               <div className="flex items-start justify-between gap-4">
-                  <span className="text-muted-foreground shrink-0">Joined</span>
-                  <span>{joinedAgo ?? '—'}</span>
-               </div>
-               <div className="flex items-start justify-between gap-4">
-                  <span className="text-muted-foreground shrink-0">Role</span>
-                  <span>{member.role}</span>
-               </div>
-               <div className="flex items-start justify-between gap-4">
-                  <span className="text-muted-foreground shrink-0 pt-0.5">Teams</span>
-                  <div className="flex flex-wrap justify-end gap-1.5">
-                     {memberTeams.map((team) => (
-                        <span
-                           key={team.id}
-                           className="inline-flex items-center gap-1 text-xs bg-accent rounded-md px-1.5 py-0.5"
-                        >
-                           {team.icon} {team.name}
-                        </span>
-                     ))}
-                  </div>
-               </div>
-               <div className="flex items-start justify-between gap-4">
-                  <span className="text-muted-foreground shrink-0 pt-0.5">Projects</span>
-                  <div className="flex flex-col items-end gap-1 min-w-0">
-                     {memberProjects.slice(0, 4).map((project) => (
-                        <span key={project.id} className="inline-flex items-center gap-1.5 text-xs min-w-0">
-                           <project.icon className="size-3.5 text-muted-foreground shrink-0" />
-                           <span className="truncate max-w-44">{project.name}</span>
-                        </span>
-                     ))}
-                     {memberProjects.length > 4 && (
-                        <span className="text-xs text-muted-foreground">
-                           +{memberProjects.length - 4} more
-                        </span>
-                     )}
-                  </div>
-               </div>
-            </div>
+            {openPanel === 'insights' && (
+               <aside className="hidden lg:flex w-[420px] shrink-0 border-l h-full overflow-hidden bg-container">
+                  <InsightsPanel issues={displayedIssues} />
+               </aside>
+            )}
 
-            <div className="px-5 py-4">
-               <Tabs defaultValue="labels">
-                  <TabsList className="h-8 bg-transparent gap-1 p-0">
-                     <TabsTrigger value="labels" className="text-xs px-2.5 rounded-full">
-                        Labels
-                     </TabsTrigger>
-                     <TabsTrigger value="priority" className="text-xs px-2.5 rounded-full">
-                        Priority
-                     </TabsTrigger>
-                     <TabsTrigger value="projects" className="text-xs px-2.5 rounded-full">
-                        Projects
-                     </TabsTrigger>
-                     <TabsTrigger value="teams" className="text-xs px-2.5 rounded-full">
-                        Teams
-                     </TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="labels">
-                     <BreakdownList rows={labelRows} />
-                  </TabsContent>
-                  <TabsContent value="priority">
-                     <BreakdownList rows={priorityRows} />
-                  </TabsContent>
-                  <TabsContent value="projects">
-                     <BreakdownList rows={projectRows} />
-                  </TabsContent>
-                  <TabsContent value="teams">
-                     <BreakdownList rows={teamRows} />
-                  </TabsContent>
-               </Tabs>
-            </div>
-         </aside>
-         )}
+            {/* Profile panel */}
+            {openPanel !== 'hidden' && openPanel !== 'insights' && (
+               <aside className="hidden lg:flex flex-col w-[340px] shrink-0 border-l h-full overflow-y-auto bg-container">
+                  <div className="px-5 pt-5 pb-4 border-b">
+                     <div className="flex items-center gap-3">
+                        <div className="relative">
+                           <Avatar className="size-11">
+                              <AvatarImage src={member.avatarUrl} alt={member.name} />
+                              <AvatarFallback>{member.name[0]}</AvatarFallback>
+                           </Avatar>
+                           <span
+                              className="border-background absolute -end-0.5 -bottom-0.5 size-3 rounded-full border-2"
+                              style={{ backgroundColor: statusUserColors[member.status] }}
+                           />
+                        </div>
+                        <div className="min-w-0">
+                           <h2 className="text-base font-semibold truncate">{member.name}</h2>
+                           <p className="text-xs text-muted-foreground truncate">
+                              {member.name} · {presenceLabel[member.status]}
+                           </p>
+                        </div>
+                     </div>
+                  </div>
+
+                  <div className="px-5 py-4 border-b flex flex-col gap-2.5 text-sm">
+                     <div className="flex items-start justify-between gap-4">
+                        <span className="text-muted-foreground shrink-0">Email</span>
+                        <span className="truncate">{member.email}</span>
+                     </div>
+                     <div className="flex items-start justify-between gap-4">
+                        <span className="text-muted-foreground shrink-0">Local time</span>
+                        <span>{localTime ?? '—'}</span>
+                     </div>
+                     <div className="flex items-start justify-between gap-4">
+                        <span className="text-muted-foreground shrink-0">Joined</span>
+                        <span>{joinedAgo ?? '—'}</span>
+                     </div>
+                     <div className="flex items-start justify-between gap-4">
+                        <span className="text-muted-foreground shrink-0">Role</span>
+                        <span>{member.role}</span>
+                     </div>
+                     <div className="flex items-start justify-between gap-4">
+                        <span className="text-muted-foreground shrink-0 pt-0.5">Teams</span>
+                        <div className="flex flex-wrap justify-end gap-1.5">
+                           {memberTeams.map((team) => (
+                              <span
+                                 key={team.id}
+                                 className="inline-flex items-center gap-1 text-xs bg-accent rounded-md px-1.5 py-0.5"
+                              >
+                                 {team.icon} {team.name}
+                              </span>
+                           ))}
+                        </div>
+                     </div>
+                     <div className="flex items-start justify-between gap-4">
+                        <span className="text-muted-foreground shrink-0 pt-0.5">Projects</span>
+                        <div className="flex flex-col items-end gap-1 min-w-0">
+                           {memberProjects.slice(0, 4).map((project) => (
+                              <span
+                                 key={project.id}
+                                 className="inline-flex items-center gap-1.5 text-xs min-w-0"
+                              >
+                                 <project.icon className="size-3.5 text-muted-foreground shrink-0" />
+                                 <span className="truncate max-w-44">{project.name}</span>
+                              </span>
+                           ))}
+                           {memberProjects.length > 4 && (
+                              <span className="text-xs text-muted-foreground">
+                                 +{memberProjects.length - 4} more
+                              </span>
+                           )}
+                        </div>
+                     </div>
+                  </div>
+
+                  <div className="px-5 py-4">
+                     <Tabs defaultValue="labels">
+                        <TabsList className="h-8 bg-transparent gap-1 p-0">
+                           <TabsTrigger value="labels" className="text-xs px-2.5 rounded-full">
+                              Labels
+                           </TabsTrigger>
+                           <TabsTrigger value="priority" className="text-xs px-2.5 rounded-full">
+                              Priority
+                           </TabsTrigger>
+                           <TabsTrigger value="projects" className="text-xs px-2.5 rounded-full">
+                              Projects
+                           </TabsTrigger>
+                           <TabsTrigger value="teams" className="text-xs px-2.5 rounded-full">
+                              Teams
+                           </TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="labels">
+                           <BreakdownList rows={labelRows} />
+                        </TabsContent>
+                        <TabsContent value="priority">
+                           <BreakdownList rows={priorityRows} />
+                        </TabsContent>
+                        <TabsContent value="projects">
+                           <BreakdownList rows={projectRows} />
+                        </TabsContent>
+                        <TabsContent value="teams">
+                           <BreakdownList rows={teamRows} />
+                        </TabsContent>
+                     </Tabs>
+                  </div>
+               </aside>
+            )}
          </div>
       </div>
    );

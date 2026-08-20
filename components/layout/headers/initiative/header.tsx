@@ -2,7 +2,7 @@
 
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
-import { getInitiativeById } from '@/mock-data/initiatives';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { ChevronRight, MoreHorizontal, Star } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -12,11 +12,8 @@ const TABS = ['overview', 'activity', 'projects'] as const;
 
 export default function Header() {
    const { orgId, initiativeId } = useParams<{ orgId: string; initiativeId: string }>();
-   const initiative = getInitiativeById(initiativeId);
-   const [tab, setTab] = useQueryState(
-      'tab',
-      parseAsStringLiteral(TABS).withDefault('overview')
-   );
+   const initiative = useWorkspaceStore((s) => s.getInitiativeById(initiativeId));
+   const [tab, setTab] = useQueryState('tab', parseAsStringLiteral(TABS).withDefault('overview'));
 
    if (!initiative) return null;
 

@@ -2,8 +2,7 @@
 
 import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import { getCurrentCycle, getUpcomingCycle } from '@/mock-data/cycles';
-import { teams } from '@/mock-data/teams';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { ChevronRight, MoreHorizontal, Star } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -11,8 +10,11 @@ import { CycleView } from '@/components/common/issues/cycle-issues';
 
 export default function HeaderNav({ cycleView }: { cycleView: CycleView }) {
    const { orgId, teamId } = useParams<{ orgId: string; teamId: string }>();
+   const teams = useWorkspaceStore((s) => s.teams);
+   const cycle = useWorkspaceStore((s) =>
+      cycleView === 'active' ? s.getCurrentCycle() : s.getUpcomingCycle()
+   );
    const team = teams.find((t) => t.id === teamId) ?? teams[0];
-   const cycle = cycleView === 'active' ? getCurrentCycle() : getUpcomingCycle();
 
    return (
       <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">
@@ -37,7 +39,7 @@ export default function HeaderNav({ cycleView }: { cycleView: CycleView }) {
             <ChevronRight className="size-3.5 text-muted-foreground shrink-0" />
             <div className="flex items-center gap-1.5 min-w-0">
                <CyclePlayIcon className="size-3.5" />
-               <span className="text-sm font-medium truncate">{cycle.name}</span>
+               <span className="text-sm font-medium truncate">{cycle?.name}</span>
             </div>
             <Star className="size-3.5 text-muted-foreground shrink-0 ml-1" />
             <MoreHorizontal className="size-3.5 text-muted-foreground shrink-0" />

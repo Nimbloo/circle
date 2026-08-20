@@ -75,6 +75,7 @@ export function adaptIssue(dto: IssueDto): Issue {
       project: dto.project ? adaptProject(dto.project) : undefined,
       rank: dto.rank,
       dueDate: dto.dueDate ?? undefined,
+      createdById: dto.createdBy?.id ?? undefined,
    };
 }
 

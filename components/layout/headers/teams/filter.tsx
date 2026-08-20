@@ -11,8 +11,9 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useMemo, useState } from 'react';
 import { ArrowUpDown, CheckIcon, ChevronRight, ListFilter, Shield } from 'lucide-react';
-import { Team, teams } from '@/mock-data/teams';
+import { Team } from '@/mock-data/teams';
 import { useTeamsFilterStore } from '@/store/team-filter-store';
+import { useWorkspaceStore } from '@/store/workspace-store';
 
 type FilterType = 'membership' | 'sort' | 'identifiers';
 
@@ -21,6 +22,7 @@ const Membership: Array<'Joined' | 'Not-Joined'> = ['Joined', 'Not-Joined'];
 export function Filter() {
    const [open, setOpen] = useState(false);
    const [active, setActive] = useState<FilterType | null>(null);
+   const teams = useWorkspaceStore((s) => s.teams);
 
    const Identifiers: Team['id'][] = useMemo(() => {
       return teams.map((team) => team.id);

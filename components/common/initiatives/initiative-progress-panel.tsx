@@ -2,9 +2,9 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
-import { getInitiativeProjects, Initiative } from '@/mock-data/initiatives';
+import { Initiative } from '@/mock-data/initiatives';
 import { health as allHealth } from '@/mock-data/projects';
-import { teams } from '@/mock-data/teams';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { useMemo, useState } from 'react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
 
@@ -24,7 +24,12 @@ interface ProgressPoint {
 /** Progress area chart + Health/Status/Teams/Leads breakdown of an initiative. */
 export function InitiativeProgressPanel({ initiative }: { initiative: Initiative }) {
    const [tab, setTab] = useState<BreakdownTab>('teams');
-   const projects = useMemo(() => getInitiativeProjects(initiative), [initiative]);
+   const getInitiativeProjects = useWorkspaceStore((s) => s.getInitiativeProjects);
+   const teams = useWorkspaceStore((s) => s.teams);
+   const projects = useMemo(
+      () => getInitiativeProjects(initiative.id),
+      [initiative, getInitiativeProjects]
+   );
 
    const series = useMemo<ProgressPoint[]>(() => {
       const seed = seedNumber(initiative.id);
@@ -96,7 +101,7 @@ export function InitiativeProgressPanel({ initiative }: { initiative: Initiative
             count: projects.filter((project) => project.health.id === entry.id).length,
          }))
          .filter((row) => row.count > 0);
-   }, [tab, projects]);
+   }, [tab, projects, teams]);
 
    return (
       <div className="flex flex-col gap-3">

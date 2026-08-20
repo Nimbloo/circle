@@ -5,10 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { health as healthList, Project } from '@/mock-data/projects';
-import { teams } from '@/mock-data/teams';
-import { users } from '@/mock-data/users';
 import { useProjectsFilterStore } from '@/store/projects-filter-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { X } from 'lucide-react';
 import { useMemo } from 'react';
 
@@ -66,6 +65,8 @@ function CountList({ rows }: { rows: CountRow[] }) {
 export default function ProjectsInsightsPanel({ projects }: ProjectsInsightsPanelProps) {
    const { closePanel } = useRightPanelStore();
    const { filters, toggleFilter } = useProjectsFilterStore();
+   const teams = useWorkspaceStore((s) => s.teams);
+   const users = useWorkspaceStore((s) => s.users);
 
    const healthRows = useMemo<CountRow[]>(
       () =>
@@ -73,7 +74,10 @@ export default function ProjectsInsightsPanel({ projects }: ProjectsInsightsPane
             key: entry.id,
             label: entry.id === 'no-update' ? 'No update expected' : entry.name,
             leading: (
-               <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
+               <span
+                  className="size-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: entry.color }}
+               />
             ),
             count: projects.filter((project) => project.health.id === entry.id).length,
             onClick: () => toggleFilter('health', entry.id),
@@ -93,7 +97,7 @@ export default function ProjectsInsightsPanel({ projects }: ProjectsInsightsPane
             }))
             .filter((row) => row.count > 0)
             .sort((a, b) => b.count - a.count),
-      [projects]
+      [teams, projects]
    );
 
    const leadRows = useMemo<CountRow[]>(
@@ -112,7 +116,7 @@ export default function ProjectsInsightsPanel({ projects }: ProjectsInsightsPane
             }))
             .filter((row) => row.count > 0)
             .sort((a, b) => b.count - a.count),
-      [projects]
+      [users, projects]
    );
 
    return (

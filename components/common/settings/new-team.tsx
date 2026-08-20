@@ -2,12 +2,13 @@
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { teams } from '@/mock-data/teams';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { Check } from 'lucide-react';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
 
 /** "Join or create a team" settings page. */
 export default function NewTeam() {
+   const teams = useWorkspaceStore((s) => s.teams);
    const notJoined = teams.filter((team) => !team.joined);
 
    return (

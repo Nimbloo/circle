@@ -11,8 +11,8 @@ import {
    SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { issueViews, projectViews, View } from '@/mock-data/views';
-import { teams } from '@/mock-data/teams';
+import { View } from '@/mock-data/views';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { useViewsDisplayStore, ViewsOrdering } from '@/store/views-display-store';
 import { ArrowDown, Plus, SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
@@ -146,17 +146,19 @@ export default function Views({ teamId }: { teamId?: string }) {
    const { orgId } = useParams<{ orgId: string }>();
    const [tab, setTab] = useQueryState('tab', parseAsStringLiteral(TABS).withDefault('issues'));
    const { ordering } = useViewsDisplayStore();
+   const views = useWorkspaceStore((s) => s.views);
+   const teams = useWorkspaceStore((s) => s.teams);
    const team = teamId ? teams.find((entry) => entry.id === teamId) : undefined;
 
    const list = useMemo(() => {
-      let source = tab === 'issues' ? issueViews : projectViews;
+      let source = views.filter((view) => view.type === (tab === 'issues' ? 'issue' : 'project'));
       if (teamId) source = source.filter((view) => view.teamId === teamId);
       return [...source].sort((a, b) => {
          if (ordering === 'created') return b.createdAt.localeCompare(a.createdAt);
          if (ordering === 'updated') return b.updatedAt.localeCompare(a.updatedAt);
          return a.name.localeCompare(b.name);
       });
-   }, [tab, ordering, teamId]);
+   }, [views, tab, ordering, teamId]);
 
    return (
       <div className="w-full h-full overflow-y-auto">

@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useSearchStore } from '@/store/search-store';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { BarChart3, PanelRight, SearchIcon } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { DisplayOptions } from '../display-options';
@@ -93,8 +94,9 @@ function HeaderOptions() {
    const [tab, setTab] = useMyIssuesTab();
    const { issues } = useIssuesStore();
    const { openPanel, togglePanel } = useRightPanelStore();
+   const meId = useWorkspaceStore((s) => s.me?.id);
 
-   const count = scopeMyIssues(issues, tab).length;
+   const count = scopeMyIssues(issues, tab, meId).length;
 
    return (
       <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">

@@ -19,21 +19,11 @@ import {
    SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import {
-   countCompletedProjects,
-   getInitiativeProjects,
-   Initiative,
-   INITIATIVE_STATUS_META,
-   initiatives as allInitiatives,
-   InitiativeStatus,
-} from '@/mock-data/initiatives';
+import { Initiative, INITIATIVE_STATUS_META, InitiativeStatus } from '@/mock-data/initiatives';
 import { priorities } from '@/mock-data/priorities';
 import { health as allHealth } from '@/mock-data/projects';
-import { users } from '@/mock-data/users';
-import {
-   InitiativesFilterType,
-   useInitiativesFilterStore,
-} from '@/store/initiatives-filter-store';
+import { useWorkspaceStore } from '@/store/workspace-store';
+import { InitiativesFilterType, useInitiativesFilterStore } from '@/store/initiatives-filter-store';
 import {
    InitiativesDisplayProperties,
    useInitiativesDisplayStore,
@@ -68,6 +58,7 @@ const TAB_ITEMS: { label: string; value: (typeof TABS)[number] }[] = [
 function InitiativesFilter() {
    const [open, setOpen] = useState(false);
    const [active, setActive] = useState<InitiativesFilterType | null>(null);
+   const users = useWorkspaceStore((s) => s.users);
    const { filters, toggleFilter, clearFilters, getActiveFiltersCount } =
       useInitiativesFilterStore();
 
@@ -294,7 +285,8 @@ const ACTIVE_DOT_COLORS: Record<string, string> = {
 };
 
 function ActiveProjectDots({ initiative }: { initiative: Initiative }) {
-   const started = getInitiativeProjects(initiative).filter(
+   const getInitiativeProjects = useWorkspaceStore((s) => s.getInitiativeProjects);
+   const started = getInitiativeProjects(initiative.id).filter(
       (project) => project.status.category === 'started'
    );
    const byHealth = new Map<string, number>();
@@ -326,8 +318,10 @@ function InitiativeRow({
    showStatus: boolean;
 }) {
    const { displayProperties } = useInitiativesDisplayStore();
-   const projects = getInitiativeProjects(initiative);
-   const completed = countCompletedProjects(initiative);
+   const getInitiativeProjects = useWorkspaceStore((s) => s.getInitiativeProjects);
+   const countCompletedProjects = useWorkspaceStore((s) => s.countCompletedProjects);
+   const projects = getInitiativeProjects(initiative.id);
+   const { completed } = countCompletedProjects(initiative.id);
 
    return (
       <Link
@@ -414,6 +408,7 @@ export default function Initiatives() {
    const { filters } = useInitiativesFilterStore();
    const { grouping, ordering, displayProperties } = useInitiativesDisplayStore();
    const [showPanel, setShowPanel] = useState(true);
+   const allInitiatives = useWorkspaceStore((s) => s.initiatives);
 
    const displayed = useMemo(() => {
       let list = allInitiatives.slice();
@@ -436,7 +431,7 @@ export default function Initiatives() {
       else if (ordering === 'target')
          list.sort((a, b) => (a.target ?? '').localeCompare(b.target ?? ''));
       return list;
-   }, [tab, filters, ordering]);
+   }, [tab, filters, ordering, allInitiatives]);
 
    const groups = useMemo(() => {
       if (grouping !== 'status') return null;

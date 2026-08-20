@@ -3,12 +3,13 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { users } from '@/mock-data/users';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { Pencil } from 'lucide-react';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
 
 /** Personal "Profile" settings. */
 export default function Profile() {
+   const users = useWorkspaceStore((s) => s.users);
    const me = users[0];
 
    return (

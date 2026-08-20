@@ -2,9 +2,8 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { getProjectDetail } from '@/mock-data/project-details';
-import { getProjectById } from '@/mock-data/projects';
-import { teams } from '@/mock-data/teams';
 import { useIssuesStore } from '@/store/issues-store';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
 import {
    ArrowRight,
@@ -56,8 +55,9 @@ function Card({ children, className }: { children: React.ReactNode; className?: 
 export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) {
    const { orgId } = useParams<{ orgId: string }>();
    const { issues: allIssues } = useIssuesStore();
+   const teams = useWorkspaceStore((s) => s.teams);
 
-   const project = getProjectById(projectId);
+   const project = useWorkspaceStore((s) => s.getProjectById(projectId));
    const detail = getProjectDetail(projectId);
 
    const issues = useMemo(

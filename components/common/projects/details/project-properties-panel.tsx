@@ -4,10 +4,9 @@ import { CapacityRing } from '@/components/common/cycles/capacity-ring';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Issue } from '@/mock-data/issues';
-import { getCycleById } from '@/mock-data/cycles';
 import { ProjectDetail } from '@/mock-data/project-details';
 import { Project } from '@/mock-data/projects';
-import { teams } from '@/mock-data/teams';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { PanelFilterTarget, usePanelFilter } from '@/components/common/issues/use-panel-filter';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
@@ -112,6 +111,7 @@ function PropertyRow({ label, children }: { label: string; children: React.React
  */
 export function ProjectPropertiesPanel({ project, detail, issues }: ProjectPropertiesPanelProps) {
    const panelFilter = usePanelFilter();
+   const teams = useWorkspaceStore((s) => s.teams);
    const completed = issues.filter(isCompleted).length;
 
    const team = teams.find((candidate) => candidate.id === project.teamId);
@@ -187,7 +187,8 @@ export function ProjectPropertiesPanel({ project, detail, issues }: ProjectPrope
             (issue) => (issue.cycleId === '' ? undefined : issue.cycleId),
             (key) => ({
                key: String(key),
-               label: getCycleById(String(key))?.name ?? `Cycle ${key}`,
+               label:
+                  useWorkspaceStore.getState().getCycleById(String(key))?.name ?? `Cycle ${key}`,
                leading: null,
                target: { columnId: 'cycle', value: String(key) },
             })

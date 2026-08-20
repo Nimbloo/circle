@@ -1,7 +1,7 @@
 'use client';
 
 import { CycleDetailsPanel } from '@/components/common/cycles/cycle-details-panel';
-import { getCurrentCycle, getUpcomingCycle } from '@/mock-data/cycles';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { displayOrderedStatus } from '@/mock-data/status';
 import { useFilterStore } from '@/store/filter-store';
 import { useIssuesStore } from '@/store/issues-store';
@@ -32,6 +32,8 @@ export default function CycleIssues({ cycleView }: CycleIssuesProps) {
    const { filters } = useFilterStore();
    const { issues } = useIssuesStore();
    const { openPanel } = useRightPanelStore();
+   const getCurrentCycle = useWorkspaceStore((s) => s.getCurrentCycle);
+   const getUpcomingCycle = useWorkspaceStore((s) => s.getUpcomingCycle);
 
    const cycle = cycleView === 'active' ? getCurrentCycle() : getUpcomingCycle();
 
@@ -39,8 +41,8 @@ export default function CycleIssues({ cycleView }: CycleIssuesProps) {
    const isViewTypeGrid = viewType === 'grid';
 
    const cycleIssues = useMemo(
-      () => issues.filter((issue) => issue.cycleId === cycle.id),
-      [issues, cycle.id]
+      () => (cycle ? issues.filter((issue) => issue.cycleId === cycle.id) : []),
+      [issues, cycle]
    );
 
    const displayedIssues = useMemo(
@@ -76,7 +78,7 @@ export default function CycleIssues({ cycleView }: CycleIssuesProps) {
                   <InsightsPanel issues={displayedIssues} />
                </aside>
             )}
-            {openPanel === 'cycle-details' && (
+            {openPanel === 'cycle-details' && cycle && (
                <aside className="hidden lg:flex w-[420px] shrink-0 border-l h-full overflow-hidden bg-container">
                   <CycleDetailsPanel cycle={cycle} issues={cycleIssues} />
                </aside>

@@ -2,11 +2,11 @@
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { projects as allProjects, Project } from '@/mock-data/projects';
-import { teams } from '@/mock-data/teams';
+import { Project } from '@/mock-data/projects';
 import { useProjectsFilterStore } from '@/store/projects-filter-store';
 import { useProjectsDisplayStore } from '@/store/projects-display-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { BarChart3 } from 'lucide-react';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
 import { useMemo } from 'react';
@@ -45,6 +45,8 @@ export default function Projects({ teamId }: { teamId?: string }) {
    const { viewTypes, grouping, ordering, closedProjects, showEmptyGroups } =
       useProjectsDisplayStore();
    const { openPanel, togglePanel } = useRightPanelStore();
+   const allProjects = useWorkspaceStore((s) => s.projects);
+   const teams = useWorkspaceStore((s) => s.teams);
    const [tab, setTab] = useQueryState('tab', parseAsStringLiteral(TABS).withDefault('all'));
    const viewType = viewTypes[tab];
 
@@ -81,7 +83,7 @@ export default function Projects({ teamId }: { teamId?: string }) {
          }
       };
       return list.sort(compare);
-   }, [tab, closedProjects, filters, ordering, teamId]);
+   }, [allProjects, tab, closedProjects, filters, ordering, teamId]);
 
    const groups = useMemo<ProjectGroup[]>(() => {
       if (grouping === 'none') {
@@ -95,7 +97,7 @@ export default function Projects({ teamId }: { teamId?: string }) {
             projects: displayed.filter((project) => project.teamId === team.id),
          }))
          .filter((group) => showEmptyGroups || group.projects.length > 0);
-   }, [displayed, grouping, showEmptyGroups]);
+   }, [teams, displayed, grouping, showEmptyGroups]);
 
    return (
       <div className="w-full h-full flex flex-col overflow-hidden">

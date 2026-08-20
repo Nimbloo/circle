@@ -2,7 +2,7 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Team } from '@/mock-data/teams';
-import { getCyclesByTeam } from '@/mock-data/cycles';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { useTeamsDisplayStore } from '@/store/teams-display-store';
 import { Box, Check, Play } from 'lucide-react';
 
@@ -22,6 +22,7 @@ const UPDATED_DATES = ['Jul 12', 'Jul 20', 'Jul 27', 'Jul 30', 'Aug 1', 'Aug 3']
 
 export default function TeamLine({ team }: TeamLineProps) {
    const { displayProperties } = useTeamsDisplayStore();
+   const getCyclesByTeam = useWorkspaceStore((s) => s.getCyclesByTeam);
    const cycles = getCyclesByTeam(team.id);
    const uniqueProjects = new Set(team.projects.map((project) => project.id)).size;
    const owner = team.members[0];

@@ -1,3 +1,5 @@
+'use client';
+
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import {
    ContextMenuContent,
@@ -35,11 +37,10 @@ import {
 } from 'lucide-react';
 import React, { useState } from 'react';
 import { useIssuesStore } from '@/store/issues-store';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { status } from '@/mock-data/status';
 import { priorities } from '@/mock-data/priorities';
-import { users } from '@/mock-data/users';
 import { labels } from '@/mock-data/labels';
-import { projects } from '@/mock-data/projects';
 import { toast } from 'sonner';
 
 interface IssueContextMenuProps {
@@ -47,6 +48,8 @@ interface IssueContextMenuProps {
 }
 
 export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
+   const users = useWorkspaceStore((s) => s.users);
+   const projects = useWorkspaceStore((s) => s.projects);
    const [isSubscribed, setIsSubscribed] = useState(false);
    const [isFavorite, setIsFavorite] = useState(false);
 

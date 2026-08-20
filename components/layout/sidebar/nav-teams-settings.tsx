@@ -10,12 +10,13 @@ import {
    SidebarMenuButton,
    SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { teams } from '@/mock-data/teams';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { Button } from '@/components/ui/button';
 import { useParams } from 'next/navigation';
 
 export function NavTeamsSettings() {
    const { orgId } = useParams<{ orgId: string }>();
+   const teams = useWorkspaceStore((s) => s.teams);
    const joinedTeams = teams.filter((t) => t.joined);
    return (
       <SidebarGroup>

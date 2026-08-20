@@ -3,7 +3,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { documentFolders } from '@/mock-data/documents';
-import { teams } from '@/mock-data/teams';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { RiDonutChartFill } from '@remixicon/react';
 import { Box, CopyMinus, Layers, Plus, Settings, SquareStack } from 'lucide-react';
 import Link from 'next/link';
@@ -15,6 +15,7 @@ import { useParams } from 'next/navigation';
  */
 export default function TeamOverview() {
    const { orgId, teamId } = useParams<{ orgId: string; teamId: string }>();
+   const teams = useWorkspaceStore((s) => s.teams);
    const team = teams.find((t) => t.id === teamId) ?? teams[0];
 
    const pinnedDocuments = documentFolders

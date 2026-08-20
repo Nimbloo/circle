@@ -3,14 +3,9 @@
 import ProjectsTimeline from '@/components/common/projects/projects-timeline';
 import { ProjectGroup } from '@/components/common/projects/projects';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import {
-   countCompletedProjects,
-   getInitiativeById,
-   getInitiativeProjects,
-   Initiative,
-   INITIATIVE_STATUS_META,
-} from '@/mock-data/initiatives';
+import { Initiative, INITIATIVE_STATUS_META } from '@/mock-data/initiatives';
 import { Project } from '@/mock-data/projects';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import {
    CalendarRange,
    ChevronDown,
@@ -63,7 +58,8 @@ const GROUP_ORDER: { key: string; label: string; match: (project: Project) => bo
 
 function ProjectsSection({ initiative }: { initiative: Initiative }) {
    const { orgId } = useParams<{ orgId: string }>();
-   const projects = getInitiativeProjects(initiative);
+   const getInitiativeProjects = useWorkspaceStore((s) => s.getInitiativeProjects);
+   const projects = getInitiativeProjects(initiative.id);
    const groups = GROUP_ORDER.map((group) => ({
       ...group,
       projects: projects.filter(group.match),
@@ -148,7 +144,8 @@ function PropertyRow({ label, children }: { label: string; children: React.React
 }
 
 function Overview({ initiative }: { initiative: Initiative }) {
-   const completed = countCompletedProjects(initiative);
+   const countCompletedProjects = useWorkspaceStore((s) => s.countCompletedProjects);
+   const { completed } = countCompletedProjects(initiative.id);
    const total = initiative.projectIds.length;
 
    return (
@@ -346,6 +343,8 @@ function Activity({ initiative }: { initiative: Initiative }) {
 /** Initiative detail page: Overview / Activity / Projects tabs. */
 export default function InitiativeDetails({ initiativeId }: { initiativeId: string }) {
    const [tab] = useQueryState('tab', parseAsStringLiteral(TABS).withDefault('overview'));
+   const getInitiativeById = useWorkspaceStore((s) => s.getInitiativeById);
+   const getInitiativeProjects = useWorkspaceStore((s) => s.getInitiativeProjects);
    const initiative = getInitiativeById(initiativeId);
 
    const timelineGroups = useMemo<ProjectGroup[]>(() => {
@@ -355,10 +354,10 @@ export default function InitiativeDetails({ initiativeId }: { initiativeId: stri
             id: initiative.id,
             name: initiative.name,
             icon: initiative.icon,
-            projects: getInitiativeProjects(initiative),
+            projects: getInitiativeProjects(initiative.id),
          },
       ];
-   }, [initiative]);
+   }, [initiative, getInitiativeProjects]);
 
    if (!initiative) {
       return (

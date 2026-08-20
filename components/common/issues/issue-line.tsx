@@ -1,7 +1,7 @@
 'use client';
 
 import { Issue } from '@/mock-data/issues';
-import { getCycleById } from '@/mock-data/cycles';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { useDisplaySettingsStore } from '@/store/display-settings-store';
 import { format } from 'date-fns';
 import Link from 'next/link';
@@ -19,6 +19,7 @@ import { IssueContextMenu } from './issue-context-menu';
 export function IssueLine({ issue, layoutId = false }: { issue: Issue; layoutId?: boolean }) {
    const { orgId } = useParams<{ orgId: string }>();
    const { displayProperties } = useDisplaySettingsStore();
+   const getCycleById = useWorkspaceStore((s) => s.getCycleById);
    const cycle = displayProperties.cycle && issue.cycleId ? getCycleById(issue.cycleId) : undefined;
 
    return (

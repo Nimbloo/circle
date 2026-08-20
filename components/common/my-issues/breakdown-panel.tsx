@@ -2,8 +2,8 @@
 
 import { cn } from '@/lib/utils';
 import { Issue } from '@/mock-data/issues';
-import { teams } from '@/mock-data/teams';
 import { useRightPanelStore } from '@/store/right-panel-store';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -45,6 +45,7 @@ const PRIORITY_COLORS: Record<string, string> = {
 export function BreakdownPanel({ issues }: { issues: Issue[] }) {
    const { closePanel } = useRightPanelStore();
    const [tab, setTab] = useState<BreakdownTab>('labels');
+   const teams = useWorkspaceStore((s) => s.teams);
 
    const rows = useMemo<BreakdownRow[]>(() => {
       const counter = new Map<string, BreakdownRow>();
@@ -81,7 +82,7 @@ export function BreakdownPanel({ issues }: { issues: Issue[] }) {
          }
       }
       return [...counter.values()].sort((a, b) => b.count - a.count);
-   }, [tab, issues]);
+   }, [tab, issues, teams]);
 
    return (
       <div className="w-full h-full overflow-y-auto p-4 flex flex-col gap-4">

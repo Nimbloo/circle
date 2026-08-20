@@ -2,7 +2,7 @@
 
 import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
 import { Button } from '@/components/ui/button';
-import { getCycleById } from '@/mock-data/cycles';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { IssueDetail } from '@/mock-data/issue-details';
 import { Issue } from '@/mock-data/issues';
 import { Ban, GitPullRequestArrow, Plus } from 'lucide-react';
@@ -31,6 +31,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
  * assignee), cycle, labels, project + milestone, relations and linked PRs.
  */
 export function IssuePropertiesPanel({ issue, detail }: IssuePropertiesPanelProps) {
+   const getCycleById = useWorkspaceStore((s) => s.getCycleById);
    const cycle = issue.cycleId ? getCycleById(issue.cycleId) : undefined;
 
    return (

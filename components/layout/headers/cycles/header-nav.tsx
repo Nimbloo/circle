@@ -1,13 +1,14 @@
 'use client';
 
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import { teams } from '@/mock-data/teams';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { ChevronRight, Star } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
 export default function HeaderNav() {
    const { orgId, teamId } = useParams<{ orgId: string; teamId: string }>();
+   const teams = useWorkspaceStore((s) => s.teams);
    const team = teams.find((t) => t.id === teamId) ?? teams[0];
 
    return (

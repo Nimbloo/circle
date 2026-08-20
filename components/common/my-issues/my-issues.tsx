@@ -12,6 +12,7 @@ import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useSearchStore } from '@/store/search-store';
 import { useViewStore } from '@/store/view-store';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { useMemo } from 'react';
 import { scopeMyIssues, useMyIssuesTab } from './use-my-issues';
 
@@ -27,11 +28,12 @@ export default function MyIssues() {
    const { filters } = useFilterStore();
    const { issues } = useIssuesStore();
    const { openPanel } = useRightPanelStore();
+   const meId = useWorkspaceStore((s) => s.me?.id);
 
    const isSearching = isSearchOpen && searchQuery.trim() !== '';
    const isViewTypeGrid = viewType === 'grid';
 
-   const scopedIssues = useMemo(() => scopeMyIssues(issues, tab), [issues, tab]);
+   const scopedIssues = useMemo(() => scopeMyIssues(issues, tab, meId), [issues, tab, meId]);
 
    const displayedIssues = useMemo(
       () => applyIssueFilters(scopedIssues, filters),
