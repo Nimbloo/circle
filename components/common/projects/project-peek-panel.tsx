@@ -1,7 +1,9 @@
 'use client';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { getProjectDetail } from '@/mock-data/project-details';
+import { adaptProjectDetail, emptyProjectDetail } from '@/lib/adapters-project-detail';
+import { api } from '@/lib/client';
+import type { ProjectDetail } from '@/mock-data/project-details';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
@@ -20,7 +22,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ProjectProgressChart } from './details/project-progress-chart';
 
 interface ProjectPeekPanelProps {
@@ -58,7 +60,22 @@ export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) 
    const teams = useWorkspaceStore((s) => s.teams);
 
    const project = useWorkspaceStore((s) => s.getProjectById(projectId));
-   const detail = getProjectDetail(projectId);
+
+   const [detail, setDetail] = useState<ProjectDetail>(() => emptyProjectDetail(projectId));
+   useEffect(() => {
+      let active = true;
+      api.projects
+         .get(projectId)
+         .then((dto) => {
+            if (active) setDetail(adaptProjectDetail(dto));
+         })
+         .catch(() => {
+            if (active) setDetail(emptyProjectDetail(projectId));
+         });
+      return () => {
+         active = false;
+      };
+   }, [projectId]);
 
    const issues = useMemo(
       () => allIssues.filter((issue) => issue.project?.id === projectId),

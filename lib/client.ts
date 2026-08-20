@@ -15,6 +15,7 @@ import type { CycleDto } from '@/lib/api/cycles';
 import type { InitiativeDto } from '@/lib/api/initiatives';
 import type { ViewDto } from '@/lib/api/views';
 import type { NotificationDto } from '@/lib/api/notifications';
+import type { ReviewDto } from '@/lib/api/reviews';
 import type { FolderDto } from '@/lib/api/documents';
 import type { IssueDetailDto, CommentDto, ActivityItem } from '@/lib/api/issue-detail';
 import type { IssueMatrix, ProjectProgress } from '@/lib/api/aggregations';
@@ -150,5 +151,11 @@ export const api = {
       setRead: (id: string, read: boolean) =>
          patch<{ id: string; read: boolean }>(`/notifications/${id}`, { read }),
       readAll: () => post<{ marked: number }>('/notifications/read-all'),
+   },
+
+   reviews: {
+      list: () => get<ReviewDto[]>('/reviews'),
+      get: (id: string) => get<ReviewDto>(`/reviews/${id}`),
+      sync: () => post<{ synced: number }>('/reviews/sync'),
    },
 };

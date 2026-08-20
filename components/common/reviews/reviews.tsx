@@ -2,17 +2,12 @@
 
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
-import {
-   createdReviews,
-   forYouReviews,
-   Review,
-   ReviewList,
-   ReviewStatus,
-} from '@/mock-data/reviews';
-import { ListFilter, SlidersHorizontal } from 'lucide-react';
+import { fetchReviews, syncReviews } from '@/lib/adapters-reviews';
+import { Review, ReviewList, ReviewStatus } from '@/mock-data/reviews';
+import { ListFilter, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { ReviewDetail, ReviewSection } from './review-detail';
 import { PrIcon } from './review-shared';
 
@@ -123,7 +118,49 @@ export default function Reviews({
    section = 'overview',
 }: ReviewsProps) {
    const { orgId } = useParams<{ orgId: string }>();
-   const source = listTab === 'for-you' ? forYouReviews : createdReviews;
+   const [reviews, setReviews] = useState<Review[]>([]);
+   const [loading, setLoading] = useState(true);
+   const [error, setError] = useState(false);
+   const [syncing, setSyncing] = useState(false);
+   const [reloadKey, setReloadKey] = useState(0);
+
+   useEffect(() => {
+      let active = true;
+      setLoading(true);
+      setError(false);
+      fetchReviews()
+         .then((data) => {
+            if (active) setReviews(data);
+         })
+         .catch(() => {
+            if (active) {
+               setReviews([]);
+               setError(true);
+            }
+         })
+         .finally(() => {
+            if (active) setLoading(false);
+         });
+      return () => {
+         active = false;
+      };
+   }, [reloadKey]);
+
+   async function handleSync() {
+      setSyncing(true);
+      try {
+         await syncReviews();
+         setReloadKey((key) => key + 1);
+      } catch {
+         setError(true);
+      } finally {
+         setSyncing(false);
+      }
+   }
+
+   // O backend não modela For you / Created (PRs crus do GitHub); ambas as abas
+   // refletem o mesmo conjunto sincronizado.
+   const source = reviews;
 
    const groups = (['open', 'merged', 'closed'] as ReviewStatus[])
       .map((status) => ({
@@ -170,18 +207,28 @@ export default function Reviews({
                </Link>
             </div>
             <div className="flex-1 overflow-y-auto">
-               {groups.map((group) => (
-                  <ReviewGroup key={group.label} label={group.label} count={group.items.length}>
-                     {group.items.map((review) => (
-                        <ReviewRow
-                           key={review.id}
-                           review={review}
-                           orgId={orgId}
-                           selected={review.id === selectedReviewId}
-                        />
-                     ))}
-                  </ReviewGroup>
-               ))}
+               {loading ? (
+                  <div className="px-4 py-6 text-sm text-muted-foreground">Loading…</div>
+               ) : error ? (
+                  <div className="px-4 py-6 text-sm text-muted-foreground">
+                     Could not load reviews.
+                  </div>
+               ) : groups.length === 0 ? (
+                  <div className="px-4 py-6 text-sm text-muted-foreground">No reviews yet.</div>
+               ) : (
+                  groups.map((group) => (
+                     <ReviewGroup key={group.label} label={group.label} count={group.items.length}>
+                        {group.items.map((review) => (
+                           <ReviewRow
+                              key={review.id}
+                              review={review}
+                              orgId={orgId}
+                              selected={review.id === selectedReviewId}
+                           />
+                        ))}
+                     </ReviewGroup>
+                  ))
+               )}
             </div>
          </div>
 
@@ -191,7 +238,22 @@ export default function Reviews({
             ) : (
                <div className="h-full flex flex-col items-center justify-center gap-4 text-muted-foreground">
                   <EmptySketch />
-                  <span className="text-sm">{source.length} reviews</span>
+                  <span className="text-sm">
+                     {loading
+                        ? 'Loading…'
+                        : error
+                          ? 'Could not load reviews.'
+                          : `${source.length} reviews`}
+                  </span>
+                  <button
+                     type="button"
+                     onClick={handleSync}
+                     disabled={syncing}
+                     className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium hover:bg-accent/50 transition-colors disabled:opacity-60"
+                  >
+                     <RefreshCw className={cn('size-3.5', syncing && 'animate-spin')} />
+                     {syncing ? 'Syncing…' : 'Sync from GitHub'}
+                  </button>
                </div>
             )}
          </div>

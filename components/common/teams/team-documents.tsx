@@ -3,9 +3,13 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { documentFolders } from '@/mock-data/documents';
+import { adaptFolders } from '@/lib/adapters-documents';
+import { api } from '@/lib/client';
+import type { DocumentFolder } from '@/mock-data/documents';
 import { formatDistanceToNowStrict, parseISO } from 'date-fns';
 import { ChevronRight, Pin, Plus, SlidersHorizontal } from 'lucide-react';
+import { useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 const timeAgo = (date: string) =>
    formatDistanceToNowStrict(parseISO(date), { addSuffix: true })
@@ -21,6 +25,32 @@ const timeAgo = (date: string) =>
  * with created / last edited metadata.
  */
 export default function TeamDocuments() {
+   const { teamId } = useParams<{ teamId: string }>();
+   const [folders, setFolders] = useState<DocumentFolder[]>([]);
+   const [loading, setLoading] = useState(true);
+   const [error, setError] = useState(false);
+
+   useEffect(() => {
+      if (!teamId) return;
+      let active = true;
+      setLoading(true);
+      setError(false);
+      api.teams
+         .documents(teamId)
+         .then((dtos) => {
+            if (active) setFolders(adaptFolders(dtos));
+         })
+         .catch(() => {
+            if (active) setError(true);
+         })
+         .finally(() => {
+            if (active) setLoading(false);
+         });
+      return () => {
+         active = false;
+      };
+   }, [teamId]);
+
    return (
       <div className="w-full">
          <div className="flex items-center justify-between px-6 py-3 gap-2">
@@ -41,42 +71,54 @@ export default function TeamDocuments() {
             </div>
          </div>
 
-         {documentFolders.map((folder) => (
-            <Collapsible key={folder.id} defaultOpen={folder.documents.some((d) => d.pinned)}>
-               <CollapsibleTrigger asChild>
-                  <button className="group w-full flex items-center gap-2 px-6 h-10 bg-sidebar/30 hover:bg-sidebar/60 border-b border-border/50 text-sm">
-                     <ChevronRight className="size-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
-                     <span className="text-base leading-none">{folder.icon}</span>
-                     <span className="font-medium">{folder.name}</span>
-                     <span className="text-muted-foreground">{folder.documents.length}</span>
-                  </button>
-               </CollapsibleTrigger>
-               <CollapsibleContent>
-                  {folder.documents.map((doc) => (
-                     <div
-                        key={doc.id}
-                        className="grid grid-cols-[1fr_40px] md:grid-cols-[1fr_90px_90px_40px] items-center px-6 h-11 hover:bg-sidebar/50 border-b border-border/30 text-sm"
-                     >
-                        <div className="flex items-center gap-2 min-w-0 pl-6">
-                           <span className="text-base leading-none">{doc.icon}</span>
-                           <span className="font-medium truncate">{doc.name}</span>
-                           {doc.pinned && <Pin className="size-3 text-muted-foreground shrink-0" />}
+         {loading && <div className="px-6 py-8 text-sm text-muted-foreground">Loading…</div>}
+         {!loading && error && (
+            <div className="px-6 py-8 text-sm text-muted-foreground">Could not load documents.</div>
+         )}
+         {!loading && !error && folders.length === 0 && (
+            <div className="px-6 py-8 text-sm text-muted-foreground">No documents yet.</div>
+         )}
+
+         {!loading &&
+            !error &&
+            folders.map((folder) => (
+               <Collapsible key={folder.id} defaultOpen={folder.documents.some((d) => d.pinned)}>
+                  <CollapsibleTrigger asChild>
+                     <button className="group w-full flex items-center gap-2 px-6 h-10 bg-sidebar/30 hover:bg-sidebar/60 border-b border-border/50 text-sm">
+                        <ChevronRight className="size-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+                        <span className="text-base leading-none">{folder.icon}</span>
+                        <span className="font-medium">{folder.name}</span>
+                        <span className="text-muted-foreground">{folder.documents.length}</span>
+                     </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                     {folder.documents.map((doc) => (
+                        <div
+                           key={doc.id}
+                           className="grid grid-cols-[1fr_40px] md:grid-cols-[1fr_90px_90px_40px] items-center px-6 h-11 hover:bg-sidebar/50 border-b border-border/30 text-sm"
+                        >
+                           <div className="flex items-center gap-2 min-w-0 pl-6">
+                              <span className="text-base leading-none">{doc.icon}</span>
+                              <span className="font-medium truncate">{doc.name}</span>
+                              {doc.pinned && (
+                                 <Pin className="size-3 text-muted-foreground shrink-0" />
+                              )}
+                           </div>
+                           <span className="hidden md:block text-xs text-muted-foreground">
+                              {timeAgo(doc.createdAt)}
+                           </span>
+                           <span className="hidden md:block text-xs text-muted-foreground">
+                              {timeAgo(doc.updatedAt)}
+                           </span>
+                           <Avatar className="size-5">
+                              <AvatarImage src={doc.creator.avatarUrl} alt={doc.creator.name} />
+                              <AvatarFallback>{doc.creator.name[0]}</AvatarFallback>
+                           </Avatar>
                         </div>
-                        <span className="hidden md:block text-xs text-muted-foreground">
-                           {timeAgo(doc.createdAt)}
-                        </span>
-                        <span className="hidden md:block text-xs text-muted-foreground">
-                           {timeAgo(doc.updatedAt)}
-                        </span>
-                        <Avatar className="size-5">
-                           <AvatarImage src={doc.creator.avatarUrl} alt={doc.creator.name} />
-                           <AvatarFallback>{doc.creator.name[0]}</AvatarFallback>
-                        </Avatar>
-                     </div>
-                  ))}
-               </CollapsibleContent>
-            </Collapsible>
-         ))}
+                     ))}
+                  </CollapsibleContent>
+               </Collapsible>
+            ))}
       </div>
    );
 }

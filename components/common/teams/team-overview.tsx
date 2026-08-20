@@ -2,12 +2,15 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { documentFolders } from '@/mock-data/documents';
+import { adaptFolders } from '@/lib/adapters-documents';
+import { api } from '@/lib/client';
+import type { TeamDocument } from '@/mock-data/documents';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { RiDonutChartFill } from '@remixicon/react';
 import { Box, CopyMinus, Layers, Plus, Settings, SquareStack } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 /**
  * Team Home — "Overview" tab: team identity, pinned resources and
@@ -18,9 +21,29 @@ export default function TeamOverview() {
    const teams = useWorkspaceStore((s) => s.teams);
    const team = teams.find((t) => t.id === teamId) ?? teams[0];
 
-   const pinnedDocuments = documentFolders
-      .flatMap((folder) => folder.documents)
-      .filter((doc) => doc.pinned);
+   const [pinnedDocuments, setPinnedDocuments] = useState<TeamDocument[]>([]);
+
+   useEffect(() => {
+      if (!teamId) return;
+      let active = true;
+      api.teams
+         .documents(teamId)
+         .then((dtos) => {
+            if (active) {
+               setPinnedDocuments(
+                  adaptFolders(dtos)
+                     .flatMap((folder) => folder.documents)
+                     .filter((doc) => doc.pinned)
+               );
+            }
+         })
+         .catch(() => {
+            if (active) setPinnedDocuments([]);
+         });
+      return () => {
+         active = false;
+      };
+   }, [teamId]);
 
    const goToLinks = [
       { label: 'Team settings', icon: Settings, href: `/${orgId}/settings` },

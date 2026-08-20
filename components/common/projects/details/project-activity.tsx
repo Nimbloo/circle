@@ -9,9 +9,11 @@ import {
    DropdownMenuItem,
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { adaptProjectDetail, emptyProjectDetail } from '@/lib/adapters-project-detail';
+import { api } from '@/lib/client';
 import { cn } from '@/lib/utils';
 import {
-   getProjectDetail,
+   ProjectDetail,
    ProjectUpdate,
    ProjectUpdateHealth,
    projectUpdateHealthColor,
@@ -22,7 +24,7 @@ import { useProjectUpdatesStore } from '@/store/project-updates-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
 import { Paperclip, Sparkles } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ProjectSidePanel } from './project-side-panel';
 
 interface ProjectActivityProps {
@@ -66,21 +68,37 @@ function UpdateCard({ update }: { update: ProjectUpdate }) {
 
 /** Project "Activity" tab: update composer + monthly timeline. */
 export default function ProjectActivity({ projectId }: ProjectActivityProps) {
-   const project = useWorkspaceStore((s) => s.getProjectById(projectId))!;
-   const detail = getProjectDetail(projectId);
+   const project = useWorkspaceStore((s) => s.getProjectById(projectId));
+   const loaded = useWorkspaceStore((s) => s.loaded);
    const { issues: allIssues } = useIssuesStore();
    const issues = useMemo(
-      () => allIssues.filter((issue) => issue.project?.id === project.id),
-      [allIssues, project.id]
+      () => allIssues.filter((issue) => issue.project?.id === projectId),
+      [allIssues, projectId]
    );
    const { postedUpdates, postUpdate } = useProjectUpdatesStore();
    const [mode, setMode] = useState<'comment' | 'update'>('update');
    const [health, setHealth] = useState<ProjectUpdateHealth>('on-track');
    const [text, setText] = useState('');
 
+   const [detail, setDetail] = useState<ProjectDetail>(() => emptyProjectDetail(projectId));
+   useEffect(() => {
+      let active = true;
+      api.projects
+         .get(projectId)
+         .then((dto) => {
+            if (active) setDetail(adaptProjectDetail(dto));
+         })
+         .catch(() => {
+            if (active) setDetail(emptyProjectDetail(projectId));
+         });
+      return () => {
+         active = false;
+      };
+   }, [projectId]);
+
    const updates = useMemo<ProjectUpdate[]>(
-      () => [...(postedUpdates[project.id] ?? []), ...detail.updates],
-      [postedUpdates, project.id, detail.updates]
+      () => [...(postedUpdates[projectId] ?? []), ...detail.updates],
+      [postedUpdates, projectId, detail.updates]
    );
 
    const updatesByMonth = useMemo(() => {
@@ -103,9 +121,17 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
 
    const handlePost = () => {
       if (text.trim() === '') return;
-      postUpdate(project.id, health, text);
+      postUpdate(projectId, health, text);
       setText('');
    };
+
+   if (!project) {
+      return (
+         <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+            {loaded ? 'Project not found.' : 'Loading…'}
+         </div>
+      );
+   }
 
    return (
       <div className="w-full h-full flex overflow-hidden">

@@ -3,7 +3,7 @@
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
-import { getReviewFileDiff, Review } from '@/mock-data/reviews';
+import type { Review } from '@/mock-data/reviews';
 import {
    Check,
    FileCode2,
@@ -13,7 +13,6 @@ import {
    SlidersHorizontal,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { DiffView } from './diff-view';
 
 /** Diff tab: Files / Commits toolbar, file list and stacked unified diffs. */
 export function ReviewDiff({ review }: { review: Review }) {
@@ -94,11 +93,23 @@ export function ReviewDiff({ review }: { review: Review }) {
                ))}
             </div>
             <div className="flex-1 min-w-0 overflow-y-auto p-4 flex flex-col gap-4">
-               {files.map((file) => (
-                  <div key={file.name + file.path} id={`diff-${file.name}`}>
-                     <DiffView diff={getReviewFileDiff(review, file)} />
+               {files.length === 0 ? (
+                  <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
+                     No file diffs available.
                   </div>
-               ))}
+               ) : (
+                  files.map((file) => (
+                     <div
+                        key={file.name + file.path}
+                        id={`diff-${file.name}`}
+                        className="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs bg-container"
+                     >
+                        <FileCode2 className="size-3.5 text-muted-foreground shrink-0" />
+                        <span className="font-medium">{file.name}</span>
+                        <span className="text-muted-foreground truncate">{file.path}</span>
+                     </div>
+                  ))
+               )}
             </div>
          </div>
       </div>

@@ -2,14 +2,16 @@
 
 import { ContentBlocks } from '@/components/common/issues/details/content-blocks';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { getProjectDetail } from '@/mock-data/project-details';
+import { adaptProjectDetail, emptyProjectDetail } from '@/lib/adapters-project-detail';
+import { api } from '@/lib/client';
+import type { ProjectDetail } from '@/mock-data/project-details';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
 import { ArrowRight, ChevronDown, FileText, PenLine, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { DocumentOutline, getOutlineItems } from './document-outline';
 import { ProjectSidePanel } from './project-side-panel';
 
@@ -21,19 +23,43 @@ const formatDay = (iso?: string) => (iso ? format(parseISO(iso), 'MMM do') : 'â€
 
 /** Project "Overview" tab: description column + properties side panel. */
 export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
-   const project = useWorkspaceStore((s) => s.getProjectById(projectId))!;
-   const detail = getProjectDetail(projectId);
+   const project = useWorkspaceStore((s) => s.getProjectById(projectId));
+   const loaded = useWorkspaceStore((s) => s.loaded);
    const { issues: allIssues } = useIssuesStore();
-   const issues = useMemo(
-      () => allIssues.filter((issue) => issue.project?.id === project.id),
-      [allIssues, project.id]
-   );
-
    const { orgId } = useParams<{ orgId: string }>();
    const teams = useWorkspaceStore((s) => s.teams);
-   const team = teams.find((candidate) => candidate.id === project.teamId);
    const scrollRef = useRef<HTMLDivElement>(null);
+
+   const [detail, setDetail] = useState<ProjectDetail>(() => emptyProjectDetail(projectId));
+   useEffect(() => {
+      let active = true;
+      api.projects
+         .get(projectId)
+         .then((dto) => {
+            if (active) setDetail(adaptProjectDetail(dto));
+         })
+         .catch(() => {
+            if (active) setDetail(emptyProjectDetail(projectId));
+         });
+      return () => {
+         active = false;
+      };
+   }, [projectId]);
+
+   const issues = useMemo(
+      () => allIssues.filter((issue) => issue.project?.id === projectId),
+      [allIssues, projectId]
+   );
+   const team = teams.find((candidate) => candidate.id === project?.teamId);
    const outlineItems = useMemo(() => getOutlineItems(detail.description), [detail.description]);
+
+   if (!project) {
+      return (
+         <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+            {loaded ? 'Project not found.' : 'Loadingâ€¦'}
+         </div>
+      );
+   }
 
    return (
       <div className="w-full h-full flex overflow-hidden">

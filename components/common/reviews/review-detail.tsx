@@ -2,10 +2,12 @@
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { getReviewById } from '@/mock-data/reviews';
+import { fetchReview } from '@/lib/adapters-reviews';
+import type { Review } from '@/mock-data/reviews';
 import { Eye, Link2, MoreHorizontal, Play, Star } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { ReviewDiff } from './review-diff';
 import { ReviewGuide } from './review-guide';
 import { ReviewOverview } from './review-overview';
@@ -20,15 +22,36 @@ const SECTION_TABS: { key: ReviewSection; label: string; path: string }[] = [
 ];
 
 /** Right pane of the Reviews split view: breadcrumb, tabs and section body. */
-export function ReviewDetail({
-   reviewId,
-   section,
-}: {
-   reviewId: string;
-   section: ReviewSection;
-}) {
+export function ReviewDetail({ reviewId, section }: { reviewId: string; section: ReviewSection }) {
    const { orgId } = useParams<{ orgId: string }>();
-   const review = getReviewById(reviewId);
+   const [review, setReview] = useState<Review | null>(null);
+   const [loading, setLoading] = useState(true);
+
+   useEffect(() => {
+      let active = true;
+      setLoading(true);
+      fetchReview(reviewId)
+         .then((data) => {
+            if (active) setReview(data);
+         })
+         .catch(() => {
+            if (active) setReview(null);
+         })
+         .finally(() => {
+            if (active) setLoading(false);
+         });
+      return () => {
+         active = false;
+      };
+   }, [reviewId]);
+
+   if (loading) {
+      return (
+         <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
+            Loading…
+         </div>
+      );
+   }
 
    if (!review) {
       return (
