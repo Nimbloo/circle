@@ -15,20 +15,20 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
    title: {
-      template: '%s | Nimbloo',
-      default: 'Nimbloo',
+      template: '%s | Circle',
+      default: 'Circle',
    },
    description:
-      'Nimbloo — workspace para acompanhamento de issues, projetos e times com uma interface moderna e responsiva.',
+      'Circle by Nimbloo — workspace para acompanhamento de issues, projetos e times com uma interface moderna e responsiva.',
    openGraph: {
       type: 'website',
       locale: 'pt_BR',
-      siteName: 'Nimbloo',
+      siteName: 'Circle',
    },
    twitter: {
       card: 'summary_large_image',
    },
-   keywords: ['nimbloo', 'workspace', 'issues', 'projetos'],
+   keywords: ['circle', 'nimbloo', 'workspace', 'issues', 'projetos'],
 };
 
 import { ThemeProvider } from '@/components/layout/theme-provider';
