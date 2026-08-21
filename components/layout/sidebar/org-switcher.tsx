@@ -47,7 +47,9 @@ export function OrgSwitcher() {
                         {/* Identidade = usuário LOGADO (dinâmico do `me`), não o workspace. */}
                         <Avatar className="size-6 rounded-md">
                            <AvatarImage src={me?.avatarUrl ?? undefined} alt={name} />
-                           <AvatarFallback className="rounded-md text-xs">
+                           {/* delayMs: só mostra a inicial se a foto demorar de verdade →
+                               elimina o flash "D → foto" no login pra quem tem avatar. */}
+                           <AvatarFallback delayMs={500} className="rounded-md text-xs">
                               {name.charAt(0).toUpperCase()}
                            </AvatarFallback>
                         </Avatar>
