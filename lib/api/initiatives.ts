@@ -11,6 +11,7 @@ import {
    appUser,
 } from '@/db/schema';
 import { ApiError } from './errors';
+import { publish } from './events';
 import type { UserRef } from './issues';
 
 type InitiativeRow = typeof initT.$inferSelect;
@@ -214,6 +215,7 @@ export async function createInitiative(
             .where(inArray(projectT.id, input.projectIds));
       }
    });
+   publish({ entity: 'initiative', action: 'created', id });
    return (await getInitiative(db, id))!;
 }
 
@@ -279,6 +281,7 @@ export async function updateInitiative(
          }
       }
    });
+   publish({ entity: 'initiative', action: 'updated', id });
    return getInitiative(db, id);
 }
 
@@ -291,6 +294,7 @@ export async function deleteInitiative(db: Db, id: string): Promise<boolean> {
       await tx.update(projectT).set({ initiativeId: null }).where(eq(projectT.initiativeId, id));
       await tx.delete(initT).where(eq(initT.id, id));
    });
+   publish({ entity: 'initiative', action: 'deleted', id });
    return true;
 }
 

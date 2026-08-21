@@ -3,6 +3,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { cycle as cycleT, issue as issueT, status as statusT, team as teamT } from '@/db/schema';
 import { ApiError } from './errors';
+import { publish } from './events';
 
 type CycleRow = typeof cycleT.$inferSelect;
 
@@ -175,6 +176,7 @@ export async function createCycle(db: Db, input: CreateCycleInput): Promise<Cycl
       capacity: input.capacity ?? 0,
    });
 
+   publish({ entity: 'cycle', action: 'created', id });
    return (await getCycle(db, id))!;
 }
 
@@ -211,6 +213,7 @@ export async function updateCycle(
       await db.update(cycleT).set(set).where(eq(cycleT.id, id));
    }
 
+   publish({ entity: 'cycle', action: 'updated', id });
    return getCycle(db, id);
 }
 
@@ -224,5 +227,6 @@ export async function deleteCycle(db: Db, id: string): Promise<boolean> {
    if (existing.length === 0) return false;
    await db.update(issueT).set({ cycleId: null }).where(eq(issueT.cycleId, id));
    await db.delete(cycleT).where(eq(cycleT.id, id));
+   publish({ entity: 'cycle', action: 'deleted', id });
    return true;
 }

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { notification, issue as issueT, appUser } from '@/db/schema';
+import { publish } from './events';
 import type { UserRef } from './issues';
 
 type NotifRow = typeof notification.$inferSelect;
@@ -125,5 +126,6 @@ export async function createNotification(db: Db, input: CreateNotificationInput)
       read: false,
       createdAt: new Date(),
    });
+   publish({ entity: 'notification', action: 'created', id });
    return id;
 }

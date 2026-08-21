@@ -23,6 +23,7 @@ import { rankAfter, firstRank, rankBetween } from './rank';
 import { ApiError } from './errors';
 import { dispatchNotification } from './notify';
 import { getCachedCatalogs } from './catalogs';
+import { publish } from './events';
 
 /** Teto default de linhas nas listagens (proteção; paginação por cursor fica p/ depois). */
 const DEFAULT_LIST_LIMIT = 500;
@@ -364,6 +365,7 @@ export async function createIssue(
       });
    });
 
+   publish({ entity: 'issue', action: 'created', id, actorEmail });
    return (await getIssue(db, id))!;
 }
 
@@ -439,6 +441,7 @@ export async function updateIssue(
       });
    }
 
+   publish({ entity: 'issue', action: 'updated', id, actorEmail });
    return getIssue(db, id);
 }
 
@@ -471,6 +474,7 @@ export async function deleteIssue(db: Db, id: string): Promise<boolean> {
       await tx.delete(issueContent).where(eq(issueContent.issueId, id));
       await tx.delete(issue).where(eq(issue.id, id));
    });
+   publish({ entity: 'issue', action: 'deleted', id });
    return true;
 }
 
@@ -495,6 +499,7 @@ export async function reorderIssue(
       .where(eq(issue.id, id))
       .returning({ id: issue.id });
    if (res.length === 0) return null;
+   publish({ entity: 'issue', action: 'updated', id });
    return getIssue(db, id);
 }
 
@@ -510,6 +515,7 @@ export async function addLabel(db: Db, id: string, labelId: string): Promise<Iss
    if (labelRows.length === 0) throw new ApiError(400, `Label '${labelId}' não existe`);
 
    await db.insert(issueLabel).values({ issueId: id, labelId }).onConflictDoNothing();
+   publish({ entity: 'issue', action: 'updated', id });
    return getIssue(db, id);
 }
 
@@ -517,5 +523,6 @@ export async function removeLabel(db: Db, id: string, labelId: string): Promise<
    await db
       .delete(issueLabel)
       .where(and(eq(issueLabel.issueId, id), eq(issueLabel.labelId, labelId)));
+   publish({ entity: 'issue', action: 'updated', id });
    return getIssue(db, id);
 }

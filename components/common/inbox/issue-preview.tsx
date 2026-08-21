@@ -9,6 +9,7 @@ import { getNotificationIcon } from '@/lib/notification-utils';
 import type { IssueDetail } from '@/mock-data/issue-details';
 import { adaptIssueDetail } from '@/lib/adapters-issue-detail';
 import { api } from '@/lib/client';
+import { ISSUE_CHANGED_EVENT } from '@/lib/use-live-sync';
 import { InboxItem } from '@/mock-data/inbox';
 import { useIssuesStore } from '@/store/issues-store';
 import { useNotificationsStore } from '@/store/notifications-store';
@@ -40,6 +41,7 @@ export default function IssuePreview({ notification, onMarkAsRead }: IssuePrevie
    const issueDetailId = issue?.id;
 
    const [detail, setDetail] = useState<IssueDetail | null>(null);
+   const [reloadKey, setReloadKey] = useState(0);
    useEffect(() => {
       if (!issueDetailId) {
          setDetail(null);
@@ -56,6 +58,17 @@ export default function IssuePreview({ notification, onMarkAsRead }: IssuePrevie
       return () => {
          active = false;
       };
+   }, [issueDetailId, reloadKey]);
+
+   // Realtime: refaz o fetch quando o SSE avisa que esta issue mudou (cross-usuário).
+   useEffect(() => {
+      if (!issueDetailId) return;
+      const onChanged = (e: Event) => {
+         const id = (e as CustomEvent<{ id?: string }>).detail?.id;
+         if (!id || id === issueDetailId) setReloadKey((k) => k + 1);
+      };
+      window.addEventListener(ISSUE_CHANGED_EVENT, onChanged);
+      return () => window.removeEventListener(ISSUE_CHANGED_EVENT, onChanged);
    }, [issueDetailId]);
 
    if (!notification) {

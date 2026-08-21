@@ -2,6 +2,7 @@ import { asc, eq } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { label as labelT, issueLabel, projectLabel } from '@/db/schema';
 import { ApiError } from './errors';
+import { publish } from './events';
 
 export interface LabelDto {
    id: string;
@@ -53,6 +54,7 @@ export async function createLabel(db: Db, input: CreateLabelInput): Promise<Labe
    if (existing) throw new ApiError(409, `Label '${id}' já existe`);
 
    await db.insert(labelT).values({ id, name, color: input.color.trim() });
+   publish({ entity: 'label', action: 'created', id });
    return (await getLabelRow(db, id).then((r) => r && toDto(r)))!;
 }
 
@@ -77,6 +79,7 @@ export async function updateLabel(
    if (Object.keys(next).length > 0) {
       await db.update(labelT).set(next).where(eq(labelT.id, id));
    }
+   publish({ entity: 'label', action: 'updated', id });
    return toDto({ ...existing, ...next });
 }
 
@@ -90,5 +93,6 @@ export async function deleteLabel(db: Db, id: string): Promise<boolean> {
       await tx.delete(projectLabel).where(eq(projectLabel.labelId, id));
       await tx.delete(labelT).where(eq(labelT.id, id));
    });
+   publish({ entity: 'label', action: 'deleted', id });
    return true;
 }

@@ -13,6 +13,7 @@ import {
 import { getOrCreateUser } from './users';
 import { sendEmail } from './integrations/mailer';
 import { ApiError } from './errors';
+import { publish } from './events';
 
 type TeamRow = typeof teamT.$inferSelect;
 
@@ -151,6 +152,7 @@ export async function createTeam(db: Db, input: CreateTeamInput): Promise<TeamDt
       color: input.color?.trim() || '#6e7bdb',
       issueSeq: 0,
    });
+   publish({ entity: 'team', action: 'created', id });
    return (await getTeam(db, id))!;
 }
 
@@ -168,6 +170,7 @@ export async function addTeamMember(db: Db, teamId: string, email: string): Prom
       .values({ teamId, userId: user.id, joined: true })
       .onConflictDoNothing()
       .returning();
+   if (inserted.length) publish({ entity: 'member', action: 'updated', id: user.id });
 
    // Convite por e-mail (best-effort): só dispara em inserção nova e quando o
    // remetente está configurado (CIRCLE_MAIL_FROM). Nunca quebra o fluxo.
@@ -189,6 +192,7 @@ export async function removeTeamMember(db: Db, teamId: string, userId: string): 
    await db
       .delete(teamMember)
       .where(and(eq(teamMember.teamId, teamId), eq(teamMember.userId, userId)));
+   publish({ entity: 'member', action: 'updated', id: userId });
 }
 
 export interface UpdateTeamInput {
@@ -210,6 +214,7 @@ export async function updateTeam(
    if (patch.icon !== undefined) set.icon = patch.icon;
    if (patch.color !== undefined) set.color = patch.color;
    if (Object.keys(set).length) await db.update(teamT).set(set).where(eq(teamT.id, id));
+   publish({ entity: 'team', action: 'updated', id });
    return getTeam(db, id);
 }
 
@@ -243,5 +248,6 @@ export async function deleteTeam(db: Db, id: string): Promise<boolean> {
 
    await db.delete(teamMember).where(eq(teamMember.teamId, id));
    await db.delete(teamT).where(eq(teamT.id, id));
+   publish({ entity: 'team', action: 'deleted', id });
    return true;
 }

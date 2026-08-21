@@ -7,6 +7,7 @@ import { isAdmin } from './auth';
 import { listIssues, type IssueDto } from './issues';
 import { listProjects, type ProjectDto } from './projects';
 import { ApiError } from './errors';
+import { publish } from './events';
 
 export interface ViewFilter {
    statusCategories?: string[];
@@ -102,6 +103,7 @@ export async function createView(
       createdAt: now,
       updatedAt: now,
    });
+   publish({ entity: 'view', action: 'created', id, actorEmail: ownerEmail });
    return (await getView(db, id))!;
 }
 
@@ -139,12 +141,14 @@ export async function updateView(
    if (patch.icon !== undefined) set.icon = patch.icon;
    if (patch.filter !== undefined) set.filter = JSON.stringify(patch.filter);
    await db.update(savedView).set(set).where(eq(savedView.id, id));
+   publish({ entity: 'view', action: 'updated', id, actorEmail });
    return getView(db, id);
 }
 
 export async function deleteView(db: Db, id: string, actorEmail: string): Promise<boolean> {
    if (!(await assertViewOwner(db, id, actorEmail))) return false;
    await db.delete(savedView).where(eq(savedView.id, id));
+   publish({ entity: 'view', action: 'deleted', id, actorEmail });
    return true;
 }
 

@@ -3,6 +3,7 @@
 import type { IssueDetail } from '@/mock-data/issue-details';
 import { adaptIssueDetail } from '@/lib/adapters-issue-detail';
 import { api } from '@/lib/client';
+import { ISSUE_CHANGED_EVENT } from '@/lib/use-live-sync';
 import { useIssuesStore } from '@/store/issues-store';
 import { Paperclip, Plus, SmilePlus } from 'lucide-react';
 import Link from 'next/link';
@@ -48,6 +49,18 @@ export default function IssueDetails() {
          active = false;
       };
    }, [issue, reloadKey]);
+
+   // Realtime: quando o SSE avisa que esta issue mudou (comment/reaction/relation de
+   // OUTRO usuário), refaz o fetch do detail/feed. Sem isso, o painel aberto fica stale.
+   useEffect(() => {
+      if (!issue) return;
+      const onChanged = (e: Event) => {
+         const id = (e as CustomEvent<{ id?: string }>).detail?.id;
+         if (!id || id === issue.id) setReloadKey((k) => k + 1);
+      };
+      window.addEventListener(ISSUE_CHANGED_EVENT, onChanged);
+      return () => window.removeEventListener(ISSUE_CHANGED_EVENT, onChanged);
+   }, [issue]);
 
    if (!issue) {
       return (

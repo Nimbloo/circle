@@ -2,6 +2,7 @@ import { eq, count } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { appUser, teamMember } from '@/db/schema';
 import { ApiError } from './errors';
+import { publish } from './events';
 
 type UserRow = typeof appUser.$inferSelect;
 
@@ -97,5 +98,6 @@ export async function updateMemberRole(
       .limit(1);
    if (existing.length === 0) return null;
    await db.update(appUser).set({ role, updatedAt: new Date() }).where(eq(appUser.id, id));
+   publish({ entity: 'member', action: 'updated', id });
    return getMember(db, id);
 }

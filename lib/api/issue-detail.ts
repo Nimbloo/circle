@@ -14,6 +14,7 @@ import {
 import { getOrCreateUser } from './users';
 import { dispatchNotification } from './notify';
 import { ApiError } from './errors';
+import { publish } from './events';
 import type { UserRef } from './issues';
 
 function userRef(
@@ -150,6 +151,7 @@ export async function addRelation(
    if (existing.length === 0) {
       await db.insert(issueRelation).values({ id: randomUUID(), issueId, relatedId, kind });
    }
+   publish({ entity: 'issue', action: 'updated', id: issueId });
    return getIssueDetail(db, issueId);
 }
 
@@ -169,6 +171,7 @@ export async function removeRelation(
             eq(issueRelation.kind, kind)
          )
       );
+   publish({ entity: 'issue', action: 'updated', id: issueId });
    return getIssueDetail(db, issueId);
 }
 
@@ -255,6 +258,7 @@ export async function addComment(
    }
    await Promise.all(notifications);
 
+   publish({ entity: 'comment', action: 'created', id, actorEmail });
    return { id, author: userRef(author), body, createdAt: now.toISOString(), reactions: [] };
 }
 
@@ -274,6 +278,7 @@ export async function updateComment(
    const actor = await getOrCreateUser(db, actorEmail);
    if (c.authorId !== actor.id) throw new ApiError(403, 'Só o autor pode editar o comentário');
    await db.update(commentT).set({ body }).where(eq(commentT.id, commentId));
+   publish({ entity: 'comment', action: 'updated', id: commentId, actorEmail });
    const [users, reactions] = await Promise.all([
       loadUsers(db, [c.authorId]),
       reactionsByComment(db, [commentId]),
@@ -303,6 +308,7 @@ export async function deleteComment(
    if (c.authorId !== actor.id) throw new ApiError(403, 'Só o autor pode excluir o comentário');
    await db.delete(commentReaction).where(eq(commentReaction.commentId, commentId));
    await db.delete(commentT).where(eq(commentT.id, commentId));
+   publish({ entity: 'comment', action: 'deleted', id: commentId, actorEmail });
    return true;
 }
 
@@ -348,6 +354,7 @@ export async function addReaction(
       .insert(commentReaction)
       .values({ commentId, emoji, userId: user.id })
       .onConflictDoNothing();
+   publish({ entity: 'comment', action: 'updated', id: commentId, actorEmail });
 }
 
 export async function removeReaction(
@@ -366,4 +373,5 @@ export async function removeReaction(
             eq(commentReaction.userId, user.id)
          )
       );
+   publish({ entity: 'comment', action: 'updated', id: commentId, actorEmail });
 }

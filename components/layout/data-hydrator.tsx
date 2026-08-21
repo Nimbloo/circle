@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useIssuesStore } from '@/store/issues-store';
 import { useNotificationsStore } from '@/store/notifications-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { useLiveSync } from '@/lib/use-live-sync';
 
 /**
  * Hidrata os stores de domínio a partir da API no mount (client-side).
@@ -11,6 +12,9 @@ import { useWorkspaceStore } from '@/store/workspace-store';
  * o board mostra o estado de falha com botão "Tentar de novo". O estado inicial
  * (mock) é mantido como fallback de render.
  * O inbox depende das issues (o preview reusa a issue viva), então hidrata depois.
+ *
+ * Também abre o canal SSE (`useLiveSync`) para sincronização em tempo real: quando
+ * OUTRO usuário muda algo, os stores afetados re-hidratam em ~1s sem refresh manual.
  */
 export function DataHydrator() {
    useEffect(() => {
@@ -20,5 +24,6 @@ export function DataHydrator() {
          .hydrate()
          .then(() => useNotificationsStore.getState().hydrate());
    }, []);
+   useLiveSync();
    return null;
 }

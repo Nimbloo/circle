@@ -18,6 +18,7 @@ import {
    appUser,
 } from '@/db/schema';
 import { ApiError } from './errors';
+import { publish } from './events';
 import type { UserRef } from './issues';
 
 type ProjectRow = typeof projectT.$inferSelect;
@@ -245,6 +246,7 @@ export async function createProject(db: Db, input: CreateProjectInput): Promise<
             .onConflictDoNothing();
       }
    });
+   publish({ entity: 'project', action: 'created', id });
    return (await getProject(db, id))!;
 }
 
@@ -302,6 +304,7 @@ export async function updateProject(
          }
       }
    });
+   publish({ entity: 'project', action: 'updated', id });
    return getProject(db, id);
 }
 
@@ -324,5 +327,6 @@ export async function deleteProject(db: Db, id: string): Promise<boolean> {
       await tx.delete(initiativeProject).where(eq(initiativeProject.projectId, id));
       await tx.delete(projectT).where(eq(projectT.id, id));
    });
+   publish({ entity: 'project', action: 'deleted', id });
    return true;
 }

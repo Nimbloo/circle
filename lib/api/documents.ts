@@ -6,6 +6,7 @@ import { getOrCreateUser } from './users';
 import { isAdmin } from './auth';
 import type { UserRef } from './issues';
 import { ApiError } from './errors';
+import { publish } from './events';
 
 export interface DocumentDto {
    id: string;
@@ -82,6 +83,7 @@ export async function createFolder(
    await db
       .insert(documentFolder)
       .values({ id, teamId: input.teamId, name: input.name, icon: input.icon ?? null });
+   publish({ entity: 'document', action: 'created', id });
    return { id, teamId: input.teamId, name: input.name, icon: input.icon ?? null, documents: [] };
 }
 
@@ -104,6 +106,7 @@ export async function createDocument(
       createdAt: now,
       updatedAt: now,
    });
+   publish({ entity: 'document', action: 'created', id, actorEmail: creatorEmail });
    return {
       id,
       folderId: input.folderId,
@@ -152,6 +155,7 @@ export async function updateDocument(
       .set(set)
       .where(eq(teamDocument.id, id))
       .returning({ id: teamDocument.id });
+   if (res.length > 0) publish({ entity: 'document', action: 'updated', id, actorEmail });
    return res.length > 0;
 }
 
@@ -161,5 +165,6 @@ export async function deleteDocument(db: Db, id: string, actorEmail: string): Pr
       .delete(teamDocument)
       .where(eq(teamDocument.id, id))
       .returning({ id: teamDocument.id });
+   if (res.length > 0) publish({ entity: 'document', action: 'deleted', id, actorEmail });
    return res.length > 0;
 }
