@@ -10,11 +10,6 @@ export type UserRow = typeof appUser.$inferSelect;
 
 const BCRYPT_ROUNDS = 10;
 
-/** URL do avatar gerado (dicebear) a partir do slug — default de quem não subiu foto. */
-export function dicebearAvatarUrl(slug: string): string {
-   return `https://api.dicebear.com/9.x/glass/svg?seed=${encodeURIComponent(slug)}`;
-}
-
 /** Token de convite forte (32 bytes → 64 chars hex, cabe no varchar(64)). */
 function generateInviteToken(): string {
    return randomBytes(32).toString('hex');
@@ -112,7 +107,7 @@ async function provisionUser(db: Db, normalizedEmail: string, role: string): Pro
             ...baseRow,
             id: randomUUID(),
             slug,
-            avatarUrl: dicebearAvatarUrl(slug),
+            avatarUrl: null, // sem foto → UI mostra iniciais coloridas (AvatarFallback)
          })
          .onConflictDoNothing()
          .returning();

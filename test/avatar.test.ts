@@ -85,16 +85,14 @@ describe('avatar service (setAvatar/getAvatar/deleteAvatar)', () => {
       ).rejects.toMatchObject({ status: 413 });
    });
 
-   it('deleteAvatar remove a foto e reverte avatar_url pro dicebear', async () => {
+   it('deleteAvatar remove a foto e zera avatar_url (→ null, UI mostra iniciais)', async () => {
       const db = await makeTestDb();
       const uid = await seedUser(db, { name: 'Ana', email: 'ana@nimbloo.ai' });
       await setAvatar(db, uid, PNG_DATA_URL, 'image/png');
 
-      const url = await deleteAvatar(db, uid);
-      expect(url).toContain('api.dicebear.com');
-      expect(url).toContain('seed=ana'); // slug do e-mail
+      await deleteAvatar(db, uid);
       expect(await getAvatar(db, uid)).toBeNull();
-      expect(await avatarUrlOf(db, uid)).toBe(url);
+      expect(await avatarUrlOf(db, uid)).toBeNull();
    });
 
    it('setAvatar em usuário inexistente falha (404)', async () => {

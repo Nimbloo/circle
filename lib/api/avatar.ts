@@ -2,7 +2,6 @@ import { eq } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { appUser, userAvatar } from '@/db/schema';
 import { ApiError } from './errors';
-import { dicebearAvatarUrl } from './users';
 
 /**
  * Foto de perfil (avatar) self-contained: a imagem vive no banco (`user_avatar`,
@@ -112,20 +111,20 @@ export async function getAvatar(db: Db, userId: string): Promise<AvatarBytes | n
 }
 
 /**
- * Remove a foto de perfil e reverte o `avatar_url` pro avatar gerado (dicebear),
- * derivado do slug do usuário. Retorna a `avatarUrl` resultante (a do dicebear).
+ * Remove a foto de perfil: apaga os bytes e zera o `avatar_url` (→ null). Sem foto,
+ * a UI renderiza as iniciais coloridas do usuário (AvatarFallback).
  */
-export async function deleteAvatar(db: Db, userId: string): Promise<string> {
+export async function deleteAvatar(db: Db, userId: string): Promise<void> {
    const rows = await db
-      .select({ slug: appUser.slug })
+      .select({ id: appUser.id })
       .from(appUser)
       .where(eq(appUser.id, userId))
       .limit(1);
    if (rows.length === 0) throw new ApiError(404, 'Usuário não encontrado');
 
    await db.delete(userAvatar).where(eq(userAvatar.userId, userId));
-
-   const avatarUrl = dicebearAvatarUrl(rows[0].slug);
-   await db.update(appUser).set({ avatarUrl, updatedAt: new Date() }).where(eq(appUser.id, userId));
-   return avatarUrl;
+   await db
+      .update(appUser)
+      .set({ avatarUrl: null, updatedAt: new Date() })
+      .where(eq(appUser.id, userId));
 }
