@@ -17,7 +17,9 @@ const { auth } = NextAuth(authConfig);
  */
 const PUBLIC_PAGE_PREFIXES = ['/login', '/signup'];
 const PUBLIC_API_EXACT = new Set(['/api/healthz', '/api/readyz']);
-const PUBLIC_API_PREFIXES = ['/api/auth'];
+// `/api/auth` = NextAuth; `/api/v1/integrations/sentry` = webhooks/UI-components do Sentry,
+// autenticados por assinatura HMAC (Sentry-Hook-Signature), não por sessão.
+const PUBLIC_API_PREFIXES = ['/api/auth', '/api/v1/integrations/sentry'];
 
 function unauthorized(): Response {
    return new Response(JSON.stringify({ title: 'Unauthorized', status: 401 }), {
