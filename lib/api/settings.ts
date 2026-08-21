@@ -51,10 +51,47 @@ const NotificationsSchema = z
    })
    .strict();
 
+/**
+ * Preferências das telas de Settings sem subsistema dedicado (Preferences,
+ * Code & reviews, AI & Agents, Agent personalization). Espelha `Preferences`
+ * de store/preferences-store.ts. `.strict()` rejeita chaves desconhecidas.
+ * Selects guardam o rótulo (string); toggles guardam boolean.
+ */
+const PreferencesSchema = z
+   .object({
+      defaultHomeView: z.string().optional(),
+      displayNames: z.string().optional(),
+      firstDayOfWeek: z.string().optional(),
+      convertEmoticons: z.boolean().optional(),
+      sendCommentsOn: z.string().optional(),
+      fontSize: z.string().optional(),
+      pointerCursors: z.boolean().optional(),
+      underlineLinks: z.boolean().optional(),
+      autoAssignSelf: z.boolean().optional(),
+      assignSelfOnStart: z.boolean().optional(),
+      codeReviewsEnabled: z.boolean().optional(),
+      autoConvertDrafts: z.boolean().optional(),
+      mergeStrategy: z.string().optional(),
+      codeTheme: z.string().optional(),
+      codeFont: z.string().optional(),
+      reviewComments: z.string().optional(),
+      reviewRequests: z.boolean().optional(),
+      githubTeamRequests: z.boolean().optional(),
+      checksMergeQueue: z.boolean().optional(),
+      requireSignedCommits: z.boolean().optional(),
+      gitAttachmentFormat: z.string().optional(),
+      gitBranchCopyMoveStarted: z.boolean().optional(),
+      openCodingToolMoveStarted: z.boolean().optional(),
+      aiUsageFeedback: z.boolean().optional(),
+      agentGuidance: z.string().max(8000).optional(),
+   })
+   .strict();
+
 export const SettingsSchema = z
    .object({
       theme: ThemeSchema.optional(),
       notifications: NotificationsSchema.optional(),
+      preferences: PreferencesSchema.optional(),
    })
    .strict();
 

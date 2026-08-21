@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { useStatuses } from '@/store/catalog-store';
+import { useLabels, useStatuses } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import {
    Bot,
@@ -48,6 +48,7 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
    const teams = useWorkspaceStore((s) => s.teams);
    const getCyclesByTeam = useWorkspaceStore((s) => s.getCyclesByTeam);
    const status = useStatuses();
+   const labels = useLabels();
    const team = teams.find((candidate) => candidate.id === teamId);
 
    if (!team) {
@@ -89,31 +90,23 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
                         icon={<Settings className="size-4" />}
                         title="General"
                         description="Name, identifier, timezone, estimates, and broader settings"
-                        chevron
-                        onClick={() => {}}
                      />
                      <SettingsRow
                         icon={<Lock className="size-4" />}
                         title="Access and permissions"
                         description="Manage team access and who in the team can take certain actions"
-                        chevron
-                        onClick={() => {}}
                      />
                      <SettingsRow
                         icon={<Users className="size-4" />}
                         title="Members"
                         description="Manage team members"
                         trailing={<span>{team.members.length} members</span>}
-                        chevron
-                        onClick={() => {}}
                      />
                      <SettingsRow
                         icon={<Zap className="size-4" />}
                         title="Slack notifications"
                         description="Broadcast notifications to Slack"
                         trailing={<span>Off</span>}
-                        chevron
-                        onClick={() => {}}
                      />
                   </SettingsCard>
                </SettingsSection>
@@ -124,25 +117,19 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
                         icon={<Tag className="size-4" />}
                         title="Issue labels"
                         description="Labels available to this team's issues"
-                        trailing={<span>7 labels</span>}
-                        chevron
-                        onClick={() => {}}
+                        trailing={<span>{labels.length} labels</span>}
                      />
                      <SettingsRow
                         icon={<FileText className="size-4" />}
                         title="Templates"
                         description="Pre-filled templates for issues, documents, and projects"
-                        trailing={<span>3 templates</span>}
-                        chevron
-                        onClick={() => {}}
+                        trailing={<span>None</span>}
                      />
                      <SettingsRow
                         icon={<Repeat className="size-4" />}
                         title="Recurring issues"
                         description="Automatically create issues on a schedule"
                         trailing={<span>None</span>}
-                        chevron
-                        onClick={() => {}}
                      />
                   </SettingsCard>
                </SettingsSection>
@@ -154,31 +141,23 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
                         title="Issue statuses"
                         description="Customize the statuses issues go through"
                         trailing={<span>{status.length} statuses</span>}
-                        chevron
-                        onClick={() => {}}
                      />
                      <SettingsRow
                         icon={<Workflow className="size-4" />}
                         title="Workflows & automations"
                         description="Manage issue automations, git workflows and other workflows"
-                        chevron
-                        onClick={() => {}}
                      />
                      <SettingsRow
                         icon={<Radar className="size-4" />}
                         title="Triage"
                         description="Streamline how you handle requests from outside your team"
                         trailing={<span>Enabled</span>}
-                        chevron
-                        onClick={() => {}}
                      />
                      <SettingsRow
                         icon={<RefreshCcw className="size-4" />}
                         title="Cycles"
                         description="Focus your team over short, time-boxed windows"
                         trailing={<span>{cycles.length > 0 ? 'Every 2 weeks' : 'Off'}</span>}
-                        chevron
-                        onClick={() => {}}
                      />
                   </SettingsCard>
                </SettingsSection>
@@ -189,38 +168,28 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
                         icon={<Bot className="size-4" />}
                         title="Team agents"
                         description="Add guidance for how agents should operate within this team"
-                        chevron
-                        onClick={() => {}}
                      />
                      <SettingsRow
                         icon={<Sparkles className="size-4" />}
                         title="Agent skills"
                         description="Agent skills shared with this team"
                         trailing={<span>None</span>}
-                        chevron
-                        onClick={() => {}}
                      />
                      <SettingsRow
                         icon={<RefreshCcw className="size-4" />}
                         title="Loops"
                         description="Automated agent workflows that run on a schedule or when an issue is updated"
                         trailing={<span>None</span>}
-                        chevron
-                        onClick={() => {}}
                      />
                      <SettingsRow
                         icon={<Zap className="size-4" />}
                         title="Project updates"
                         description="Automatically generate updates using recent activity and defined rules"
-                        chevron
-                        onClick={() => {}}
                      />
                      <SettingsRow
                         icon={<FileText className="size-4" />}
                         title="Resolved thread summaries"
                         description="Automatically generate summaries for resolved threads"
-                        chevron
-                        onClick={() => {}}
                      />
                   </SettingsCard>
                </SettingsSection>

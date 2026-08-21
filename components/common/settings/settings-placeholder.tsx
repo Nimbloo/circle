@@ -1,7 +1,6 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { PlaceholderConfig } from './placeholder-sections';
 
 /** Hand-drawn-style dashed smiley used by the empty states. */
@@ -62,19 +61,16 @@ export default function SettingsPlaceholder({ config }: { config: PlaceholderCon
                <p className="text-sm text-muted-foreground mt-1">{config.description}</p>
             )}
 
-            <div className="flex items-center justify-between gap-3 mt-6">
-               <Input placeholder="Filter by name..." className="w-72 h-8" />
-               {config.actionLabel && (
-                  <div className="flex items-center gap-2">
-                     <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                        Soon
-                     </span>
-                     <Button size="xs" disabled>
-                        {config.actionLabel}
-                     </Button>
-                  </div>
-               )}
-            </div>
+            {config.actionLabel && (
+               <div className="flex items-center justify-end gap-2 mt-6">
+                  <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                     Soon
+                  </span>
+                  <Button size="xs" disabled>
+                     {config.actionLabel}
+                  </Button>
+               </div>
+            )}
 
             <div className="flex flex-col items-center justify-center gap-5 py-32">
                <DashedSmiley />

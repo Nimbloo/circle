@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { filterIssuesForView, filterProjectsForView } from '@/mock-data/views';
+import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { BarChart3, MoreHorizontal, Star } from 'lucide-react';
@@ -11,12 +12,17 @@ import { useParams } from 'next/navigation';
 export default function Header() {
    const { viewId } = useParams<{ orgId: string; viewId: string }>();
    const view = useWorkspaceStore((s) => s.getViewById(viewId));
+   const liveIssues = useIssuesStore((s) => s.issues);
+   const liveProjects = useWorkspaceStore((s) => s.projects);
    const { openPanel, togglePanel } = useRightPanelStore();
 
    if (!view) return null;
 
+   // Conta contra os stores vivos (hidratados da API), não os mocks.
    const count =
-      view.type === 'issue' ? filterIssuesForView(view).length : filterProjectsForView(view).length;
+      view.type === 'issue'
+         ? filterIssuesForView(view, liveIssues).length
+         : filterProjectsForView(view, liveProjects).length;
 
    return (
       <div className="w-full flex flex-col">

@@ -4,7 +4,7 @@ import { applyIssueFilters } from '@/components/common/issues/issue-filter-colum
 import { IssueFilterBar } from '@/components/common/issues/issue-filter-bar';
 import { GroupedIssuesView } from '@/components/common/issues/grouped-issues-view';
 import { InsightsPanel } from '@/components/common/issues/insights-panel';
-import { SearchIssues } from '@/components/common/issues/search-issues';
+import { IssueLine } from '@/components/common/issues/issue-line';
 import { BreakdownPanel } from './breakdown-panel';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
@@ -41,11 +41,36 @@ export default function MyIssues() {
       [scopedIssues, filters]
    );
 
+   // Busca escopada ao tab + filtros ativos (não a global) — coerente com o
+   // contrato "My issues" desta tela. Casa título/identifier, como searchIssues.
+   const searchedIssues = useMemo(() => {
+      if (!isSearching) return [];
+      const q = searchQuery.trim().toLowerCase();
+      return displayedIssues.filter(
+         (i) => i.title.toLowerCase().includes(q) || i.identifier.toLowerCase().includes(q)
+      );
+   }, [isSearching, searchQuery, displayedIssues]);
+
    if (isSearching) {
       return (
          <div className="w-full h-full">
             <div className="px-6 mb-6">
-               <SearchIssues />
+               {searchedIssues.length > 0 ? (
+                  <div className="border rounded-md mt-4">
+                     <div className="py-2 px-4 border-b bg-muted/50">
+                        <h3 className="text-sm font-medium">Results ({searchedIssues.length})</h3>
+                     </div>
+                     <div className="divide-y">
+                        {searchedIssues.map((issue) => (
+                           <IssueLine key={issue.id} issue={issue} layoutId={false} />
+                        ))}
+                     </div>
+                  </div>
+               ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                     No results found for &quot;{searchQuery}&quot;
+                  </div>
+               )}
             </div>
          </div>
       );

@@ -2,7 +2,6 @@
 
 import { StatusCategory } from '@/mock-data/status';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { Plus } from 'lucide-react';
 import { useMemo } from 'react';
 import { SettingsShell } from './shared';
 
@@ -52,11 +51,8 @@ export default function ProjectStatusesSettings() {
          <div className="rounded-lg border bg-container overflow-hidden">
             {groups.map((group) => (
                <div key={group.label}>
-                  <div className="flex items-center justify-between px-4 py-2 bg-accent/30 border-y first:border-t-0 border-border/50">
+                  <div className="flex items-center px-4 py-2 bg-accent/30 border-y first:border-t-0 border-border/50">
                      <span className="text-sm text-muted-foreground">{group.label}</span>
-                     <button className="text-muted-foreground hover:text-foreground transition-colors">
-                        <Plus className="size-3.5" />
-                     </button>
                   </div>
                   {group.statuses.length === 0 && (
                      <div className="px-4 py-3 text-xs text-muted-foreground">No statuses</div>

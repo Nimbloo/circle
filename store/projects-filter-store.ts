@@ -1,32 +1,13 @@
 'use client';
 
-import { parseAsArrayOf, parseAsString, parseAsStringLiteral, useQueryStates } from 'nuqs';
-
-export type ProjectsSort =
-   | 'title-asc'
-   | 'title-desc'
-   | 'date-asc'
-   | 'date-desc'
-   | 'status-asc'
-   | 'status-desc';
-
-const SORTS: ProjectsSort[] = [
-   'title-asc',
-   'title-desc',
-   'date-asc',
-   'date-desc',
-   'status-asc',
-   'status-desc',
-];
+import { parseAsArrayOf, parseAsString, useQueryStates } from 'nuqs';
 
 export interface ProjectsFilterState {
    filters: {
       health: string[]; // health ids
       priority: string[]; // priority ids
    };
-   sort: ProjectsSort;
 
-   setSort: (sort: ProjectsSort) => void;
    setFilter: (type: 'health' | 'priority', ids: string[]) => void;
    toggleFilter: (type: 'health' | 'priority', id: string) => void;
    clearFilters: () => void;
@@ -39,10 +20,9 @@ export interface ProjectsFilterState {
 const parsers = {
    health: parseAsArrayOf(parseAsString).withDefault([]),
    priority: parseAsArrayOf(parseAsString).withDefault([]),
-   sort: parseAsStringLiteral(SORTS).withDefault('title-asc'),
 };
 
-/** Projects page filters + sorting, URL-synced via nuqs (?health=…&priority=…&sort=…). */
+/** Projects page filters, URL-synced via nuqs (?health=…&priority=…). Sort lives in Display Options. */
 export function useProjectsFilterStore(): ProjectsFilterState {
    const [state, setState] = useQueryStates(parsers, { history: 'replace' });
 
@@ -50,9 +30,7 @@ export function useProjectsFilterStore(): ProjectsFilterState {
 
    return {
       filters,
-      sort: state.sort,
 
-      setSort: (sort) => setState({ sort: sort === 'title-asc' ? null : sort }),
       setFilter: (type, ids) => setState({ [type]: ids.length > 0 ? ids : null }),
       toggleFilter: (type, id) => {
          const current = filters[type];

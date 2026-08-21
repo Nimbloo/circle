@@ -95,9 +95,15 @@ function issueQuery(opts: IssueListOptions = {}): string {
    return s ? `?${s}` : '';
 }
 
-/** `api.me()` lê o perfil; `api.me.update(...)` faz PATCH parcial (name/timezone). */
+/**
+ * `api.me()` lê o perfil; `.update(...)` faz PATCH parcial (name/timezone);
+ * `.uploadAvatar/.removeAvatar` gerenciam a foto de perfil (retornam o MeDto novo).
+ */
 const me = Object.assign(() => get<MeDto>('/me'), {
    update: (body: { name?: string; timezone?: string | null }) => patch<MeDto>('/me', body),
+   uploadAvatar: (dataUrl: string, contentType: string) =>
+      post<MeDto>('/me/avatar', { dataUrl, contentType }),
+   removeAvatar: () => del<MeDto>('/me/avatar'),
 });
 
 export const api = {

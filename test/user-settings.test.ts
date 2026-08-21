@@ -77,6 +77,29 @@ describe('SettingsSchema (closed shape)', () => {
    it('rejects unknown keys nested under theme', () => {
       expect(() => SettingsSchema.parse({ theme: { injected: true } })).toThrow();
    });
+
+   it('accepts the preferences slice (selects as strings, toggles as booleans)', () => {
+      const blob = {
+         preferences: {
+            defaultHomeView: 'Inbox',
+            fontSize: 'Large',
+            pointerCursors: false,
+            underlineLinks: true,
+            codeReviewsEnabled: true,
+            mergeStrategy: 'Rebase and merge',
+            agentGuidance: 'Be concise.',
+         },
+      };
+      expect(() => SettingsSchema.parse(blob)).not.toThrow();
+   });
+
+   it('rejects unknown keys nested under preferences', () => {
+      expect(() => SettingsSchema.parse({ preferences: { injected: true } })).toThrow();
+   });
+
+   it('rejects a wrong-typed preference (boolean where a string is expected)', () => {
+      expect(() => SettingsSchema.parse({ preferences: { fontSize: true } })).toThrow();
+   });
 });
 
 describe('updateProfile', () => {

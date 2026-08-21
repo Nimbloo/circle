@@ -15,24 +15,17 @@ import { health as allHealth } from '@/mock-data/projects';
 import { usePriorities } from '@/store/catalog-store';
 import { useProjectsFilterStore } from '@/store/projects-filter-store';
 import { useState } from 'react';
-import {
-   ArrowUpDown,
-   BarChart3,
-   CheckIcon,
-   ChevronRight,
-   HeartPulse,
-   ListFilter,
-} from 'lucide-react';
+import { BarChart3, CheckIcon, ChevronRight, HeartPulse, ListFilter } from 'lucide-react';
 
-type FilterType = 'health' | 'priority' | 'sort';
+// Sort lives in Display Options (Ordering); the filter popover is filters-only.
+type FilterType = 'health' | 'priority';
 
 export function Filter() {
    const [open, setOpen] = useState(false);
    const [active, setActive] = useState<FilterType | null>(null);
    const priorities = usePriorities();
 
-   const { filters, sort, toggleFilter, clearFilters, getActiveFiltersCount, setSort } =
-      useProjectsFilterStore();
+   const { filters, toggleFilter, clearFilters, getActiveFiltersCount } = useProjectsFilterStore();
 
    return (
       <Popover open={open} onOpenChange={setOpen}>
@@ -85,16 +78,6 @@ export function Filter() {
                               )}
                               <ChevronRight className="size-4" />
                            </div>
-                        </CommandItem>
-                        <CommandItem
-                           onSelect={() => setActive('sort')}
-                           className="flex items-center justify-between cursor-pointer"
-                        >
-                           <span className="flex items-center gap-2">
-                              <ArrowUpDown className="size-4 text-muted-foreground" />
-                              Sort by
-                           </span>
-                           <ChevronRight className="size-4" />
                         </CommandItem>
                      </CommandGroup>
                      {getActiveFiltersCount() > 0 && (
@@ -182,71 +165,6 @@ export function Filter() {
                               {filters.priority.includes(p.id) && <CheckIcon size={16} />}
                            </CommandItem>
                         ))}
-                     </CommandGroup>
-                  </CommandList>
-               </Command>
-            ) : active === 'sort' ? (
-               <Command>
-                  <div className="flex items-center border-b p-2">
-                     <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-6"
-                        onClick={() => setActive(null)}
-                        aria-label="Back"
-                     >
-                        <ChevronRight className="size-4 rotate-180" />
-                     </Button>
-                     <span className="ml-2 font-medium">Sort by</span>
-                  </div>
-                  <CommandList>
-                     <CommandGroup heading="Title">
-                        <CommandItem
-                           onSelect={() => setSort('title-asc')}
-                           className="flex items-center justify-between"
-                        >
-                           A → Z{sort === 'title-asc' && <CheckIcon size={16} />}
-                        </CommandItem>
-                        <CommandItem
-                           onSelect={() => setSort('title-desc')}
-                           className="flex items-center justify-between"
-                        >
-                           Z → A{sort === 'title-desc' && <CheckIcon size={16} />}
-                        </CommandItem>
-                     </CommandGroup>
-                     <CommandSeparator />
-                     <CommandGroup heading="Targeted Date">
-                        <CommandItem
-                           onSelect={() => setSort('date-asc')}
-                           className="flex items-center justify-between"
-                        >
-                           Oldest to Newest
-                           {sort === 'date-asc' && <CheckIcon size={16} />}
-                        </CommandItem>
-                        <CommandItem
-                           onSelect={() => setSort('date-desc')}
-                           className="flex items-center justify-between"
-                        >
-                           Newest to Oldest
-                           {sort === 'date-desc' && <CheckIcon size={16} />}
-                        </CommandItem>
-                     </CommandGroup>
-                     <CommandSeparator />
-                     <CommandGroup heading="Status">
-                        <CommandItem
-                           onSelect={() => setSort('status-asc')}
-                           className="flex items-center justify-between"
-                        >
-                           Lowest to Highest
-                           {sort === 'status-asc' && <CheckIcon size={16} />}
-                        </CommandItem>
-                        <CommandItem
-                           onSelect={() => setSort('status-desc')}
-                           className="flex items-center justify-between"
-                        >
-                           Highest to Lowest
-                           {sort === 'status-desc' && <CheckIcon size={16} />}
-                        </CommandItem>
                      </CommandGroup>
                   </CommandList>
                </Command>

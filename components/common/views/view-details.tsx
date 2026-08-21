@@ -6,6 +6,7 @@ import ProjectsList from '@/components/common/projects/projects-list';
 import { ProjectGroup } from '@/components/common/projects/projects';
 import { filterIssuesForView, filterProjectsForView, View } from '@/mock-data/views';
 import { useStatuses } from '@/store/catalog-store';
+import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useMemo } from 'react';
@@ -13,7 +14,9 @@ import { useMemo } from 'react';
 function IssueViewBody({ view }: { view: View }) {
    const { openPanel } = useRightPanelStore();
    const allStatus = useStatuses();
-   const issues = useMemo(() => filterIssuesForView(view), [view]);
+   // Filtra contra o store vivo (hidratado da API), não o mock vazio.
+   const liveIssues = useIssuesStore((s) => s.issues);
+   const issues = useMemo(() => filterIssuesForView(view, liveIssues), [view, liveIssues]);
 
    return (
       <div className="w-full h-full flex flex-col overflow-hidden">
@@ -37,8 +40,10 @@ function IssueViewBody({ view }: { view: View }) {
 }
 
 function ProjectViewBody({ view }: { view: View }) {
+   // Filtra contra o store vivo (hidratado da API), não o mock stale.
+   const liveProjects = useWorkspaceStore((s) => s.projects);
    const groups = useMemo<ProjectGroup[]>(() => {
-      const projects = filterProjectsForView(view);
+      const projects = filterProjectsForView(view, liveProjects);
       const byStatus = new Map<string, ProjectGroup>();
       for (const project of projects) {
          const key = project.status.id;
@@ -48,7 +53,7 @@ function ProjectViewBody({ view }: { view: View }) {
          byStatus.get(key)!.projects.push(project);
       }
       return [...byStatus.values()];
-   }, [view]);
+   }, [view, liveProjects]);
 
    return <ProjectsList groups={groups} />;
 }

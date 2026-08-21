@@ -71,6 +71,18 @@ export const userSettings = pgTable('user_settings', {
    updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
+// Foto de perfil (avatar) enviada pelo usuário, armazenada self-contained no
+// banco como data-URL base64. Servida por /api/v1/users/{id}/avatar; o
+// `app_user.avatar_url` aponta pra esse endpoint. Linha 1:1 com o usuário (PK = userId).
+export const userAvatar = pgTable('user_avatar', {
+   userId: varchar('user_id', { length: 36 })
+      .primaryKey()
+      .references(() => appUser.id),
+   data: text('data').notNull(), // imagem em base64 (payload do data-URL, sem o prefixo)
+   contentType: varchar('content_type', { length: 64 }).notNull(),
+   updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
 export const team = pgTable('team', {
    id: varchar('id', { length: 16 }).primaryKey(), // key curta (CORE, DESIGN)
    name: varchar('name', { length: 128 }).notNull(),

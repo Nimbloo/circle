@@ -1,33 +1,14 @@
 'use client';
 
 import { Team } from '@/mock-data/teams';
-import { parseAsArrayOf, parseAsString, parseAsStringLiteral, useQueryStates } from 'nuqs';
-
-export type TeamsSort =
-   | 'name-asc'
-   | 'name-desc'
-   | 'members-asc' //number of members
-   | 'members-desc'
-   | 'projects-asc' //number of projects
-   | 'projects-desc';
-
-const SORTS: TeamsSort[] = [
-   'name-asc',
-   'name-desc',
-   'members-asc',
-   'members-desc',
-   'projects-asc',
-   'projects-desc',
-];
+import { parseAsArrayOf, parseAsString, useQueryStates } from 'nuqs';
 
 export interface TeamsFilterState {
    filters: {
       membership: ('Joined' | 'Not-Joined')[];
       identifier: Team['id'][];
    };
-   sort: TeamsSort;
 
-   setSort: (sort: TeamsSort) => void;
    setFilter: (
       type: 'membership' | 'identifier',
       ids: 'Joined' | 'Not-Joined' | Team['id']
@@ -45,10 +26,9 @@ export interface TeamsFilterState {
 const parsers = {
    membership: parseAsArrayOf(parseAsString).withDefault([]),
    identifier: parseAsArrayOf(parseAsString).withDefault([]),
-   sort: parseAsStringLiteral(SORTS).withDefault('name-asc'),
 };
 
-/** Teams page filters + sorting, URL-synced via nuqs (?membership=…&identifier=…&sort=…). */
+/** Teams page filters, URL-synced via nuqs (?membership=…&identifier=…). Sort lives in Display Options. */
 export function useTeamsFilterStore(): TeamsFilterState {
    const [state, setState] = useQueryStates(parsers, { history: 'replace' });
 
@@ -59,9 +39,7 @@ export function useTeamsFilterStore(): TeamsFilterState {
 
    return {
       filters,
-      sort: state.sort,
 
-      setSort: (sort) => setState({ sort: sort === 'name-asc' ? null : sort }),
       setFilter: (type, ids) => setState({ [type]: [ids] }),
       toggleFilter: (type, id) => {
          const current = filters[type] as string[];

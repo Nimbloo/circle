@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { usePreferencesStore } from '@/store/preferences-store';
 import { RiSlackFill } from '@remixicon/react';
 import { Bot, MessageCircleQuestion, Radar, RefreshCcw, Sparkles, Terminal } from 'lucide-react';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
@@ -38,6 +39,8 @@ const AGENT_FEATURES = [
 
 /** Workspace "AI & Agents" settings. */
 export default function AiAgents() {
+   const usageFeedback = usePreferencesStore((s) => s.aiUsageFeedback);
+   const setPref = usePreferencesStore((s) => s.setPref);
    return (
       <SettingsShell
          title="AI & Agents"
@@ -48,7 +51,12 @@ export default function AiAgents() {
                <SettingsRow
                   title="Enable usage feedback"
                   description="Improve AI functionality by sharing usage feedback. Never used to train models"
-                  trailing={<Switch defaultChecked />}
+                  trailing={
+                     <Switch
+                        checked={usageFeedback}
+                        onCheckedChange={(v) => setPref('aiUsageFeedback', v)}
+                     />
+                  }
                />
             </SettingsCard>
          </SettingsSection>
@@ -73,9 +81,6 @@ export default function AiAgents() {
                         </>
                      }
                      description={feature.description}
-                     trailing={<span>Enabled</span>}
-                     chevron
-                     onClick={() => {}}
                   />
                ))}
             </SettingsCard>
@@ -100,17 +105,23 @@ export default function AiAgents() {
                   icon={<RiSlackFill className="size-4" />}
                   title="Slack"
                   description="Settings and additional guidance for creating issues from Slack messages"
-                  trailing={<span>Enabled</span>}
-                  chevron
-                  onClick={() => {}}
+                  muted
+                  trailing={
+                     <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        Soon
+                     </span>
+                  }
                />
                <SettingsRow
                   icon={<MessageCircleQuestion className="size-4" />}
                   title="Asks for Slack"
                   description="Settings and issue templates for creating issues from Asks for Slack"
-                  trailing={<span>Enabled</span>}
-                  chevron
-                  onClick={() => {}}
+                  muted
+                  trailing={
+                     <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        Soon
+                     </span>
+                  }
                />
             </SettingsCard>
          </SettingsSection>

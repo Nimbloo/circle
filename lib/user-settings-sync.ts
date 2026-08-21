@@ -18,6 +18,11 @@ import {
    useNotificationPrefsStore,
    type NotificationPrefs,
 } from '@/store/notification-prefs-store';
+import {
+   usePreferencesStore,
+   DEFAULT_PREFERENCES,
+   type Preferences,
+} from '@/store/preferences-store';
 
 interface ThemeSlice {
    mode: ThemeMode;
@@ -29,6 +34,7 @@ interface ThemeSlice {
 interface SettingsBlob {
    theme?: Partial<ThemeSlice>;
    notifications?: Partial<NotificationPrefs>;
+   preferences?: Partial<Preferences>;
 }
 
 let started = false;
@@ -45,6 +51,16 @@ function themeSlice(): ThemeSlice {
    };
 }
 
+function preferencesSlice(): Preferences {
+   const p = usePreferencesStore.getState();
+   // Só as chaves de `Preferences` (descarta setPref/hydratePrefs) e na ordem do default.
+   const slice = {} as Preferences;
+   (Object.keys(DEFAULT_PREFERENCES) as (keyof Preferences)[]).forEach((k) => {
+      (slice as unknown as Record<string, unknown>)[k] = p[k];
+   });
+   return slice;
+}
+
 function snapshot(): SettingsBlob {
    const n = useNotificationPrefsStore.getState();
    return {
@@ -56,6 +72,7 @@ function snapshot(): SettingsBlob {
          inviteAccepted: n.inviteAccepted,
          privacyLegal: n.privacyLegal,
       },
+      preferences: preferencesSlice(),
    };
 }
 
@@ -88,6 +105,7 @@ export async function startUserSettingsSync(): Promise<void> {
       const data = (await api.settings.get()) as SettingsBlob;
       applyTheme(data.theme);
       if (data.notifications) useNotificationPrefsStore.getState().hydratePrefs(data.notifications);
+      if (data.preferences) usePreferencesStore.getState().hydratePrefs(data.preferences);
    } catch {
       // sem sessão / sem settings ainda — segue com os defaults locais.
    }
@@ -95,4 +113,5 @@ export async function startUserSettingsSync(): Promise<void> {
    // Assina DEPOIS de aplicar, pra não regravar o que acabou de carregar.
    useThemeStore.subscribe(scheduleSave);
    useNotificationPrefsStore.subscribe(scheduleSave);
+   usePreferencesStore.subscribe(scheduleSave);
 }

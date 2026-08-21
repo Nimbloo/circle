@@ -1,17 +1,13 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { FileText, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
 
-/** Invented workspace issue templates. */
-const TEMPLATES = [
-   { name: 'Bug report intake', meta: 'Created by sophia.reed 1 year ago' },
-   { name: 'Component feature request', meta: 'Created by mason.carter 1 year ago' },
-   { name: 'Release checklist', meta: 'Updated by alex.zhang 2 years ago' },
-];
-
-/** Workspace "Issue templates" settings. */
+/**
+ * Workspace "Issue templates" settings. O subsistema de templates ainda não
+ * existe (sem backend) → estado vazio honesto + ação "Soon" desabilitada.
+ */
 export default function IssueTemplatesSettings() {
    return (
       <SettingsShell
@@ -21,7 +17,9 @@ export default function IssueTemplatesSettings() {
          <SettingsSection>
             <SettingsCard>
                <SettingsRow
-                  title={`${TEMPLATES.length} issue templates`}
+                  title="No issue templates yet"
+                  description="Em breve"
+                  muted
                   trailing={
                      <div className="flex items-center gap-2">
                         <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -39,15 +37,6 @@ export default function IssueTemplatesSettings() {
                      </div>
                   }
                />
-               {TEMPLATES.map((template) => (
-                  <SettingsRow
-                     key={template.name}
-                     icon={<FileText className="size-4" />}
-                     title={template.name}
-                     description={template.meta}
-                     onClick={() => {}}
-                  />
-               ))}
             </SettingsCard>
          </SettingsSection>
       </SettingsShell>

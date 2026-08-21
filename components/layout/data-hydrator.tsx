@@ -6,6 +6,7 @@ import { useNotificationsStore } from '@/store/notifications-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useLiveSync } from '@/lib/use-live-sync';
 import { startUserSettingsSync } from '@/lib/user-settings-sync';
+import { PreferencesApplier } from '@/components/layout/preferences-applier';
 
 /**
  * Hidrata os stores de domínio a partir da API no mount (client-side).
@@ -27,5 +28,5 @@ export function DataHydrator() {
          .then(() => useNotificationsStore.getState().hydrate());
    }, []);
    useLiveSync();
-   return null;
+   return <PreferencesApplier />;
 }

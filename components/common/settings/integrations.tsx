@@ -59,9 +59,14 @@ function StatusBadge({ status }: { status: NonNullable<Integration['status']> })
    );
 }
 
+/**
+ * Cartão do diretório de integrações. É read-only (`div`, não `button`): o fluxo
+ * de conexão real (OAuth de terceiros) ainda não existe — evita afordância falsa
+ * de clique. O status ("Enabled"/"Pre-installed") vem dos dados do diretório.
+ */
 function IntegrationCard({ integration }: { integration: Integration }) {
    return (
-      <button className="flex items-start gap-3 rounded-lg border bg-container p-3 text-left hover:bg-accent/50 transition-colors">
+      <div className="flex items-start gap-3 rounded-lg border bg-container p-3 text-left">
          <IntegrationIcon integration={integration} />
          <span className="flex flex-col gap-0.5 min-w-0">
             <span className="flex items-center gap-2">
@@ -72,7 +77,7 @@ function IntegrationCard({ integration }: { integration: Integration }) {
                {integration.description}
             </span>
          </span>
-      </button>
+      </div>
    );
 }
 
@@ -154,9 +159,9 @@ export default function Integrations() {
                      <h2 className="text-base font-medium">Enabled</h2>
                      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
                         {ENABLED_INTEGRATIONS.map((integration) => (
-                           <button
+                           <div
                               key={integration.id}
-                              className="flex flex-col items-start gap-2 rounded-lg border bg-container p-3 w-32 shrink-0 hover:bg-accent/50 transition-colors"
+                              className="flex flex-col items-start gap-2 rounded-lg border bg-container p-3 w-32 shrink-0"
                            >
                               <IntegrationIcon integration={integration} size={28} />
                               <span className="flex flex-col items-start">
@@ -165,7 +170,7 @@ export default function Integrations() {
                                  </span>
                                  <span className="text-[11px] text-muted-foreground">Enabled</span>
                               </span>
-                           </button>
+                           </div>
                         ))}
                      </div>
                   </section>
