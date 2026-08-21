@@ -99,7 +99,7 @@ function ProjectsSection({ initiative }: { initiative: Initiative }) {
                      <span className="hidden md:block w-12 shrink-0">
                         <Avatar className="size-5">
                            <AvatarImage
-                              src={project.lead?.avatarUrl}
+                              src={project.lead?.avatarUrl || undefined}
                               alt={project.lead?.name ?? ''}
                            />
                            <AvatarFallback className="text-[9px]">
@@ -175,7 +175,7 @@ function Overview({ initiative }: { initiative: Initiative }) {
                      <span className="inline-flex items-center gap-1.5">
                         <Avatar className="size-4">
                            <AvatarImage
-                              src={initiative.owner.avatarUrl}
+                              src={initiative.owner.avatarUrl || undefined}
                               alt={initiative.owner.name}
                            />
                            <AvatarFallback className="text-[8px]">
@@ -233,7 +233,7 @@ function Overview({ initiative }: { initiative: Initiative }) {
                      <span className="inline-flex items-center gap-1.5">
                         <Avatar className="size-4">
                            <AvatarImage
-                              src={initiative.owner.avatarUrl}
+                              src={initiative.owner.avatarUrl || undefined}
                               alt={initiative.owner.name}
                            />
                            <AvatarFallback className="text-[8px]">

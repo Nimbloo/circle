@@ -176,9 +176,13 @@ async function fetchPrPage(
 ): Promise<GitHubPr[]> {
    const res = await doFetch(
       `https://api.github.com/repos/${repo}/pulls?state=all&per_page=${PER_PAGE}&page=${page}`,
-      { headers: ghHeaders(token) }
+      { headers: ghHeaders(token), signal: AbortSignal.timeout(10_000) }
    );
-   if (!res.ok) return [];
+   if (!res.ok) {
+      // rate-limit/401/404 do GitHub: loga (senão o sync subconta em silêncio) e segue.
+      console.warn(`[circle] github /pulls ${repo} p${page} → HTTP ${res.status}`);
+      return [];
+   }
    const prs = await res.json();
    return Array.isArray(prs) ? (prs as GitHubPr[]) : [];
 }
@@ -197,6 +201,7 @@ async function fetchPrDetail(
    try {
       const res = await doFetch(`https://api.github.com/repos/${repo}/pulls/${prNumber}`, {
          headers: ghHeaders(token),
+         signal: AbortSignal.timeout(10_000),
       });
       if (!res.ok) return null;
       const d = (await res.json()) as GitHubPr;

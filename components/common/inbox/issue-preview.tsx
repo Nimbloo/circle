@@ -129,7 +129,7 @@ export default function IssuePreview({ notification, onMarkAsRead }: IssuePrevie
                      <div className="relative shrink-0">
                         <Avatar className="size-7">
                            <AvatarImage
-                              src={notification.user.avatarUrl}
+                              src={notification.user.avatarUrl || undefined}
                               alt={notification.user.name}
                            />
                            <AvatarFallback className="text-xs">
@@ -165,7 +165,7 @@ export default function IssuePreview({ notification, onMarkAsRead }: IssuePrevie
                         <span className="flex items-center gap-1.5">
                            <Avatar className="size-4">
                               <AvatarImage
-                                 src={displayIssue.assignee.avatarUrl}
+                                 src={displayIssue.assignee.avatarUrl || undefined}
                                  alt={displayIssue.assignee.name}
                               />
                               <AvatarFallback className="text-[9px]">

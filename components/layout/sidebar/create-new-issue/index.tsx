@@ -2,7 +2,6 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Heart } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { RiEditLine } from '@remixicon/react';
@@ -102,15 +101,7 @@ export function CreateNewIssue() {
          </DialogTrigger>
          <DialogContent className="w-full sm:max-w-[750px] p-0 shadow-xl top-[30%]">
             <DialogHeader>
-               <DialogTitle>
-                  <div className="flex items-center px-4 pt-4 gap-2">
-                     {/* Badge do time (visual, não-interativo) — era um <Button> sem ação. */}
-                     <span className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-sm">
-                        <Heart className="size-4 text-orange-500 fill-orange-500" />
-                        <span className="font-medium">CORE</span>
-                     </span>
-                  </div>
-               </DialogTitle>
+               <DialogTitle className="px-4 pt-4 text-base font-medium">New issue</DialogTitle>
             </DialogHeader>
 
             <div className="px-4 pb-0 space-y-3 w-full">

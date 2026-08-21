@@ -3,7 +3,6 @@
 import { cn } from '@/lib/utils';
 import { fetchReview } from '@/lib/adapters-reviews';
 import type { Review } from '@/mock-data/reviews';
-import { Link2, MoreHorizontal, Play, Star } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -75,9 +74,6 @@ export function ReviewDetail({ reviewId, section }: { reviewId: string; section:
             <span className="text-sm font-medium truncate">{review.title}</span>
             <DiffStat additions={review.additions} deletions={review.deletions} />
             <span className="flex-1" />
-            <Star className="size-3.5 text-muted-foreground shrink-0" />
-            <MoreHorizontal className="size-3.5 text-muted-foreground shrink-0" />
-            <Link2 className="size-3.5 text-muted-foreground shrink-0 hidden sm:block" />
          </div>
          <div className="flex items-center justify-between px-4 h-10 border-b shrink-0">
             <div className="flex items-center gap-1.5">
@@ -95,9 +91,6 @@ export function ReviewDetail({ reviewId, section }: { reviewId: string; section:
                      {tab.label}
                   </Link>
                ))}
-            </div>
-            <div className="flex items-center gap-1">
-               <Play className="size-3.5 text-muted-foreground" />
             </div>
          </div>
          <div className="flex-1 min-h-0 overflow-hidden">

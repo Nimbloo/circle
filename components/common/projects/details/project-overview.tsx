@@ -155,7 +155,7 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                               {project.lead && (
                                  <Avatar className="size-4">
                                     <AvatarImage
-                                       src={project.lead.avatarUrl}
+                                       src={project.lead.avatarUrl || undefined}
                                        alt={project.lead.name}
                                     />
                                     <AvatarFallback>{project.lead.name[0]}</AvatarFallback>
