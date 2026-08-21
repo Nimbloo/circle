@@ -9,13 +9,20 @@ WORKDIR /app
 
 FROM base AS deps
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+# Cache mount no store do pnpm: rebuilds só baixam pacote novo (sobrevive à invalidação
+# da camada e ao builder prune limitado). package-import-method=copy evita erro de
+# hardlink cross-device entre o store (cache mount) e o node_modules (layer).
+RUN --mount=type=cache,id=circle-pnpm-store,target=/pnpm/store \
+    pnpm install --frozen-lockfile --store-dir=/pnpm/store --config.package-import-method=copy
 
 FROM base AS build
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN pnpm build
+# Cache mount no .next/cache: compilação incremental do Next entre builds. (Não vai pro
+# runtime — standalone não copia .next/cache — é só aceleração de build.)
+RUN --mount=type=cache,id=circle-next-cache,target=/app/.next/cache \
+    pnpm build
 
 FROM node:22-alpine AS runtime
 WORKDIR /app
