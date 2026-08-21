@@ -24,7 +24,8 @@ import { useProjectUpdatesStore } from '@/store/project-updates-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
 import { Paperclip, Sparkles } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { ProjectSidePanel } from './project-side-panel';
 
 interface ProjectActivityProps {
@@ -75,16 +76,24 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
       () => allIssues.filter((issue) => issue.project?.id === projectId),
       [allIssues, projectId]
    );
-   const { postedUpdates, postUpdate } = useProjectUpdatesStore();
+   const { postedUpdates, postUpdate, removeUpdate } = useProjectUpdatesStore();
    const [mode, setMode] = useState<'comment' | 'update'>('update');
    const [health, setHealth] = useState<ProjectUpdateHealth>('on-track');
    const [text, setText] = useState('');
+   const [posting, setPosting] = useState(false);
 
    const [detail, setDetail] = useState<ProjectDetail>(() => emptyProjectDetail(projectId));
+   const reload = useCallback(async () => {
+      try {
+         setDetail(adaptProjectDetail(await api.projects.detail(projectId)));
+      } catch {
+         setDetail(emptyProjectDetail(projectId));
+      }
+   }, [projectId]);
    useEffect(() => {
       let active = true;
       api.projects
-         .get(projectId)
+         .detail(projectId)
          .then((dto) => {
             if (active) setDetail(adaptProjectDetail(dto));
          })
@@ -119,10 +128,29 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
            )
          : 0;
 
-   const handlePost = () => {
-      if (text.trim() === '') return;
-      postUpdate(projectId, health, text);
+   const handlePost = async () => {
+      if (text.trim() === '' || posting) return;
+      if (mode !== 'update') {
+         // "Comment" ainda é local (sem tabela dedicada de comentário de projeto).
+         postUpdate(projectId, health, text);
+         setText('');
+         return;
+      }
+      setPosting(true);
+      // Otimista: mostra o update na hora; confirma/rollback depois do POST.
+      const optimistic = postUpdate(projectId, health, text);
       setText('');
+      try {
+         await api.projects.postUpdate(projectId, { health, blocks: optimistic.blocks });
+         await reload(); // o update persistido volta em detail.updates
+         removeUpdate(projectId, optimistic.id); // limpa o otimista (evita duplicar)
+         toast.success('Update posted');
+      } catch {
+         removeUpdate(projectId, optimistic.id); // rollback
+         toast.error('Could not post the update');
+      } finally {
+         setPosting(false);
+      }
    };
 
    if (!project) {
@@ -239,7 +267,11 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
                         >
                            <Paperclip className="size-4" />
                         </Button>
-                        <Button size="xs" onClick={handlePost} disabled={text.trim() === ''}>
+                        <Button
+                           size="xs"
+                           onClick={handlePost}
+                           disabled={text.trim() === '' || posting}
+                        >
                            Post {mode === 'update' ? 'update' : 'comment'}
                         </Button>
                      </div>
@@ -266,7 +298,13 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
             </div>
          </div>
 
-         <ProjectSidePanel project={project} detail={detail} issues={issues} />
+         <ProjectSidePanel
+            project={project}
+            detail={detail}
+            issues={issues}
+            projectId={projectId}
+            onChanged={reload}
+         />
       </div>
    );
 }

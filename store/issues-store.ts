@@ -51,11 +51,15 @@ interface IssuesState {
    addIssueLabel: (issueId: string, label: LabelInterface) => void;
    removeIssueLabel: (issueId: string, labelId: string) => void;
    updateIssueProject: (issueId: string, newProject: Project | undefined) => void;
+   /** Reordena a issue por rank (drag-and-drop) entre dois vizinhos. Otimista + rollback. */
+   reorderIssue: (id: string, beforeId: string | null, afterId: string | null) => void;
 
    getIssueById: (id: string) => Issue | undefined;
 }
 
-const sortByRank = (issues: Issue[]) => [...issues].sort((a, b) => b.rank.localeCompare(a.rank));
+// asc(rank) — mesmo critério do servidor (listIssues faz orderBy asc(rank)); mantém
+// a exibição alinhada com o drag-to-reorder (que grava um rank ENTRE dois vizinhos).
+const sortByRank = (issues: Issue[]) => [...issues].sort((a, b) => a.rank.localeCompare(b.rank));
 
 /** Mapeia um Partial<Issue> (objetos ricos) para o patch da API (ids). */
 function toUpdateInput(updated: Partial<Issue>): UpdateIssueInput {
@@ -103,6 +107,7 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
       const input: CreateIssueInput = {
          teamId: (issue.project as { teamId?: string } | undefined)?.teamId ?? 'CORE',
          title: issue.title,
+         description: issue.description || null, // era descartado → issue nascia sem descrição
          statusId: issue.status.id,
          priorityId: issue.priority.id,
          assigneeId: issue.assignee?.id ?? null,
@@ -229,6 +234,31 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
    },
 
    updateIssueProject: (issueId, newProject) => get().updateIssue(issueId, { project: newProject }),
+
+   reorderIssue: (id, beforeId, afterId) => {
+      // Otimista: move a issue na ordem do array (o grouping preserva a ordem do array).
+      // O servidor calcula o rank real (rankBetween) — re-hidratamos p/ reconciliar.
+      const snapshot = { issues: get().issues, issuesByStatus: get().issuesByStatus };
+      set((state) => {
+         const arr = state.issues.filter((i) => i.id !== id);
+         const moved = state.issues.find((i) => i.id === id);
+         if (!moved) return {};
+         let insertAt: number;
+         if (afterId) insertAt = arr.findIndex((i) => i.id === afterId);
+         else if (beforeId) insertAt = arr.findIndex((i) => i.id === beforeId) + 1;
+         else insertAt = arr.length;
+         if (insertAt < 0) insertAt = arr.length;
+         arr.splice(insertAt, 0, moved);
+         return { issues: arr, issuesByStatus: groupIssuesByStatus(arr) };
+      });
+      api.issues
+         .reorder(id, beforeId, afterId)
+         .then(() => get().hydrate())
+         .catch(() => {
+            set(snapshot);
+            toast.error('Falha ao reordenar a issue');
+         });
+   },
 
    getIssueById: (id) => get().issues.find((i) => i.id === id),
 }));

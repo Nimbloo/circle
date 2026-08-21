@@ -37,6 +37,7 @@ interface Option {
 export function CreateProjectButton() {
    const hydrate = useWorkspaceStore((s) => s.hydrate);
    const teams = useWorkspaceStore((s) => s.teams);
+   const initiatives = useWorkspaceStore((s) => s.initiatives);
 
    const [open, setOpen] = useState(false);
    const [busy, setBusy] = useState(false);
@@ -45,6 +46,7 @@ export function CreateProjectButton() {
    const [statusId, setStatusId] = useState('');
    const [priorityId, setPriorityId] = useState('');
    const [healthId, setHealthId] = useState('');
+   const [initiativeId, setInitiativeId] = useState('none');
 
    const [statuses, setStatuses] = useState<Option[]>([]);
    const [priorities, setPriorities] = useState<Option[]>([]);
@@ -91,9 +93,11 @@ export function CreateProjectButton() {
             statusId,
             priorityId,
             healthId,
+            initiativeId: initiativeId === 'none' ? null : initiativeId,
          });
          await hydrate();
          setName('');
+         setInitiativeId('none');
          setOpen(false);
          toast.success('Project created');
       } catch {
@@ -188,6 +192,22 @@ export function CreateProjectButton() {
                         </SelectContent>
                      </Select>
                   </div>
+               </div>
+               <div className="flex flex-col gap-1.5">
+                  <Label>Initiative</Label>
+                  <Select value={initiativeId} onValueChange={setInitiativeId}>
+                     <SelectTrigger>
+                        <SelectValue placeholder="No initiative" />
+                     </SelectTrigger>
+                     <SelectContent>
+                        <SelectItem value="none">No initiative</SelectItem>
+                        {initiatives.map((i) => (
+                           <SelectItem key={i.id} value={i.id}>
+                              {i.name}
+                           </SelectItem>
+                        ))}
+                     </SelectContent>
+                  </Select>
                </div>
             </div>
             <DialogFooter>

@@ -29,7 +29,7 @@ export default function ProjectIssues({ projectId }: ProjectIssuesProps) {
    useEffect(() => {
       let active = true;
       api.projects
-         .get(projectId)
+         .detail(projectId)
          .then((dto) => {
             if (active) setDetail(adaptProjectDetail(dto));
          })

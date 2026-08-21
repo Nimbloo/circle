@@ -2,17 +2,20 @@
 
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CircleCheck, CircleX, AlertCircle, HelpCircle, Bell } from 'lucide-react';
+import { CircleCheck, CircleX, AlertCircle, HelpCircle, Bell, CheckIcon } from 'lucide-react';
 import { Project } from '@/mock-data/projects';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
+import { useHealthStates } from '@/store/catalog-store';
+import { useState } from 'react';
 
 interface HealthPopoverProps {
    project: Project;
+   onHealthChange?: (healthId: string) => void;
 }
 
-export function HealthPopover({ project }: HealthPopoverProps) {
+export function HealthPopover({ project, onHealthChange }: HealthPopoverProps) {
    const getHealthIcon = (healthId: string) => {
       switch (healthId) {
          case 'on-track':
@@ -28,9 +31,16 @@ export function HealthPopover({ project }: HealthPopoverProps) {
    };
 
    const isMobile = useIsMobile();
+   const healthStates = useHealthStates();
+   const [open, setOpen] = useState(false);
+
+   const handleSelect = (healthId: string) => {
+      setOpen(false);
+      if (onHealthChange && healthId !== project.health.id) onHealthChange(healthId);
+   };
 
    return (
-      <Popover>
+      <Popover open={open} onOpenChange={setOpen}>
          <PopoverTrigger asChild>
             <Button
                className="flex items-center justify-center gap-1 h-7 px-2"
@@ -96,6 +106,25 @@ export function HealthPopover({ project }: HealthPopoverProps) {
                <div>
                   <p className="text-sm text-muted-foreground">{project.health.description}</p>
                </div>
+
+               {onHealthChange && (
+                  <div className="flex flex-col gap-0.5 border-t pt-2">
+                     <span className="text-xs text-muted-foreground px-1 pb-1">Set health</span>
+                     {healthStates.map((state) => (
+                        <button
+                           key={state.id}
+                           onClick={() => handleSelect(state.id)}
+                           className="flex items-center gap-2 rounded-md px-1.5 py-1 text-sm hover:bg-accent transition-colors"
+                        >
+                           {getHealthIcon(state.id)}
+                           <span>{state.name}</span>
+                           {project.health.id === state.id && (
+                              <CheckIcon className="size-3.5 ml-auto" />
+                           )}
+                        </button>
+                     ))}
+                  </div>
+               )}
             </div>
          </PopoverContent>
       </Popover>

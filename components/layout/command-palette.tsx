@@ -37,7 +37,6 @@ import {
    UserRound,
    UserRoundMinus,
    UserRoundPlus,
-   Users,
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -96,7 +95,6 @@ export function CommandPalette() {
    const allLabels = useLabels();
    const cycles = useWorkspaceStore((s) => s.cycles);
    const allProjects = useWorkspaceStore((s) => s.projects);
-   const teams = useWorkspaceStore((s) => s.teams);
    const users = useWorkspaceStore((s) => s.users);
 
    const orgId = pathname.split('/')[1] || 'nimbloo';
@@ -132,7 +130,13 @@ export function CommandPalette() {
          }
       };
       window.addEventListener('keydown', onKeyDown);
-      return () => window.removeEventListener('keydown', onKeyDown);
+      // Abertura via UI (ex.: botão "Search" da sidebar) — mesmo palette.
+      const onOpen = () => setOpen(true);
+      window.addEventListener('circle:open-command', onOpen);
+      return () => {
+         window.removeEventListener('keydown', onKeyDown);
+         window.removeEventListener('circle:open-command', onOpen);
+      };
    }, [reset]);
 
    const copy = useCallback(
@@ -307,16 +311,8 @@ export function CommandPalette() {
                               Move to cycle…
                               <Keys keys={['⇧', 'C']} />
                            </CommandItem>
-                           <CommandItem
-                              onSelect={() => {
-                                 setRoute('team');
-                                 setQuery('');
-                              }}
-                           >
-                              <Users className="text-muted-foreground" />
-                              Move to a different team…
-                              <Keys keys={['⌘', '⇧', 'M']} />
-                           </CommandItem>
+                           {/* "Move to a different team" removido: era falso-sucesso (toast
+                               sem persistir; mover de time troca o identifier, não suportado). */}
                            <CommandItem
                               onSelect={() => {
                                  setRoute('due-date');
@@ -604,25 +600,6 @@ export function CommandPalette() {
                               {issue.cycleId === cycle.id && <Check className="ml-auto size-4" />}
                            </CommandItem>
                         ))}
-                     </CommandGroup>
-                  )}
-
-                  {route === 'team' && issue && (
-                     <CommandGroup heading="Move to a different team…">
-                        {teams
-                           .filter((team) => team.joined)
-                           .map((team) => (
-                              <CommandItem
-                                 key={team.id}
-                                 onSelect={() => {
-                                    toast.success(`Moved to ${team.name}`);
-                                    close();
-                                 }}
-                              >
-                                 <span className="text-sm">{team.icon}</span>
-                                 {team.name}
-                              </CommandItem>
-                           ))}
                      </CommandGroup>
                   )}
 

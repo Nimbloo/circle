@@ -13,6 +13,10 @@ interface ProjectSidePanelProps {
    issues: Issue[];
    /** Issues shown by the insights panel (e.g. after filters); defaults to `issues`. */
    insightsIssues?: Issue[];
+   /** Habilita a edição de milestones (add/complete/remove) no properties panel. */
+   projectId?: string;
+   /** Re-fetch do detalhe após uma mutação (milestones). Sem ele, o painel é read-only. */
+   onChanged?: () => void | Promise<void>;
 }
 
 /**
@@ -25,6 +29,8 @@ export function ProjectSidePanel({
    detail,
    issues,
    insightsIssues,
+   projectId,
+   onChanged,
 }: ProjectSidePanelProps) {
    const { openPanel } = useRightPanelStore();
 
@@ -35,7 +41,13 @@ export function ProjectSidePanel({
          {openPanel === 'insights' ? (
             <InsightsPanel issues={insightsIssues ?? issues} />
          ) : (
-            <ProjectPropertiesPanel project={project} detail={detail} issues={issues} />
+            <ProjectPropertiesPanel
+               project={project}
+               detail={detail}
+               issues={issues}
+               projectId={projectId}
+               onChanged={onChanged}
+            />
          )}
       </aside>
    );

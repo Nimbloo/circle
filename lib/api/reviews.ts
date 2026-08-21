@@ -260,9 +260,17 @@ async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike)
 
       // additions/deletions só entram no update quando temos detalhe fresco — assim
       // um PR que virou merged não tem seu contador zerado num re-sync.
+      // Metadados que mudam ao longo da vida do PR (rename de branch, edição de
+      // título/URL, vínculo com issue) também são reconciliados no re-sync.
       const set: Partial<typeof review.$inferInsert> = {
          title: row.title,
          status: row.status,
+         author: row.author,
+         targetBranch: row.targetBranch,
+         sourceBranch: row.sourceBranch,
+         url: row.url,
+         resolvesIdentifier: row.resolvesIdentifier,
+         resolvesTitle: row.resolvesTitle,
          syncedAt: row.syncedAt,
       };
       if (detail) {

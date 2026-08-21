@@ -21,6 +21,7 @@ import { parseAsStringLiteral, useQueryState } from 'nuqs';
 import { useMemo } from 'react';
 import { InitiativeProgressPanel } from './initiative-progress-panel';
 import { InitiativeStatusIcon } from './initiative-status-icon';
+import { InitiativeActions } from './initiative-actions';
 
 const TABS = ['overview', 'activity', 'projects'] as const;
 
@@ -155,9 +156,12 @@ function Overview({ initiative }: { initiative: Initiative }) {
       <div className="w-full h-full flex overflow-hidden">
          <div className="flex-1 min-w-0 overflow-y-auto">
             <div className="max-w-3xl mx-auto px-8 py-10 flex flex-col gap-6">
-               <span className="inline-flex size-10 items-center justify-center rounded-md bg-muted/50 text-2xl">
-                  {initiative.icon}
-               </span>
+               <div className="flex items-start justify-between">
+                  <span className="inline-flex size-10 items-center justify-center rounded-md bg-muted/50 text-2xl">
+                     {initiative.icon}
+                  </span>
+                  <InitiativeActions initiative={initiative} />
+               </div>
                <div className="flex flex-col gap-2">
                   <h1 className="text-2xl font-semibold">{initiative.name}</h1>
                   <p className="text-sm text-muted-foreground">

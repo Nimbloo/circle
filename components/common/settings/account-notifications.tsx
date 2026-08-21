@@ -3,21 +3,13 @@
 import { Switch } from '@/components/ui/switch';
 import { useNotificationPrefsStore } from '@/store/notification-prefs-store';
 import { Mail, Monitor, Slack, Smartphone } from 'lucide-react';
-import { EnabledDot, SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
+import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
 
 const CHANNELS = [
-   {
-      icon: <Monitor className="size-4" />,
-      title: 'Desktop',
-      status: 'Enabled for assignments, status changes, 13 others',
-   },
-   {
-      icon: <Smartphone className="size-4" />,
-      title: 'Mobile',
-      status: 'Enabled for assignments, status changes, 13 others',
-   },
-   { icon: <Mail className="size-4" />, title: 'Email', status: 'Enabled for all notifications' },
-   { icon: <Slack className="size-4" />, title: 'Slack', status: 'Enabled for all notifications' },
+   { icon: <Monitor className="size-4" />, title: 'Desktop' },
+   { icon: <Smartphone className="size-4" />, title: 'Mobile' },
+   { icon: <Mail className="size-4" />, title: 'Email' },
+   { icon: <Slack className="size-4" />, title: 'Slack' },
 ];
 
 /** Personal notification settings (push channels + product updates). */
@@ -35,9 +27,8 @@ export default function AccountNotifications() {
                      key={channel.title}
                      icon={channel.icon}
                      title={channel.title}
-                     description={<EnabledDot>{channel.status}</EnabledDot>}
-                     chevron
-                     onClick={() => {}}
+                     description="Em breve"
+                     muted
                   />
                ))}
             </SettingsCard>

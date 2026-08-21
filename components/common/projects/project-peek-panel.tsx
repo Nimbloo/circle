@@ -65,7 +65,7 @@ export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) 
    useEffect(() => {
       let active = true;
       api.projects
-         .get(projectId)
+         .detail(projectId)
          .then((dto) => {
             if (active) setDetail(adaptProjectDetail(dto));
          })

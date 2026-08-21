@@ -45,6 +45,8 @@ export interface Project {
    initiative?: string;
    /** Days since the last health update (undefined = no update yet). */
    healthUpdatedAgoDays?: number;
+   /** Number of issues in the project (computed by the backend). */
+   issueCount?: number;
 }
 
 type BaseProject = Omit<

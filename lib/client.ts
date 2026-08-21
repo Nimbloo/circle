@@ -8,12 +8,27 @@ import type {
    CreateIssueInput,
    UpdateIssueInput,
 } from '@/lib/api/issues';
-import type { ProjectDto, CreateProjectInput } from '@/lib/api/projects';
+import type { ProjectDto, CreateProjectInput, UpdateProjectInput } from '@/lib/api/projects';
+import type {
+   ProjectDetailDto,
+   ProjectMilestoneDto,
+   ProjectResourceDto,
+   ProjectUpdateDto,
+   UpdateDetailInput,
+   AddMilestoneInput,
+   UpdateMilestoneInput,
+   AddResourceInput,
+   PostUpdateInput,
+} from '@/lib/api/project-detail';
 import type { TeamDto, CreateTeamInput } from '@/lib/api/teams';
 import type { MemberDto } from '@/lib/api/members';
 import type { CycleDto, CreateCycleInput, UpdateCycleInput } from '@/lib/api/cycles';
-import type { InitiativeDto, CreateInitiativeInput } from '@/lib/api/initiatives';
-import type { ViewDto, CreateViewInput } from '@/lib/api/views';
+import type {
+   InitiativeDto,
+   CreateInitiativeInput,
+   UpdateInitiativeInput,
+} from '@/lib/api/initiatives';
+import type { ViewDto, CreateViewInput, UpdateViewInput } from '@/lib/api/views';
 import type { NotificationDto } from '@/lib/api/notifications';
 import type { ReviewDto } from '@/lib/api/reviews';
 import type { FolderDto } from '@/lib/api/documents';
@@ -171,9 +186,31 @@ export const api = {
       list: (q = '') => get<ProjectDto[]>(`/projects${q}`),
       get: (id: string) => get<ProjectDto>(`/projects/${id}`),
       create: (input: CreateProjectInput) => post<ProjectDto>('/projects', input),
+      update: (id: string, body: UpdateProjectInput) => patch<ProjectDto>(`/projects/${id}`, body),
+      remove: (id: string) => del<{ deleted: boolean }>(`/projects/${id}`),
       issues: (id: string, opts?: IssueListOptions) =>
          get<IssueDto[]>(`/projects/${id}/issues${issueQuery(opts)}`),
       progress: (id: string) => get<ProjectProgress>(`/projects/${id}/progress`),
+
+      // Conteúdo editorial (summary/description/milestones/updates/resources).
+      detail: (id: string) => get<ProjectDetailDto>(`/projects/${id}/detail`),
+      updateDetail: (id: string, body: UpdateDetailInput) =>
+         patch<ProjectDetailDto>(`/projects/${id}/detail`, body),
+      milestones: (id: string) => get<ProjectMilestoneDto[]>(`/projects/${id}/milestones`),
+      addMilestone: (id: string, body: AddMilestoneInput) =>
+         post<ProjectMilestoneDto>(`/projects/${id}/milestones`, body),
+      updateMilestone: (id: string, mid: string, body: UpdateMilestoneInput) =>
+         patch<ProjectMilestoneDto>(`/projects/${id}/milestones/${mid}`, body),
+      removeMilestone: (id: string, mid: string) =>
+         del<{ deleted: boolean }>(`/projects/${id}/milestones/${mid}`),
+      updates: (id: string) => get<ProjectUpdateDto[]>(`/projects/${id}/updates`),
+      postUpdate: (id: string, body: PostUpdateInput) =>
+         post<ProjectUpdateDto>(`/projects/${id}/updates`, body),
+      resources: (id: string) => get<ProjectResourceDto[]>(`/projects/${id}/resources`),
+      addResource: (id: string, body: AddResourceInput) =>
+         post<ProjectResourceDto>(`/projects/${id}/resources`, body),
+      removeResource: (id: string, rid: string) =>
+         del<{ deleted: boolean }>(`/projects/${id}/resources/${rid}`),
    },
 
    cycles: {
@@ -197,12 +234,17 @@ export const api = {
       list: (q = '') => get<InitiativeDto[]>(`/initiatives${q}`),
       get: (id: string) => get<InitiativeDto>(`/initiatives/${id}`),
       create: (input: CreateInitiativeInput) => post<InitiativeDto>('/initiatives', input),
+      update: (id: string, body: UpdateInitiativeInput) =>
+         patch<InitiativeDto>(`/initiatives/${id}`, body),
+      remove: (id: string) => del<{ deleted: boolean }>(`/initiatives/${id}`),
    },
 
    views: {
       list: (team?: string) => get<ViewDto[]>(`/views${team ? `?team=${team}` : ''}`),
       get: (id: string) => get<ViewDto>(`/views/${id}`),
       create: (input: CreateViewInput) => post<ViewDto>('/views', input),
+      update: (id: string, body: UpdateViewInput) => patch<ViewDto>(`/views/${id}`, body),
+      remove: (id: string) => del<{ deleted: boolean }>(`/views/${id}`),
       results: (id: string) =>
          get<{ type: string; issues?: IssueDto[]; projects?: ProjectDto[] }>(
             `/views/${id}/results`

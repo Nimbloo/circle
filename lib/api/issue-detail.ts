@@ -185,8 +185,17 @@ export async function listComments(
       .from(commentT)
       .where(eq(commentT.issueId, issueId))
       .orderBy(asc(commentT.createdAt));
-   // Resolve o "me" pelo mesmo helper usado p/ autor/ator (idempotente por e-mail).
-   const meUserId = meEmail ? (await getOrCreateUser(db, meEmail)).id : undefined;
+   // Resolve o "me" por SELECT read-only — o usuário já está autenticado, não se faz
+   // INSERT (getOrCreateUser) num handler de leitura. Não achou → undefined (reactedByMe=false).
+   let meUserId: string | undefined;
+   if (meEmail) {
+      const meRows = await db
+         .select({ id: appUser.id })
+         .from(appUser)
+         .where(eq(appUser.email, meEmail.trim().toLowerCase()))
+         .limit(1);
+      meUserId = meRows[0]?.id;
+   }
    const [users, reactions] = await Promise.all([
       loadUsers(
          db,

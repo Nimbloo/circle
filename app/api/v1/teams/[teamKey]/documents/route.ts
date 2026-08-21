@@ -39,12 +39,16 @@ export async function POST(req: Request, { params }: Params) {
       const input = CreateSchema.parse(await req.json());
       if (input.kind === 'folder') {
          return ok(
-            await createFolder(db, {
-               id: input.id,
-               teamId: teamKey,
-               name: input.name,
-               icon: input.icon ?? null,
-            })
+            await createFolder(
+               db,
+               {
+                  id: input.id,
+                  teamId: teamKey,
+                  name: input.name,
+                  icon: input.icon ?? null,
+               },
+               email
+            )
          );
       }
       return ok(
@@ -52,6 +56,7 @@ export async function POST(req: Request, { params }: Params) {
             db,
             {
                folderId: input.folderId,
+               teamId: teamKey,
                name: input.name,
                icon: input.icon ?? null,
                pinned: input.pinned,

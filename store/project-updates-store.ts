@@ -36,36 +36,51 @@ function currentAuthor(): User {
 }
 
 interface ProjectUpdatesState {
-   /** Updates posted at runtime, newest first, keyed by project id. */
+   /**
+    * Updates OTIMISTAS (recém-postadas), newest first, por project id. Servem só
+    * de buffer entre o POST e o re-fetch do detalhe: `postUpdate` insere o item
+    * na hora e `removeUpdate` o remove quando o servidor confirma (o update
+    * persistido volta em `detail.updates`) ou quando o POST falha (rollback).
+    */
    postedUpdates: Record<string, ProjectUpdate[]>;
-   postUpdate: (projectId: string, health: ProjectUpdateHealth, text: string) => void;
+   /** Insere um update otimista e o RETORNA (id + blocks) p/ enviar ao backend. */
+   postUpdate: (projectId: string, health: ProjectUpdateHealth, text: string) => ProjectUpdate;
+   /** Remove um update otimista (confirmação pós-persistência ou rollback de erro). */
+   removeUpdate: (projectId: string, id: string) => void;
 }
 
 let nextId = 1;
 
 /**
- * Runtime project updates (the "Post update" composer). Merged with the
- * mock updates from project-details.ts when rendering the Activity tab.
+ * Runtime project updates (the "Post update" composer). Buffer otimista mesclado
+ * com `detail.updates` (backend) ao renderizar a aba Activity.
  */
 export const useProjectUpdatesStore = create<ProjectUpdatesState>((set) => ({
    postedUpdates: {},
-   postUpdate: (projectId, health, text) =>
-      set((state) => {
-         const update: ProjectUpdate = {
-            id: `posted-${nextId++}`,
-            author: currentAuthor(),
-            date: new Date().toISOString().slice(0, 10),
-            health,
-            blocks: text
-               .split(/\n{2,}/)
-               .filter((paragraph) => paragraph.trim() !== '')
-               .map((paragraph) => ({ type: 'paragraph', text: paragraph.trim() })),
-         };
-         return {
-            postedUpdates: {
-               ...state.postedUpdates,
-               [projectId]: [update, ...(state.postedUpdates[projectId] ?? [])],
-            },
-         };
-      }),
+   postUpdate: (projectId, health, text) => {
+      const update: ProjectUpdate = {
+         id: `posted-${nextId++}`,
+         author: currentAuthor(),
+         date: new Date().toISOString().slice(0, 10),
+         health,
+         blocks: text
+            .split(/\n{2,}/)
+            .filter((paragraph) => paragraph.trim() !== '')
+            .map((paragraph) => ({ type: 'paragraph', text: paragraph.trim() })),
+      };
+      set((state) => ({
+         postedUpdates: {
+            ...state.postedUpdates,
+            [projectId]: [update, ...(state.postedUpdates[projectId] ?? [])],
+         },
+      }));
+      return update;
+   },
+   removeUpdate: (projectId, id) =>
+      set((state) => ({
+         postedUpdates: {
+            ...state.postedUpdates,
+            [projectId]: (state.postedUpdates[projectId] ?? []).filter((u) => u.id !== id),
+         },
+      })),
 }));

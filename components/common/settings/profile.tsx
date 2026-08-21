@@ -1,11 +1,9 @@
 'use client';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/client';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { Pencil } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
@@ -65,14 +63,7 @@ export default function Profile() {
                />
                <SettingsRow
                   title="Email"
-                  trailing={
-                     <span className="inline-flex items-center gap-2 text-foreground">
-                        {me.email}
-                        <Button size="icon" variant="ghost" className="size-6">
-                           <Pencil className="size-3" />
-                        </Button>
-                     </span>
-                  }
+                  trailing={<span className="text-foreground">{me.email}</span>}
                />
                <SettingsRow
                   title="Full name"
@@ -90,27 +81,9 @@ export default function Profile() {
                   }
                />
                <SettingsRow
-                  title="Title"
-                  description="Your job title or role"
-                  trailing={<Input placeholder="Software engineer" className="h-8 w-44" />}
-               />
-               <SettingsRow
                   title="Username"
                   description="One word, like a nickname or first name"
                   trailing={<Input defaultValue={me.slug} disabled className="h-8 w-44" />}
-               />
-            </SettingsCard>
-         </SettingsSection>
-
-         <SettingsSection title="Workspace access">
-            <SettingsCard>
-               <SettingsRow
-                  title="Remove yourself from workspace"
-                  trailing={
-                     <Button size="xs" variant="ghost" className="text-red-500 hover:text-red-500">
-                        Leave workspace
-                     </Button>
-                  }
                />
             </SettingsCard>
          </SettingsSection>

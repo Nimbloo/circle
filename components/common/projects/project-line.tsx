@@ -4,9 +4,32 @@ import { Issue } from '@/mock-data/issues';
 import { Project } from '@/mock-data/projects';
 import { useIssuesStore } from '@/store/issues-store';
 import { useProjectsDisplayStore } from '@/store/projects-display-store';
+import { useWorkspaceStore } from '@/store/workspace-store';
+import { api } from '@/lib/client';
+import type { UpdateProjectInput } from '@/lib/api/projects';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { format } from 'date-fns';
+import { toast } from 'sonner';
+import { MoreHorizontal, Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+   DropdownMenu,
+   DropdownMenuContent,
+   DropdownMenuItem,
+   DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+   AlertDialog,
+   AlertDialogAction,
+   AlertDialogCancel,
+   AlertDialogContent,
+   AlertDialogDescription,
+   AlertDialogFooter,
+   AlertDialogHeader,
+   AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { HealthPopover } from './health-popover';
 import { PrioritySelector } from './priority-selector';
 import { LeadSelector } from './lead-selector';
@@ -24,7 +47,39 @@ export default function ProjectLine({ project }: ProjectLineProps) {
    const { orgId } = useParams<{ orgId: string }>();
    const { issues } = useIssuesStore();
    const { displayProperties } = useProjectsDisplayStore();
-   const issueCount = useMemo(() => countIssues(issues, project.id), [issues, project.id]);
+   const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const [confirmOpen, setConfirmOpen] = useState(false);
+   const [busy, setBusy] = useState(false);
+
+   // Prefere a contagem calculada pelo backend (issueCount); cai pro cálculo
+   // local só quando o DTO não a trouxe (ex: dados mock).
+   const computed = useMemo(() => countIssues(issues, project.id), [issues, project.id]);
+   const issueCount = project.issueCount ?? computed;
+
+   const patchProject = async (patch: UpdateProjectInput, okMsg: string) => {
+      try {
+         await api.projects.update(project.id, patch);
+         await hydrate();
+         toast.success(okMsg);
+      } catch {
+         toast.error('Could not update the project');
+      }
+   };
+
+   const remove = async () => {
+      if (busy) return;
+      setBusy(true);
+      try {
+         await api.projects.remove(project.id);
+         await hydrate();
+         toast.success('Project deleted');
+         setConfirmOpen(false);
+      } catch {
+         toast.error('Could not delete the project');
+      } finally {
+         setBusy(false);
+      }
+   };
 
    return (
       <div className="w-full flex items-center py-3 px-6 border-b hover:bg-sidebar/50 border-muted-foreground/5 text-sm">
@@ -59,22 +114,41 @@ export default function ProjectLine({ project }: ProjectLineProps) {
 
          {displayProperties.health && (
             <div className="hidden sm:block w-[120px] shrink-0">
-               <HealthPopover project={project} />
+               <HealthPopover
+                  project={project}
+                  onHealthChange={(healthId) => patchProject({ healthId }, 'Health updated')}
+               />
             </div>
          )}
          {displayProperties.priority && (
             <div className="hidden md:block w-[70px] shrink-0">
-               <PrioritySelector priority={project.priority} />
+               <PrioritySelector
+                  priority={project.priority}
+                  onPriorityChange={(priorityId) =>
+                     patchProject({ priorityId }, 'Priority updated')
+                  }
+               />
             </div>
          )}
          {displayProperties.lead && (
             <div className="hidden xl:block w-[130px] shrink-0">
-               <LeadSelector lead={project.lead} />
+               <LeadSelector
+                  lead={project.lead}
+                  onLeadChange={(userId) => patchProject({ leadId: userId }, 'Lead updated')}
+               />
             </div>
          )}
          {displayProperties.targetDate && (
             <div className="hidden xl:block w-[110px] shrink-0">
-               <DatePicker date={project.targetDate ? new Date(project.targetDate) : undefined} />
+               <DatePicker
+                  date={project.targetDate ? new Date(project.targetDate) : undefined}
+                  onDateChange={(date) =>
+                     patchProject(
+                        { targetDate: date ? format(date, 'yyyy-MM-dd') : null },
+                        'Target date updated'
+                     )
+                  }
+               />
             </div>
          )}
          {displayProperties.issues && (
@@ -90,6 +164,57 @@ export default function ProjectLine({ project }: ProjectLineProps) {
                />
             </div>
          )}
+
+         <div className="w-8 shrink-0 flex justify-end">
+            <DropdownMenu>
+               <DropdownMenuTrigger asChild>
+                  <Button
+                     size="icon"
+                     variant="ghost"
+                     className="size-7"
+                     aria-label="Project actions"
+                  >
+                     <MoreHorizontal className="size-4 text-muted-foreground" />
+                  </Button>
+               </DropdownMenuTrigger>
+               <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                     variant="destructive"
+                     onSelect={(e) => {
+                        e.preventDefault();
+                        setConfirmOpen(true);
+                     }}
+                  >
+                     <Trash2 className="size-4" />
+                     Delete project
+                  </DropdownMenuItem>
+               </DropdownMenuContent>
+            </DropdownMenu>
+         </div>
+
+         <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <AlertDialogContent>
+               <AlertDialogHeader>
+                  <AlertDialogTitle>Delete project?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                     This removes “{project.name}”. Its issues are kept but unassigned from the
+                     project. This cannot be undone.
+                  </AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter>
+                  <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                     onClick={(e) => {
+                        e.preventDefault();
+                        void remove();
+                     }}
+                     disabled={busy}
+                  >
+                     Delete
+                  </AlertDialogAction>
+               </AlertDialogFooter>
+            </AlertDialogContent>
+         </AlertDialog>
       </div>
    );
 }

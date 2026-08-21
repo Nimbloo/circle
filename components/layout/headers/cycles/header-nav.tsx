@@ -1,6 +1,7 @@
 'use client';
 
 import { SidebarTrigger } from '@/components/ui/sidebar';
+import { CreateCycleButton } from '@/components/common/cycles/create-cycle-dialog';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { ChevronRight, Star } from 'lucide-react';
 import Link from 'next/link';
@@ -28,6 +29,7 @@ export default function HeaderNav() {
             <span className="text-sm font-medium">Cycles</span>
             <Star className="size-3.5 text-muted-foreground shrink-0 ml-1" />
          </div>
+         <CreateCycleButton defaultTeamId={team?.id} />
       </div>
    );
 }

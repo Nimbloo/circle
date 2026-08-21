@@ -3,6 +3,7 @@
 import * as React from 'react';
 
 import { NavInbox } from '@/components/layout/sidebar/nav-inbox';
+import { NavSearch } from '@/components/layout/sidebar/nav-search';
 import { NavTeams } from '@/components/layout/sidebar/nav-teams';
 import { NavWorkspace } from '@/components/layout/sidebar/nav-workspace';
 import { NavSettings } from '@/components/layout/sidebar/nav-settings';
@@ -26,6 +27,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                </>
             ) : (
                <>
+                  <NavSearch />
                   <NavInbox />
                   <NavWorkspace />
                   <NavTeams />

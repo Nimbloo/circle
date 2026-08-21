@@ -1,26 +1,25 @@
 /**
  * Adapter API -> ProjectDetail (tipo rico do detalhe de projeto).
  *
- * O backend expõe a META do projeto (`ProjectDto`: status/priority/health/lead/
- * datas/labels/% — consumida via `useWorkspaceStore().getProjectById`), mas NÃO
- * guarda o conteúdo EDITORIAL que a tela de detalhe mostra: `summary`,
- * `description` (blocos), `resources`, `milestones`, a timeline de `updates`
- * textuais e o `activity` feed. Não há tabela/endpoint para esses campos.
+ * O backend agora materializa o conteúdo EDITORIAL do projeto nas tabelas
+ * `project_detail`/`project_milestone`/`project_update`/`project_resource`/
+ * `project_activity`, servido em `GET /projects/{id}/detail` (`ProjectDetailDto`).
+ * Este adapter converte esse DTO para o `ProjectDetail` que a tela consome.
  *
- * Não fabricamos esses dados (os mocks foram zerados de propósito): os campos
- * sem fonte no backend saem VAZIOS e a UI já degrada bem — mostra "Add
- * milestones…", "No updates yet", o CTA "Write first project update" e uma
- * descrição vazia. Quando o backend passar a materializar algum desses campos,
- * este adapter é o único ponto a estender (o resto da tela já lê `ProjectDetail`).
- *
- * `updates`: a composição runtime ("Post update") vive no `useProjectUpdatesStore`
- * e é mesclada no componente da aba Activity — por isso o adapter deixa `updates`
- * vazio (evita duplicar o merge).
+ * `emptyProjectDetail` continua sendo a casca usada como estado inicial/loading
+ * (e fallback em erro de fetch): id + conteúdo vazio, e a UI já degrada bem
+ * ("Add milestones…", "No updates yet", descrição vazia).
  */
-import type { ProjectDto } from '@/lib/api/projects';
+import type {
+   ProjectDetailDto,
+   ProjectUpdateDto,
+   ProjectActivityDto,
+} from '@/lib/api/project-detail';
+import type { UserRef } from '@/lib/api/issues';
 import type { ProjectDetail } from '@/mock-data/project-details';
+import type { User } from '@/mock-data/users';
 
-/** ProjectDetail "casca" — só o id, com o conteúdo editorial vazio (sem fonte no backend). */
+/** ProjectDetail "casca" — só o id, com o conteúdo editorial vazio (estado de loading/erro). */
 export function emptyProjectDetail(projectId: string): ProjectDetail {
    return {
       projectId,
@@ -33,11 +32,66 @@ export function emptyProjectDetail(projectId: string): ProjectDetail {
    };
 }
 
-/**
- * ProjectDto (backend) -> ProjectDetail. Hoje o DTO só carrega a meta do
- * projeto; o conteúdo editorial (summary/description/…) não tem fonte, então
- * delegamos para `emptyProjectDetail`. É o seam para quando o backend crescer.
- */
-export function adaptProjectDetail(dto: ProjectDto): ProjectDetail {
-   return emptyProjectDetail(dto.id);
+/** UserRef (backend) -> User (mock-data), preenchendo os campos que a UI não usa. */
+function toUser(ref: UserRef | null): User {
+   if (!ref) {
+      return {
+         id: 'unknown',
+         name: 'Unknown',
+         avatarUrl: '',
+         email: '',
+         status: 'offline',
+         role: 'Member',
+         joinedDate: '',
+         teamIds: [],
+         timezone: 'UTC',
+      };
+   }
+   return {
+      id: ref.id,
+      name: ref.name,
+      avatarUrl: ref.avatarUrl ?? '',
+      email: ref.email,
+      slug: ref.slug,
+      status: 'offline',
+      role: 'Member',
+      joinedDate: '',
+      teamIds: [],
+      timezone: 'UTC',
+   };
+}
+
+/** ISO/date -> 'YYYY-MM-DD' (as datas da UI usam parseISO num dia). */
+const day = (iso: string): string => (iso ? iso.slice(0, 10) : '');
+
+function adaptUpdate(u: ProjectUpdateDto): ProjectDetail['updates'][number] {
+   return {
+      id: u.id,
+      author: toUser(u.author),
+      date: day(u.createdAt),
+      health: u.health,
+      blocks: u.blocks,
+   };
+}
+
+function adaptActivity(a: ProjectActivityDto): ProjectDetail['activity'][number] {
+   return { id: a.id, user: toUser(a.user), date: day(a.createdAt), text: a.text };
+}
+
+/** ProjectDetailDto (backend) -> ProjectDetail (tela). */
+export function adaptProjectDetail(dto: ProjectDetailDto): ProjectDetail {
+   return {
+      projectId: dto.projectId,
+      summary: dto.summary,
+      description: dto.description,
+      resources: dto.resources.map((r) => ({ label: r.label, url: r.url })),
+      milestones: dto.milestones.map((m) => ({
+         id: m.id,
+         name: m.name,
+         targetDate: m.targetDate ?? undefined,
+         completed: m.completed,
+      })),
+      updates: dto.updates.map(adaptUpdate),
+      activity: dto.activity.map(adaptActivity),
+   };
 }

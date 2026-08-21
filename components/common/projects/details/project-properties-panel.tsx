@@ -8,16 +8,22 @@ import { ProjectDetail } from '@/mock-data/project-details';
 import { Project } from '@/mock-data/projects';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { PanelFilterTarget, usePanelFilter } from '@/components/common/issues/use-panel-filter';
+import { api } from '@/lib/client';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { ProjectProgressChart } from './project-progress-chart';
 import { ArrowRight, Calendar, Check, Compass, Plus, Slack, Tag, UserPlus } from 'lucide-react';
 import { useMemo } from 'react';
+import { toast } from 'sonner';
 
 interface ProjectPropertiesPanelProps {
    project: Project;
    detail: ProjectDetail;
    issues: Issue[];
+   /** Presente => milestones editáveis (add/complete). Ausente => read-only. */
+   projectId?: string;
+   /** Re-fetch do detalhe após mutação de milestone. */
+   onChanged?: () => void | Promise<void>;
 }
 
 const isCompleted = (issue: Issue) => issue.status.category === 'completed';
@@ -109,7 +115,13 @@ function PropertyRow({ label, children }: { label: string; children: React.React
  * Right-side panel of the project pages: properties, milestones,
  * progress breakdowns and a compact activity feed.
  */
-export function ProjectPropertiesPanel({ project, detail, issues }: ProjectPropertiesPanelProps) {
+export function ProjectPropertiesPanel({
+   project,
+   detail,
+   issues,
+   projectId,
+   onChanged,
+}: ProjectPropertiesPanelProps) {
    const panelFilter = usePanelFilter();
    const teams = useWorkspaceStore((s) => s.teams);
    const completed = issues.filter(isCompleted).length;
@@ -117,6 +129,33 @@ export function ProjectPropertiesPanel({ project, detail, issues }: ProjectPrope
    const team = teams.find((candidate) => candidate.id === project.teamId);
 
    const started = issues.filter((issue) => issue.status.category === 'started').length;
+
+   // Edição de milestones só quando o pai passa projectId + onChanged (overview/activity).
+   const canEditMilestones = Boolean(projectId && onChanged);
+
+   const handleAddMilestone = async () => {
+      if (!projectId) return;
+      const name = window.prompt('Milestone name');
+      if (!name?.trim()) return;
+      const targetDate = window.prompt('Target date (YYYY-MM-DD, optional)')?.trim() || undefined;
+      try {
+         await api.projects.addMilestone(projectId, { name: name.trim(), targetDate });
+         await onChanged?.();
+         toast.success('Milestone added');
+      } catch {
+         toast.error('Could not add the milestone');
+      }
+   };
+
+   const handleToggleMilestone = async (milestoneId: string, completedNow: boolean) => {
+      if (!projectId) return;
+      try {
+         await api.projects.updateMilestone(projectId, milestoneId, { completed: !completedNow });
+         await onChanged?.();
+      } catch {
+         toast.error('Could not update the milestone');
+      }
+   };
 
    const members = useMemo(() => {
       const seen = new Set<string>();
@@ -307,9 +346,15 @@ export function ProjectPropertiesPanel({ project, detail, issues }: ProjectPrope
          <div className="px-5 py-4 border-b">
             <div className="flex items-center justify-between mb-2">
                <h3 className="text-sm font-medium">Milestones</h3>
-               <button className="text-muted-foreground hover:text-foreground transition-colors">
-                  <Plus className="size-3.5" />
-               </button>
+               {canEditMilestones && (
+                  <button
+                     type="button"
+                     onClick={handleAddMilestone}
+                     className="text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                     <Plus className="size-3.5" />
+                  </button>
+               )}
             </div>
             {detail.milestones.length === 0 ? (
                <p className="text-xs text-muted-foreground">
@@ -324,15 +369,21 @@ export function ProjectPropertiesPanel({ project, detail, issues }: ProjectPrope
                         className="flex items-center justify-between gap-2 text-sm"
                      >
                         <span className="flex items-center gap-2 min-w-0">
-                           <span
-                              className={
+                           <button
+                              type="button"
+                              disabled={!canEditMilestones}
+                              onClick={() =>
+                                 handleToggleMilestone(milestone.id, milestone.completed)
+                              }
+                              className={cn(
                                  milestone.completed
                                     ? 'size-4 rounded-full bg-violet-500 flex items-center justify-center shrink-0'
-                                    : 'size-4 rounded-full border border-muted-foreground/40 shrink-0'
-                              }
+                                    : 'size-4 rounded-full border border-muted-foreground/40 shrink-0',
+                                 canEditMilestones && 'cursor-pointer'
+                              )}
                            >
                               {milestone.completed && <Check className="size-2.5 text-white" />}
-                           </span>
+                           </button>
                            <span
                               className={
                                  milestone.completed

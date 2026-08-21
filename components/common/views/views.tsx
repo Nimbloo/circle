@@ -14,7 +14,9 @@ import { cn } from '@/lib/utils';
 import { View } from '@/mock-data/views';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useViewsDisplayStore, ViewsOrdering } from '@/store/views-display-store';
-import { ArrowDown, Plus, SlidersHorizontal } from 'lucide-react';
+import { ArrowDown, SlidersHorizontal } from 'lucide-react';
+import { CreateViewButton } from './create-view-dialog';
+import { ViewActions } from './view-actions';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
@@ -101,39 +103,42 @@ function DisplayOptions() {
 function ViewRow({ view, orgId }: { view: View; orgId: string }) {
    const { displayProperties } = useViewsDisplayStore();
    return (
-      <Link
-         href={`/${orgId}/view/${view.id}`}
-         className="flex items-center gap-3 px-6 py-2.5 border-b border-border/50 hover:bg-sidebar/50 transition-colors"
-      >
-         <span className="inline-flex size-6 items-center justify-center rounded bg-muted/50 text-sm shrink-0">
-            {view.icon}
-         </span>
-         <span className="flex flex-col min-w-0 flex-1">
-            <span className="text-sm font-medium truncate">{view.name}</span>
-            <span className="text-xs text-muted-foreground truncate">{view.description}</span>
-         </span>
-         {displayProperties.created && (
-            <span className="hidden sm:block text-xs text-muted-foreground w-24 shrink-0">
-               {formatDate(view.createdAt)}
+      <div className="flex items-center gap-3 px-6 py-2.5 border-b border-border/50 hover:bg-sidebar/50 transition-colors">
+         <Link
+            href={`/${orgId}/view/${view.id}`}
+            className="flex items-center gap-3 min-w-0 flex-1"
+         >
+            <span className="inline-flex size-6 items-center justify-center rounded bg-muted/50 text-sm shrink-0">
+               {view.icon}
             </span>
-         )}
-         {displayProperties.updated && (
-            <span className="hidden sm:block text-xs text-muted-foreground w-24 shrink-0">
-               {formatDate(view.updatedAt)}
+            <span className="flex flex-col min-w-0 flex-1">
+               <span className="text-sm font-medium truncate">{view.name}</span>
+               <span className="text-xs text-muted-foreground truncate">{view.description}</span>
             </span>
-         )}
-         {displayProperties.owner && (
-            <span className="flex items-center gap-1.5 w-32 shrink-0 justify-end">
-               <Avatar className="size-5">
-                  <AvatarImage src={view.owner.avatarUrl} alt={view.owner.name} />
-                  <AvatarFallback className="text-[9px]">{view.owner.name[0]}</AvatarFallback>
-               </Avatar>
-               <span className="text-xs text-muted-foreground truncate max-w-24">
-                  {view.owner.name}
+            {displayProperties.created && (
+               <span className="hidden sm:block text-xs text-muted-foreground w-24 shrink-0">
+                  {formatDate(view.createdAt)}
                </span>
-            </span>
-         )}
-      </Link>
+            )}
+            {displayProperties.updated && (
+               <span className="hidden sm:block text-xs text-muted-foreground w-24 shrink-0">
+                  {formatDate(view.updatedAt)}
+               </span>
+            )}
+            {displayProperties.owner && (
+               <span className="flex items-center gap-1.5 w-32 shrink-0 justify-end">
+                  <Avatar className="size-5">
+                     <AvatarImage src={view.owner.avatarUrl} alt={view.owner.name} />
+                     <AvatarFallback className="text-[9px]">{view.owner.name[0]}</AvatarFallback>
+                  </Avatar>
+                  <span className="text-xs text-muted-foreground truncate max-w-24">
+                     {view.owner.name}
+                  </span>
+               </span>
+            )}
+         </Link>
+         <ViewActions view={view} />
+      </div>
    );
 }
 
@@ -195,7 +200,7 @@ export default function Views({ teamId }: { teamId?: string }) {
                   </span>
                ) : (
                   <span className="inline-flex size-5 items-center justify-center rounded bg-primary text-primary-foreground text-[10px] font-semibold">
-                     LN
+                     N
                   </span>
                )}
                <span className="font-medium">{team ? team.name : 'Nimbloo'}</span>
@@ -203,9 +208,7 @@ export default function Views({ teamId }: { teamId?: string }) {
                   · {team ? 'Team' : 'Workspace'}
                </span>
             </span>
-            <Button size="xs" variant="ghost" aria-label="New view">
-               <Plus className="size-3.5" />
-            </Button>
+            <CreateViewButton />
          </div>
 
          {list.map((view) => (

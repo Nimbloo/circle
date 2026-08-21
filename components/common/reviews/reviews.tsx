@@ -2,6 +2,7 @@
 
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { fetchReviews, syncReviews } from '@/lib/adapters-reviews';
 import { Review, ReviewList, ReviewStatus } from '@/mock-data/reviews';
 import { ListFilter, RefreshCw, SlidersHorizontal } from 'lucide-react';
@@ -121,6 +122,7 @@ export default function Reviews({
    section = 'overview',
 }: ReviewsProps) {
    const { orgId } = useParams<{ orgId: string }>();
+   const isAdmin = useWorkspaceStore((s) => s.me?.admin ?? false);
    const [reviews, setReviews] = useState<Review[]>([]);
    const [total, setTotal] = useState(0);
    const [loading, setLoading] = useState(true);
@@ -284,15 +286,17 @@ export default function Reviews({
                   <span className="text-sm">
                      {loading ? 'Loading…' : error ? 'Could not load reviews.' : `${total} reviews`}
                   </span>
-                  <button
-                     type="button"
-                     onClick={handleSync}
-                     disabled={syncing}
-                     className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium hover:bg-accent/50 transition-colors disabled:opacity-60"
-                  >
-                     <RefreshCw className={cn('size-3.5', syncing && 'animate-spin')} />
-                     {syncing ? 'Syncing…' : 'Sync from GitHub'}
-                  </button>
+                  {isAdmin && (
+                     <button
+                        type="button"
+                        onClick={handleSync}
+                        disabled={syncing}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium hover:bg-accent/50 transition-colors disabled:opacity-60"
+                     >
+                        <RefreshCw className={cn('size-3.5', syncing && 'animate-spin')} />
+                        {syncing ? 'Syncing…' : 'Sync from GitHub'}
+                     </button>
+                  )}
                </div>
             )}
          </div>

@@ -240,6 +240,19 @@ export async function listIssues(
    meId?: string
 ): Promise<IssueDto[]> {
    const cat = await loadCatalogs(db);
+   // Resolve o meId a partir do e-mail em opts (assignee=me / createdBy=me) quando o
+   // chamador não o passou — senão o filtro `me` era um no-op silencioso (retornava tudo).
+   if (!meId) {
+      const meEmail = opts.assigneeMe ?? opts.createdByMe;
+      if (meEmail) {
+         const rows = await db
+            .select({ id: appUser.id })
+            .from(appUser)
+            .where(eq(appUser.email, meEmail.trim().toLowerCase()))
+            .limit(1);
+         meId = rows[0]?.id;
+      }
+   }
    const where = buildWhere(db, opts, cat.statuses, meId);
    const rows = await db
       .select()
@@ -411,6 +424,16 @@ export async function updateIssue(
       events.push({ event: 'priority', text: `changed priority` });
    if (patch.cycleId !== undefined && (patch.cycleId || null) !== prev.cycleId)
       events.push({ event: 'cycle', text: `changed cycle` });
+   if (patch.assigneeId !== undefined && (patch.assigneeId || null) !== prev.assigneeId)
+      events.push({ event: 'assignee', text: `changed assignee` });
+   if (patch.title !== undefined && patch.title !== prev.title)
+      events.push({ event: 'title', text: `renamed the issue` });
+   if (patch.projectId !== undefined && (patch.projectId || null) !== prev.projectId)
+      events.push({ event: 'project', text: `changed project` });
+   if (patch.estimate !== undefined && (patch.estimate ?? null) !== prev.estimate)
+      events.push({ event: 'estimate', text: `changed estimate` });
+   if (patch.dueDate !== undefined && (patch.dueDate ?? null) !== prev.dueDate)
+      events.push({ event: 'dueDate', text: `changed due date` });
    if (events.length) {
       const now = new Date();
       await db.insert(activityEvent).values(

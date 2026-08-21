@@ -8,6 +8,7 @@ import {
    text,
    primaryKey,
    index,
+   unique,
 } from 'drizzle-orm/pg-core';
 
 // ─────────────────────────────────────────────────────────────
@@ -192,7 +193,12 @@ export const cycle = pgTable(
       endDate: date('end_date').notNull(),
       capacity: integer('capacity').notNull().default(0),
    },
-   (t) => [index('idx_cycle_team').on(t.teamId)]
+   (t) => [
+      index('idx_cycle_team').on(t.teamId),
+      // Nº de cycle é único por time — barra colisão sob concorrência (dois inserts
+      // computando max(number)+1 ao mesmo tempo). O 2º insert falha em vez de duplicar.
+      unique('cycle_team_id_number_unique').on(t.teamId, t.number),
+   ]
 );
 
 export const issue = pgTable(

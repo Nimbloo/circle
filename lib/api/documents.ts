@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { eq, inArray, asc } from 'drizzle-orm';
+import { and, eq, inArray, asc } from 'drizzle-orm';
 import type { Db } from '@/db';
-import { documentFolder, teamDocument, appUser } from '@/db/schema';
-import { getOrCreateUser } from './users';
+import { documentFolder, teamDocument, teamMember, appUser } from '@/db/schema';
+import { getOrCreateUser, type UserRow } from './users';
 import { isAdmin } from './auth';
 import type { UserRef } from './issues';
 import { ApiError } from './errors';
@@ -74,11 +74,28 @@ export async function listTeamDocuments(db: Db, teamId: string): Promise<FolderD
    }));
 }
 
+/**
+ * Garante que o ator é membro do time (tabela team_member). Retorna a UserRow do ator
+ * (reaproveitada pelo chamador). 403 se não for membro.
+ */
+async function assertTeamMember(db: Db, teamId: string, actorEmail: string): Promise<UserRow> {
+   const me = await getOrCreateUser(db, actorEmail);
+   const rows = await db
+      .select({ userId: teamMember.userId })
+      .from(teamMember)
+      .where(and(eq(teamMember.teamId, teamId), eq(teamMember.userId, me.id)))
+      .limit(1);
+   if (rows.length === 0) throw new ApiError(403, 'Você não é membro deste time');
+   return me;
+}
+
 export async function createFolder(
    db: Db,
-   input: { id?: string; teamId: string; name: string; icon?: string | null }
+   input: { id?: string; teamId: string; name: string; icon?: string | null },
+   actorEmail: string
 ): Promise<FolderDto> {
    if (!input.name?.trim()) throw new ApiError(400, 'name é obrigatório');
+   await assertTeamMember(db, input.teamId, actorEmail);
    const id = input.id ?? randomUUID();
    await db
       .insert(documentFolder)
@@ -89,11 +106,26 @@ export async function createFolder(
 
 export async function createDocument(
    db: Db,
-   input: { folderId: string; name: string; icon?: string | null; pinned?: boolean },
+   input: {
+      folderId: string;
+      teamId: string;
+      name: string;
+      icon?: string | null;
+      pinned?: boolean;
+   },
    creatorEmail: string
 ): Promise<DocumentDto> {
    if (!input.name?.trim()) throw new ApiError(400, 'name é obrigatório');
-   const creator = await getOrCreateUser(db, creatorEmail);
+   const creator = await assertTeamMember(db, input.teamId, creatorEmail);
+   // A pasta-alvo tem que existir E pertencer ao mesmo time (evita gravar documento
+   // em pasta de outro time via folderId forjado).
+   const [folder] = await db
+      .select({ teamId: documentFolder.teamId })
+      .from(documentFolder)
+      .where(eq(documentFolder.id, input.folderId))
+      .limit(1);
+   if (!folder) throw new ApiError(404, 'Pasta não encontrada');
+   if (folder.teamId !== input.teamId) throw new ApiError(400, 'A pasta não pertence a este time');
    const id = randomUUID();
    const now = new Date();
    await db.insert(teamDocument).values({

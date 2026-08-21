@@ -22,7 +22,12 @@ function emailFromTestHeader(req?: Request): string | null {
  * Async: em produção consulta a sessão do NextAuth.
  */
 export async function emailFromRequest(req?: Request): Promise<string | null> {
-   if (process.env.NODE_ENV === 'test') return emailFromTestHeader(req);
+   // Guard DUPLO: só ativa o seam de header em teste (vitest) E fora do runtime do
+   // Next. O server de produção (`next start`) sempre define NEXT_RUNTIME → o bypass
+   // do header NUNCA liga em prod, mesmo que NODE_ENV venha errado por acidente.
+   if (process.env.NODE_ENV === 'test' && !process.env.NEXT_RUNTIME) {
+      return emailFromTestHeader(req);
+   }
    // Import dinâmico: mantém o next-auth fora do grafo estático (edge + testes).
    const { auth } = await import('@/auth');
    const session = await auth();

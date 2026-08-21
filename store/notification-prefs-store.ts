@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 export type NotificationPrefKey =
+   | 'emailNotifications'
    | 'showUpdatesInSidebar'
    | 'changelogNewsletter'
    | 'marketing'
@@ -11,6 +12,7 @@ export type NotificationPrefKey =
 export type NotificationPrefs = Record<NotificationPrefKey, boolean>;
 
 const DEFAULT_PREFS: NotificationPrefs = {
+   emailNotifications: true,
    showUpdatesInSidebar: true,
    changelogNewsletter: false,
    marketing: false,

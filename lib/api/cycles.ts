@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { cycle as cycleT, issue as issueT, status as statusT, team as teamT } from '@/db/schema';
 import { ApiError } from './errors';
@@ -131,7 +131,10 @@ export async function getCycleByStatus(
    const rows = await db
       .select()
       .from(cycleT)
+      // orderBy determinístico: sem ele, com vários 'upcoming' o resultado era arbitrário
+      // (ordem do heap). O mais próximo (menor startDate) é o "próximo" correto.
       .where(and(eq(cycleT.teamId, teamId), eq(cycleT.status, status)))
+      .orderBy(asc(cycleT.startDate))
       .limit(1);
    if (rows.length === 0) return null;
    const match = rows[0];
@@ -225,8 +228,11 @@ export async function deleteCycle(db: Db, id: string): Promise<boolean> {
       .where(eq(cycleT.id, id))
       .limit(1);
    if (existing.length === 0) return false;
-   await db.update(issueT).set({ cycleId: null }).where(eq(issueT.cycleId, id));
-   await db.delete(cycleT).where(eq(cycleT.id, id));
+   // Transacional: se o delete falhar, as issues não podem ficar desassociadas.
+   await db.transaction(async (tx) => {
+      await tx.update(issueT).set({ cycleId: null }).where(eq(issueT.cycleId, id));
+      await tx.delete(cycleT).where(eq(cycleT.id, id));
+   });
    publish({ entity: 'cycle', action: 'deleted', id });
    return true;
 }

@@ -31,7 +31,8 @@ const UpdateSchema = z.object({
 export async function PATCH(req: Request, { params }: Params) {
    return handle(async () => {
       const { teamKey } = await params;
-      await requireEmail(req);
+      const email = await requireEmail(req);
+      if (!(await isAdmin(email, db))) throw new ApiError(403, 'Apenas admin');
       const patch = UpdateSchema.parse(await req.json());
       const dto = await updateTeam(db, teamKey, patch);
       return dto ? ok(dto) : notFound(`Team '${teamKey}' não encontrado`);

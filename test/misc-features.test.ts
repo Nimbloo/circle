@@ -155,8 +155,14 @@ describe('inbox / notifications', () => {
 describe('documents', () => {
    it('creates folders/documents and lists them nested', async () => {
       const db = await base();
-      const folder = await createFolder(db, { teamId: 'CORE', name: 'Specs' });
-      const doc = await createDocument(db, { folderId: folder.id, name: 'RFC', pinned: true }, ME);
+      // ME precisa ser membro do time (checagem de membership no createFolder/createDocument).
+      await seedUser(db, { name: 'Dev', email: ME, teamIds: ['CORE'] });
+      const folder = await createFolder(db, { teamId: 'CORE', name: 'Specs' }, ME);
+      const doc = await createDocument(
+         db,
+         { folderId: folder.id, teamId: 'CORE', name: 'RFC', pinned: true },
+         ME
+      );
       const folders = await listTeamDocuments(db, 'CORE');
       expect(folders).toHaveLength(1);
       expect(folders[0].documents).toHaveLength(1);

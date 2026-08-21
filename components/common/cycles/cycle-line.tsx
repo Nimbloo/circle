@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { CapacityRing } from './capacity-ring';
+import { CycleActions } from './cycle-actions';
 
 export function CyclePlayIcon({ className }: { className?: string }) {
    return (
@@ -82,13 +83,16 @@ export default function CycleLine({ cycle }: CycleLineProps) {
       </div>
    );
 
-   if (href) {
-      return (
-         <Link href={href} className="block w-full">
-            {content}
-         </Link>
-      );
-   }
-
-   return content;
+   return (
+      <div className="w-full flex items-center pr-2">
+         {href ? (
+            <Link href={href} className="block flex-1 min-w-0">
+               {content}
+            </Link>
+         ) : (
+            <div className="flex-1 min-w-0">{content}</div>
+         )}
+         <CycleActions cycle={cycle} />
+      </div>
+   );
 }

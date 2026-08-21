@@ -28,6 +28,12 @@ interface RelationEditorProps {
    addLabel: string;
    /** Chamado após add/remove — o pai deve refetch o detail. */
    onChanged: () => void;
+   /**
+    * Renderiza a lista das issues relacionadas (default true). `false` = só o botão de
+    * adicionar — usado em sub-issues, onde a lista já é exibida com um layout próprio,
+    * mas `relatedIds` ainda filtra os candidatos do picker.
+    */
+   renderList?: boolean;
 }
 
 /**
@@ -41,6 +47,7 @@ export function RelationEditor({
    relatedIds,
    addLabel,
    onChanged,
+   renderList = true,
 }: RelationEditorProps) {
    const { orgId } = useParams<{ orgId: string }>();
    const issues = useIssuesStore((s) => s.issues);
@@ -82,26 +89,27 @@ export function RelationEditor({
 
    return (
       <div className="flex flex-col gap-1">
-         {related.map((issue) => (
-            <div key={issue.id} className="group flex items-center gap-2 text-sm min-w-0">
-               <issue.status.icon />
-               <Link
-                  href={`/${orgId ?? 'nimbloo'}/issue/${issue.identifier}`}
-                  className="truncate hover:underline"
-               >
-                  {issue.title}
-               </Link>
-               <button
-                  type="button"
-                  onClick={() => remove(issue.id)}
-                  disabled={busy}
-                  aria-label="Remove relation"
-                  className="ml-auto shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground disabled:opacity-40"
-               >
-                  <X className="size-3.5" />
-               </button>
-            </div>
-         ))}
+         {renderList &&
+            related.map((issue) => (
+               <div key={issue.id} className="group flex items-center gap-2 text-sm min-w-0">
+                  <issue.status.icon />
+                  <Link
+                     href={`/${orgId ?? 'nimbloo'}/issue/${issue.identifier}`}
+                     className="truncate hover:underline"
+                  >
+                     {issue.title}
+                  </Link>
+                  <button
+                     type="button"
+                     onClick={() => remove(issue.id)}
+                     disabled={busy}
+                     aria-label="Remove relation"
+                     className="ml-auto shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground disabled:opacity-40"
+                  >
+                     <X className="size-3.5" />
+                  </button>
+               </div>
+            ))}
          <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
                <button

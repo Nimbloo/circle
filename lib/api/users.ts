@@ -138,29 +138,49 @@ export async function getOrCreateUser(db: Db, email: string): Promise<UserRow> {
    return provisionUser(db, normalized, role);
 }
 
+/** Resultado do convite. `alreadyRegistered` = usuário já tinha senha (conta ativa). */
+export type InviteResult = UserRow & { alreadyRegistered: boolean };
+
 /**
- * Convida um usuário: cria (ou atualiza a role de) um app_user pelo e-mail, SEM senha
- * (passwordHash pendente — o convidado a define depois via /signup). Gera um
- * `inviteToken` single-use (novo a cada convite) e o devolve na row retornada — o
- * chamador o entrega ao convidado (link do e-mail). Idempotente por e-mail.
+ * Convida um usuário pelo e-mail. Idempotente. Três casos:
+ *  - Usuário novo → provisiona (sem senha) + gera `inviteToken` single-use.
+ *  - Convite pendente (existe, SEM senha) → atualiza a role + renova o token.
+ *  - JÁ CADASTRADO (existe, COM senha) → NÃO gera token novo nem reseta nada
+ *    (o link de signup seria inútil — setPassword rejeitaria com 409). Só atualiza a
+ *    role se o admin pediu uma diferente. Sinaliza `alreadyRegistered:true` p/ o
+ *    chamador não disparar o e-mail de convite.
+ * O `inviteToken` (quando gerado) volta na row — o chamador o entrega ao convidado.
  */
-export async function inviteUser(db: Db, email: string, role: string): Promise<UserRow> {
+export async function inviteUser(db: Db, email: string, role: string): Promise<InviteResult> {
    const normalized = email.trim().toLowerCase();
-   const inviteToken = generateInviteToken();
    const existing = await db.select().from(appUser).where(eq(appUser.email, normalized)).limit(1);
    if (existing.length > 0) {
+      const current = existing[0];
+      if (current.passwordHash) {
+         // Conta ativa: só reconcilia a role (se mudou), sem token nem reset.
+         if (current.role !== role) {
+            await db
+               .update(appUser)
+               .set({ role, updatedAt: new Date() })
+               .where(eq(appUser.email, normalized));
+         }
+         return { ...current, role, inviteToken: null, alreadyRegistered: true };
+      }
+      // Convite ainda pendente: renova o token e atualiza a role.
+      const inviteToken = generateInviteToken();
       await db
          .update(appUser)
          .set({ role, inviteToken, updatedAt: new Date() })
          .where(eq(appUser.email, normalized));
-      return { ...existing[0], role, inviteToken };
+      return { ...current, role, inviteToken, alreadyRegistered: false };
    }
+   const inviteToken = generateInviteToken();
    const created = await provisionUser(db, normalized, role);
    await db
       .update(appUser)
       .set({ inviteToken, updatedAt: new Date() })
       .where(eq(appUser.id, created.id));
-   return { ...created, inviteToken };
+   return { ...created, inviteToken, alreadyRegistered: false };
 }
 
 export interface UpdateProfileInput {

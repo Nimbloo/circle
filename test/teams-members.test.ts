@@ -147,7 +147,8 @@ describe('teams', () => {
 
    it('refuses to delete a team that still has a document folder (FK RESTRICT)', async () => {
       const { db } = await workspace();
-      await createFolder(db, { teamId: 'DESIGN', name: 'Specs' });
+      // ana é membro de DESIGN — passa na checagem de membership do createFolder.
+      await createFolder(db, { teamId: 'DESIGN', name: 'Specs' }, 'ana@nimbloo.ai');
       await expect(deleteTeam(db, 'DESIGN')).rejects.toThrow();
       expect(await getTeam(db, 'DESIGN')).not.toBeNull();
    });

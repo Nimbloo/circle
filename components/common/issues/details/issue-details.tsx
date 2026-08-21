@@ -5,7 +5,6 @@ import { adaptIssueDetail } from '@/lib/adapters-issue-detail';
 import { api } from '@/lib/client';
 import { ISSUE_CHANGED_EVENT } from '@/lib/use-live-sync';
 import { useIssuesStore } from '@/store/issues-store';
-import { Paperclip, Plus, SmilePlus } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
@@ -13,6 +12,7 @@ import { AssigneeUser } from '../assignee-user';
 import { ActivityFeed } from './activity-feed';
 import { ContentBlocks } from './content-blocks';
 import { IssuePropertiesPanel } from './issue-properties-panel';
+import { RelationEditor } from './relation-editor';
 
 /**
  * Issue detail page: rich description, sub-issues, activity feed and a
@@ -96,19 +96,9 @@ export default function IssueDetails() {
                   <ContentBlocks blocks={detail.description} />
                </div>
 
-               {/* Quick actions */}
-               <div className="flex items-center gap-3 mt-6 text-muted-foreground">
-                  <button className="hover:text-foreground" aria-label="Add reaction">
-                     <SmilePlus className="size-4" />
-                  </button>
-                  <button className="hover:text-foreground" aria-label="Attach file">
-                     <Paperclip className="size-4" />
-                  </button>
-               </div>
-
                {/* Sub-issues */}
                <div className="mt-8">
-                  {subIssues.length > 0 ? (
+                  {subIssues.length > 0 && (
                      <>
                         <h2 className="text-sm font-medium mb-1">
                            Sub-issues{' '}
@@ -121,7 +111,7 @@ export default function IssueDetails() {
                               /{subIssues.length}
                            </span>
                         </h2>
-                        <div className="flex flex-col border-t border-border/50">
+                        <div className="flex flex-col border-t border-border/50 mb-2">
                            {subIssues.map((subIssue) => (
                               <Link
                                  key={subIssue.id}
@@ -140,12 +130,17 @@ export default function IssueDetails() {
                            ))}
                         </div>
                      </>
-                  ) : (
-                     <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-                        <Plus className="size-4" />
-                        Add sub-issues
-                     </button>
                   )}
+                  {/* Add-only: a lista rica acima já exibe os subs; o picker cria a relação
+                      `sub` (filtrando os já vinculados via relatedIds) e refetch no onChanged. */}
+                  <RelationEditor
+                     issueId={issue.id}
+                     kind="sub"
+                     relatedIds={detail.subIssueIds ?? []}
+                     addLabel="Add sub-issues"
+                     renderList={false}
+                     onChanged={() => setReloadKey((k) => k + 1)}
+                  />
                </div>
 
                <div className="border-t border-border/60 mt-8" />

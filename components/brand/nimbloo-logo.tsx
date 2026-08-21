@@ -10,16 +10,17 @@ interface NimblooLogoProps {
 }
 
 /**
- * Theme-aware Nimbloo wordmark.
- *
- * Uses `currentColor` for the mark and `text-foreground` for the name, so it
- * renders dark on light backgrounds and light on dark backgrounds automatically.
+ * Logo Nimbloo theme-aware: **roxo no tema claro, branco no tema escuro** (igual ao
+ * nimbloo-frontend). Cor via `text-[#6D28D9] dark:text-white`; mark e nome usam
+ * `currentColor`. Passe `className` pra sobrescrever (ex.: `text-foreground`).
  *
  * {/* TODO: trocar pelo SVG oficial da Nimbloo *\/}
  */
 export function NimblooLogo({ className, size = 24, markOnly = false }: NimblooLogoProps) {
    return (
-      <span className={cn('inline-flex items-center gap-2 text-foreground', className)}>
+      <span
+         className={cn('inline-flex items-center gap-2 text-[#6D28D9] dark:text-white', className)}
+      >
          <svg
             width={size}
             height={size}

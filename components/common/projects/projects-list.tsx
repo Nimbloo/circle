@@ -28,6 +28,7 @@ export default function ProjectsList({ groups }: { groups: ProjectGroup[] }) {
                <div className="hidden xl:block w-[60px] shrink-0 pl-2.5">Issues</div>
             )}
             {displayProperties.status && <div className="w-[90px] shrink-0 pl-2">Status</div>}
+            <div className="w-8 shrink-0" />
          </div>
 
          {groups.map((group) => (

@@ -25,6 +25,12 @@ export async function POST(req: Request) {
       const { email, role } = InviteSchema.parse(await req.json());
       const user = await inviteUser(db, email, role);
 
+      // Usuário já tem conta ativa: role (talvez) reconciliada, mas nenhum token/e-mail
+      // de convite — o link de signup seria inútil (setPassword daria 409). Sinaliza ao admin.
+      if (user.alreadyRegistered) {
+         return ok({ id: user.id, email: user.email, role: user.role, alreadyRegistered: true });
+      }
+
       // Link single-use do convite (e-mail + token no query string).
       const baseUrl = process.env.AUTH_URL || 'https://circle.nimbloo.ai';
       const signupUrl = `${baseUrl}/signup?email=${encodeURIComponent(user.email)}&token=${user.inviteToken}`;

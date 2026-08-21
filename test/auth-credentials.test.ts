@@ -32,12 +32,30 @@ describe('inviteUser', () => {
       expect(rows[0].role).toBe('Admin');
    });
 
-   it('generates a new token on every (re-)invite', async () => {
+   it('generates a new token on every (re-)invite while the account is still pending', async () => {
       const db = await makeTestDb();
       const first = await inviteUser(db, 'reinv@nimbloo.ai', 'Member');
       const second = await inviteUser(db, 'reinv@nimbloo.ai', 'Member');
       expect(second.inviteToken).toBeTruthy();
       expect(second.inviteToken).not.toBe(first.inviteToken);
+      expect(second.alreadyRegistered).toBe(false);
+   });
+
+   it('does NOT reset a registered account on re-invite (only reconciles the role)', async () => {
+      const db = await makeTestDb();
+      const u = await inviteUser(db, 'done@nimbloo.ai', 'Member');
+      await setPassword(db, 'done@nimbloo.ai', 'sup3rsecret', u.inviteToken!);
+      const [before] = await db.select().from(appUser).where(eq(appUser.email, 'done@nimbloo.ai'));
+
+      const re = await inviteUser(db, 'done@nimbloo.ai', 'Admin');
+      expect(re.alreadyRegistered).toBe(true);
+      expect(re.inviteToken).toBeNull(); // sem token inútil
+      expect(re.role).toBe('Admin'); // role reconciliada
+
+      const [after] = await db.select().from(appUser).where(eq(appUser.email, 'done@nimbloo.ai'));
+      expect(after.passwordHash).toBe(before.passwordHash); // senha intacta
+      expect(after.inviteToken).toBeNull(); // continua sem token (não reaberto)
+      expect(after.role).toBe('Admin');
    });
 });
 

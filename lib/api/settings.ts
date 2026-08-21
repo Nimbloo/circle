@@ -40,6 +40,9 @@ const ThemeSchema = z
 
 const NotificationsSchema = z
    .object({
+      // Master switch dos e-mails transacionais (menção/comentário/etc). Default true;
+      // honrada em dispatchNotification (o in-app sempre grava, só o e-mail respeita).
+      emailNotifications: z.boolean().optional(),
       showUpdatesInSidebar: z.boolean().optional(),
       changelogNewsletter: z.boolean().optional(),
       marketing: z.boolean().optional(),

@@ -18,6 +18,24 @@ import type { ViewDto } from '@/lib/api/views';
 const statusById = new Map(statusCatalog.map((s) => [s.id, s]));
 const priorityById = new Map(priorityCatalog.map((p) => [p.id, p]));
 
+/**
+ * Owner sintético quando o ownerId não está no mapa de members (ex.: membro removido).
+ * Preserva o id e evita `{} as User` — a UI lê `owner.name` sem quebrar.
+ */
+function fallbackUser(id: string): User {
+   return {
+      id,
+      name: '—',
+      email: '',
+      avatarUrl: '',
+      status: 'offline',
+      role: 'Member',
+      joinedDate: '',
+      teamIds: [],
+      timezone: 'UTC',
+   };
+}
+
 function toStatus(s: { id: string; name: string; color: string; category: string }): Status {
    return (
       statusById.get(s.id) ?? {
@@ -96,6 +114,7 @@ export function adaptProject(p: ProjectDto): Project {
       labels: p.labels,
       initiative: p.initiativeId ?? undefined,
       healthUpdatedAgoDays: p.healthUpdatedAgoDays ?? undefined,
+      issueCount: p.issueCount,
    };
 }
 
@@ -154,7 +173,7 @@ export function adaptView(v: ViewDto, users: Map<string, User>): View {
       icon: v.icon ?? '🔍',
       type: v.type as View['type'],
       teamId: v.teamId ?? undefined,
-      owner: users.get(v.ownerId) ?? ({} as User),
+      owner: users.get(v.ownerId) ?? fallbackUser(v.ownerId),
       createdAt: v.createdAt,
       updatedAt: v.updatedAt,
       filter: v.filter as View['filter'],

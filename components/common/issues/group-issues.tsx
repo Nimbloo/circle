@@ -105,7 +105,10 @@ const IssueGridList: FC<{ issues: Issue[]; status?: Status }> = ({ issues, statu
       accept: IssueDragType,
       canDrop: () => status !== undefined,
       drop(item: Issue, monitor) {
-         if (status && monitor.didDrop() && item.status.id !== status.id) {
+         // Só trata quando NENHUM card tratou o drop (área vazia do grupo). Se um card
+         // tratou (reorder ou status), `didDrop()` é true e o container não faz nada —
+         // senão sobrescreveria o reorder com um status-change redundante.
+         if (status && !monitor.didDrop() && item.status.id !== status.id) {
             updateIssueStatus(item.id, status);
          }
       },
@@ -141,7 +144,7 @@ const IssueGridList: FC<{ issues: Issue[]; status?: Status }> = ({ issues, statu
             )}
          </AnimatePresence>
          {issues.map((issue) => (
-            <IssueGrid key={issue.id} issue={issue} />
+            <IssueGrid key={issue.id} issue={issue} orderedIssues={issues} />
          ))}
       </div>
    );

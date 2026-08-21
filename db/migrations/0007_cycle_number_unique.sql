@@ -1,0 +1,1 @@
+ALTER TABLE "cycle" ADD CONSTRAINT "cycle_team_id_number_unique" UNIQUE("team_id","number");
