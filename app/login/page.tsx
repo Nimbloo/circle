@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 
+import { CircleLogo } from '@/components/brand/circle-logo';
 import { NimblooLogo } from '@/components/brand/nimbloo-logo';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -82,10 +83,13 @@ function LoginForm() {
          <div className="w-full max-w-sm">
             <Card>
                <CardHeader className="items-center text-center">
-                  <CardTitle className="text-3xl font-semibold tracking-tight">Circle</CardTitle>
-                  <div className="text-muted-foreground mt-1 flex items-center gap-1 text-xs">
+                  <CardTitle className="flex items-center gap-2.5 text-3xl font-semibold tracking-tight">
+                     <CircleLogo size={30} className="text-foreground" />
+                     Circle
+                  </CardTitle>
+                  <div className="text-muted-foreground mt-1 flex items-center gap-1.5 text-xs">
                      <span>by</span>
-                     <NimblooLogo size={14} />
+                     <NimblooLogo size={13} />
                   </div>
                   <CardDescription className="mt-3">Entre para continuar</CardDescription>
                </CardHeader>
