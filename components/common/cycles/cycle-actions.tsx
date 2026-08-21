@@ -37,7 +37,7 @@ import { api } from '@/lib/client';
 import { Cycle, CycleStatus, cycleStatusLabel } from '@/mock-data/cycles';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 const STATUS_IDS: CycleStatus[] = ['planned', 'upcoming', 'current', 'completed'];
@@ -58,6 +58,18 @@ function EditCycleDialog({
    const [startDate, setStartDate] = useState(cycle.startDate);
    const [endDate, setEndDate] = useState(cycle.endDate);
    const [capacity, setCapacity] = useState(String(cycle.capacity));
+
+   // Ressincroniza o form com o cycle atual ao (re)abrir — o useState inicial só
+   // roda no mount, então sem isto reabrir após hydrate mostraria valores stale.
+   useEffect(() => {
+      if (open) {
+         setName(cycle.name);
+         setStatus(cycle.status);
+         setStartDate(cycle.startDate);
+         setEndDate(cycle.endDate);
+         setCapacity(String(cycle.capacity));
+      }
+   }, [open, cycle]);
 
    const save = async () => {
       if (!name.trim() || busy) return;

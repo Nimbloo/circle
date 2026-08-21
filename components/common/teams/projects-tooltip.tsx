@@ -20,8 +20,8 @@ export function ProjectsTooltip({ projects }: ProjectsTooltipProps) {
             </TooltipTrigger>
             <TooltipContent className="p-2">
                <div className="flex flex-col gap-1">
-                  {projects.map((project, index) => (
-                     <div key={index} className="flex items-center gap-1.5">
+                  {projects.map((project) => (
+                     <div key={project.id} className="flex items-center gap-1.5">
                         <project.icon className="size-4 shrink-0" />
                         <span className="text-sm w-full text-left">{project?.name}</span>
                         <div className="shrink-0">

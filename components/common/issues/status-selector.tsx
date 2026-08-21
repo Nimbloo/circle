@@ -53,6 +53,7 @@ export function StatusSelector({ status, issueId }: StatusSelectorProps) {
                   variant="ghost"
                   role="combobox"
                   aria-expanded={open}
+                  aria-label="Set status"
                >
                   {renderStatusIcon(value)}
                </Button>

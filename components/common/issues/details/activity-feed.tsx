@@ -257,9 +257,6 @@ export function ActivityFeed({
       <div className="mt-10">
          <div className="flex items-center justify-between mb-2">
             <h2 className="text-base font-semibold">Activity</h2>
-            <button className="text-xs text-muted-foreground hover:text-foreground">
-               Subscribe
-            </button>
          </div>
 
          <div className="flex flex-col">

@@ -10,23 +10,12 @@ interface TeamLineProps {
    team: Team;
 }
 
-/** Deterministic fake created/updated dates (no created field in mock data). */
-const hashString = (value: string): number => {
-   let hash = 0;
-   for (let i = 0; i < value.length; i++) hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
-   return hash;
-};
-
-const CREATED_DATES = ['Mar 2024', 'Jun 2024', 'Sep 2024', 'Jan 2025', 'May 2025', 'Nov 2025'];
-const UPDATED_DATES = ['Jul 12', 'Jul 20', 'Jul 27', 'Jul 30', 'Aug 1', 'Aug 3'];
-
 export default function TeamLine({ team }: TeamLineProps) {
    const { displayProperties } = useTeamsDisplayStore();
    const getCyclesByTeam = useWorkspaceStore((s) => s.getCyclesByTeam);
    const cycles = getCyclesByTeam(team.id);
    const uniqueProjects = new Set(team.projects.map((project) => project.id)).size;
    const owner = team.members[0];
-   const hash = hashString(team.id);
 
    return (
       <div className="w-full flex items-center py-2.5 px-6 border-b hover:bg-sidebar/50 border-muted-foreground/5 text-sm">
@@ -100,15 +89,11 @@ export default function TeamLine({ team }: TeamLineProps) {
          )}
 
          {displayProperties.created && (
-            <div className="hidden xl:block w-[90px] shrink-0 text-xs text-muted-foreground">
-               {CREATED_DATES[hash % CREATED_DATES.length]}
-            </div>
+            <div className="hidden xl:block w-[90px] shrink-0 text-xs text-muted-foreground">—</div>
          )}
 
          {displayProperties.updated && (
-            <div className="hidden xl:block w-[90px] shrink-0 text-xs text-muted-foreground">
-               {UPDATED_DATES[hash % UPDATED_DATES.length]}
-            </div>
+            <div className="hidden xl:block w-[90px] shrink-0 text-xs text-muted-foreground">—</div>
          )}
       </div>
    );

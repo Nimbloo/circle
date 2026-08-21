@@ -24,10 +24,10 @@ export function PrioritySelector({ priority, onPriorityChange }: PrioritySelecto
    const id = useId();
    const priorities = usePriorities();
    const [open, setOpen] = useState<boolean>(false);
-   const [value, setValue] = useState<string>(priority.id);
+   // Deriva do prop — reverte junto com o rollback e reflete mudança externa.
+   const value = priority.id;
 
    const handlePriorityChange = (priorityId: string) => {
-      setValue(priorityId);
       setOpen(false);
 
       if (onPriorityChange) {
@@ -46,6 +46,7 @@ export function PrioritySelector({ priority, onPriorityChange }: PrioritySelecto
                   variant="ghost"
                   role="combobox"
                   aria-expanded={open}
+                  aria-label="Set priority"
                >
                   {(() => {
                      const selectedItem = priorities.find((item) => item.id === value);

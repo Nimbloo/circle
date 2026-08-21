@@ -1,9 +1,6 @@
 'use client';
 
-import {
-   PanelFilterTarget,
-   usePanelFilter,
-} from '@/components/common/issues/use-panel-filter';
+import { PanelFilterTarget, usePanelFilter } from '@/components/common/issues/use-panel-filter';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -11,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { Cycle, cycleStatusLabel, formatCycleDateRange } from '@/mock-data/cycles';
 import { Issue } from '@/mock-data/issues';
 import { useRightPanelStore } from '@/store/right-panel-store';
-import { Plus, User, X } from 'lucide-react';
+import { User, X } from 'lucide-react';
 import { useMemo } from 'react';
 import { CapacityRing } from './capacity-ring';
 import { CycleBurnupChart } from './cycle-burnup-chart';
@@ -240,11 +237,6 @@ export function CycleDetailsPanel({ cycle, issues }: CycleDetailsPanelProps) {
                <CyclePlayIcon />
                <h2 className="text-lg font-semibold">{cycle.name}</h2>
             </div>
-
-            <button className="flex items-center gap-1.5 mt-3 text-sm text-muted-foreground hover:text-foreground transition-colors">
-               <Plus className="size-4" />
-               Add document or link...
-            </button>
          </div>
 
          {/* Progress */}

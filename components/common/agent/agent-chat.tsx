@@ -28,6 +28,7 @@ function useStreamReply() {
    }, []);
 
    return (chatId: string, messageId: string, reply: string) => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
       const words = reply.split(/(\s+)/);
       let index = 0;
       intervalRef.current = setInterval(() => {
@@ -40,6 +41,18 @@ function useStreamReply() {
          index += 1;
       }, 14);
    };
+}
+
+/** Makes explicit that replies are canned examples, not a live LLM/backlog analysis. */
+function DemoBadge() {
+   return (
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+         <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 font-medium text-amber-600 dark:text-amber-400">
+            Demo
+         </span>
+         <span>Example responses — not a live analysis of the backlog.</span>
+      </div>
+   );
 }
 
 function AgentMessageBody({ content, streaming }: { content: string; streaming?: boolean }) {
@@ -85,15 +98,17 @@ function ChatComposer({
    onSend,
    autoFocus,
    large,
+   disabled,
 }: {
    onSend: (input: string) => void;
    autoFocus?: boolean;
    large?: boolean;
+   disabled?: boolean;
 }) {
    const [value, setValue] = useState('');
 
    const submit = () => {
-      if (value.trim() === '') return;
+      if (disabled || value.trim() === '') return;
       onSend(value.trim());
       setValue('');
    };
@@ -103,6 +118,7 @@ function ChatComposer({
          <textarea
             value={value}
             autoFocus={autoFocus}
+            disabled={disabled}
             onChange={(event) => setValue(event.target.value)}
             onKeyDown={(event) => {
                if (event.key === 'Enter' && !event.shiftKey) {
@@ -112,7 +128,7 @@ function ChatComposer({
             }}
             placeholder="Ask the agent…"
             className={cn(
-               'w-full resize-none bg-transparent px-4 pt-3.5 text-sm outline-none placeholder:text-muted-foreground',
+               'w-full resize-none bg-transparent px-4 pt-3.5 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-60',
                large ? 'min-h-16' : 'min-h-12'
             )}
          />
@@ -137,7 +153,7 @@ function ChatComposer({
                   size="icon"
                   className="size-7 rounded-full"
                   onClick={submit}
-                  disabled={value.trim() === ''}
+                  disabled={disabled || value.trim() === ''}
                   aria-label="Send"
                >
                   <ArrowUp className="size-4" />
@@ -162,12 +178,14 @@ export default function AgentChat() {
    const scrollRef = useRef<HTMLDivElement>(null);
 
    const activeChat = chats.find((chat) => chat.id === activeChatId);
+   const isStreaming = activeChat?.messages.some((message) => message.streaming) ?? false;
 
    useEffect(() => {
       scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
    }, [activeChat?.messages]);
 
    const handleSend = (input: string) => {
+      if (isStreaming) return;
       const { chatId, assistantMessageId, reply } = sendMessage(input);
       stream(chatId, assistantMessageId, reply);
    };
@@ -176,6 +194,9 @@ export default function AgentChat() {
    if (!activeChat) {
       return (
          <div className="w-full h-full flex flex-col items-center overflow-y-auto">
+            <div className="w-full flex justify-center border-b bg-container px-4 py-2">
+               <DemoBadge />
+            </div>
             {!bannerDismissed && (
                <div className="mt-4 flex items-center gap-3 rounded-full border bg-container shadow-xs px-4 py-1.5 text-sm">
                   <span>Agent is now your default view</span>
@@ -195,7 +216,7 @@ export default function AgentChat() {
                <div className="flex justify-center mb-8 text-muted-foreground/30">
                   <Bot className="size-24" strokeWidth={1} />
                </div>
-               <ChatComposer onSend={handleSend} autoFocus large />
+               <ChatComposer onSend={handleSend} autoFocus large disabled={isStreaming} />
 
                {!examplesDismissed && (
                   <div className="mt-6">
@@ -237,6 +258,9 @@ export default function AgentChat() {
    /* --------------------------- Conversation --------------------------- */
    return (
       <div className="w-full h-full flex flex-col overflow-hidden">
+         <div className="shrink-0 border-b bg-container px-4 py-2">
+            <DemoBadge />
+         </div>
          <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
             <div className="max-w-2xl mx-auto px-6 py-8 flex flex-col gap-6">
                {activeChat.messages.map((message) =>
@@ -273,7 +297,7 @@ export default function AgentChat() {
          </div>
          <div className="shrink-0 border-t bg-container">
             <div className="max-w-2xl mx-auto px-6 py-4">
-               <ChatComposer onSend={handleSend} />
+               <ChatComposer onSend={handleSend} disabled={isStreaming} />
             </div>
          </div>
       </div>

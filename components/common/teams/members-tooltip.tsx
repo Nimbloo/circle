@@ -17,8 +17,8 @@ export function MembersTooltip({ members }: MembersTooltipProps) {
          <Tooltip>
             <TooltipTrigger asChild>
                <div className="flex -space-x-2">
-                  {displayedMembers.map((member, index) => (
-                     <Avatar key={index} className="size-6 border-2 border-container">
+                  {displayedMembers.map((member) => (
+                     <Avatar key={member.id} className="size-6 border-2 border-container">
                         <AvatarImage src={member.avatarUrl} alt={member.name} />
                         <AvatarFallback className="text-xs">{member.name[0]}</AvatarFallback>
                      </Avatar>
@@ -32,8 +32,8 @@ export function MembersTooltip({ members }: MembersTooltipProps) {
             </TooltipTrigger>
             <TooltipContent className="p-2">
                <div className="flex flex-col gap-1">
-                  {members.map((member, index) => (
-                     <div key={index} className="flex items-center gap-1.5">
+                  {members.map((member) => (
+                     <div key={member.id} className="flex items-center gap-1.5">
                         <Avatar className="size-5">
                            <AvatarImage src={member.avatarUrl} alt={member.name} />
                            <AvatarFallback className="text-[10px]">{member.name[0]}</AvatarFallback>

@@ -159,7 +159,7 @@ export function BulkActionsBar() {
                                  onSelect={() => applyAssignee(u.id)}
                               >
                                  <Avatar className="size-4">
-                                    <AvatarImage src={u.avatarUrl} alt={u.name} />
+                                    <AvatarImage src={u.avatarUrl || undefined} alt={u.name} />
                                     <AvatarFallback>{u.name[0]}</AvatarFallback>
                                  </Avatar>
                                  {u.name}

@@ -40,7 +40,7 @@ import { usePriorities, useHealthStates } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 const STATUS_IDS = Object.keys(INITIATIVE_STATUS_META) as InitiativeStatus[];
@@ -64,6 +64,18 @@ function EditInitiativeDialog({
    const [status, setStatus] = useState<InitiativeStatus>(initiative.status);
    const [priorityId, setPriorityId] = useState<string>(initiative.priority.id);
    const [healthId, setHealthId] = useState<string>(initiative.health.id);
+
+   // Ressincroniza o form com a initiative atual ao (re)abrir — o useState inicial
+   // só roda no mount, então sem isto reabrir após hydrate mostraria valores stale.
+   useEffect(() => {
+      if (open) {
+         setName(initiative.name);
+         setDescription(initiative.description ?? '');
+         setStatus(initiative.status);
+         setPriorityId(initiative.priority.id);
+         setHealthId(initiative.health.id);
+      }
+   }, [open, initiative]);
 
    const save = async () => {
       if (!name.trim() || busy) return;

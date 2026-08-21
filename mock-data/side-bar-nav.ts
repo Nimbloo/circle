@@ -21,22 +21,22 @@ import {
 export const inboxItems = [
    {
       name: 'Inbox',
-      url: '/lndev-ui/inbox',
+      url: '/inbox',
       icon: Inbox,
    },
    {
       name: 'Reviews',
-      url: '/lndev-ui/reviews',
+      url: '/reviews',
       icon: GitPullRequestArrow,
    },
    {
       name: 'My issues',
-      url: '/lndev-ui/my-issues',
+      url: '/my-issues',
       icon: FolderKanban,
    },
    {
       name: 'Agent',
-      url: '/lndev-ui/agent',
+      url: '/agent',
       icon: Bot,
    },
 ];
@@ -44,27 +44,22 @@ export const inboxItems = [
 export const workspaceItems = [
    {
       name: 'Teams',
-      url: '/lndev-ui/teams',
+      url: '/teams',
       icon: ContactRound,
    },
    {
       name: 'Projects',
-      url: '/lndev-ui/projects',
+      url: '/projects',
       icon: Box,
    },
    {
       name: 'Members',
-      url: '/lndev-ui/members',
+      url: '/members',
       icon: UserRound,
    },
 ];
 
 export const accountItems = [
-   {
-      name: 'Account',
-      url: '/settings/account',
-      icon: UserRound,
-   },
    {
       name: 'Preferences',
       url: '/settings/preferences',
@@ -95,13 +90,8 @@ export const accountItems = [
 export const featuresItems = [
    {
       name: 'Labels',
-      url: '/settings/labels',
+      url: '/settings/issue-labels',
       icon: Tag,
-   },
-   {
-      name: 'Projects',
-      url: '/settings/projects',
-      icon: Box,
    },
    {
       name: 'Initiatives',
@@ -115,7 +105,7 @@ export const featuresItems = [
    },
    {
       name: 'Templates',
-      url: '/settings/templates',
+      url: '/settings/issue-templates',
       icon: FileText,
    },
    {

@@ -6,15 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Initiative, INITIATIVE_STATUS_META } from '@/mock-data/initiatives';
 import { Project } from '@/mock-data/projects';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import {
-   CalendarRange,
-   ChevronDown,
-   FilePenLine,
-   FileText,
-   Plus,
-   Tag,
-   UserRound,
-} from 'lucide-react';
+import { CalendarRange, ChevronDown, FilePenLine, Plus, Tag, UserRound } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
@@ -285,24 +277,8 @@ function Overview({ initiative }: { initiative: Initiative }) {
             <InitiativeProgressPanel initiative={initiative} />
 
             <div className="flex flex-col gap-3">
-               <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Activity</span>
-                  <button className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-                     See all
-                  </button>
-               </div>
-               <div className="flex flex-col gap-2 text-xs text-muted-foreground">
-                  <span className="flex items-start gap-2">
-                     <FilePenLine className="size-3.5 mt-px shrink-0" />
-                     {initiative.owner?.name ?? 'someone'} renamed the initiative ·{' '}
-                     {formatTarget(initiative.createdAt)}
-                  </span>
-                  <span className="flex items-start gap-2">
-                     <FileText className="size-3.5 mt-px shrink-0" />
-                     {initiative.owner?.name ?? 'someone'} created the initiative ·{' '}
-                     {formatTarget(initiative.createdAt)}
-                  </span>
-               </div>
+               <span className="text-sm font-medium">Activity</span>
+               <p className="text-xs text-muted-foreground">No activity recorded yet.</p>
             </div>
          </aside>
       </div>
@@ -311,36 +287,11 @@ function Overview({ initiative }: { initiative: Initiative }) {
 
 /* ------------------------------- activity tab ----------------------------- */
 
-function Activity({ initiative }: { initiative: Initiative }) {
-   const events = [
-      {
-         label: `${initiative.owner?.name ?? 'someone'} created the initiative`,
-         date: formatTarget(initiative.createdAt),
-      },
-      {
-         label: `${initiative.owner?.name ?? 'someone'} changed the status to ${INITIATIVE_STATUS_META[initiative.status].label}`,
-         date: formatTarget(initiative.createdAt),
-      },
-      {
-         label: `${initiative.projectIds.length} projects added to the initiative`,
-         date: formatTarget(initiative.createdAt),
-      },
-   ];
+function Activity() {
    return (
       <div className="max-w-2xl mx-auto px-8 py-10 flex flex-col gap-4 w-full">
          <h2 className="text-lg font-medium">Activity</h2>
-         <div className="flex flex-col">
-            {events.map((event, index) => (
-               <div
-                  key={index}
-                  className="flex items-center gap-3 py-3 border-b border-border/50 text-sm"
-               >
-                  <FileText className="size-4 text-muted-foreground shrink-0" />
-                  <span className="flex-1">{event.label}</span>
-                  <span className="text-xs text-muted-foreground">{event.date}</span>
-               </div>
-            ))}
-         </div>
+         <p className="text-sm text-muted-foreground">No activity recorded yet.</p>
       </div>
    );
 }
@@ -374,7 +325,7 @@ export default function InitiativeDetails({ initiativeId }: { initiativeId: stri
       );
    }
 
-   if (tab === 'activity') return <Activity initiative={initiative} />;
+   if (tab === 'activity') return <Activity />;
    if (tab === 'projects') return <ProjectsTimeline groups={timelineGroups} />;
    return <Overview initiative={initiative} />;
 }

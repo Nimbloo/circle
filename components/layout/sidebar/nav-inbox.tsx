@@ -17,6 +17,7 @@ import {
    useSidebarPrefsStore,
 } from '@/store/sidebar-prefs-store';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 const ITEM_KEYS: Record<string, SidebarItemKey> = {
@@ -27,6 +28,7 @@ const ITEM_KEYS: Record<string, SidebarItemKey> = {
 };
 
 export function NavInbox() {
+   const { orgId } = useParams<{ orgId: string }>();
    const { visibility, badgeStyle, order } = useSidebarPrefsStore();
    const { getUnreadCount } = useNotificationsStore();
    const [mounted, setMounted] = useState(false);
@@ -67,7 +69,7 @@ export function NavInbox() {
             {items.map((item) => (
                <SidebarMenuItem key={item.name}>
                   <SidebarMenuButton asChild>
-                     <Link href={item.url}>
+                     <Link href={`/${orgId}${item.url}`}>
                         <item.icon />
                         <span>{item.name}</span>
                      </Link>

@@ -13,11 +13,11 @@ interface DatePickerProps {
 }
 
 export function DatePicker({ date, onDateChange }: DatePickerProps) {
-   const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(date);
    const [open, setOpen] = React.useState<boolean>(false);
+   // Deriva do prop — reverte junto com o rollback e reflete mudança externa.
+   const selectedDate = date;
 
    const handleDateSelect = (date: Date | undefined) => {
-      setSelectedDate(date);
       if (onDateChange) {
          onDateChange(date);
       }
@@ -31,6 +31,7 @@ export function DatePicker({ date, onDateChange }: DatePickerProps) {
                variant="ghost"
                className="h-7 px-2 justify-start text-left font-normal"
                size="sm"
+               aria-label="Set target date"
             >
                <CalendarIcon className="h-4 w-4 md:mr-0.5" />
                {selectedDate ? (

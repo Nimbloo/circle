@@ -1,13 +1,12 @@
 'use client';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { adaptFolders } from '@/lib/adapters-documents';
 import { api } from '@/lib/client';
 import type { DocumentFolder } from '@/mock-data/documents';
 import { formatDistanceToNowStrict, parseISO } from 'date-fns';
-import { ChevronRight, Pin, Plus, SlidersHorizontal } from 'lucide-react';
+import { ChevronRight, Pin } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -59,15 +58,6 @@ export default function TeamDocuments() {
                <span className="hidden md:block">Created</span>
                <span className="hidden md:block">Last edited</span>
                <span />
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-               <Button size="xs" variant="secondary">
-                  <Plus className="size-4 md:mr-1" />
-                  <span className="hidden md:inline">New document</span>
-               </Button>
-               <Button size="xs" variant="ghost">
-                  <SlidersHorizontal className="size-4" />
-               </Button>
             </div>
          </div>
 

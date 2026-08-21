@@ -181,9 +181,6 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                            <span className="w-24 text-muted-foreground shrink-0">Initiatives</span>
                            <span className="inline-flex items-center gap-1.5">
                               📄 {project.initiative}
-                              <button className="text-muted-foreground hover:text-foreground transition-colors">
-                                 <Plus className="size-3.5" />
-                              </button>
                            </span>
                         </div>
                      )}
@@ -204,9 +201,6 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                                  <ChevronDown className="size-3 text-muted-foreground" />
                               </span>
                            ))}
-                           <button className="text-muted-foreground hover:text-foreground transition-colors">
-                              <Plus className="size-3.5" />
-                           </button>
                         </div>
                      </div>
 
@@ -226,6 +220,7 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                            <button
                               type="button"
                               onClick={handleAddResource}
+                              aria-label="Add resource"
                               className="text-muted-foreground hover:text-foreground transition-colors"
                            >
                               <Plus className="size-3.5" />

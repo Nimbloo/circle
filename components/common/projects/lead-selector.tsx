@@ -25,10 +25,10 @@ export function LeadSelector({ lead, onLeadChange }: LeadSelectorProps) {
    const id = useId();
    const users = useWorkspaceStore((s) => s.users);
    const [open, setOpen] = useState<boolean>(false);
-   const [value, setValue] = useState<string>(lead?.id ?? '');
+   // Deriva do prop — reverte junto com o rollback e reflete mudança externa.
+   const value = lead?.id ?? '';
 
    const handleLeadChange = (userId: string) => {
-      setValue(userId);
       setOpen(false);
 
       if (onLeadChange) {
@@ -47,6 +47,7 @@ export function LeadSelector({ lead, onLeadChange }: LeadSelectorProps) {
                   variant="ghost"
                   role="combobox"
                   aria-expanded={open}
+                  aria-label="Set lead"
                >
                   {(() => {
                      const selectedUser = users.find((user) => user.id === value);

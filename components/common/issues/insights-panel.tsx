@@ -1,13 +1,6 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import {
-   Select,
-   SelectContent,
-   SelectItem,
-   SelectTrigger,
-   SelectValue,
-} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { Issue } from '@/mock-data/issues';
 import type { Status } from '@/mock-data/status';
@@ -97,43 +90,6 @@ export function InsightsPanel({ issues }: InsightsPanelProps) {
             <Button variant="ghost" size="icon" className="size-7" onClick={closePanel}>
                <X className="size-4" />
             </Button>
-         </div>
-
-         {/* Measure / Slice / Segment */}
-         <div className="grid grid-cols-3 gap-2 px-4 pb-4 shrink-0">
-            <div className="flex flex-col gap-1">
-               <span className="text-xs text-muted-foreground">Measure</span>
-               <Select defaultValue="issue-count">
-                  <SelectTrigger className="h-8 text-xs w-full">
-                     <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                     <SelectItem value="issue-count">Issue count</SelectItem>
-                  </SelectContent>
-               </Select>
-            </div>
-            <div className="flex flex-col gap-1">
-               <span className="text-xs text-muted-foreground">Slice</span>
-               <Select defaultValue="status">
-                  <SelectTrigger className="h-8 text-xs w-full">
-                     <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                     <SelectItem value="status">Status</SelectItem>
-                  </SelectContent>
-               </Select>
-            </div>
-            <div className="flex flex-col gap-1">
-               <span className="text-xs text-muted-foreground">Segment</span>
-               <Select defaultValue="priority">
-                  <SelectTrigger className="h-8 text-xs w-full">
-                     <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                     <SelectItem value="priority">Priority</SelectItem>
-                  </SelectContent>
-               </Select>
-            </div>
          </div>
 
          {/* Stacked bar chart */}
@@ -236,12 +192,6 @@ export function InsightsPanel({ issues }: InsightsPanelProps) {
                   })}
                </tbody>
             </table>
-         </div>
-
-         <div className="shrink-0 border-t px-4 py-3">
-            <button className="text-xs text-indigo-500 dark:text-indigo-400 hover:underline">
-               Set default for everyone
-            </button>
          </div>
       </div>
    );

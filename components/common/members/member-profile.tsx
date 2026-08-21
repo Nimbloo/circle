@@ -23,7 +23,7 @@ import { RoleControl } from './role-control';
 
 const presenceLabel: Record<User['status'], string> = {
    online: 'Online now',
-   away: 'Away as of 11 minutes ago',
+   away: 'Away',
    offline: 'Offline',
 };
 
@@ -87,7 +87,7 @@ function useClientTimes(member: User) {
       const interval = setInterval(update, 30_000);
       setJoinedAgo(formatDistanceToNowStrict(new Date(member.joinedDate), { addSuffix: true }));
       return () => clearInterval(interval);
-   }, [member]);
+   }, [member.timezone, member.joinedDate]);
 
    return { localTime, joinedAgo };
 }

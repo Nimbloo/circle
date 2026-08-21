@@ -108,9 +108,9 @@ export default function AccountCodeReviews() {
                         />
                      </div>
                      <pre className="text-xs leading-5 font-mono overflow-x-auto py-2">
-                        {DIFF_LINES.map((line, index) => (
+                        {DIFF_LINES.map((line) => (
                            <div
-                              key={index}
+                              key={`${line.kind}-${line.number}-${line.text}`}
                               className={
                                  line.kind === 'removed'
                                     ? 'bg-red-500/10 border-l-2 border-red-500 px-3 flex gap-3'

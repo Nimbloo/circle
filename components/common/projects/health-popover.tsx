@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CircleCheck, CircleX, AlertCircle, HelpCircle, Bell, CheckIcon } from 'lucide-react';
+import { CircleCheck, CircleX, AlertCircle, HelpCircle, CheckIcon } from 'lucide-react';
 import { Project } from '@/mock-data/projects';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -63,19 +63,6 @@ export function HealthPopover({ project, onHealthChange }: HealthPopoverProps) {
                      <project.icon className="size-4 shrink-0 text-muted-foreground" />
                   )}
                   <h4 className="font-medium text-sm">{project.name}</h4>
-               </div>
-               <div className="flex items-center gap-2">
-                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
-                     Subscribe
-                  </Button>
-                  <Button
-                     variant="outline"
-                     size="sm"
-                     className="h-7 px-2 text-xs flex items-center gap-1"
-                  >
-                     <Bell className="size-3" />
-                     New update
-                  </Button>
                </div>
             </div>
             <div className="p-3 space-y-3">

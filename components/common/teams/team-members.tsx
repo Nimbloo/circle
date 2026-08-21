@@ -7,7 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { api } from '@/lib/client';
 import { RoleControl } from '@/components/common/members/role-control';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { Plus, SlidersHorizontal, X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -99,9 +99,6 @@ export default function TeamMembers() {
                      </PopoverContent>
                   </Popover>
                )}
-               <Button size="xs" variant="ghost">
-                  <SlidersHorizontal className="size-4" />
-               </Button>
             </div>
          </div>
 

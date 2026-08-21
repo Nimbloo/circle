@@ -1,13 +1,12 @@
 'use client';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
 import { adaptFolders } from '@/lib/adapters-documents';
 import { api } from '@/lib/client';
 import type { TeamDocument } from '@/mock-data/documents';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { RiDonutChartFill } from '@remixicon/react';
-import { Box, CopyMinus, Layers, Plus, Settings, SquareStack } from 'lucide-react';
+import { Box, CopyMinus, Layers, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -54,7 +53,7 @@ export default function TeamOverview() {
       { label: 'Issues', icon: CopyMinus, href: `/${orgId}/team/${team.id}/all` },
       { label: 'Cycles', icon: RiDonutChartFill, href: `/${orgId}/team/${team.id}/cycles` },
       { label: 'Projects', icon: Box, href: `/${orgId}/projects` },
-      { label: 'Views', icon: Layers, href: '#' },
+      { label: 'Views', icon: Layers, href: `/${orgId}/team/${team.id}/views` },
    ];
 
    return (
@@ -73,14 +72,6 @@ export default function TeamOverview() {
             <div className="mt-12">
                <div className="flex items-center justify-between">
                   <h2 className="text-xl font-semibold">Team resources</h2>
-                  <div className="flex items-center gap-1">
-                     <Button variant="ghost" size="icon" className="size-7 rounded-full border">
-                        <Plus className="size-4" />
-                     </Button>
-                     <Button variant="ghost" size="icon" className="size-7 rounded-full border">
-                        <SquareStack className="size-4" />
-                     </Button>
-                  </div>
                </div>
 
                <div className="mt-4 flex flex-col gap-1">

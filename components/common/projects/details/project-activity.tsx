@@ -23,7 +23,6 @@ import { useIssuesStore } from '@/store/issues-store';
 import { useProjectUpdatesStore } from '@/store/project-updates-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
-import { Paperclip, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { ProjectSidePanel } from './project-side-panel';
@@ -254,27 +253,14 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
                      </div>
                   )}
 
-                  <div className="mt-3 flex items-center justify-between">
-                     <Button variant="outline" size="xs" className="gap-1.5">
-                        <Sparkles className="size-3.5" />
-                        Write with Agent
+                  <div className="mt-3 flex items-center justify-end">
+                     <Button
+                        size="xs"
+                        onClick={handlePost}
+                        disabled={text.trim() === '' || posting}
+                     >
+                        Post {mode === 'update' ? 'update' : 'comment'}
                      </Button>
-                     <div className="flex items-center gap-2">
-                        <Button
-                           variant="ghost"
-                           size="icon"
-                           className="size-7 text-muted-foreground"
-                        >
-                           <Paperclip className="size-4" />
-                        </Button>
-                        <Button
-                           size="xs"
-                           onClick={handlePost}
-                           disabled={text.trim() === '' || posting}
-                        >
-                           Post {mode === 'update' ? 'update' : 'comment'}
-                        </Button>
-                     </div>
                   </div>
                </div>
 

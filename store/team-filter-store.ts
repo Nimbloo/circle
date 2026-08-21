@@ -9,10 +9,6 @@ export interface TeamsFilterState {
       identifier: Team['id'][];
    };
 
-   setFilter: (
-      type: 'membership' | 'identifier',
-      ids: 'Joined' | 'Not-Joined' | Team['id']
-   ) => void;
    toggleFilter: (
       type: 'membership' | 'identifier',
       id: 'Joined' | 'Not-Joined' | Team['id']
@@ -40,7 +36,6 @@ export function useTeamsFilterStore(): TeamsFilterState {
    return {
       filters,
 
-      setFilter: (type, ids) => setState({ [type]: [ids] }),
       toggleFilter: (type, id) => {
          const current = filters[type] as string[];
          const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
