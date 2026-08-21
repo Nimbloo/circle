@@ -15,7 +15,8 @@ import {
 import { listMembers, getMember, updateMemberRole } from '@/lib/api/members';
 import { createView } from '@/lib/api/views';
 import { createFolder } from '@/lib/api/documents';
-import { isAdmin } from '@/lib/api/auth';
+import { isAdmin, emailFromRequest } from '@/lib/api/auth';
+import { getOrCreateUser } from '@/lib/api/users';
 
 async function workspace() {
    const db = await makeTestDb();
@@ -189,7 +190,7 @@ describe('members', () => {
 });
 
 // A escalada de privilégio é barrada no route handler (members/[id] PATCH):
-// `if (!isAdmin(email)) throw new ApiError(403, ...)`. Como o vitest deste
+// `if (!isAdmin(email, db)) throw new ApiError(403, ...)`. Como o vitest deste
 // sandbox não resolve `next/server` (usado pelo route), validamos aqui a
 // função-porteiro `isAdmin` — a decisão de allow/deny que o gate consome.
 describe('member role escalation gate (isAdmin)', () => {
@@ -199,17 +200,95 @@ describe('member role escalation gate (isAdmin)', () => {
       else process.env.CIRCLE_ADMIN_EMAILS = prevAdmins;
    });
 
-   it('denies a non-admin (would 403) and allows only allowlisted admins', () => {
+   it('denies a non-admin (would 403) and allows only allowlisted admins', async () => {
       process.env.CIRCLE_ADMIN_EMAILS = 'boss@nimbloo.ai';
+      const { db } = await workspace();
       // não-admin -> gate lança 403 (PATCH role bloqueado)
-      expect(isAdmin('bob@nimbloo.ai')).toBe(false);
+      expect(await isAdmin('ana@nimbloo.ai', db)).toBe(false);
       // admin da allowlist -> passa (case-insensitive)
-      expect(isAdmin('boss@nimbloo.ai')).toBe(true);
-      expect(isAdmin('BOSS@nimbloo.ai')).toBe(true);
+      expect(await isAdmin('boss@nimbloo.ai', db)).toBe(true);
+      expect(await isAdmin('BOSS@nimbloo.ai', db)).toBe(true);
    });
 
-   it('treats everyone as non-admin when the allowlist is empty', () => {
+   it('treats everyone as non-admin when the allowlist is empty and no Admin row exists', async () => {
       delete process.env.CIRCLE_ADMIN_EMAILS;
-      expect(isAdmin('bob@nimbloo.ai')).toBe(false);
+      const db = await makeTestDb();
+      await seedUser(db, { name: 'Ana', email: 'ana@nimbloo.ai' });
+      expect(await isAdmin('ana@nimbloo.ai', db)).toBe(false);
+   });
+
+   it('honors the DB role column: role=Admin -> isAdmin true even without env', async () => {
+      delete process.env.CIRCLE_ADMIN_EMAILS;
+      const { db } = await workspace();
+      // Bob foi semeado com role='Admin' no banco
+      expect(await isAdmin('bob@nimbloo.ai', db)).toBe(true);
+      expect(await isAdmin('ana@nimbloo.ai', db)).toBe(false);
+   });
+});
+
+// GAP 1 — autenticidade da borda via segredo compartilhado com o oauth2-proxy.
+describe('emailFromRequest (X-Forwarded-Email + shared-secret enforcement)', () => {
+   const prevSecret = process.env.CIRCLE_PROXY_SHARED_SECRET;
+   afterEach(() => {
+      if (prevSecret === undefined) delete process.env.CIRCLE_PROXY_SHARED_SECRET;
+      else process.env.CIRCLE_PROXY_SHARED_SECRET = prevSecret;
+   });
+
+   const basic = (user: string, pass: string) =>
+      `Basic ${Buffer.from(`${user}:${pass}`).toString('base64')}`;
+   const reqWith = (headers: Record<string, string>) =>
+      new Request('http://circle.local/api/x', { headers });
+
+   it('uses X-Forwarded-Email directly when the secret env is not set (backward-compat)', () => {
+      delete process.env.CIRCLE_PROXY_SHARED_SECRET;
+      const email = emailFromRequest(reqWith({ 'x-forwarded-email': 'Ana@Nimbloo.ai' }));
+      expect(email).toBe('ana@nimbloo.ai');
+   });
+
+   it('rejects a request without Authorization when the secret is set', () => {
+      process.env.CIRCLE_PROXY_SHARED_SECRET = 's3cr3t';
+      const email = emailFromRequest(reqWith({ 'x-forwarded-email': 'ana@nimbloo.ai' }));
+      expect(email).toBeNull();
+   });
+
+   it('accepts a Basic auth with the right password and keeps the header as identity', () => {
+      process.env.CIRCLE_PROXY_SHARED_SECRET = 's3cr3t';
+      const email = emailFromRequest(
+         reqWith({
+            'x-forwarded-email': 'ana@nimbloo.ai',
+            'authorization': basic('oauth2-proxy', 's3cr3t'),
+         })
+      );
+      expect(email).toBe('ana@nimbloo.ai');
+   });
+
+   it('rejects a Basic auth with the wrong password', () => {
+      process.env.CIRCLE_PROXY_SHARED_SECRET = 's3cr3t';
+      const email = emailFromRequest(
+         reqWith({
+            'x-forwarded-email': 'ana@nimbloo.ai',
+            'authorization': basic('oauth2-proxy', 'wrong'),
+         })
+      );
+      expect(email).toBeNull();
+   });
+});
+
+// GAP 2 — bootstrap do 1º admin no provisionamento.
+describe('getOrCreateUser admin bootstrap', () => {
+   const prevAdmins = process.env.CIRCLE_ADMIN_EMAILS;
+   afterEach(() => {
+      if (prevAdmins === undefined) delete process.env.CIRCLE_ADMIN_EMAILS;
+      else process.env.CIRCLE_ADMIN_EMAILS = prevAdmins;
+   });
+
+   it('promotes the first-ever user to Admin when no admin exists', async () => {
+      delete process.env.CIRCLE_ADMIN_EMAILS;
+      const db = await makeTestDb();
+      const first = await getOrCreateUser(db, 'first@nimbloo.ai');
+      expect(first.role).toBe('Admin');
+      // o segundo já entra como Member (bootstrap não repete)
+      const second = await getOrCreateUser(db, 'second@nimbloo.ai');
+      expect(second.role).toBe('Member');
    });
 });

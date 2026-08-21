@@ -35,9 +35,9 @@ export function NavInbox() {
 
    useEffect(() => {
       let active = true;
-      fetchReviews()
-         .then((list) => {
-            if (active) setReviewCount(list.length);
+      fetchReviews({ limit: 1 })
+         .then((page) => {
+            if (active) setReviewCount(page.total);
          })
          .catch(() => {});
       return () => {

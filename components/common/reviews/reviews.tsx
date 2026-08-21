@@ -33,6 +33,9 @@ const GROUP_LABELS: Record<ReviewStatus, string> = {
    closed: 'Closed',
 };
 
+/** Tamanho de página do load-more (alinhado ao default do backend). */
+const PAGE_SIZE = 50;
+
 function ReviewRow({
    review,
    orgId,
@@ -119,7 +122,9 @@ export default function Reviews({
 }: ReviewsProps) {
    const { orgId } = useParams<{ orgId: string }>();
    const [reviews, setReviews] = useState<Review[]>([]);
+   const [total, setTotal] = useState(0);
    const [loading, setLoading] = useState(true);
+   const [loadingMore, setLoadingMore] = useState(false);
    const [error, setError] = useState(false);
    const [syncing, setSyncing] = useState(false);
    const [reloadKey, setReloadKey] = useState(0);
@@ -128,13 +133,17 @@ export default function Reviews({
       let active = true;
       setLoading(true);
       setError(false);
-      fetchReviews()
-         .then((data) => {
-            if (active) setReviews(data);
+      fetchReviews({ limit: PAGE_SIZE, offset: 0 })
+         .then((page) => {
+            if (active) {
+               setReviews(page.reviews);
+               setTotal(page.total);
+            }
          })
          .catch(() => {
             if (active) {
                setReviews([]);
+               setTotal(0);
                setError(true);
             }
          })
@@ -145,6 +154,19 @@ export default function Reviews({
          active = false;
       };
    }, [reloadKey]);
+
+   async function handleLoadMore() {
+      setLoadingMore(true);
+      try {
+         const page = await fetchReviews({ limit: PAGE_SIZE, offset: reviews.length });
+         setReviews((prev) => [...prev, ...page.reviews]);
+         setTotal(page.total);
+      } catch {
+         setError(true);
+      } finally {
+         setLoadingMore(false);
+      }
+   }
 
    async function handleSync() {
       setSyncing(true);
@@ -216,18 +238,39 @@ export default function Reviews({
                ) : groups.length === 0 ? (
                   <div className="px-4 py-6 text-sm text-muted-foreground">No reviews yet.</div>
                ) : (
-                  groups.map((group) => (
-                     <ReviewGroup key={group.label} label={group.label} count={group.items.length}>
-                        {group.items.map((review) => (
-                           <ReviewRow
-                              key={review.id}
-                              review={review}
-                              orgId={orgId}
-                              selected={review.id === selectedReviewId}
-                           />
-                        ))}
-                     </ReviewGroup>
-                  ))
+                  <>
+                     {groups.map((group) => (
+                        <ReviewGroup
+                           key={group.label}
+                           label={group.label}
+                           count={group.items.length}
+                        >
+                           {group.items.map((review) => (
+                              <ReviewRow
+                                 key={review.id}
+                                 review={review}
+                                 orgId={orgId}
+                                 selected={review.id === selectedReviewId}
+                              />
+                           ))}
+                        </ReviewGroup>
+                     ))}
+                     <div className="flex flex-col items-center gap-2 px-4 py-3">
+                        <span className="text-xs text-muted-foreground">
+                           {reviews.length} de {total}
+                        </span>
+                        {reviews.length < total && (
+                           <button
+                              type="button"
+                              onClick={handleLoadMore}
+                              disabled={loadingMore}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium hover:bg-accent/50 transition-colors disabled:opacity-60"
+                           >
+                              {loadingMore ? 'Carregando…' : 'Carregar mais'}
+                           </button>
+                        )}
+                     </div>
+                  </>
                )}
             </div>
          </div>
@@ -239,11 +282,7 @@ export default function Reviews({
                <div className="h-full flex flex-col items-center justify-center gap-4 text-muted-foreground">
                   <EmptySketch />
                   <span className="text-sm">
-                     {loading
-                        ? 'Loading…'
-                        : error
-                          ? 'Could not load reviews.'
-                          : `${source.length} reviews`}
+                     {loading ? 'Loading…' : error ? 'Could not load reviews.' : `${total} reviews`}
                   </span>
                   <button
                      type="button"

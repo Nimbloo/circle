@@ -70,9 +70,22 @@ export function adaptReviews(dtos: ReviewDto[]): Review[] {
 /*                                  Fetchers                                  */
 /* -------------------------------------------------------------------------- */
 
-/** GET /reviews — lista os PRs sincronizados, já adaptados pra `Review`. */
-export async function fetchReviews(): Promise<Review[]> {
-   return adaptReviews(await api.reviews.list());
+export interface ReviewsPage {
+   reviews: Review[];
+   total: number;
+   limit: number;
+   offset: number;
+}
+
+/**
+ * GET /reviews — página de PRs sincronizados (limit/offset, default limit=50),
+ * já adaptados pra `Review`, mais o total do conjunto (pra o load-more/"X de Y").
+ */
+export async function fetchReviews(
+   opts: { limit?: number; offset?: number } = {}
+): Promise<ReviewsPage> {
+   const { items, total, limit, offset } = await api.reviews.list(opts);
+   return { reviews: adaptReviews(items), total, limit, offset };
 }
 
 /** GET /reviews/{id} — detalhe de um review, ou `null` se não existir (404). */

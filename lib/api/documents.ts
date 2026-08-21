@@ -131,7 +131,7 @@ async function assertDocumentOwner(db: Db, id: string, actorEmail: string): Prom
       .limit(1);
    if (rows.length === 0) return false;
    const me = await getOrCreateUser(db, actorEmail);
-   if (rows[0].creatorId !== me.id && !isAdmin(actorEmail))
+   if (rows[0].creatorId !== me.id && !(await isAdmin(actorEmail, db)))
       throw new ApiError(403, 'Apenas o criador do documento pode alterá-lo');
    return true;
 }

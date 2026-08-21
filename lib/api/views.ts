@@ -121,7 +121,7 @@ async function assertViewOwner(db: Db, id: string, actorEmail: string): Promise<
       .limit(1);
    if (existing.length === 0) return false;
    const me = await getOrCreateUser(db, actorEmail);
-   if (existing[0].ownerId !== me.id && !isAdmin(actorEmail))
+   if (existing[0].ownerId !== me.id && !(await isAdmin(actorEmail, db)))
       throw new ApiError(403, 'Apenas o dono da view (ou admin)');
    return true;
 }

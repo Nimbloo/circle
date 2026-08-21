@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: Request) {
    return handle(async () => {
       const email = requireEmail(req);
-      if (!isAdmin(email))
+      if (!(await isAdmin(email, db)))
          throw new ApiError(403, 'Apenas administradores podem disparar a sincronização');
       const synced = await syncFromGitHub(db);
       return ok({ synced });

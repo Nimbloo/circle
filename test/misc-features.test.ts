@@ -80,6 +80,9 @@ describe('views', () => {
       const db = await base();
       await seedUser(db, { name: 'Owner', email: ME });
       const other = 'other@nimbloo.ai';
+      // usuário existente e não-admin (senão o bootstrap do 1º admin o promoveria
+      // ao provisioná-lo, num DB sem nenhum Admin, e o gate de dono não dispararia)
+      await seedUser(db, { name: 'Other', email: other });
       const v = await createView(db, { slug: 's', name: 'V', type: 'issue', filter: {} }, ME);
 
       await expect(updateView(db, v.id, { name: 'Hacked' }, other)).rejects.toThrow();

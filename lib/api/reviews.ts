@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm';
+import { count, desc, eq } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { review } from '@/db/schema';
 import { ApiError } from './errors';
@@ -45,15 +45,42 @@ function toDto(r: ReviewRow): ReviewDto {
    };
 }
 
-export async function listReviews(db: Db, opts: { status?: string } = {}): Promise<ReviewDto[]> {
-   const rows = opts.status
+export interface ListReviewsOptions {
+   status?: string;
+   limit?: number;
+   offset?: number;
+}
+
+export interface ReviewPage {
+   items: ReviewDto[];
+   total: number;
+}
+
+/**
+ * Lista PRs sincronizados, paginado (limit/offset, default limit=50) + total do
+ * conjunto (respeitando o filtro de status), pra a UI mostrar "X de Y" e o load-more.
+ */
+export async function listReviews(db: Db, opts: ListReviewsOptions = {}): Promise<ReviewPage> {
+   const limit = opts.limit ?? 50;
+   const offset = opts.offset ?? 0;
+   const where = opts.status ? eq(review.status, opts.status) : undefined;
+
+   const rows = where
       ? await db
            .select()
            .from(review)
-           .where(eq(review.status, opts.status))
+           .where(where)
            .orderBy(desc(review.createdAt))
-      : await db.select().from(review).orderBy(desc(review.createdAt));
-   return rows.map(toDto);
+           .limit(limit)
+           .offset(offset)
+      : await db.select().from(review).orderBy(desc(review.createdAt)).limit(limit).offset(offset);
+
+   const countRows = where
+      ? await db.select({ c: count() }).from(review).where(where)
+      : await db.select({ c: count() }).from(review);
+   const total = Number(countRows[0]?.c ?? 0);
+
+   return { items: rows.map(toDto), total };
 }
 
 export async function getReview(db: Db, id: string): Promise<ReviewDto | null> {
@@ -72,11 +99,27 @@ interface GitHubPr {
    user?: { login: string };
    base?: { ref: string };
    head?: { ref: string };
+   // Só presentes no GET individual do PR (a lista /pulls não os retorna).
    additions?: number;
    deletions?: number;
+   changed_files?: number;
 }
 
 type FetchLike = typeof fetch;
+
+// Paginação da lista /pulls e cap do fetch de detalhe (evita queimar rate-limit
+// em ~86 repos). MAX_PAGES × PER_PAGE = teto de PRs varridos por repo.
+const PER_PAGE = 50;
+const MAX_PAGES = 5; // 500 PRs/repo — PRs antigos além disso não são varridos
+const DETAIL_CONCURRENCY = 8;
+
+function ghHeaders(token: string): HeadersInit {
+   return {
+      'authorization': `Bearer ${token}`,
+      'accept': 'application/vnd.github+json',
+      'user-agent': 'circle-nimbloo',
+   };
+}
 
 function statusOf(pr: GitHubPr): string {
    if (pr.merged_at) return 'merged';
@@ -124,22 +167,78 @@ export async function syncFromGitHub(db: Db, opts: SyncOptions = {}): Promise<nu
    return count;
 }
 
-/** Puxa os PRs de um repo e faz upsert. Retorna quantos foram sincronizados. */
-async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike): Promise<number> {
-   const res = await doFetch(`https://api.github.com/repos/${repo}/pulls?state=all&per_page=50`, {
-      headers: {
-         'authorization': `Bearer ${token}`,
-         'accept': 'application/vnd.github+json',
-         'user-agent': 'circle-nimbloo',
-      },
-   });
-   if (!res.ok) return 0;
-   const prs = (await res.json()) as GitHubPr[];
-   if (!Array.isArray(prs) || prs.length === 0) return 0;
+/** Lê uma página de /pulls (retorna [] em erro/formato inesperado). */
+async function fetchPrPage(
+   repo: string,
+   token: string,
+   doFetch: FetchLike,
+   page: number
+): Promise<GitHubPr[]> {
+   const res = await doFetch(
+      `https://api.github.com/repos/${repo}/pulls?state=all&per_page=${PER_PAGE}&page=${page}`,
+      { headers: ghHeaders(token) }
+   );
+   if (!res.ok) return [];
+   const prs = await res.json();
+   return Array.isArray(prs) ? (prs as GitHubPr[]) : [];
+}
 
-   const rows = prs.map((pr) => {
+/**
+ * GET individual do PR — única fonte de additions/deletions/changed_files (a lista
+ * /pulls não os retorna). Best-effort: retorna null em qualquer falha (o sync segue
+ * com 0). `changed_files`/checks não são persistidos (não há coluna na tabela review).
+ */
+async function fetchPrDetail(
+   repo: string,
+   prNumber: number,
+   token: string,
+   doFetch: FetchLike
+): Promise<{ additions: number; deletions: number } | null> {
+   try {
+      const res = await doFetch(`https://api.github.com/repos/${repo}/pulls/${prNumber}`, {
+         headers: ghHeaders(token),
+      });
+      if (!res.ok) return null;
+      const d = (await res.json()) as GitHubPr;
+      if (!d || typeof d !== 'object') return null;
+      return { additions: Number(d.additions) || 0, deletions: Number(d.deletions) || 0 };
+   } catch {
+      return null;
+   }
+}
+
+/** Puxa os PRs de um repo (paginado) e faz upsert. Retorna quantos foram sincronizados. */
+async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike): Promise<number> {
+   // Pagina /pulls até acabar ou atingir o teto (PRs antigos além do teto ficam de fora).
+   const prs: GitHubPr[] = [];
+   for (let page = 1; page <= MAX_PAGES; page += 1) {
+      const pagePrs = await fetchPrPage(repo, token, doFetch, page);
+      prs.push(...pagePrs);
+      if (pagePrs.length < PER_PAGE) break; // última página
+   }
+   if (prs.length === 0) return 0;
+
+   // Cap de rate-limit: busca o detalhe (additions/deletions) SÓ dos PRs open, em
+   // lotes concorrentes. PRs closed/merged mantêm o valor já persistido (0 se nunca
+   // teve detalhe) — não sobrescrevemos com 0 no upsert.
+   const openPrs = prs.filter((pr) => statusOf(pr) === 'open');
+   const detailByNumber = new Map<number, { additions: number; deletions: number }>();
+   for (let i = 0; i < openPrs.length; i += DETAIL_CONCURRENCY) {
+      const batch = openPrs.slice(i, i + DETAIL_CONCURRENCY);
+      const details = await Promise.all(
+         batch.map((pr) => fetchPrDetail(repo, pr.number, token, doFetch))
+      );
+      batch.forEach((pr, idx) => {
+         const d = details[idx];
+         if (d) detailByNumber.set(pr.number, d);
+      });
+   }
+
+   let count = 0;
+   for (const pr of prs) {
       const resolvesId = parseResolves(pr.title);
-      return {
+      const detail = detailByNumber.get(pr.number);
+      const row = {
          id: `${repo}#${pr.number}`,
          title: pr.title,
          status: statusOf(pr),
@@ -149,8 +248,8 @@ async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike)
          author: pr.user?.login ?? null,
          targetBranch: pr.base?.ref ?? null,
          sourceBranch: pr.head?.ref ?? null,
-         additions: pr.additions ?? 0,
-         deletions: pr.deletions ?? 0,
+         additions: detail?.additions ?? pr.additions ?? 0,
+         deletions: detail?.deletions ?? pr.deletions ?? 0,
          resolvesIdentifier: resolvesId,
          resolvesTitle: resolvesId ? pr.title : null,
          checksPassed: 0,
@@ -158,23 +257,20 @@ async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike)
          createdAt: new Date(pr.created_at),
          syncedAt: new Date(),
       };
-   });
 
-   let count = 0;
-   for (const row of rows) {
-      await db
-         .insert(review)
-         .values(row)
-         .onConflictDoUpdate({
-            target: review.id,
-            set: {
-               title: row.title,
-               status: row.status,
-               additions: row.additions,
-               deletions: row.deletions,
-               syncedAt: row.syncedAt,
-            },
-         });
+      // additions/deletions só entram no update quando temos detalhe fresco — assim
+      // um PR que virou merged não tem seu contador zerado num re-sync.
+      const set: Partial<typeof review.$inferInsert> = {
+         title: row.title,
+         status: row.status,
+         syncedAt: row.syncedAt,
+      };
+      if (detail) {
+         set.additions = row.additions;
+         set.deletions = row.deletions;
+      }
+
+      await db.insert(review).values(row).onConflictDoUpdate({ target: review.id, set });
       count += 1;
    }
    return count;

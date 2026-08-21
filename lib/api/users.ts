@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { count, eq } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { appUser, teamMember } from '@/db/schema';
 import { isAdmin } from './auth';
@@ -31,7 +31,7 @@ export async function getMe(db: Db, email: string): Promise<MeDto> {
       email: user.email,
       avatarUrl: user.avatarUrl,
       role: user.role,
-      admin: isAdmin(user.email),
+      admin: await isAdmin(user.email, db),
       teamIds: teams.map((t) => t.teamId),
    };
 }
@@ -73,6 +73,14 @@ export async function getOrCreateUser(db: Db, email: string): Promise<UserRow> {
       .limit(1);
    if (slugTaken.length > 0) slug = `${slug}-${randomUUID().slice(0, 6)}`;
 
+   // Bootstrap do 1º admin: allowlist/role-DB OU — se não há NENHUM admin ainda —
+   // o primeiro usuário criado vira Admin (sistema sem admin destrava sozinho).
+   let role = (await isAdmin(normalized, db)) ? 'Admin' : 'Member';
+   if (role !== 'Admin') {
+      const admins = await db.select({ c: count() }).from(appUser).where(eq(appUser.role, 'Admin'));
+      if (Number(admins[0]?.c ?? 0) === 0) role = 'Admin';
+   }
+
    const now = new Date();
    const row = {
       id: randomUUID(),
@@ -80,7 +88,7 @@ export async function getOrCreateUser(db: Db, email: string): Promise<UserRow> {
       name: nameFromEmail(normalized),
       email: normalized,
       avatarUrl: `https://api.dicebear.com/9.x/glass/svg?seed=${encodeURIComponent(slug)}`,
-      role: isAdmin(normalized) ? 'Admin' : 'Member',
+      role,
       presence: 'offline',
       timezone: null,
       joinedAt: now.toISOString().slice(0, 10),

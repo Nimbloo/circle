@@ -15,7 +15,8 @@ export async function DELETE(req: Request, { params }: Params) {
    return handle(async () => {
       const { teamKey, userId } = await params;
       const email = requireEmail(req);
-      if (!isAdmin(email)) throw new ApiError(403, 'Apenas administradores podem remover membros');
+      if (!(await isAdmin(email, db)))
+         throw new ApiError(403, 'Apenas administradores podem remover membros');
       await removeTeamMember(db, teamKey, userId);
       return ok(await listTeamMembers(db, teamKey));
    });

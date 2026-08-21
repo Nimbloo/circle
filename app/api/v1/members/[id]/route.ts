@@ -25,7 +25,7 @@ export async function PATCH(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
       const email = requireEmail(req);
-      if (!isAdmin(email)) throw new ApiError(403, 'Apenas admin');
+      if (!(await isAdmin(email, db))) throw new ApiError(403, 'Apenas admin');
       const { role } = UpdateSchema.parse(await req.json());
       const dto = await updateMemberRole(db, id, role);
       return dto ? ok(dto) : notFound(`Membro '${id}' não encontrado`);

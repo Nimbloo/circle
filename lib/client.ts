@@ -46,6 +46,17 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
    return (json?.data ?? json) as T;
 }
 
+/** Como `request`, mas devolve o envelope inteiro {data, meta} (pra ler `meta.total`). */
+async function requestEnvelope<T>(path: string): Promise<{ data: T; meta?: unknown }> {
+   const res = await fetch(`/api/v1${path}`, { method: 'GET' });
+   const json = await res.json().catch(() => null);
+   if (!res.ok) {
+      const detail = (json && (json.detail || json.title)) || res.statusText;
+      throw new ApiError(res.status, String(detail), json);
+   }
+   return { data: (json?.data ?? json) as T, meta: json?.meta };
+}
+
 const get = <T>(p: string) => request<T>('GET', p);
 const post = <T>(p: string, b?: unknown) => request<T>('POST', p, b ?? {});
 const patch = <T>(p: string, b: unknown) => request<T>('PATCH', p, b);
@@ -194,7 +205,20 @@ export const api = {
    },
 
    reviews: {
-      list: () => get<ReviewDto[]>('/reviews'),
+      list: async (opts: { limit?: number; offset?: number } = {}) => {
+         const sp = new URLSearchParams();
+         if (opts.limit != null) sp.set('limit', String(opts.limit));
+         if (opts.offset != null) sp.set('offset', String(opts.offset));
+         const qs = sp.toString();
+         const { data, meta } = await requestEnvelope<ReviewDto[]>(`/reviews${qs ? `?${qs}` : ''}`);
+         const m = (meta ?? {}) as { total?: number; limit?: number; offset?: number };
+         return {
+            items: data,
+            total: m.total ?? data.length,
+            limit: m.limit ?? opts.limit ?? data.length,
+            offset: m.offset ?? opts.offset ?? 0,
+         };
+      },
       get: (id: string) => get<ReviewDto>(`/reviews/${id}`),
       sync: () => post<{ synced: number }>('/reviews/sync'),
    },
