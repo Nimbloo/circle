@@ -80,8 +80,19 @@ function issueQuery(opts: IssueListOptions = {}): string {
    return s ? `?${s}` : '';
 }
 
+/** `api.me()` lê o perfil; `api.me.update(...)` faz PATCH parcial (name/timezone). */
+const me = Object.assign(() => get<MeDto>('/me'), {
+   update: (body: { name?: string; timezone?: string | null }) => patch<MeDto>('/me', body),
+});
+
 export const api = {
-   me: () => get<MeDto>('/me'),
+   me,
+
+   settings: {
+      get: () => get<Record<string, unknown>>('/settings'),
+      put: (data: Record<string, unknown>) =>
+         request<Record<string, unknown>>('PUT', '/settings', data),
+   },
 
    statuses: () =>
       get<{ id: string; name: string; color: string; category: string; position: number }[]>(
@@ -152,6 +163,8 @@ export const api = {
       list: (q = '') => get<MemberDto[]>(`/members${q}`),
       get: (id: string) => get<MemberDto>(`/members/${id}`),
       updateRole: (id: string, role: string) => patch<MemberDto>(`/members/${id}`, { role }),
+      invite: (email: string, role: string) =>
+         post<{ id: string; email: string; role: string }>('/members/invite', { email, role }),
    },
 
    projects: {

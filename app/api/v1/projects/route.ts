@@ -46,7 +46,7 @@ const CreateSchema = z.object({
 
 export async function POST(req: Request) {
    return handle(async () => {
-      requireEmail(req);
+      await requireEmail(req);
       const input = CreateSchema.parse(await req.json());
       return ok(await createProject(db, input));
    });

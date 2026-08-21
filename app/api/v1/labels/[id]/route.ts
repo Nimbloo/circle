@@ -17,7 +17,7 @@ const UpdateSchema = z.object({
 export async function PATCH(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      requireEmail(req);
+      await requireEmail(req);
       const patch = UpdateSchema.parse(await req.json());
       const dto = await updateLabel(db, id, patch);
       return dto ? ok(dto) : notFound(`Label '${id}' não encontrado`);
@@ -27,7 +27,7 @@ export async function PATCH(req: Request, { params }: Params) {
 export async function DELETE(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      requireEmail(req);
+      await requireEmail(req);
       const removed = await deleteLabel(db, id);
       return removed ? ok({ deleted: true }) : notFound(`Label '${id}' não encontrado`);
    });

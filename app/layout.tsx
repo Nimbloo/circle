@@ -32,6 +32,7 @@ export const metadata: Metadata = {
 };
 
 import { ThemeProvider } from '@/components/layout/theme-provider';
+import { AuthSessionProvider } from '@/components/providers/session-provider';
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
 
 export default function RootLayout({
@@ -50,7 +51,7 @@ export default function RootLayout({
          >
             <NuqsAdapter>
                <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-                  {children}
+                  <AuthSessionProvider>{children}</AuthSessionProvider>
                   <Toaster />
                </ThemeProvider>
             </NuqsAdapter>

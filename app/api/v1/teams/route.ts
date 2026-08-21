@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request) {
    return handle(async () => {
       const sp = new URL(req.url).searchParams;
-      const email = emailFromRequest(req);
+      const email = await emailFromRequest(req);
       const meId = email ? (await getOrCreateUser(db, email)).id : undefined;
       const [sort, dir] = (sp.get('sort') ?? 'name-asc').split('-') as [TeamSort, 'asc' | 'desc'];
       return ok(await listTeams(db, { membership: multi(sp, 'membership'), sort, dir }, meId));
@@ -28,7 +28,7 @@ const CreateTeamSchema = z.object({
 
 export async function POST(req: Request) {
    return handle(async () => {
-      requireEmail(req);
+      await requireEmail(req);
       const input = CreateTeamSchema.parse(await req.json());
       return ok(await createTeam(db, input));
    });

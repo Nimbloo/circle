@@ -1,0 +1,1 @@
+ALTER TABLE "app_user" ADD COLUMN "invite_token" varchar(64);

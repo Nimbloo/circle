@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { ChevronsUpDown } from 'lucide-react';
+import { signOut } from 'next-auth/react';
 
 import {
    DropdownMenu,
@@ -80,7 +81,7 @@ export function OrgSwitcher() {
                         </DropdownMenuSubContent>
                      </DropdownMenuPortal>
                   </DropdownMenuSub>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => signOut({ callbackUrl: '/login' })}>
                      Log out
                      <DropdownMenuShortcut>⌥⇧Q</DropdownMenuShortcut>
                   </DropdownMenuItem>

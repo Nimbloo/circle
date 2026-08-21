@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
    return handle(async () => {
-      const email = requireEmail(req);
+      const email = await requireEmail(req);
       return ok(await bootstrapWorkspace(db, email));
    });
 }

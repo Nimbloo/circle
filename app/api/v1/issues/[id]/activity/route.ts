@@ -12,6 +12,6 @@ type Params = { params: Promise<{ id: string }> };
 export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      return ok(await listActivity(db, id, emailFromRequest(req) ?? undefined));
+      return ok(await listActivity(db, id, (await emailFromRequest(req)) ?? undefined));
    });
 }

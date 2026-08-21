@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
    return handle(async () => {
-      const email = requireEmail(req);
+      const email = await requireEmail(req);
       const me = await getOrCreateUser(db, email);
       const sp = new URL(req.url).searchParams;
       const readParam = sp.get('read');

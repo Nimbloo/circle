@@ -1,53 +1,33 @@
 /**
- * Identidade via header injetado pelo oauth2-proxy (Google SSO @nimbloo.ai).
- * A app não valida token — confia no header (rede fechada; oauth2-proxy à frente).
- * Em dev, sem proxy, usa CIRCLE_AUTH_DEV_FALLBACK_EMAIL.
+ * Identidade do usuário autenticado.
+ *
+ * Produção: sessão assinada do NextAuth (JWT no cookie) — lida via `auth()`.
+ * Testes (NODE_ENV==='test'): lê o header `x-forwarded-email` do request, mantendo
+ * os testes de rota existentes funcionando sem stack de sessão. É o SEAM DE TESTE.
  */
-import { timingSafeEqual } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { appUser } from '@/db/schema';
 
-const EMAIL_HEADER = process.env.CIRCLE_AUTH_EMAIL_HEADER ?? 'x-forwarded-email';
-const DEV_FALLBACK = process.env.CIRCLE_AUTH_DEV_FALLBACK_EMAIL ?? '';
+const TEST_EMAIL_HEADER = 'x-forwarded-email';
 
-/** Compara duas strings em tempo constante (sem vazar tamanho como early-return útil). */
-function secretsMatch(a: string, b: string): boolean {
-   const ab = Buffer.from(a, 'utf8');
-   const bb = Buffer.from(b, 'utf8');
-   if (ab.length !== bb.length) return false;
-   return timingSafeEqual(ab, bb);
+/** Em teste, deriva o e-mail do header injetado pelos helpers de teste. */
+function emailFromTestHeader(req?: Request): string | null {
+   const raw = req?.headers.get(TEST_EMAIL_HEADER);
+   return raw ? raw.trim().toLowerCase() : null;
 }
 
 /**
- * Autenticidade da borda: quando CIRCLE_PROXY_SHARED_SECRET está setado, exige
- * `Authorization: Basic base64(<user>:<segredo>)` (mandado pelo oauth2-proxy via
- * --set-basic-auth) cujo password bata com o segredo. Sem o env, enforcement OFF
- * (retrocompatível). Valida só AUTENTICIDADE; a IDENTIDADE segue no X-Forwarded-Email.
+ * E-mail do usuário autenticado (minúsculo) ou null.
+ * Async: em produção consulta a sessão do NextAuth.
  */
-function proxyAuthentic(req: Request): boolean {
-   const expected = process.env.CIRCLE_PROXY_SHARED_SECRET;
-   if (!expected) return true; // enforcement OFF
-   const header = req.headers.get('authorization');
-   if (!header) return false;
-   const [scheme, encoded] = header.split(' ');
-   if (!encoded || scheme.toLowerCase() !== 'basic') return false;
-   let decoded: string;
-   try {
-      decoded = Buffer.from(encoded, 'base64').toString('utf8');
-   } catch {
-      return false;
-   }
-   const sep = decoded.indexOf(':');
-   if (sep < 0) return false;
-   const password = decoded.slice(sep + 1);
-   return secretsMatch(password, expected);
-}
-
-export function emailFromRequest(req: Request): string | null {
-   if (!proxyAuthentic(req)) return null;
-   const raw = req.headers.get(EMAIL_HEADER) ?? (DEV_FALLBACK || null);
-   return raw ? raw.trim().toLowerCase() : null;
+export async function emailFromRequest(req?: Request): Promise<string | null> {
+   if (process.env.NODE_ENV === 'test') return emailFromTestHeader(req);
+   // Import dinâmico: mantém o next-auth fora do grafo estático (edge + testes).
+   const { auth } = await import('@/auth');
+   const session = await auth();
+   const email = session?.user?.email;
+   return email ? email.trim().toLowerCase() : null;
 }
 
 /**

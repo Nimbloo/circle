@@ -15,7 +15,7 @@ const PatchSchema = z.object({ read: z.boolean() });
 export async function PATCH(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      const email = requireEmail(req);
+      const email = await requireEmail(req);
       const me = await getOrCreateUser(db, email);
       const { read } = PatchSchema.parse(await req.json());
       const okd = await setRead(db, id, read, me.id);

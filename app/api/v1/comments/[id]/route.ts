@@ -14,7 +14,7 @@ const CommentSchema = z.object({ body: z.string().min(1).max(10000) });
 export async function PATCH(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      const email = requireEmail(req);
+      const email = await requireEmail(req);
       const { body } = CommentSchema.parse(await req.json());
       const updated = await updateComment(db, id, body, email);
       if (!updated) return notFound('Comentário não encontrado');
@@ -25,7 +25,7 @@ export async function PATCH(req: Request, { params }: Params) {
 export async function DELETE(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      const email = requireEmail(req);
+      const email = await requireEmail(req);
       const deleted = await deleteComment(db, id, email);
       if (!deleted) return notFound('Comentário não encontrado');
       return ok({ deleted: true });

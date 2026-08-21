@@ -14,7 +14,7 @@ const AddLabelSchema = z.object({ labelId: z.string().min(1) });
 export async function POST(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      requireEmail(req);
+      await requireEmail(req);
       const { labelId } = AddLabelSchema.parse(await req.json());
       const dto = await addLabel(db, id, labelId);
       return dto ? ok(dto) : notFound(`Issue '${id}' não encontrada`);

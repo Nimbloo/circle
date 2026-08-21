@@ -13,7 +13,7 @@ export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
       const { teamKey } = await params;
       const sp = new URL(req.url).searchParams;
-      const meEmail = emailFromRequest(req) ?? undefined;
+      const meEmail = (await emailFromRequest(req)) ?? undefined;
       const { opts } = parseIssueListOptions(sp, meEmail);
       opts.team = teamKey; // escopo por time
       return ok(await listIssues(db, opts));

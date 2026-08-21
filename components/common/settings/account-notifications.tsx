@@ -1,6 +1,7 @@
 'use client';
 
 import { Switch } from '@/components/ui/switch';
+import { useNotificationPrefsStore } from '@/store/notification-prefs-store';
 import { Mail, Monitor, Slack, Smartphone } from 'lucide-react';
 import { EnabledDot, SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
 
@@ -21,6 +22,7 @@ const CHANNELS = [
 
 /** Personal notification settings (push channels + product updates). */
 export default function AccountNotifications() {
+   const prefs = useNotificationPrefsStore();
    return (
       <SettingsShell title="Notifications">
          <SettingsSection
@@ -50,12 +52,22 @@ export default function AccountNotifications() {
                <SettingsRow
                   title="Show updates in sidebar"
                   description="Highlight new features and improvements in the app sidebar"
-                  trailing={<Switch defaultChecked />}
+                  trailing={
+                     <Switch
+                        checked={prefs.showUpdatesInSidebar}
+                        onCheckedChange={(v) => prefs.setPref('showUpdatesInSidebar', v)}
+                     />
+                  }
                />
                <SettingsRow
                   title="Changelog newsletter"
                   description="Receive an email twice a month highlighting new features and improvements"
-                  trailing={<Switch />}
+                  trailing={
+                     <Switch
+                        checked={prefs.changelogNewsletter}
+                        onCheckedChange={(v) => prefs.setPref('changelogNewsletter', v)}
+                     />
+                  }
                />
             </SettingsCard>
 
@@ -64,7 +76,12 @@ export default function AccountNotifications() {
                <SettingsRow
                   title="Marketing and onboarding"
                   description="Occasional updates to help you get the most out of Nimbloo"
-                  trailing={<Switch />}
+                  trailing={
+                     <Switch
+                        checked={prefs.marketing}
+                        onCheckedChange={(v) => prefs.setPref('marketing', v)}
+                     />
+                  }
                />
             </SettingsCard>
 
@@ -73,12 +90,22 @@ export default function AccountNotifications() {
                <SettingsRow
                   title="Invite accepted"
                   description="Receive an email when an invite you sent is accepted"
-                  trailing={<Switch defaultChecked />}
+                  trailing={
+                     <Switch
+                        checked={prefs.inviteAccepted}
+                        onCheckedChange={(v) => prefs.setPref('inviteAccepted', v)}
+                     />
+                  }
                />
                <SettingsRow
                   title="Privacy and legal updates"
                   description="Important updates about terms of service or privacy policy changes"
-                  trailing={<Switch defaultChecked />}
+                  trailing={
+                     <Switch
+                        checked={prefs.privacyLegal}
+                        onCheckedChange={(v) => prefs.setPref('privacyLegal', v)}
+                     />
+                  }
                />
             </SettingsCard>
          </SettingsSection>

@@ -1,11 +1,27 @@
-import { randomUUID } from 'node:crypto';
-import { count, eq } from 'drizzle-orm';
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { eq } from 'drizzle-orm';
+import bcrypt from 'bcryptjs';
 import type { Db } from '@/db';
 import { appUser, teamMember } from '@/db/schema';
 import { isAdmin } from './auth';
 import { ApiError } from './errors';
 
 export type UserRow = typeof appUser.$inferSelect;
+
+const BCRYPT_ROUNDS = 10;
+
+/** Token de convite forte (32 bytes → 64 chars hex, cabe no varchar(64)). */
+function generateInviteToken(): string {
+   return randomBytes(32).toString('hex');
+}
+
+/** Compara dois tokens em tempo constante, com guarda de tamanho (evita timing/length leak). */
+function tokensMatch(stored: string, provided: string): boolean {
+   const a = Buffer.from(stored, 'utf8');
+   const b = Buffer.from(provided, 'utf8');
+   if (a.length !== b.length) return false;
+   return timingSafeEqual(a, b);
+}
 
 export interface MeDto {
    id: string;
@@ -18,7 +34,7 @@ export interface MeDto {
    teamIds: string[];
 }
 
-/** Usuário corrente (do e-mail SSO) + times + flag admin. */
+/** Usuário corrente (do e-mail da sessão) + times + flag admin. */
 export async function getMe(db: Db, email: string): Promise<MeDto> {
    const user = await getOrCreateUser(db, email);
    const teams = await db
@@ -57,17 +73,14 @@ function nameFromEmail(email: string): string {
 }
 
 /**
- * Resolve o usuário pelo e-mail do SSO; provisiona no 1º acesso (role via allowlist).
- * Idempotente por e-mail (unique).
+ * Insere um novo app_user com a role dada, tratando a corrida em AMBAS as constraints
+ * unique (email E slug). Assume que o e-mail ainda não existe (chamador já checou).
+ * - conflito por EMAIL = outro request já criou → relê e devolve.
+ * - conflito por SLUG (e-mail diferente, mesmo local-part) → novo slug sufixado + retenta.
  */
-export async function getOrCreateUser(db: Db, email: string): Promise<UserRow> {
-   const normalized = email.trim().toLowerCase();
-   const existing = await db.select().from(appUser).where(eq(appUser.email, normalized)).limit(1);
-   if (existing.length > 0) return existing[0];
-
-   const base = slugFromEmail(normalized);
+async function provisionUser(db: Db, normalizedEmail: string, role: string): Promise<UserRow> {
+   const base = slugFromEmail(normalizedEmail);
    let slug = base;
-   // garante unicidade do slug (best-effort; a corrida real é tratada no loop de insert)
    const slugTaken = await db
       .select({ id: appUser.id })
       .from(appUser)
@@ -75,19 +88,10 @@ export async function getOrCreateUser(db: Db, email: string): Promise<UserRow> {
       .limit(1);
    if (slugTaken.length > 0) slug = `${base}-${randomUUID().slice(0, 6)}`;
 
-   // Bootstrap do 1º admin: allowlist/role-DB OU — se não há NENHUM admin ainda —
-   // o primeiro usuário criado vira Admin (sistema sem admin destrava sozinho).
-   // (2 primeiros logins simultâneos podem virar 2 admins — aceitável p/ tool interna.)
-   let role = (await isAdmin(normalized, db)) ? 'Admin' : 'Member';
-   if (role !== 'Admin') {
-      const admins = await db.select({ c: count() }).from(appUser).where(eq(appUser.role, 'Admin'));
-      if (Number(admins[0]?.c ?? 0) === 0) role = 'Admin';
-   }
-
    const now = new Date();
    const baseRow = {
-      name: nameFromEmail(normalized),
-      email: normalized,
+      name: nameFromEmail(normalizedEmail),
+      email: normalizedEmail,
       role,
       presence: 'offline',
       timezone: null,
@@ -96,9 +100,6 @@ export async function getOrCreateUser(db: Db, email: string): Promise<UserRow> {
       updatedAt: now,
    };
 
-   // Insere tratando a corrida em AMBAS as constraints unique (email E slug):
-   // - conflito por EMAIL = outro request já criou este usuário → relê e devolve.
-   // - conflito por SLUG (e-mail diferente, mesmo local-part) → novo slug sufixado + retenta.
    for (let attempt = 0; attempt < 4; attempt++) {
       const inserted = await db
          .insert(appUser)
@@ -112,11 +113,116 @@ export async function getOrCreateUser(db: Db, email: string): Promise<UserRow> {
          .returning();
       if (inserted.length > 0) return inserted[0];
 
-      const byEmail = await db.select().from(appUser).where(eq(appUser.email, normalized)).limit(1);
+      const byEmail = await db
+         .select()
+         .from(appUser)
+         .where(eq(appUser.email, normalizedEmail))
+         .limit(1);
       if (byEmail.length > 0) return byEmail[0]; // conflito era por e-mail → pronto.
 
-      // conflito era por slug (e-mail distinto) → sufixa e tenta de novo.
-      slug = `${base}-${randomUUID().slice(0, 6)}`;
+      slug = `${base}-${randomUUID().slice(0, 6)}`; // conflito por slug → sufixa e retenta.
    }
    throw new ApiError(500, 'Não foi possível provisionar o usuário (colisão de slug)');
+}
+
+/**
+ * Resolve o usuário pelo e-mail da sessão; provisiona no 1º acesso (role via allowlist).
+ * Idempotente por e-mail (unique).
+ */
+export async function getOrCreateUser(db: Db, email: string): Promise<UserRow> {
+   const normalized = email.trim().toLowerCase();
+   const existing = await db.select().from(appUser).where(eq(appUser.email, normalized)).limit(1);
+   if (existing.length > 0) return existing[0];
+
+   const role = (await isAdmin(normalized, db)) ? 'Admin' : 'Member';
+   return provisionUser(db, normalized, role);
+}
+
+/**
+ * Convida um usuário: cria (ou atualiza a role de) um app_user pelo e-mail, SEM senha
+ * (passwordHash pendente — o convidado a define depois via /signup). Gera um
+ * `inviteToken` single-use (novo a cada convite) e o devolve na row retornada — o
+ * chamador o entrega ao convidado (link do e-mail). Idempotente por e-mail.
+ */
+export async function inviteUser(db: Db, email: string, role: string): Promise<UserRow> {
+   const normalized = email.trim().toLowerCase();
+   const inviteToken = generateInviteToken();
+   const existing = await db.select().from(appUser).where(eq(appUser.email, normalized)).limit(1);
+   if (existing.length > 0) {
+      await db
+         .update(appUser)
+         .set({ role, inviteToken, updatedAt: new Date() })
+         .where(eq(appUser.email, normalized));
+      return { ...existing[0], role, inviteToken };
+   }
+   const created = await provisionUser(db, normalized, role);
+   await db
+      .update(appUser)
+      .set({ inviteToken, updatedAt: new Date() })
+      .where(eq(appUser.id, created.id));
+   return { ...created, inviteToken };
+}
+
+export interface UpdateProfileInput {
+   name?: string;
+   timezone?: string | null;
+}
+
+/**
+ * Atualiza o perfil do usuário corrente (pelo e-mail da sessão). Campos opcionais:
+ * `name` e `timezone`. Provisiona o usuário se ainda não existir. Retorna o MeDto.
+ */
+export async function updateProfile(
+   db: Db,
+   email: string,
+   patch: UpdateProfileInput
+): Promise<MeDto> {
+   const user = await getOrCreateUser(db, email);
+   const set: Partial<UserRow> = {};
+   if (patch.name !== undefined) {
+      const name = patch.name.trim();
+      if (!name) throw new ApiError(400, 'Nome não pode ser vazio');
+      set.name = name;
+   }
+   if (patch.timezone !== undefined) set.timezone = patch.timezone?.trim() || null;
+   if (Object.keys(set).length > 0) {
+      await db
+         .update(appUser)
+         .set({ ...set, updatedAt: new Date() })
+         .where(eq(appUser.id, user.id));
+   }
+   return getMe(db, user.email);
+}
+
+/**
+ * Define a senha (bcrypt) de um usuário JÁ convidado, validando o token single-use.
+ * Regras (fecha o takeover de conta via /signup):
+ *  - e-mail sem app_user      → 403 (não convidado).
+ *  - passwordHash já setado    → 409 (já cadastrado; use o fluxo de reset).
+ *  - inviteToken null ou token divergente (compare timing-safe) → 403.
+ *    (Usuário SSO tem inviteToken null → nenhum token casa → 403.)
+ *  - OK → grava o hash e LIMPA o inviteToken (single-use).
+ */
+export async function setPassword(
+   db: Db,
+   email: string,
+   password: string,
+   token: string
+): Promise<void> {
+   const normalized = email.trim().toLowerCase();
+   const rows = await db
+      .select({ id: appUser.id, hash: appUser.passwordHash, inviteToken: appUser.inviteToken })
+      .from(appUser)
+      .where(eq(appUser.email, normalized))
+      .limit(1);
+   if (rows.length === 0) throw new ApiError(403, 'E-mail não convidado');
+   if (rows[0].hash) throw new ApiError(409, 'Senha já cadastrada');
+   if (!rows[0].inviteToken || !tokensMatch(rows[0].inviteToken, token)) {
+      throw new ApiError(403, 'Convite inválido ou expirado');
+   }
+   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+   await db
+      .update(appUser)
+      .set({ passwordHash, inviteToken: null, updatedAt: new Date() })
+      .where(eq(appUser.email, normalized));
 }

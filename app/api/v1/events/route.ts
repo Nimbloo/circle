@@ -4,18 +4,18 @@ import { subscribe, type CircleEvent } from '@/lib/api/events';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/** Heartbeat: comentário SSE a cada 25s mantém a conexão viva pelo oauth2-proxy/LB. */
+/** Heartbeat: comentário SSE a cada 25s mantém a conexão viva pelo LB/gateway. */
 const HEARTBEAT_MS = 25_000;
 
 /**
  * Stream SSE do barramento em tempo real. Mesmo gate de auth do resto da API
- * (header do oauth2-proxy) — probes (healthz/readyz) não passam por aqui.
+ * (sessão NextAuth) — probes (healthz/readyz) não passam por aqui.
  *
  * Cada mutação nos serviços publica um `CircleEvent`; o cliente (`useLiveSync`)
  * consome via `EventSource` e faz refetch coarse debounced do store afetado.
  */
 export async function GET(req: Request): Promise<Response> {
-   const email = emailFromRequest(req);
+   const email = await emailFromRequest(req);
    if (!email) return new Response('Unauthorized', { status: 401 });
 
    const encoder = new TextEncoder();

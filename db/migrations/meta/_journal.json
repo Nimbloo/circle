@@ -29,6 +29,27 @@
          "when": 1787259036668,
          "tag": "0003_add_missing_indexes",
          "breakpoints": true
+      },
+      {
+         "idx": 4,
+         "version": "7",
+         "when": 1787274622098,
+         "tag": "0004_add_password_hash",
+         "breakpoints": true
+      },
+      {
+         "idx": 5,
+         "version": "7",
+         "when": 1787275405132,
+         "tag": "0005_user_settings",
+         "breakpoints": true
+      },
+      {
+         "idx": 6,
+         "version": "7",
+         "when": 1787278047431,
+         "tag": "0006_invite_token",
+         "breakpoints": true
       }
    ]
 }

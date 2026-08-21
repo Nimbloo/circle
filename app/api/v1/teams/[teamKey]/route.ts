@@ -15,7 +15,7 @@ type Params = { params: Promise<{ teamKey: string }> };
 export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
       const { teamKey } = await params;
-      const email = emailFromRequest(req);
+      const email = await emailFromRequest(req);
       const meId = email ? (await getOrCreateUser(db, email)).id : undefined;
       const dto = await getTeam(db, teamKey, meId);
       return dto ? ok(dto) : notFound(`Team '${teamKey}' não encontrado`);
@@ -31,7 +31,7 @@ const UpdateSchema = z.object({
 export async function PATCH(req: Request, { params }: Params) {
    return handle(async () => {
       const { teamKey } = await params;
-      requireEmail(req);
+      await requireEmail(req);
       const patch = UpdateSchema.parse(await req.json());
       const dto = await updateTeam(db, teamKey, patch);
       return dto ? ok(dto) : notFound(`Team '${teamKey}' não encontrado`);
@@ -41,7 +41,7 @@ export async function PATCH(req: Request, { params }: Params) {
 export async function DELETE(req: Request, { params }: Params) {
    return handle(async () => {
       const { teamKey } = await params;
-      const email = requireEmail(req);
+      const email = await requireEmail(req);
       if (!(await isAdmin(email, db))) throw new ApiError(403, 'Apenas admin');
       const removed = await deleteTeam(db, teamKey);
       return removed ? ok({ deleted: true }) : notFound(`Team '${teamKey}' não encontrado`);

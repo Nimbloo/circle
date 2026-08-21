@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { api } from '@/lib/client';
+import { RoleControl } from '@/components/common/members/role-control';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Plus, SlidersHorizontal, X } from 'lucide-react';
 import { useParams } from 'next/navigation';
@@ -20,6 +21,7 @@ export default function TeamMembers() {
    const { teamId } = useParams<{ orgId: string; teamId: string }>();
    const teams = useWorkspaceStore((s) => s.teams);
    const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const isAdmin = useWorkspaceStore((s) => s.me?.admin ?? false);
    const team = teams.find((t) => t.id === teamId) ?? teams[0];
 
    const [open, setOpen] = useState(false);
@@ -67,34 +69,36 @@ export default function TeamMembers() {
          <div className="flex items-center justify-between px-6 py-3">
             <span className="text-sm text-muted-foreground font-medium">Name ↓</span>
             <div className="flex items-center gap-2">
-               <Popover open={open} onOpenChange={setOpen}>
-                  <PopoverTrigger asChild>
-                     <Button size="xs" variant="secondary">
-                        <Plus className="size-4 mr-1" />
-                        Add a member
-                     </Button>
-                  </PopoverTrigger>
-                  <PopoverContent align="end" className="w-72 p-3">
-                     <p className="text-xs text-muted-foreground mb-2">
-                        Add by email (the user is provisioned if new).
-                     </p>
-                     <div className="flex items-center gap-1.5">
-                        <Input
-                           type="email"
-                           placeholder="name@nimbloo.ai"
-                           value={email}
-                           onChange={(e) => setEmail(e.target.value)}
-                           onKeyDown={(e) => {
-                              if (e.key === 'Enter') void addMember();
-                           }}
-                           className="h-8"
-                        />
-                        <Button size="xs" onClick={() => void addMember()} disabled={busy}>
-                           Add
+               {isAdmin && (
+                  <Popover open={open} onOpenChange={setOpen}>
+                     <PopoverTrigger asChild>
+                        <Button size="xs" variant="secondary">
+                           <Plus className="size-4 mr-1" />
+                           Add a member
                         </Button>
-                     </div>
-                  </PopoverContent>
-               </Popover>
+                     </PopoverTrigger>
+                     <PopoverContent align="end" className="w-72 p-3">
+                        <p className="text-xs text-muted-foreground mb-2">
+                           Add by email (the user is provisioned if new).
+                        </p>
+                        <div className="flex items-center gap-1.5">
+                           <Input
+                              type="email"
+                              placeholder="name@nimbloo.ai"
+                              value={email}
+                              onChange={(e) => setEmail(e.target.value)}
+                              onKeyDown={(e) => {
+                                 if (e.key === 'Enter') void addMember();
+                              }}
+                              className="h-8"
+                           />
+                           <Button size="xs" onClick={() => void addMember()} disabled={busy}>
+                              Add
+                           </Button>
+                        </div>
+                     </PopoverContent>
+                  </Popover>
+               )}
                <Button size="xs" variant="ghost">
                   <SlidersHorizontal className="size-4" />
                </Button>
@@ -128,18 +132,22 @@ export default function TeamMembers() {
                   {member.email}
                </div>
                <div className="w-[45%] md:w-[20%] flex items-center justify-between">
-                  <span className="text-xs px-2 py-1 rounded-md bg-accent text-muted-foreground">
-                     {member.role}
-                  </span>
-                  <button
-                     type="button"
-                     onClick={() => void removeMember(member.id, member.name)}
-                     disabled={busy}
-                     aria-label={`Remove ${member.name}`}
-                     className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground disabled:opacity-40"
-                  >
-                     <X className="size-4" />
-                  </button>
+                  <RoleControl
+                     userId={member.id}
+                     role={member.role}
+                     className="text-xs px-2 py-1 rounded-md bg-accent text-muted-foreground"
+                  />
+                  {isAdmin && (
+                     <button
+                        type="button"
+                        onClick={() => void removeMember(member.id, member.name)}
+                        disabled={busy}
+                        aria-label={`Remove ${member.name}`}
+                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground disabled:opacity-40"
+                     >
+                        <X className="size-4" />
+                     </button>
+                  )}
                </div>
             </div>
          ))}

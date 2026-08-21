@@ -35,7 +35,7 @@ const CreateSchema = z.discriminatedUnion('kind', [
 export async function POST(req: Request, { params }: Params) {
    return handle(async () => {
       const { teamKey } = await params;
-      const email = requireEmail(req);
+      const email = await requireEmail(req);
       const input = CreateSchema.parse(await req.json());
       if (input.kind === 'folder') {
          return ok(

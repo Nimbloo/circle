@@ -226,69 +226,50 @@ describe('member role escalation gate (isAdmin)', () => {
    });
 });
 
-// GAP 1 — autenticidade da borda via segredo compartilhado com o oauth2-proxy.
-describe('emailFromRequest (X-Forwarded-Email + shared-secret enforcement)', () => {
-   const prevSecret = process.env.CIRCLE_PROXY_SHARED_SECRET;
-   afterEach(() => {
-      if (prevSecret === undefined) delete process.env.CIRCLE_PROXY_SHARED_SECRET;
-      else process.env.CIRCLE_PROXY_SHARED_SECRET = prevSecret;
-   });
-
-   const basic = (user: string, pass: string) =>
-      `Basic ${Buffer.from(`${user}:${pass}`).toString('base64')}`;
+// Seam de teste: em NODE_ENV=test o e-mail vem do header x-forwarded-email
+// (a sessão NextAuth substitui isso em produção).
+describe('emailFromRequest (test seam via x-forwarded-email header)', () => {
    const reqWith = (headers: Record<string, string>) =>
       new Request('http://circle.local/api/x', { headers });
 
-   it('uses X-Forwarded-Email directly when the secret env is not set (backward-compat)', () => {
-      delete process.env.CIRCLE_PROXY_SHARED_SECRET;
-      const email = emailFromRequest(reqWith({ 'x-forwarded-email': 'Ana@Nimbloo.ai' }));
+   it('reads and normalizes the x-forwarded-email header', async () => {
+      const email = await emailFromRequest(reqWith({ 'x-forwarded-email': 'Ana@Nimbloo.ai' }));
       expect(email).toBe('ana@nimbloo.ai');
    });
 
-   it('rejects a request without Authorization when the secret is set', () => {
-      process.env.CIRCLE_PROXY_SHARED_SECRET = 's3cr3t';
-      const email = emailFromRequest(reqWith({ 'x-forwarded-email': 'ana@nimbloo.ai' }));
+   it('returns null when the header is absent', async () => {
+      const email = await emailFromRequest(reqWith({}));
       expect(email).toBeNull();
    });
 
-   it('accepts a Basic auth with the right password and keeps the header as identity', () => {
-      process.env.CIRCLE_PROXY_SHARED_SECRET = 's3cr3t';
-      const email = emailFromRequest(
-         reqWith({
-            'x-forwarded-email': 'ana@nimbloo.ai',
-            'authorization': basic('oauth2-proxy', 's3cr3t'),
-         })
-      );
-      expect(email).toBe('ana@nimbloo.ai');
-   });
-
-   it('rejects a Basic auth with the wrong password', () => {
-      process.env.CIRCLE_PROXY_SHARED_SECRET = 's3cr3t';
-      const email = emailFromRequest(
-         reqWith({
-            'x-forwarded-email': 'ana@nimbloo.ai',
-            'authorization': basic('oauth2-proxy', 'wrong'),
-         })
-      );
+   it('returns null when no request is passed', async () => {
+      const email = await emailFromRequest();
       expect(email).toBeNull();
    });
 });
 
-// GAP 2 — bootstrap do 1º admin no provisionamento.
-describe('getOrCreateUser admin bootstrap', () => {
+// Provisionamento por Google/convite: sem bootstrap de 1º admin. Role default = Member,
+// exceto e-mail na allowlist CIRCLE_ADMIN_EMAILS.
+describe('getOrCreateUser provisioning', () => {
    const prevAdmins = process.env.CIRCLE_ADMIN_EMAILS;
    afterEach(() => {
       if (prevAdmins === undefined) delete process.env.CIRCLE_ADMIN_EMAILS;
       else process.env.CIRCLE_ADMIN_EMAILS = prevAdmins;
    });
 
-   it('promotes the first-ever user to Admin when no admin exists', async () => {
+   it('provisions new users as Member (no first-admin bootstrap)', async () => {
       delete process.env.CIRCLE_ADMIN_EMAILS;
       const db = await makeTestDb();
       const first = await getOrCreateUser(db, 'first@nimbloo.ai');
-      expect(first.role).toBe('Admin');
-      // o segundo já entra como Member (bootstrap não repete)
+      expect(first.role).toBe('Member');
       const second = await getOrCreateUser(db, 'second@nimbloo.ai');
       expect(second.role).toBe('Member');
+   });
+
+   it('provisions as Admin when the email is in the allowlist', async () => {
+      process.env.CIRCLE_ADMIN_EMAILS = 'boss@nimbloo.ai';
+      const db = await makeTestDb();
+      const boss = await getOrCreateUser(db, 'boss@nimbloo.ai');
+      expect(boss.role).toBe('Admin');
    });
 });

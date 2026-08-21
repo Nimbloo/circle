@@ -5,6 +5,7 @@ import { useIssuesStore } from '@/store/issues-store';
 import { useNotificationsStore } from '@/store/notifications-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useLiveSync } from '@/lib/use-live-sync';
+import { startUserSettingsSync } from '@/lib/user-settings-sync';
 
 /**
  * Hidrata os stores de domínio a partir da API no mount (client-side).
@@ -19,6 +20,7 @@ import { useLiveSync } from '@/lib/use-live-sync';
 export function DataHydrator() {
    useEffect(() => {
       useWorkspaceStore.getState().hydrate();
+      void startUserSettingsSync();
       void useIssuesStore
          .getState()
          .hydrate()

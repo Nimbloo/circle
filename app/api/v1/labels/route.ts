@@ -19,7 +19,7 @@ const CreateSchema = z.object({
 
 export async function POST(req: Request) {
    return handle(async () => {
-      requireEmail(req);
+      await requireEmail(req);
       const input = CreateSchema.parse(await req.json());
       const dto = await createLabel(db, input);
       return ok(dto);

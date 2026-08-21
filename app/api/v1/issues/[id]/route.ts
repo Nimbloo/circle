@@ -31,7 +31,7 @@ const UpdateSchema = z.object({
 export async function PATCH(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      const email = requireEmail(req);
+      const email = await requireEmail(req);
       const patch = UpdateSchema.parse(await req.json());
       const dto = await updateIssue(db, id, patch, email);
       return dto ? ok(dto) : notFound(`Issue '${id}' não encontrada`);
@@ -41,7 +41,7 @@ export async function PATCH(req: Request, { params }: Params) {
 export async function DELETE(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      requireEmail(req);
+      await requireEmail(req);
       const removed = await deleteIssue(db, id);
       return removed ? ok({ deleted: true }) : notFound(`Issue '${id}' não encontrada`);
    });

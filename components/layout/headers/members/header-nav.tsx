@@ -12,35 +12,37 @@ import {
 } from '@/components/ui/select';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { api } from '@/lib/client';
+import { MEMBER_ROLES } from '@/lib/api/members';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
 /**
- * Convida um membro adicionando-o a um time via api.teams.addMember (não há rota
- * global de "invite" — membership é sempre por time) e re-hidrata o workspace.
+ * Convite org-level (admin-only): cria/atualiza o app_user com a role escolhida
+ * via api.members.invite (POST /members/invite) e re-hidrata o workspace. O
+ * usuário define a senha depois via /signup. Membership por time segue no
+ * Team Home (Add a member).
  */
 function InviteButton() {
    const hydrate = useWorkspaceStore((s) => s.hydrate);
-   const teams = useWorkspaceStore((s) => s.teams);
    const [open, setOpen] = useState(false);
-   const [teamId, setTeamId] = useState('');
    const [email, setEmail] = useState('');
+   const [role, setRole] = useState<string>('Member');
    const [busy, setBusy] = useState(false);
 
    const invite = async () => {
-      const team = teamId || teams[0]?.id || '';
-      if (!team || !email.trim() || busy) return;
+      const value = email.trim().toLowerCase();
+      if (!value || busy) return;
       setBusy(true);
       try {
-         await api.teams.addMember(team, email.trim());
+         await api.members.invite(value, role);
          await hydrate();
          setEmail('');
          setOpen(false);
-         toast.success(`Invited ${email.trim()} to ${team}`);
+         toast.success(`Invited ${value} as ${role}`);
       } catch {
-         toast.error('Could not invite (e-mail inválido ou time inexistente)');
+         toast.error('Could not invite (e-mail inválido ou sem permissão)');
       } finally {
          setBusy(false);
       }
@@ -51,25 +53,13 @@ function InviteButton() {
          <PopoverTrigger asChild>
             <Button className="relative" size="xs" variant="secondary">
                <Plus className="size-4" />
-               Invite
+               Convidar
             </Button>
          </PopoverTrigger>
          <PopoverContent align="end" className="w-72 p-3 flex flex-col gap-2">
             <p className="text-xs text-muted-foreground">
-               Membership é por time — escolha o time e o e-mail.
+               Convide por e-mail com uma role — o usuário define a senha no primeiro acesso.
             </p>
-            <Select value={teamId || teams[0]?.id || ''} onValueChange={setTeamId}>
-               <SelectTrigger className="h-8">
-                  <SelectValue placeholder="Team" />
-               </SelectTrigger>
-               <SelectContent>
-                  {teams.map((t) => (
-                     <SelectItem key={t.id} value={t.id}>
-                        {t.name}
-                     </SelectItem>
-                  ))}
-               </SelectContent>
-            </Select>
             <Input
                type="email"
                placeholder="member@nimbloo.ai"
@@ -80,13 +70,25 @@ function InviteButton() {
                }}
                className="h-8"
             />
+            <Select value={role} onValueChange={setRole}>
+               <SelectTrigger className="h-8">
+                  <SelectValue placeholder="Role" />
+               </SelectTrigger>
+               <SelectContent>
+                  {MEMBER_ROLES.map((r) => (
+                     <SelectItem key={r} value={r}>
+                        {r}
+                     </SelectItem>
+                  ))}
+               </SelectContent>
+            </Select>
             <Button
                size="xs"
                onClick={() => void invite()}
-               disabled={busy || !email.trim() || teams.length === 0}
+               disabled={busy || !email.trim()}
                className="self-end"
             >
-               Invite
+               Convidar
             </Button>
          </PopoverContent>
       </Popover>
@@ -95,6 +97,7 @@ function InviteButton() {
 
 export default function HeaderNav() {
    const users = useWorkspaceStore((s) => s.users);
+   const isAdmin = useWorkspaceStore((s) => s.me?.admin ?? false);
    return (
       <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">
          <div className="flex items-center gap-2">
@@ -104,9 +107,7 @@ export default function HeaderNav() {
                <span className="text-xs bg-accent rounded-md px-1.5 py-1">{users.length}</span>
             </div>
          </div>
-         <div className="flex items-center gap-2">
-            <InviteButton />
-         </div>
+         <div className="flex items-center gap-2">{isAdmin && <InviteButton />}</div>
       </div>
    );
 }

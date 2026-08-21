@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request) {
    return handle(async () => {
       const sp = new URL(req.url).searchParams;
-      const meEmail = emailFromRequest(req) ?? undefined;
+      const meEmail = (await emailFromRequest(req)) ?? undefined;
       const { opts } = parseIssueListOptions(sp, meEmail);
       return ok(await listIssues(db, opts));
    });
@@ -33,7 +33,7 @@ const CreateSchema = z.object({
 
 export async function POST(req: Request) {
    return handle(async () => {
-      const email = requireEmail(req);
+      const email = await requireEmail(req);
       const input = CreateSchema.parse(await req.json());
       const dto = await createIssue(db, input, email);
       return ok(dto);

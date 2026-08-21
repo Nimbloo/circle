@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { ok } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
+import { isAdmin } from '@/lib/api/auth';
+import { ApiError } from '@/lib/api/errors';
 import { listTeamMembers, addTeamMember } from '@/lib/api/teams';
 
 export const runtime = 'nodejs';
@@ -22,7 +24,8 @@ const AddMemberSchema = z.object({ email: z.string().email() });
 export async function POST(req: Request, { params }: Params) {
    return handle(async () => {
       const { teamKey } = await params;
-      requireEmail(req);
+      const actor = await requireEmail(req);
+      if (!(await isAdmin(actor, db))) throw new ApiError(403, 'Apenas admin');
       const { email } = AddMemberSchema.parse(await req.json());
       await addTeamMember(db, teamKey, email);
       return ok(await listTeamMembers(db, teamKey));

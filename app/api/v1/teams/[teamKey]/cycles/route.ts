@@ -27,7 +27,7 @@ const CreateSchema = z.object({
 export async function POST(req: Request, { params }: Params) {
    return handle(async () => {
       const { teamKey } = await params;
-      requireEmail(req);
+      await requireEmail(req);
       const input = CreateSchema.parse(await req.json());
       const dto = await createCycle(db, { teamId: teamKey, ...input });
       return ok(dto);

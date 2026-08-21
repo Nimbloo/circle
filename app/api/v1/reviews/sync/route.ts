@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 /** Dispara a ingestão de PRs do GitHub (config via env GITHUB_TOKEN + CIRCLE_GITHUB_REPOS). */
 export async function POST(req: Request) {
    return handle(async () => {
-      const email = requireEmail(req);
+      const email = await requireEmail(req);
       if (!(await isAdmin(email, db)))
          throw new ApiError(403, 'Apenas administradores podem disparar a sincronização');
       const synced = await syncFromGitHub(db);

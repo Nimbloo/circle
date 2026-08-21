@@ -49,12 +49,24 @@ export const appUser = pgTable('app_user', {
    slug: varchar('slug', { length: 64 }).notNull().unique(),
    name: varchar('name', { length: 128 }).notNull(),
    email: varchar('email', { length: 255 }).notNull().unique(),
+   passwordHash: varchar('password_hash', { length: 255 }), // nullable — login por credenciais (bcrypt); null = só SSO/convite pendente
+   inviteToken: varchar('invite_token', { length: 64 }), // nullable — token single-use do convite; null = SSO ou já resgatado
    avatarUrl: varchar('avatar_url', { length: 512 }),
    role: varchar('role', { length: 16 }).notNull().default('Member'), // Member|Admin|Guest|Application
    presence: varchar('presence', { length: 16 }).notNull().default('offline'),
    timezone: varchar('timezone', { length: 64 }),
    joinedAt: date('joined_at').notNull(),
    createdAt: timestamp('created_at').notNull().defaultNow(),
+   updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+// Settings por-usuário (JSON serializado em `data`). Fonte da verdade
+// server-side de preferências (tema, notificações) — o localStorage vira cache.
+export const userSettings = pgTable('user_settings', {
+   userId: varchar('user_id', { length: 36 })
+      .primaryKey()
+      .references(() => appUser.id),
+   data: text('data').notNull().default('{}'),
    updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 

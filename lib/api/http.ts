@@ -4,9 +4,9 @@ import { problem } from './response';
 import { ApiError } from './errors';
 import type { IssueListOptions } from './issues';
 
-/** E-mail do usuário autenticado (header do oauth2-proxy) ou 401. */
-export function requireEmail(req: Request): string {
-   const email = emailFromRequest(req);
+/** E-mail do usuário autenticado (sessão NextAuth; header em teste) ou 401. */
+export async function requireEmail(req?: Request): Promise<string> {
+   const email = await emailFromRequest(req);
    if (!email) throw new ApiError(401, 'Não autenticado');
    return email;
 }

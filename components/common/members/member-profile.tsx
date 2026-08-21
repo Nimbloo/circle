@@ -19,6 +19,7 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { parseAsString, useQueryState } from 'nuqs';
 import { useEffect, useMemo, useState } from 'react';
+import { RoleControl } from './role-control';
 
 const presenceLabel: Record<User['status'], string> = {
    online: 'Online now',
@@ -266,9 +267,9 @@ export default function MemberProfile({ member }: { member: User }) {
                         <span className="text-muted-foreground shrink-0">Joined</span>
                         <span>{joinedAgo ?? '—'}</span>
                      </div>
-                     <div className="flex items-start justify-between gap-4">
+                     <div className="flex items-center justify-between gap-4">
                         <span className="text-muted-foreground shrink-0">Role</span>
-                        <span>{member.role}</span>
+                        <RoleControl userId={member.id} role={member.role} />
                      </div>
                      <div className="flex items-start justify-between gap-4">
                         <span className="text-muted-foreground shrink-0 pt-0.5">Teams</span>

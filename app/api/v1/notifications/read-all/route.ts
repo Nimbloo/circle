@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
    return handle(async () => {
-      const email = requireEmail(req);
+      const email = await requireEmail(req);
       const me = await getOrCreateUser(db, email);
       return ok({ marked: await markAllRead(db, me.id) });
    });

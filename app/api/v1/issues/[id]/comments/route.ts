@@ -13,7 +13,7 @@ type Params = { params: Promise<{ id: string }> };
 export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      return ok(await listComments(db, id, emailFromRequest(req) ?? undefined));
+      return ok(await listComments(db, id, (await emailFromRequest(req)) ?? undefined));
    });
 }
 
@@ -22,7 +22,7 @@ const CommentSchema = z.object({ body: z.string().min(1).max(10000) });
 export async function POST(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      const email = requireEmail(req);
+      const email = await requireEmail(req);
       const { body } = CommentSchema.parse(await req.json());
       return ok(await addComment(db, id, body, email));
    });

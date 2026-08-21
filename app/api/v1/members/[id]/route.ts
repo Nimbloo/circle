@@ -24,7 +24,7 @@ const UpdateSchema = z.object({ role: z.string().min(1) });
 export async function PATCH(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      const email = requireEmail(req);
+      const email = await requireEmail(req);
       if (!(await isAdmin(email, db))) throw new ApiError(403, 'Apenas admin');
       const { role } = UpdateSchema.parse(await req.json());
       const dto = await updateMemberRole(db, id, role);
