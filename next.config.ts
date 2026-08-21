@@ -38,7 +38,7 @@ const nextConfig: NextConfig = {
    // `Can't resolve 'fs'/'path'/'stream'`. Externaliza + no bundle EDGE resolve os
    // node-builtins pra `false` (o código node-only nunca EXECUTA no Edge: o middleware
    // usa só a sessão JWT, e o `register()` da instrumentation é gated em NEXT_RUNTIME).
-   serverExternalPackages: ['pg', 'bcryptjs'],
+   serverExternalPackages: ['pg', 'bcryptjs', 'prom-client'],
    webpack: (config, { nextRuntime, webpack }) => {
       // Tudo que NÃO é o runtime Node (edge + qualquer compilação de instrumentation
       // fora do node) não deve tentar resolver pg/node-builtins.

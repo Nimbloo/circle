@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { emailFromRequest } from './auth';
 import { problem } from './response';
 import { ApiError } from './errors';
+import { observeHttp } from '@/lib/metrics';
 import type { IssueListOptions } from './issues';
 
 /** E-mail do usuário autenticado (sessão NextAuth; header em teste) ou 401. */
@@ -74,23 +75,30 @@ function reqTag(req?: Request): string {
  * Passe `req` (opcional) pra correlacionar os logs de erro com rota/método.
  */
 export async function handle(fn: () => Promise<Response>, req?: Request): Promise<Response> {
+   const start = Date.now();
+   let res: Response;
    try {
-      return await fn();
+      res = await fn();
    } catch (e) {
-      if (e instanceof ApiError) return problem(e.status, titleFor(e.status), e.message);
-      if (e instanceof z.ZodError) {
-         return problem(400, 'Bad Request', 'Payload inválido', { errors: e.flatten() });
+      if (e instanceof ApiError) {
+         res = problem(e.status, titleFor(e.status), e.message);
+      } else if (e instanceof z.ZodError) {
+         res = problem(400, 'Bad Request', 'Payload inválido', { errors: e.flatten() });
+      } else {
+         const dbMapped = mapDbError(e);
+         if (dbMapped) {
+            // 4xx derivado de SQLSTATE: loga warn pra não mascarar query malformada como erro do cliente.
+            const code = (e as { code?: unknown })?.code;
+            console.warn(`[circle-api]${reqTag(req)} db-mapped (SQLSTATE ${String(code)})`, e);
+            res = dbMapped;
+         } else {
+            console.error(`[circle-api]${reqTag(req)} erro não tratado:`, e);
+            res = problem(500, 'Internal Server Error');
+         }
       }
-      const dbMapped = mapDbError(e);
-      if (dbMapped) {
-         // 4xx derivado de SQLSTATE: loga warn pra não mascarar query malformada como "erro do cliente".
-         const code = (e as { code?: unknown })?.code;
-         console.warn(`[circle-api]${reqTag(req)} db-mapped (SQLSTATE ${String(code)})`, e);
-         return dbMapped;
-      }
-      console.error(`[circle-api]${reqTag(req)} erro não tratado:`, e);
-      return problem(500, 'Internal Server Error');
    }
+   observeHttp(req?.method ?? 'UNKNOWN', res.status, (Date.now() - start) / 1000);
+   return res;
 }
 
 /** Lê um parâmetro multivalorado: repetido (?x=a&x=b) ou CSV (?x=a,b). */
