@@ -82,9 +82,12 @@ function LoginForm() {
          <div className="w-full max-w-sm">
             <Card>
                <CardHeader className="items-center text-center">
-                  <NimblooLogo size={26} className="mb-2" />
-                  <CardTitle className="text-2xl">Circle</CardTitle>
-                  <CardDescription>Entre para continuar</CardDescription>
+                  <CardTitle className="text-3xl font-semibold tracking-tight">Circle</CardTitle>
+                  <div className="text-muted-foreground mt-1 flex items-center gap-1 text-xs">
+                     <span>by</span>
+                     <NimblooLogo size={14} />
+                  </div>
+                  <CardDescription className="mt-3">Entre para continuar</CardDescription>
                </CardHeader>
                <CardContent className="flex flex-col gap-4">
                   <Button
