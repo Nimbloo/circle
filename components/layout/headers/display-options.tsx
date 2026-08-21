@@ -257,9 +257,6 @@ export function DisplayOptions() {
                >
                   Reset
                </button>
-               <button className="text-xs text-indigo-500 dark:text-indigo-400 hover:underline">
-                  Set default for everyone
-               </button>
             </div>
          </PopoverContent>
       </Popover>

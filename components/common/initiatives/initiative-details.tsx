@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Initiative, INITIATIVE_STATUS_META } from '@/mock-data/initiatives';
 import { Project } from '@/mock-data/projects';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { CalendarRange, ChevronDown, FilePenLine, Plus, Tag, UserRound } from 'lucide-react';
+import { CalendarRange, ChevronDown, Plus, Tag, UserRound } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
@@ -199,16 +199,8 @@ function Overview({ initiative }: { initiative: Initiative }) {
 
                <div className="flex items-center gap-3 text-sm">
                   <span className="text-muted-foreground text-xs w-24">Resources</span>
-                  <button className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
-                     <Plus className="size-4" />
-                     Add document or link…
-                  </button>
+                  <span className="text-muted-foreground">No resources</span>
                </div>
-
-               <button className="flex items-center justify-center gap-2 rounded-lg border py-4 text-sm text-muted-foreground hover:bg-accent/40 transition-colors">
-                  <FilePenLine className="size-4" />
-                  Write first initiative update
-               </button>
 
                <div className="flex flex-col gap-2">
                   <h2 className="text-sm font-medium">Description</h2>

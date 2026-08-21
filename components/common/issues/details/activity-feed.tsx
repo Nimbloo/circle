@@ -132,7 +132,7 @@ function CommentCard({
       <div className="group/comment my-2 rounded-lg border border-border/60 bg-container p-3.5">
          <div className="flex items-center gap-2 mb-1.5">
             <Avatar className="size-5">
-               <AvatarImage src={item.actor.avatarUrl} alt={item.actor.name} />
+               <AvatarImage src={item.actor.avatarUrl || undefined} alt={item.actor.name} />
                <AvatarFallback>{item.actor.name[0]}</AvatarFallback>
             </Avatar>
             <span className="text-sm font-medium">{item.actor.name}</span>

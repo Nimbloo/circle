@@ -131,7 +131,10 @@ export function CycleProgressLegend({ cycle }: { cycle: Cycle }) {
          label: 'Scope',
          swatch: COLORS.scope,
          value: cycle.scope,
-         extra: cycle.scopeDelta !== 0 ? `+${cycle.scopeDelta}%` : undefined,
+         extra:
+            cycle.scopeDelta !== 0
+               ? `${cycle.scopeDelta > 0 ? '+' : ''}${cycle.scopeDelta}%`
+               : undefined,
          extraClass: 'text-red-500',
       },
       {

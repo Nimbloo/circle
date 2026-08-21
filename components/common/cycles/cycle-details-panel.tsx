@@ -137,7 +137,7 @@ export function CycleDetailsPanel({ cycle, issues }: CycleDetailsPanelProps) {
                   label: assignee.name,
                   leading: (
                      <Avatar className="size-5 shrink-0">
-                        <AvatarImage src={assignee.avatarUrl} alt={assignee.name} />
+                        <AvatarImage src={assignee.avatarUrl || undefined} alt={assignee.name} />
                         <AvatarFallback>{assignee.name[0]}</AvatarFallback>
                      </Avatar>
                   ),
@@ -228,7 +228,13 @@ export function CycleDetailsPanel({ cycle, issues }: CycleDetailsPanelProps) {
                      {formatCycleDateRange(cycle)}
                   </span>
                </div>
-               <Button variant="ghost" size="icon" className="size-7" onClick={closePanel}>
+               <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7"
+                  onClick={closePanel}
+                  aria-label="Close"
+               >
                   <X className="size-4" />
                </Button>
             </div>
@@ -251,7 +257,12 @@ export function CycleDetailsPanel({ cycle, issues }: CycleDetailsPanelProps) {
                   <div className="text-sm">
                      <span className="font-medium">{cycle.scope}</span>{' '}
                      {cycle.scopeDelta !== 0 && (
-                        <span className="text-xs text-red-500">+{cycle.scopeDelta}%</span>
+                        <span
+                           className={`text-xs ${cycle.scopeDelta > 0 ? 'text-red-500' : 'text-emerald-500'}`}
+                        >
+                           {cycle.scopeDelta > 0 ? '+' : ''}
+                           {cycle.scopeDelta}%
+                        </span>
                      )}
                   </div>
                </div>

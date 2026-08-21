@@ -129,7 +129,7 @@ export default function Profile() {
                   trailing={
                      <div className="flex items-center gap-3">
                         <Avatar className="size-9">
-                           <AvatarImage src={avatarSrc} alt={me.name} />
+                           <AvatarImage src={avatarSrc || undefined} alt={me.name} />
                            <AvatarFallback>{me.name[0]}</AvatarFallback>
                         </Avatar>
                         <input

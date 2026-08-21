@@ -68,11 +68,15 @@ export function CreateNewIssue() {
       setAddIssueForm(createDefaultData());
    }, [createDefaultData]);
 
+   const [submitting, setSubmitting] = useState(false);
+
    const createIssue = async () => {
+      if (submitting) return; // guarda contra double-submit (duplo-clique)
       if (!addIssueForm.title) {
          toast.error('Title is required');
          return;
       }
+      setSubmitting(true);
       try {
          // addIssue faz o set otimista e resolve só após o create + re-hydrate no servidor.
          await addIssue(addIssueForm);
@@ -84,6 +88,8 @@ export function CreateNewIssue() {
       } catch {
          // A issue otimista já foi revertida no store; mantém o modal aberto p/ retry.
          toast.error('Falha ao criar a issue');
+      } finally {
+         setSubmitting(false);
       }
    };
 
@@ -98,10 +104,11 @@ export function CreateNewIssue() {
             <DialogHeader>
                <DialogTitle>
                   <div className="flex items-center px-4 pt-4 gap-2">
-                     <Button size="sm" variant="outline" className="gap-1.5">
+                     {/* Badge do time (visual, não-interativo) — era um <Button> sem ação. */}
+                     <span className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-sm">
                         <Heart className="size-4 text-orange-500 fill-orange-500" />
                         <span className="font-medium">CORE</span>
-                     </Button>
+                     </span>
                   </div>
                </DialogTitle>
             </DialogHeader>
@@ -173,13 +180,8 @@ export function CreateNewIssue() {
                      <Label htmlFor="create-more">Create more</Label>
                   </div>
                </div>
-               <Button
-                  size="sm"
-                  onClick={() => {
-                     createIssue();
-                  }}
-               >
-                  Create issue
+               <Button size="sm" disabled={submitting || !addIssueForm.title} onClick={createIssue}>
+                  {submitting ? 'Creating…' : 'Create issue'}
                </Button>
             </div>
          </DialogContent>

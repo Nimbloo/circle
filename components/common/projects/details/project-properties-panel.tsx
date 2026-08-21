@@ -12,7 +12,7 @@ import { api } from '@/lib/client';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { ProjectProgressChart } from './project-progress-chart';
-import { ArrowRight, Calendar, Check, Compass, Plus, Slack, Tag, UserPlus } from 'lucide-react';
+import { ArrowRight, Calendar, Check, Compass, Plus, Tag, UserPlus } from 'lucide-react';
 import { useMemo } from 'react';
 import { toast } from 'sonner';
 
@@ -181,7 +181,7 @@ export function ProjectPropertiesPanel({
                        leading: (
                           <Avatar className="size-5 shrink-0">
                              <AvatarImage
-                                src={sample.assignee.avatarUrl}
+                                src={sample.assignee.avatarUrl || undefined}
                                 alt={sample.assignee.name}
                              />
                              <AvatarFallback>{sample.assignee.name[0]}</AvatarFallback>
@@ -253,7 +253,10 @@ export function ProjectPropertiesPanel({
                   {project.lead ? (
                      <>
                         <Avatar className="size-5">
-                           <AvatarImage src={project.lead.avatarUrl} alt={project.lead.name} />
+                           <AvatarImage
+                              src={project.lead.avatarUrl || undefined}
+                              alt={project.lead.name}
+                           />
                            <AvatarFallback>{project.lead.name[0]}</AvatarFallback>
                         </Avatar>
                         <span className="truncate max-w-36">{project.lead.name}</span>
@@ -268,7 +271,10 @@ export function ProjectPropertiesPanel({
                         <span className="flex -space-x-1.5">
                            {members.slice(0, 3).map((member) => (
                               <Avatar key={member.id} className="size-5 border-2 border-container">
-                                 <AvatarImage src={member.avatarUrl} alt={member.name} />
+                                 <AvatarImage
+                                    src={member.avatarUrl || undefined}
+                                    alt={member.name}
+                                 />
                                  <AvatarFallback>{member.name[0]}</AvatarFallback>
                               </Avatar>
                            ))}
@@ -276,10 +282,10 @@ export function ProjectPropertiesPanel({
                         {members.length} {members.length === 1 ? 'member' : 'members'}
                      </span>
                   ) : (
-                     <button className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
+                     <span className="inline-flex items-center gap-1.5 text-muted-foreground">
                         <UserPlus className="size-3.5" />
-                        Add members
-                     </button>
+                        No members
+                     </span>
                   )}
                </PropertyRow>
                <PropertyRow label="Dates">
@@ -297,12 +303,6 @@ export function ProjectPropertiesPanel({
                   <span className="inline-flex items-center gap-1.5">
                      {team?.icon} {team?.name ?? project.teamId}
                   </span>
-               </PropertyRow>
-               <PropertyRow label="Slack">
-                  <button className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
-                     <Slack className="size-3.5" />
-                     Connect channel
-                  </button>
                </PropertyRow>
                <PropertyRow label="Initiatives">
                   {project.initiative ? (
@@ -334,9 +334,6 @@ export function ProjectPropertiesPanel({
                            {label.name}
                         </span>
                      ))}
-                     <button className="text-muted-foreground hover:text-foreground transition-colors">
-                        <Plus className="size-3.5" />
-                     </button>
                   </div>
                </PropertyRow>
             </div>
@@ -466,15 +463,15 @@ export function ProjectPropertiesPanel({
          <div className="px-5 py-4">
             <div className="flex items-center justify-between mb-2">
                <h3 className="text-sm font-medium">Activity</h3>
-               <button className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-                  See all
-               </button>
             </div>
             <div className="flex flex-col gap-3">
                {detail.activity.map((event) => (
                   <div key={event.id} className="flex items-start gap-2 text-xs">
                      <Avatar className="size-4 mt-0.5 shrink-0">
-                        <AvatarImage src={event.user.avatarUrl} alt={event.user.name} />
+                        <AvatarImage
+                           src={event.user.avatarUrl || undefined}
+                           alt={event.user.name}
+                        />
                         <AvatarFallback>{event.user.name[0]}</AvatarFallback>
                      </Avatar>
                      <p className="text-muted-foreground leading-relaxed">

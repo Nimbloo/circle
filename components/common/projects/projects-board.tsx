@@ -74,7 +74,7 @@ function ProjectCard({ project }: { project: Project }) {
             )}
             {displayProperties.lead && project.lead && (
                <Avatar className="size-4 ml-auto shrink-0">
-                  <AvatarImage src={project.lead.avatarUrl} alt={project.lead.name} />
+                  <AvatarImage src={project.lead.avatarUrl || undefined} alt={project.lead.name} />
                   <AvatarFallback>{project.lead.name[0]}</AvatarFallback>
                </Avatar>
             )}

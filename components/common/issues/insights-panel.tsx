@@ -87,7 +87,13 @@ export function InsightsPanel({ issues }: InsightsPanelProps) {
                <span className="text-xl font-semibold">{issues.length}</span>
                <span className="text-sm text-muted-foreground">issues</span>
             </div>
-            <Button variant="ghost" size="icon" className="size-7" onClick={closePanel}>
+            <Button
+               variant="ghost"
+               size="icon"
+               className="size-7"
+               onClick={closePanel}
+               aria-label="Close"
+            >
                <X className="size-4" />
             </Button>
          </div>

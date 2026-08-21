@@ -80,7 +80,7 @@ function assigneeOptions(users: User[]): ColumnOption[] {
          label: user.name,
          icon: (
             <Avatar className="size-4">
-               <AvatarImage src={user.avatarUrl} alt={user.name} />
+               <AvatarImage src={user.avatarUrl || undefined} alt={user.name} />
                <AvatarFallback>{user.name[0]}</AvatarFallback>
             </Avatar>
          ),

@@ -48,7 +48,7 @@ function UpdateCard({ update }: { update: ProjectUpdate }) {
       <div className="border rounded-lg p-4">
          <div className="flex items-center gap-2 text-sm">
             <Avatar className="size-5">
-               <AvatarImage src={update.author.avatarUrl} alt={update.author.name} />
+               <AvatarImage src={update.author.avatarUrl || undefined} alt={update.author.name} />
                <AvatarFallback>{update.author.name[0]}</AvatarFallback>
             </Avatar>
             <span className="font-medium">{update.author.name}</span>

@@ -67,7 +67,7 @@ export function AssigneeSelector({ assignee, onChange }: AssigneeSelectorProps) 
                            return (
                               <Avatar className="size-5">
                                  <AvatarImage
-                                    src={selectedUser.avatarUrl}
+                                    src={selectedUser.avatarUrl || undefined}
                                     alt={selectedUser.name}
                                  />
                                  <AvatarFallback>{selectedUser.name.charAt(0)}</AvatarFallback>
@@ -118,7 +118,10 @@ export function AssigneeSelector({ assignee, onChange }: AssigneeSelectorProps) 
                               >
                                  <div className="flex items-center gap-2">
                                     <Avatar className="size-5">
-                                       <AvatarImage src={user.avatarUrl} alt={user.name} />
+                                       <AvatarImage
+                                          src={user.avatarUrl || undefined}
+                                          alt={user.name}
+                                       />
                                        <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
                                     </Avatar>
                                     {user.name}

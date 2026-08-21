@@ -453,7 +453,7 @@ export function CommandPalette() {
                               }}
                            >
                               <Avatar className="size-5">
-                                 <AvatarImage src={user.avatarUrl} alt={user.name} />
+                                 <AvatarImage src={user.avatarUrl || undefined} alt={user.name} />
                                  <AvatarFallback className="text-[9px]">
                                     {user.name[0]}
                                  </AvatarFallback>

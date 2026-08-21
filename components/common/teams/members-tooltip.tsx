@@ -19,7 +19,7 @@ export function MembersTooltip({ members }: MembersTooltipProps) {
                <div className="flex -space-x-2">
                   {displayedMembers.map((member) => (
                      <Avatar key={member.id} className="size-6 border-2 border-container">
-                        <AvatarImage src={member.avatarUrl} alt={member.name} />
+                        <AvatarImage src={member.avatarUrl || undefined} alt={member.name} />
                         <AvatarFallback className="text-xs">{member.name[0]}</AvatarFallback>
                      </Avatar>
                   ))}
@@ -35,7 +35,7 @@ export function MembersTooltip({ members }: MembersTooltipProps) {
                   {members.map((member) => (
                      <div key={member.id} className="flex items-center gap-1.5">
                         <Avatar className="size-5">
-                           <AvatarImage src={member.avatarUrl} alt={member.name} />
+                           <AvatarImage src={member.avatarUrl || undefined} alt={member.name} />
                            <AvatarFallback className="text-[10px]">{member.name[0]}</AvatarFallback>
                         </Avatar>
                         <span className="text-sm">{member.name}</span>

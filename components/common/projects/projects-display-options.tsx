@@ -193,16 +193,10 @@ export function ProjectsDisplayOptions() {
                   {viewType === 'timeline' && (
                      <>
                         <OptionRow label="Show project list">
-                           <Switch
-                              checked={showProjectList}
-                              onCheckedChange={setShowProjectList}
-                           />
+                           <Switch checked={showProjectList} onCheckedChange={setShowProjectList} />
                         </OptionRow>
                         <OptionRow label="Show week numbers">
-                           <Switch
-                              checked={showWeekNumbers}
-                              onCheckedChange={setShowWeekNumbers}
-                           />
+                           <Switch checked={showWeekNumbers} onCheckedChange={setShowWeekNumbers} />
                         </OptionRow>
                      </>
                   )}
@@ -246,9 +240,6 @@ export function ProjectsDisplayOptions() {
                   className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                >
                   Reset
-               </button>
-               <button className="text-sm text-indigo-500 dark:text-indigo-400 hover:underline">
-                  Set default for everyone
                </button>
             </div>
          </PopoverContent>

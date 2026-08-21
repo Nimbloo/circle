@@ -159,7 +159,7 @@ function InitiativesFilter() {
                               onSelect={() => toggleFilter('owner', user.id)}
                            >
                               <Avatar className="size-4">
-                                 <AvatarImage src={user.avatarUrl} alt={user.name} />
+                                 <AvatarImage src={user.avatarUrl || undefined} alt={user.name} />
                                  <AvatarFallback className="text-[8px]">
                                     {user.name[0]}
                                  </AvatarFallback>
@@ -357,7 +357,10 @@ function InitiativeRow({
             <span className="hidden sm:flex w-14 shrink-0">
                {initiative.owner ? (
                   <Avatar className="size-5">
-                     <AvatarImage src={initiative.owner.avatarUrl} alt={initiative.owner.name} />
+                     <AvatarImage
+                        src={initiative.owner.avatarUrl || undefined}
+                        alt={initiative.owner.name}
+                     />
                      <AvatarFallback className="text-[9px]">
                         {initiative.owner.name[0]}
                      </AvatarFallback>

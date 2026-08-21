@@ -11,7 +11,6 @@ import {
    Paperclip,
    Plus,
    Send,
-   UserPlus,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -121,7 +120,7 @@ export function ReviewOverview({ review }: { review: Review }) {
                   <div className="flex flex-col gap-1.5">
                      {review.testPlan.map((item, index) => (
                         <label key={index} className="flex items-start gap-2 text-sm">
-                           <Checkbox checked={item.checked} className="size-4 mt-0.5" />
+                           <Checkbox checked={item.checked} disabled className="size-4 mt-0.5" />
                            <span>
                               <InlineText text={item.text} />
                            </span>
@@ -150,9 +149,9 @@ export function ReviewOverview({ review }: { review: Review }) {
                            />
                            {review.deployment.state}
                         </span>
-                        <button className="text-primary text-left hover:underline">
+                        <span className="text-muted-foreground text-left">
                            {review.deployment.action}
-                        </button>
+                        </span>
                      </div>
                   </div>
                )}
@@ -248,10 +247,7 @@ export function ReviewOverview({ review }: { review: Review }) {
             </div>
             <div className="flex flex-col gap-2">
                <span className="text-sm font-medium">Reviewers</span>
-               <button className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors self-start">
-                  <UserPlus className="size-4" />
-                  Add reviewers
-               </button>
+               <span className="text-sm text-muted-foreground">No reviewers</span>
             </div>
             <div className="flex flex-col gap-2">
                <span className="text-sm font-medium">Checks</span>

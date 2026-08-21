@@ -5,7 +5,7 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { BarChart3, ChevronRight, Link2, MoreHorizontal, PanelRight, Star } from 'lucide-react';
+import { BarChart3, ChevronRight, PanelRight } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, usePathname } from 'next/navigation';
 
@@ -91,18 +91,7 @@ export default function Header({ projectId }: { projectId: string }) {
                      <project.icon className="size-3.5" />
                   </span>
                   <span className="font-medium truncate">{project.name}</span>
-                  <Button variant="ghost" size="icon" className="size-6 text-muted-foreground">
-                     <Star className="size-3.5" />
-                  </Button>
                </div>
-            </div>
-            <div className="flex items-center gap-1">
-               <Button variant="ghost" size="icon" className="size-7 text-muted-foreground">
-                  <Link2 className="size-4" />
-               </Button>
-               <Button variant="ghost" size="icon" className="size-7 text-muted-foreground">
-                  <MoreHorizontal className="size-4" />
-               </Button>
             </div>
          </div>
          <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">

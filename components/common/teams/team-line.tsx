@@ -45,7 +45,7 @@ export default function TeamLine({ team }: TeamLineProps) {
             <div className="hidden lg:block w-[70px] shrink-0">
                {owner && (
                   <Avatar className="size-5">
-                     <AvatarImage src={owner.avatarUrl} alt={owner.name} />
+                     <AvatarImage src={owner.avatarUrl || undefined} alt={owner.name} />
                      <AvatarFallback>{owner.name[0]}</AvatarFallback>
                   </Avatar>
                )}
@@ -59,7 +59,7 @@ export default function TeamLine({ team }: TeamLineProps) {
                      <span className="flex -space-x-1.5">
                         {team.members.slice(0, 6).map((member) => (
                            <Avatar key={member.id} className="size-5 border-2 border-container">
-                              <AvatarImage src={member.avatarUrl} alt={member.name} />
+                              <AvatarImage src={member.avatarUrl || undefined} alt={member.name} />
                               <AvatarFallback>{member.name[0]}</AvatarFallback>
                            </Avatar>
                         ))}

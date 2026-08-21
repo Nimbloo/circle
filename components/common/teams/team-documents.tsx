@@ -101,7 +101,10 @@ export default function TeamDocuments() {
                               {timeAgo(doc.updatedAt)}
                            </span>
                            <Avatar className="size-5">
-                              <AvatarImage src={doc.creator.avatarUrl} alt={doc.creator.name} />
+                              <AvatarImage
+                                 src={doc.creator.avatarUrl || undefined}
+                                 alt={doc.creator.name}
+                              />
                               <AvatarFallback>{doc.creator.name[0]}</AvatarFallback>
                            </Avatar>
                         </div>

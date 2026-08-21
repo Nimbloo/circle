@@ -82,14 +82,9 @@ export default function Notifications() {
                </div>
             </div>
 
-            <div className="border-t py-2 px-4 flex items-center justify-between">
-               <div className="flex items-center gap-2">
-                  <RiSlackLine className="size-4" />
-                  <span className="text-xs font-medium">Slack notifications</span>
-               </div>
-               <Button size="xs" variant="outline">
-                  Configure
-               </Button>
+            <div className="border-t py-2 px-4 flex items-center gap-2">
+               <RiSlackLine className="size-4" />
+               <span className="text-xs font-medium">Slack notifications</span>
             </div>
          </PopoverContent>
       </Popover>

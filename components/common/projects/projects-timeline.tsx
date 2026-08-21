@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 import { Project } from '@/mock-data/projects';
 import { useProjectsDisplayStore } from '@/store/projects-display-store';
 import { format, parseISO } from 'date-fns';
-import { ArrowLeft, ArrowRight, Check, ChevronDown, Plus } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, ChevronDown } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ProjectPeekPanel } from './project-peek-panel';
 import { ProjectGroup } from './projects';
@@ -199,7 +199,7 @@ function TimelineBar({
             <span className="truncate font-medium">{project.name}</span>
             {displayProperties.lead && project.lead && (
                <Avatar className="size-4 shrink-0">
-                  <AvatarImage src={project.lead.avatarUrl} alt={project.lead.name} />
+                  <AvatarImage src={project.lead.avatarUrl || undefined} alt={project.lead.name} />
                   <AvatarFallback>{project.lead.name[0]}</AvatarFallback>
                </Avatar>
             )}
@@ -448,9 +448,6 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
                            <span className="text-xs text-muted-foreground">
                               {group.projects.length}
                            </span>
-                           <button className="ml-auto text-muted-foreground hover:text-foreground transition-colors">
-                              <Plus className="size-3.5" />
-                           </button>
                         </div>
                         <div className="py-1">
                            {group.projects.map((project) => (
@@ -491,7 +488,7 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
                                        {displayProperties.lead && project.lead && (
                                           <Avatar className="size-4 shrink-0">
                                              <AvatarImage
-                                                src={project.lead.avatarUrl}
+                                                src={project.lead.avatarUrl || undefined}
                                                 alt={project.lead.name}
                                              />
                                              <AvatarFallback>{project.lead.name[0]}</AvatarFallback>

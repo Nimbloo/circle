@@ -13,11 +13,8 @@ import {
    CalendarPlus,
    ChevronRight,
    Compass,
-   Plus,
    Slack,
-   Star,
    Tag,
-   UserPlus,
    X,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -124,9 +121,6 @@ export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) 
                </span>
                <ChevronRight className="size-4 shrink-0 text-muted-foreground group-hover:text-foreground transition-colors" />
             </Link>
-            <button className="text-muted-foreground hover:text-foreground transition-colors shrink-0">
-               <Star className="size-4" />
-            </button>
             <button
                onClick={onClose}
                className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
@@ -140,9 +134,6 @@ export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) 
          <Card>
             <div className="flex items-center justify-between mb-1.5">
                <h3 className="text-sm font-medium">Properties</h3>
-               <button className="text-muted-foreground hover:text-foreground transition-colors">
-                  <Plus className="size-3.5" />
-               </button>
             </div>
             <div className="flex flex-col">
                <PropertyRow label="Status">
@@ -157,7 +148,10 @@ export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) 
                   {project.lead ? (
                      <>
                         <Avatar className="size-5">
-                           <AvatarImage src={project.lead.avatarUrl} alt={project.lead.name} />
+                           <AvatarImage
+                              src={project.lead.avatarUrl || undefined}
+                              alt={project.lead.name}
+                           />
                            <AvatarFallback>{project.lead.name[0]}</AvatarFallback>
                         </Avatar>
                         <span className="truncate max-w-40">{project.lead.name}</span>
@@ -172,7 +166,10 @@ export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) 
                         <span className="flex -space-x-1.5">
                            {members.slice(0, 3).map((member) => (
                               <Avatar key={member.id} className="size-5 border-2 border-container">
-                                 <AvatarImage src={member.avatarUrl} alt={member.name} />
+                                 <AvatarImage
+                                    src={member.avatarUrl || undefined}
+                                    alt={member.name}
+                                 />
                                  <AvatarFallback>{member.name[0]}</AvatarFallback>
                               </Avatar>
                            ))}
@@ -180,10 +177,7 @@ export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) 
                         {members.length} {members.length === 1 ? 'member' : 'members'}
                      </span>
                   ) : (
-                     <button className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
-                        <UserPlus className="size-3.5" />
-                        Add members
-                     </button>
+                     <span className="text-muted-foreground">No members</span>
                   )}
                </PropertyRow>
                <PropertyRow label="Dates">
@@ -207,10 +201,10 @@ export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) 
                   </span>
                </PropertyRow>
                <PropertyRow label="Slack">
-                  <button className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
+                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
                      <Slack className="size-3.5" />
-                     Connect channel
-                  </button>
+                     No channel
+                  </span>
                </PropertyRow>
                <PropertyRow label="Initiatives">
                   {project.initiative ? (
@@ -251,9 +245,6 @@ export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) 
          <Card>
             <div className="flex items-center justify-between mb-2">
                <h3 className="text-sm font-medium">Milestones</h3>
-               <button className="text-muted-foreground hover:text-foreground transition-colors">
-                  <Plus className="size-3.5" />
-               </button>
             </div>
             {detail.milestones.length === 0 ? (
                <p className="text-xs text-muted-foreground">

@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useSearchStore } from '@/store/search-store';
-import { BarChart3, ChevronRight, PanelRight, SearchIcon, Star } from 'lucide-react';
+import { BarChart3, ChevronRight, PanelRight, SearchIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseAsString, useQueryState } from 'nuqs';
@@ -140,13 +140,10 @@ export default function Header({ member }: { member: User }) {
                   </Link>
                   <ChevronRight className="size-3.5 text-muted-foreground shrink-0" />
                   <Avatar className="size-5 shrink-0">
-                     <AvatarImage src={member.avatarUrl} alt={member.name} />
+                     <AvatarImage src={member.avatarUrl || undefined} alt={member.name} />
                      <AvatarFallback>{member.name[0]}</AvatarFallback>
                   </Avatar>
                   <span className="font-medium truncate">{member.name}</span>
-                  <Button variant="ghost" size="icon" className="size-6 text-muted-foreground">
-                     <Star className="size-3.5" />
-                  </Button>
                </div>
             </div>
             <div className="flex items-center gap-2">

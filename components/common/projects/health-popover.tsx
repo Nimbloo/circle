@@ -75,7 +75,10 @@ export function HealthPopover({ project, onHealthChange }: HealthPopoverProps) {
                      {project.lead && (
                         <>
                            <Avatar className="size-5">
-                              <AvatarImage src={project.lead.avatarUrl} alt={project.lead.name} />
+                              <AvatarImage
+                                 src={project.lead.avatarUrl || undefined}
+                                 alt={project.lead.name}
+                              />
                               <AvatarFallback>{project.lead.name.charAt(0)}</AvatarFallback>
                            </Avatar>
                            <span className="text-xs text-muted-foreground">

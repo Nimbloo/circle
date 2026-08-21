@@ -128,7 +128,7 @@ function ViewRow({ view, orgId }: { view: View; orgId: string }) {
             {displayProperties.owner && (
                <span className="flex items-center gap-1.5 w-32 shrink-0 justify-end">
                   <Avatar className="size-5">
-                     <AvatarImage src={view.owner.avatarUrl} alt={view.owner.name} />
+                     <AvatarImage src={view.owner.avatarUrl || undefined} alt={view.owner.name} />
                      <AvatarFallback className="text-[9px]">{view.owner.name[0]}</AvatarFallback>
                   </Avatar>
                   <span className="text-xs text-muted-foreground truncate max-w-24">

@@ -3,17 +3,11 @@
 import { InlineText } from '@/components/common/issues/details/content-blocks';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import {
-   DropdownMenu,
-   DropdownMenuContent,
-   DropdownMenuItem,
-   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { agentExamples, agentSkills } from '@/mock-data/agent';
+import { agentExamples } from '@/mock-data/agent';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useAgentChatStore } from '@/store/agent-chat-store';
-import { ArrowUp, Blocks, Bot, ChevronDown, Paperclip, X } from 'lucide-react';
+import { ArrowUp, Bot, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 /** Streams the canned reply into the assistant message, word by word. */
@@ -132,33 +126,16 @@ function ChatComposer({
                large ? 'min-h-16' : 'min-h-12'
             )}
          />
-         <div className="flex items-center justify-between px-2.5 pb-2.5">
-            <DropdownMenu>
-               <DropdownMenuTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground px-1.5 py-1 rounded-md outline-none transition-colors">
-                  <Blocks className="size-3.5" />
-                  Skills
-                  <ChevronDown className="size-3" />
-               </DropdownMenuTrigger>
-               <DropdownMenuContent align="start" className="w-48">
-                  {agentSkills.map((skill) => (
-                     <DropdownMenuItem key={skill}>{skill}</DropdownMenuItem>
-                  ))}
-               </DropdownMenuContent>
-            </DropdownMenu>
-            <div className="flex items-center gap-1">
-               <Button variant="ghost" size="icon" className="size-7 text-muted-foreground">
-                  <Paperclip className="size-4" />
-               </Button>
-               <Button
-                  size="icon"
-                  className="size-7 rounded-full"
-                  onClick={submit}
-                  disabled={disabled || value.trim() === ''}
-                  aria-label="Send"
-               >
-                  <ArrowUp className="size-4" />
-               </Button>
-            </div>
+         <div className="flex items-center justify-end px-2.5 pb-2.5">
+            <Button
+               size="icon"
+               className="size-7 rounded-full"
+               onClick={submit}
+               disabled={disabled || value.trim() === ''}
+               aria-label="Send"
+            >
+               <ArrowUp className="size-4" />
+            </Button>
          </div>
       </div>
    );
@@ -200,9 +177,6 @@ export default function AgentChat() {
             {!bannerDismissed && (
                <div className="mt-4 flex items-center gap-3 rounded-full border bg-container shadow-xs px-4 py-1.5 text-sm">
                   <span>Agent is now your default view</span>
-                  <button className="text-muted-foreground hover:text-foreground transition-colors">
-                     Change
-                  </button>
                   <button
                      onClick={() => setBannerDismissed(true)}
                      className="font-medium rounded-full border px-2.5 py-0.5 hover:bg-accent transition-colors"

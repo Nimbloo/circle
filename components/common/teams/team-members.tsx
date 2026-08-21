@@ -115,7 +115,7 @@ export default function TeamMembers() {
             >
                <div className="w-[55%] md:w-[45%] flex items-center gap-2.5 min-w-0">
                   <Avatar className="size-6 shrink-0">
-                     <AvatarImage src={member.avatarUrl} alt={member.name} />
+                     <AvatarImage src={member.avatarUrl || undefined} alt={member.name} />
                      <AvatarFallback>{member.name[0]}</AvatarFallback>
                   </Avatar>
                   <div className="flex flex-col min-w-0">

@@ -213,7 +213,10 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                            color: '#8f9299',
                            icon: assignee ? (
                               <Avatar className="size-4">
-                                 <AvatarImage src={assignee.avatarUrl} alt={assignee.name} />
+                                 <AvatarImage
+                                    src={assignee.avatarUrl || undefined}
+                                    alt={assignee.name}
+                                 />
                                  <AvatarFallback>{assignee.name[0]}</AvatarFallback>
                               </Avatar>
                            ) : (

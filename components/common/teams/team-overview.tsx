@@ -102,7 +102,7 @@ export default function TeamOverview() {
                <div className="flex -space-x-1.5">
                   {team.members.slice(0, 4).map((member) => (
                      <Avatar key={member.id} className="size-5 ring-2 ring-background">
-                        <AvatarImage src={member.avatarUrl} alt={member.name} />
+                        <AvatarImage src={member.avatarUrl || undefined} alt={member.name} />
                         <AvatarFallback>{member.name[0]}</AvatarFallback>
                      </Avatar>
                   ))}

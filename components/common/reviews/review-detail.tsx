@@ -1,10 +1,9 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { fetchReview } from '@/lib/adapters-reviews';
 import type { Review } from '@/mock-data/reviews';
-import { Eye, Link2, MoreHorizontal, Play, Star } from 'lucide-react';
+import { Link2, MoreHorizontal, Play, Star } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -98,10 +97,6 @@ export function ReviewDetail({ reviewId, section }: { reviewId: string; section:
                ))}
             </div>
             <div className="flex items-center gap-1">
-               <Button size="xs" variant="ghost">
-                  <Eye className="size-3.5" />
-                  Preview
-               </Button>
                <Play className="size-3.5 text-muted-foreground" />
             </div>
          </div>

@@ -56,7 +56,7 @@ export function LeadSelector({ lead, onLeadChange }: LeadSelectorProps) {
                            <>
                               <Avatar className="size-5 mr-1">
                                  <AvatarImage
-                                    src={selectedUser.avatarUrl}
+                                    src={selectedUser.avatarUrl || undefined}
                                     alt={selectedUser.name}
                                  />
                                  <AvatarFallback>{selectedUser.name.charAt(0)}</AvatarFallback>
@@ -85,7 +85,10 @@ export function LeadSelector({ lead, onLeadChange }: LeadSelectorProps) {
                            >
                               <div className="flex items-center gap-2">
                                  <Avatar className="size-5">
-                                    <AvatarImage src={user.avatarUrl} alt={user.name} />
+                                    <AvatarImage
+                                       src={user.avatarUrl || undefined}
+                                       alt={user.name}
+                                    />
                                     <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
                                  </Avatar>
                                  <span className="text-xs">{user.name}</span>

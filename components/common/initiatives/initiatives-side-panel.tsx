@@ -103,7 +103,7 @@ export function InitiativesSidePanel({ initiatives }: { initiatives: Initiative[
                   {tab === 'owner' &&
                      (row.avatarUrl ? (
                         <Avatar className="size-5">
-                           <AvatarImage src={row.avatarUrl} alt={row.label} />
+                           <AvatarImage src={row.avatarUrl || undefined} alt={row.label} />
                            <AvatarFallback className="text-[9px]">{row.label[0]}</AvatarFallback>
                         </Avatar>
                      ) : (

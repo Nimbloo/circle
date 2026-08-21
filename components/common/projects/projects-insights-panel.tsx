@@ -108,7 +108,7 @@ export default function ProjectsInsightsPanel({ projects }: ProjectsInsightsPane
                label: user.name,
                leading: (
                   <Avatar className="size-5 shrink-0">
-                     <AvatarImage src={user.avatarUrl} alt={user.name} />
+                     <AvatarImage src={user.avatarUrl || undefined} alt={user.name} />
                      <AvatarFallback>{user.name[0]}</AvatarFallback>
                   </Avatar>
                ),
@@ -126,7 +126,13 @@ export default function ProjectsInsightsPanel({ projects }: ProjectsInsightsPane
                <span className="text-xl font-semibold">{projects.length}</span>
                <span className="text-sm text-muted-foreground">projects</span>
             </div>
-            <Button variant="ghost" size="icon" className="size-7" onClick={closePanel}>
+            <Button
+               variant="ghost"
+               size="icon"
+               className="size-7"
+               onClick={closePanel}
+               aria-label="Close"
+            >
                <X className="size-4" />
             </Button>
          </div>
