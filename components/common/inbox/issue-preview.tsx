@@ -112,7 +112,7 @@ export default function IssuePreview({ notification, onMarkAsRead }: IssuePrevie
                   </Button>
                )}
                <Button variant="ghost" size="xs" asChild>
-                  <Link href={`/${orgId ?? 'lndev-ui'}/issue/${displayIssue.identifier}`}>
+                  <Link href={`/${orgId ?? 'nimbloo'}/issue/${displayIssue.identifier}`}>
                      Open
                      <ArrowUpRight className="size-3.5 ml-0.5" />
                   </Link>

@@ -86,7 +86,7 @@ export function RelationEditor({
             <div key={issue.id} className="group flex items-center gap-2 text-sm min-w-0">
                <issue.status.icon />
                <Link
-                  href={`/${orgId ?? 'lndev-ui'}/issue/${issue.identifier}`}
+                  href={`/${orgId ?? 'nimbloo'}/issue/${issue.identifier}`}
                   className="truncate hover:underline"
                >
                   {issue.title}

@@ -20,6 +20,7 @@ import {
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { CreateNewIssue } from './create-new-issue';
 import { ThemeToggle } from '../theme-toggle';
+import { NimblooLogo } from '@/components/brand/nimbloo-logo';
 import Link from 'next/link';
 
 export function OrgSwitcher() {
@@ -33,11 +34,8 @@ export function OrgSwitcher() {
                         size="lg"
                         className="h-8 p-1 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                      >
-                        <div className="flex aspect-square size-6 items-center justify-center rounded bg-orange-500 text-sidebar-primary-foreground">
-                           LN
-                        </div>
                         <div className="grid flex-1 text-left text-sm leading-tight">
-                           <span className="truncate font-semibold">lndev-ui</span>
+                           <NimblooLogo size={22} />
                         </div>
                         <ChevronsUpDown className="ml-auto" />
                      </SidebarMenuButton>
@@ -55,7 +53,7 @@ export function OrgSwitcher() {
                >
                   <DropdownMenuGroup>
                      <DropdownMenuItem asChild>
-                        <Link href="/lndev-ui/settings">
+                        <Link href="/nimbloo/settings">
                            Settings
                            <DropdownMenuShortcut>G then S</DropdownMenuShortcut>
                         </Link>
@@ -71,13 +69,10 @@ export function OrgSwitcher() {
                      <DropdownMenuSubTrigger>Switch Workspace</DropdownMenuSubTrigger>
                      <DropdownMenuPortal>
                         <DropdownMenuSubContent>
-                           <DropdownMenuLabel>leonelngoya@gmail.com</DropdownMenuLabel>
+                           <DropdownMenuLabel>workspace@nimbloo.ai</DropdownMenuLabel>
                            <DropdownMenuSeparator />
                            <DropdownMenuItem>
-                              <div className="flex aspect-square size-6 items-center justify-center rounded bg-orange-500 text-sidebar-primary-foreground">
-                                 LN
-                              </div>
-                              lndev-ui
+                              <NimblooLogo size={22} />
                            </DropdownMenuItem>
                            <DropdownMenuSeparator />
                            <DropdownMenuItem>Create or join workspace</DropdownMenuItem>

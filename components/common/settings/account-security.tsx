@@ -44,7 +44,7 @@ export default function AccountSecurity() {
                />
                <SettingsRow
                   icon={<Smartphone className="size-4" />}
-                  title="LNDev UI iOS"
+                  title="Nimbloo iOS"
                   description="Paris, FR · Last seen about 3 hours ago"
                />
             </SettingsCard>
@@ -72,7 +72,7 @@ export default function AccountSecurity() {
                   icon={<KeyRound className="size-4" />}
                   title={
                      <>
-                        LNDEV_PERSONAL_API_KEY
+                        NIMBLOO_PERSONAL_API_KEY
                         <span className="text-xs text-muted-foreground font-normal">
                            · full access · public & private teams
                         </span>

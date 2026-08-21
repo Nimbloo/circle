@@ -198,7 +198,7 @@ export default function Views({ teamId }: { teamId?: string }) {
                      LN
                   </span>
                )}
-               <span className="font-medium">{team ? team.name : 'LNDev UI'}</span>
+               <span className="font-medium">{team ? team.name : 'Nimbloo'}</span>
                <span className="text-muted-foreground text-xs">
                   · {team ? 'Team' : 'Workspace'}
                </span>

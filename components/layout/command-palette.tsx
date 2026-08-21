@@ -99,7 +99,7 @@ export function CommandPalette() {
    const teams = useWorkspaceStore((s) => s.teams);
    const users = useWorkspaceStore((s) => s.users);
 
-   const orgId = pathname.split('/')[1] || 'lndev-ui';
+   const orgId = pathname.split('/')[1] || 'nimbloo';
 
    const contextIssue = useMemo<Issue | undefined>(() => {
       const match = pathname.match(/^\/[^/]+\/issue\/([^/]+)/);
