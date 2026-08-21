@@ -64,6 +64,13 @@
          "when": 1787282488437,
          "tag": "0008_user_avatar",
          "breakpoints": true
+      },
+      {
+         "idx": 9,
+         "version": "7",
+         "when": 1787355380026,
+         "tag": "0009_broken_makkari",
+         "breakpoints": true
       }
    ]
 }

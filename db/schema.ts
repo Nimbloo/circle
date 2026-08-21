@@ -235,6 +235,9 @@ export const issue = pgTable(
       rank: varchar('rank', { length: 64 }).notNull(), // lexorank
       dueDate: date('due_date'),
       estimate: integer('estimate'), // pontos de estimativa (nullable = sem estimativa)
+      // Card originado de um erro do Sentry: id da issue do Sentry (dedup/idempotência).
+      // Nullable (issues normais = null); único → replay/retry do Sentry não duplica card.
+      sentryIssueId: varchar('sentry_issue_id', { length: 128 }),
       createdAt: timestamp('created_at').notNull().defaultNow(),
       updatedAt: timestamp('updated_at').notNull().defaultNow(),
    },
@@ -246,6 +249,7 @@ export const issue = pgTable(
       index('idx_issue_assignee').on(t.assigneeId),
       index('idx_issue_created_by').on(t.createdById),
       index('idx_issue_rank').on(t.rank),
+      unique('issue_sentry_issue_id_unique').on(t.sentryIssueId),
    ]
 );
 

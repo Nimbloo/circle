@@ -90,6 +90,33 @@ describe('sentry integration', () => {
       expect(await linkCardFromSentry(db, '')).toBeNull();
    });
 
+   it('createCardFromSentry: dedup por sentryIssueId — reenvio reusa o MESMO card', async () => {
+      const db = await makeTestDb();
+      await seedTeam(db, 'CORE', 'Core');
+
+      const first = await createCardFromSentry(db, {
+         title: 'Erro recorrente',
+         teamId: 'CORE',
+         sentryIssueId: 'sentry-abc-123',
+      });
+      // 2º create com o MESMO issueId do Sentry (replay/retry) não cria card novo.
+      const second = await createCardFromSentry(db, {
+         title: 'Erro recorrente (reenvio)',
+         teamId: 'CORE',
+         sentryIssueId: 'sentry-abc-123',
+      });
+      expect(second.identifier).toBe(first.identifier); // mesmo card
+      expect(second.identifier).toBe('CORE-1'); // não avançou pra CORE-2
+
+      // issueId diferente → card novo.
+      const other = await createCardFromSentry(db, {
+         title: 'Outro erro',
+         teamId: 'CORE',
+         sentryIssueId: 'sentry-def-456',
+      });
+      expect(other.identifier).toBe('CORE-2');
+   });
+
    it('teamOptions: lista os times como {label,value}', async () => {
       const db = await makeTestDb();
       await seedTeam(db, 'CORE', 'Core');

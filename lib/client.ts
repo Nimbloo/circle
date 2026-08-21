@@ -281,6 +281,6 @@ export const api = {
          };
       },
       get: (id: string) => get<ReviewDto>(`/reviews/${id}`),
-      sync: () => post<{ synced: number }>('/reviews/sync'),
+      sync: () => post<{ started: boolean }>('/reviews/sync'),
    },
 };

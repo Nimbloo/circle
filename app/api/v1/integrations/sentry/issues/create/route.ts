@@ -23,7 +23,7 @@ export async function POST(req: Request) {
    const sig = req.headers.get('sentry-hook-signature');
    if (!verifySignature(raw, sig)) return json({ error: 'assinatura inválida' }, 401);
 
-   let body: { fields?: Record<string, string>; webUrl?: string };
+   let body: { fields?: Record<string, string>; webUrl?: string; issueId?: string };
    try {
       body = JSON.parse(raw);
    } catch {
@@ -37,6 +37,7 @@ export async function POST(req: Request) {
          description: fields.description,
          teamId: fields.teamId,
          sentryWebUrl: body.webUrl,
+         sentryIssueId: body.issueId, // dedup: reenvio do mesmo erro reusa o card
       });
       return json(result, 200);
    } catch (e) {

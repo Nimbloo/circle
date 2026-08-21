@@ -311,6 +311,8 @@ export interface CreateIssueInput {
    dueDate?: string | null;
    estimate?: number | null;
    description?: string | null;
+   /** Origem Sentry (dedup): id da issue do Sentry. Único no banco. */
+   sentryIssueId?: string | null;
 }
 
 /** Gera identifier (<TEAM_KEY>-<seq> atômico) e rank (append), cria a issue + labels + evento. */
@@ -374,6 +376,7 @@ export async function createIssue(
          rank,
          dueDate: input.dueDate ?? null,
          estimate: input.estimate ?? null,
+         sentryIssueId: input.sentryIssueId ?? null,
          createdAt: now,
          updatedAt: now,
       });

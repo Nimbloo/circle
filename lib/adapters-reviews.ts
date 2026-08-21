@@ -98,8 +98,7 @@ export async function fetchReview(id: string): Promise<Review | null> {
    }
 }
 
-/** POST /reviews/sync — dispara a ingestão de PRs do GitHub; retorna o nº sincronizado. */
-export async function syncReviews(): Promise<number> {
-   const { synced } = await api.reviews.sync();
-   return synced;
+/** POST /reviews/sync — dispara a ingestão de PRs do GitHub (roda em background no servidor). */
+export async function syncReviews(): Promise<void> {
+   await api.reviews.sync();
 }

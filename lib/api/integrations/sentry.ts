@@ -6,6 +6,7 @@ import {
    priority as priorityT,
    label as labelT,
    team as teamT,
+   issue as issueT,
 } from '@/db/schema';
 import { createIssue, getIssueByIdentifier } from '../issues';
 import { ApiError } from '../errors';
@@ -131,6 +132,24 @@ export interface SentryCardInput {
    teamId?: string | null;
    /** URL da issue no Sentry (rodapé do card, pra voltar ao erro). */
    sentryWebUrl?: string | null;
+   /** Id da issue no Sentry — dedup: reenvio/replay do mesmo erro reusa o card. */
+   sentryIssueId?: string | null;
+}
+
+/** Monta o resultado a partir de um card existente (por identifier + teamId). */
+async function resultFor(db: Db, identifier: string, teamId: string): Promise<SentryLinkResult> {
+   const t = await db.select({ name: teamT.name }).from(teamT).where(eq(teamT.id, teamId)).limit(1);
+   return { webUrl: cardUrl(identifier), project: t[0]?.name ?? teamId, identifier };
+}
+
+/** Busca um card já criado pra essa issue do Sentry (dedup). */
+async function findBySentryId(db: Db, sentryIssueId: string): Promise<SentryLinkResult | null> {
+   const rows = await db
+      .select({ identifier: issueT.identifier, teamId: issueT.teamId })
+      .from(issueT)
+      .where(eq(issueT.sentryIssueId, sentryIssueId))
+      .limit(1);
+   return rows.length ? resultFor(db, rows[0].identifier, rows[0].teamId) : null;
 }
 export interface SentryLinkResult {
    webUrl: string;
@@ -146,6 +165,13 @@ export async function createCardFromSentry(
    const title = input.title?.trim();
    if (!title) throw new ApiError(400, 'title é obrigatório');
 
+   // Dedup: replay/retry do Sentry pro mesmo erro reusa o card existente (não duplica).
+   const sentryId = input.sentryIssueId?.trim() || null;
+   if (sentryId) {
+      const existing = await findBySentryId(db, sentryId);
+      if (existing) return existing;
+   }
+
    const team = await resolveTeam(db, input.teamId);
    const [statusId, priorityId, labelId] = await Promise.all([
       resolveStatusId(db, process.env.CIRCLE_SENTRY_STATUS_ID || 'triage'),
@@ -157,13 +183,33 @@ export async function createCardFromSentry(
    const footer = input.sentryWebUrl ? `---\nOrigem (Sentry): ${input.sentryWebUrl}` : '';
    const description = (base + footer).trim() || null;
 
-   const issue = await createIssue(
-      db,
-      { teamId: team.id, title, statusId, priorityId, labelIds: [labelId], description },
-      actorEmail()
-   );
-
-   return { webUrl: cardUrl(issue.identifier), project: team.name, identifier: issue.identifier };
+   try {
+      const created = await createIssue(
+         db,
+         {
+            teamId: team.id,
+            title,
+            statusId,
+            priorityId,
+            labelIds: [labelId],
+            description,
+            sentryIssueId: sentryId,
+         },
+         actorEmail()
+      );
+      return {
+         webUrl: cardUrl(created.identifier),
+         project: team.name,
+         identifier: created.identifier,
+      };
+   } catch (e) {
+      // Corrida: outro replay criou o card com o mesmo sentryIssueId (23505 na unique).
+      if (sentryId && (e as { code?: string })?.code === '23505') {
+         const existing = await findBySentryId(db, sentryId);
+         if (existing) return existing;
+      }
+      throw e;
+   }
 }
 
 /** Linka um card EXISTENTE (por identifier, ex.: CORE-12) a uma issue do Sentry. */

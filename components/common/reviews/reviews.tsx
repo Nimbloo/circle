@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ReactNode, useEffect, useState } from 'react';
 import { ReviewDetail, ReviewSection } from './review-detail';
+import { toast } from 'sonner';
 import { PrIcon } from './review-shared';
 
 /** Hand-drawn empty-state sketch (paper plane over a folded sheet). */
@@ -173,9 +174,12 @@ export default function Reviews({
    async function handleSync() {
       setSyncing(true);
       try {
-         await syncReviews();
-         setReloadKey((key) => key + 1);
+         await syncReviews(); // servidor dispara a ingestão em background
+         toast.success('Sincronização iniciada — os PRs aparecem em instantes');
+         // Re-busca após uma janela (o sync de ~86 repos roda no servidor, não bloqueia).
+         setTimeout(() => setReloadKey((key) => key + 1), 6000);
       } catch {
+         toast.error('Falha ao iniciar a sincronização');
          setError(true);
       } finally {
          setSyncing(false);
