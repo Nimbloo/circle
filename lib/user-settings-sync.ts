@@ -66,6 +66,7 @@ function snapshot(): SettingsBlob {
    return {
       theme: themeSlice(),
       notifications: {
+         emailNotifications: n.emailNotifications,
          showUpdatesInSidebar: n.showUpdatesInSidebar,
          changelogNewsletter: n.changelogNewsletter,
          marketing: n.marketing,

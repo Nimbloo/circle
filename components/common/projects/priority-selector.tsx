@@ -67,6 +67,7 @@ export function PrioritySelector({ priority, onPriorityChange }: PrioritySelecto
                            <CommandItem
                               key={item.id}
                               value={item.id}
+                              keywords={[item.name]}
                               onSelect={handlePriorityChange}
                               className="flex items-center justify-between"
                            >

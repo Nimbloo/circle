@@ -235,11 +235,13 @@ export async function setPassword(
       .from(appUser)
       .where(eq(appUser.email, normalized))
       .limit(1);
-   if (rows.length === 0) throw new ApiError(403, 'E-mail não convidado');
-   if (rows[0].hash) throw new ApiError(409, 'Senha já cadastrada');
-   if (!rows[0].inviteToken || !tokensMatch(rows[0].inviteToken, token)) {
-      throw new ApiError(403, 'Convite inválido ou expirado');
-   }
+   // Resposta UNIFORME para todos os casos de falha (403 genérico) — não vaza se o e-mail
+   // existe, se já tem senha, ou se o token diverge (anti-enumeração no endpoint público).
+   // Usuário já cadastrado deve usar o login; SSO tem inviteToken null → nunca casa.
+   const invalid = () => new ApiError(403, 'Convite inválido ou expirado');
+   if (rows.length === 0) throw invalid();
+   if (rows[0].hash) throw invalid();
+   if (!rows[0].inviteToken || !tokensMatch(rows[0].inviteToken, token)) throw invalid();
    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
    await db
       .update(appUser)

@@ -15,6 +15,8 @@ export async function sendSlack(text: string): Promise<SendResult> {
          method: 'POST',
          headers: { 'content-type': 'application/json' },
          body: JSON.stringify({ text }),
+         // Timeout duro: webhook pendurado NÃO pode acoplar latência à request da API.
+         signal: AbortSignal.timeout(3000),
       });
       return res.ok ? { sent: true } : { sent: false, reason: `http ${res.status}` };
    } catch (err) {

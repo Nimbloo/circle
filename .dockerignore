@@ -8,6 +8,9 @@ node_modules
 out
 build
 coverage
+tsconfig.tsbuildinfo
+test
+vitest.config.ts
 npm-debug.log*
 .pnpm-debug.log*
 *.md

@@ -19,8 +19,8 @@ export async function GET(_req: Request, { params }: Params) {
 
 const UpdateSchema = z.object({
    title: z.string().min(1).max(512).optional(),
-   statusId: z.string().max(64).optional(),
-   priorityId: z.string().max(64).optional(),
+   statusId: z.string().min(1).max(64).optional(),
+   priorityId: z.string().min(1).max(64).optional(),
    assigneeId: z.string().max(36).nullish(),
    projectId: z.string().max(36).nullish(),
    cycleId: z.string().max(36).nullish(),

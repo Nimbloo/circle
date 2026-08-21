@@ -16,7 +16,10 @@ export async function GET() {
          status: 200,
          headers: { 'content-type': 'application/json' },
       });
-   } catch {
+   } catch (e) {
+      // Loga a causa: é justamente o sinal que o endpoint existe pra detectar (DB fora).
+      // Sem isso o pod fica `unready` no rollout sem rastro no stdout/Loki.
+      console.error('[circle] readyz falhou (DB inacessível):', e);
       return new Response(JSON.stringify({ status: 'unready' }), {
          status: 503,
          headers: { 'content-type': 'application/json' },

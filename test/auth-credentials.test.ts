@@ -102,10 +102,11 @@ describe('setPassword', () => {
       const db = await makeTestDb();
       const u = await inviteUser(db, 'dup@nimbloo.ai', 'Member');
       await setPassword(db, 'dup@nimbloo.ai', 'firstpass1', u.inviteToken!);
-      // mesmo token, agora com senha já setada → 409 (não reutilizável).
+      // mesmo token, agora com senha já setada → 403 genérico (não reutilizável;
+      // resposta uniforme anti-enumeração — ver setPassword).
       await expect(
          setPassword(db, 'dup@nimbloo.ai', 'secondpass1', u.inviteToken!)
-      ).rejects.toMatchObject({ status: 409 });
+      ).rejects.toMatchObject({ status: 403 });
       const [row] = await db.select().from(appUser).where(eq(appUser.email, 'dup@nimbloo.ai'));
       expect(await bcrypt.compare('firstpass1', row.passwordHash!)).toBe(true);
    });

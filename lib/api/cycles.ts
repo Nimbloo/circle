@@ -161,26 +161,36 @@ export async function createCycle(db: Db, input: CreateCycleInput): Promise<Cycl
 
    if (input.startDate > input.endDate) throw new ApiError(400, 'startDate deve ser <= endDate');
 
-   const maxRows = await db
-      .select({ m: sql<number | null>`max(${cycleT.number})` })
-      .from(cycleT)
-      .where(eq(cycleT.teamId, input.teamId));
-   const number = (maxRows[0]?.m ?? 0) + 1;
-
+   // `max(number)+1` não é atômico; dois POSTs concorrentes no mesmo time computam o
+   // mesmo número e o 2º viola `cycle_team_id_number_unique`. Retry recomputando o max
+   // transforma isso em "próximo número" em vez de 409 numa criação legítima.
    const id = randomUUID();
-   await db.insert(cycleT).values({
-      id,
-      number,
-      name: input.name,
-      teamId: input.teamId,
-      status: input.status ?? 'planned',
-      startDate: input.startDate,
-      endDate: input.endDate,
-      capacity: input.capacity ?? 0,
-   });
-
-   publish({ entity: 'cycle', action: 'created', id });
-   return (await getCycle(db, id))!;
+   for (let attempt = 0; attempt < 4; attempt++) {
+      const maxRows = await db
+         .select({ m: sql<number | null>`max(${cycleT.number})` })
+         .from(cycleT)
+         .where(eq(cycleT.teamId, input.teamId));
+      const number = (maxRows[0]?.m ?? 0) + 1;
+      try {
+         await db.insert(cycleT).values({
+            id,
+            number,
+            name: input.name,
+            teamId: input.teamId,
+            status: input.status ?? 'planned',
+            startDate: input.startDate,
+            endDate: input.endDate,
+            capacity: input.capacity ?? 0,
+         });
+         publish({ entity: 'cycle', action: 'created', id });
+         return (await getCycle(db, id))!;
+      } catch (e) {
+         // 23505 na constraint de (team, number) → corrida: recomputa e retenta.
+         if ((e as { code?: string })?.code === '23505' && attempt < 3) continue;
+         throw e;
+      }
+   }
+   throw new ApiError(500, 'Não foi possível numerar o ciclo (colisão concorrente)');
 }
 
 export interface UpdateCycleInput {

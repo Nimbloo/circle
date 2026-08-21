@@ -59,8 +59,21 @@ function mapDbError(e: unknown): Response | null {
    }
 }
 
-/** Envolve um handler mapeando ApiError/ZodError/erros do Postgres para ProblemDetail. */
-export async function handle(fn: () => Promise<Response>): Promise<Response> {
+/** Contexto `METHOD /path` da request pra correlacionar o log com o endpoint. */
+function reqTag(req?: Request): string {
+   if (!req) return '';
+   try {
+      return ` ${req.method} ${new URL(req.url).pathname}`;
+   } catch {
+      return '';
+   }
+}
+
+/**
+ * Envolve um handler mapeando ApiError/ZodError/erros do Postgres para ProblemDetail.
+ * Passe `req` (opcional) pra correlacionar os logs de erro com rota/método.
+ */
+export async function handle(fn: () => Promise<Response>, req?: Request): Promise<Response> {
    try {
       return await fn();
    } catch (e) {
@@ -69,8 +82,13 @@ export async function handle(fn: () => Promise<Response>): Promise<Response> {
          return problem(400, 'Bad Request', 'Payload inválido', { errors: e.flatten() });
       }
       const dbMapped = mapDbError(e);
-      if (dbMapped) return dbMapped;
-      console.error('[circle-api] erro não tratado:', e);
+      if (dbMapped) {
+         // 4xx derivado de SQLSTATE: loga warn pra não mascarar query malformada como "erro do cliente".
+         const code = (e as { code?: unknown })?.code;
+         console.warn(`[circle-api]${reqTag(req)} db-mapped (SQLSTATE ${String(code)})`, e);
+         return dbMapped;
+      }
+      console.error(`[circle-api]${reqTag(req)} erro não tratado:`, e);
       return problem(500, 'Internal Server Error');
    }
 }

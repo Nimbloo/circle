@@ -233,6 +233,27 @@ function orderRows(rows: IssueDto[], orderBy: IssueListOptions['orderBy']): Issu
    return rows; // já vem por rank asc do banco
 }
 
+/**
+ * Ordenação NO SQL, para o LIMIT pegar o top-N CERTO (antes, ordenava sempre por rank e
+ * só reordenava em memória → com >limit issues, `created`/`priority`/`title` devolviam um
+ * subconjunto arbitrário). `orderRows` continua como ordenação final exata sobre esse set.
+ */
+function listOrder(orderBy: IssueListOptions['orderBy'], cat: CatalogMaps): SQL[] {
+   if (orderBy === 'created') return [sql`${issue.createdAt} desc`];
+   if (orderBy === 'title') return [asc(issue.title)];
+   if (orderBy === 'priority') {
+      // CASE mapeia priorityId → sortRank (mesmo critério do orderRows final); catálogo
+      // pequeno e fechado. priorityId ausente/desconhecido vai pro fim.
+      const whens = [...cat.priorities.values()].map(
+         (p) => sql`when ${issue.priorityId} = ${p.id} then ${p.sortRank}`
+      );
+      return whens.length > 0
+         ? [sql`(case ${sql.join(whens, sql` `)} else 999 end) asc`, asc(issue.rank)]
+         : [asc(issue.rank)];
+   }
+   return [asc(issue.rank)];
+}
+
 // ── Operações ───────────────────────────────────────────────────────
 export async function listIssues(
    db: Db,
@@ -258,7 +279,7 @@ export async function listIssues(
       .select()
       .from(issue)
       .where(where)
-      .orderBy(asc(issue.rank))
+      .orderBy(...listOrder(opts.orderBy, cat))
       .limit(DEFAULT_LIST_LIMIT);
    const dtos = await assemble(db, rows, cat);
    return orderRows(dtos, opts.orderBy);
@@ -408,8 +429,10 @@ export async function updateIssue(
    if (patch.title !== undefined) set.title = patch.title;
    if (patch.statusId !== undefined) set.statusId = patch.statusId;
    if (patch.priorityId !== undefined) set.priorityId = patch.priorityId;
-   if (patch.assigneeId !== undefined) set.assigneeId = patch.assigneeId;
-   if (patch.projectId !== undefined) set.projectId = patch.projectId;
+   // `""` (limpar o campo) → null, consistente com cycleId: senão a FK vira 404
+   // "recurso não existe" em vez de desatribuir/desvincular.
+   if (patch.assigneeId !== undefined) set.assigneeId = patch.assigneeId || null;
+   if (patch.projectId !== undefined) set.projectId = patch.projectId || null;
    if (patch.cycleId !== undefined) set.cycleId = patch.cycleId || null;
    if (patch.dueDate !== undefined) set.dueDate = patch.dueDate;
    if (patch.estimate !== undefined) set.estimate = patch.estimate;
@@ -455,7 +478,9 @@ export async function updateIssue(
       patch.assigneeId !== prev.assigneeId &&
       patch.assigneeId !== actor.id
    ) {
-      await dispatchNotification(db, {
+      // Fire-and-forget: notificação (Slack/SES) não bloqueia a resposta do PATCH.
+      // `dispatchNotification` captura os próprios erros (loga, não lança).
+      void dispatchNotification(db, {
          type: 'assignment',
          issueId: id,
          recipientId: patch.assigneeId,

@@ -265,7 +265,10 @@ export async function addComment(
          })
       );
    }
-   await Promise.all(notifications);
+   // Fire-and-forget: as notificações (Slack/SES) não bloqueiam a resposta do comentário.
+   void Promise.all(notifications).catch((e) =>
+      console.error('[circle] notificações de comentário falharam:', e)
+   );
 
    publish({ entity: 'comment', action: 'created', id, actorEmail });
    return { id, author: userRef(author), body, createdAt: now.toISOString(), reactions: [] };

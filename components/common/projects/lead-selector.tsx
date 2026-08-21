@@ -78,6 +78,7 @@ export function LeadSelector({ lead, onLeadChange }: LeadSelectorProps) {
                            <CommandItem
                               key={user.id}
                               value={user.id}
+                              keywords={[user.name]}
                               onSelect={handleLeadChange}
                               className="flex items-center justify-between"
                            >

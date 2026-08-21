@@ -1,9 +1,38 @@
 import type { NextConfig } from 'next';
 
+// Headers de segurança em toda resposta (defesa em profundidade além do gateway Istio).
+// CSP permite o mínimo do Next (styles inline do runtime; imagens data:/blob: pro avatar
+// base64) e bloqueia embedding (anti-clickjacking) + framing de terceiros.
+const CSP = [
+   "default-src 'self'",
+   "script-src 'self' 'unsafe-inline'",
+   "style-src 'self' 'unsafe-inline'",
+   "img-src 'self' data: blob:",
+   "font-src 'self' data:",
+   "connect-src 'self'",
+   "frame-ancestors 'none'",
+   "base-uri 'self'",
+   "form-action 'self'",
+].join('; ');
+
+const SECURITY_HEADERS = [
+   { key: 'Content-Security-Policy', value: CSP },
+   { key: 'X-Frame-Options', value: 'DENY' },
+   { key: 'X-Content-Type-Options', value: 'nosniff' },
+   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+   {
+      key: 'Strict-Transport-Security',
+      value: 'max-age=31536000; includeSubDomains',
+   },
+];
+
 const nextConfig: NextConfig = {
    /* config options here */
    output: 'standalone',
    devIndicators: false,
+   async headers() {
+      return [{ source: '/:path*', headers: SECURITY_HEADERS }];
+   },
    // pg/bcryptjs usam APIs de Node. Com o middleware criando um runtime Edge, o webpack
    // tentava bundlar o `pg` (via instrumentation → @/db) pro Edge e quebrava em
    // `Can't resolve 'fs'/'path'/'stream'`. Externaliza + no bundle EDGE resolve os

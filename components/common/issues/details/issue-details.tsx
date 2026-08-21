@@ -124,7 +124,7 @@ export default function IssueDetails() {
                                  </span>
                                  <span className="truncate font-medium">{subIssue.title}</span>
                                  <span className="ml-auto shrink-0">
-                                    <AssigneeUser user={subIssue.assignee} />
+                                    <AssigneeUser user={subIssue.assignee} issueId={subIssue.id} />
                                  </span>
                               </Link>
                            ))}

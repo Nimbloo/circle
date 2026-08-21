@@ -1,5 +1,6 @@
 import { emailFromRequest } from '@/lib/api/auth';
 import { subscribe, type CircleEvent } from '@/lib/api/events';
+import { problem } from '@/lib/api/response';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,7 +17,7 @@ const HEARTBEAT_MS = 25_000;
  */
 export async function GET(req: Request): Promise<Response> {
    const email = await emailFromRequest(req);
-   if (!email) return new Response('Unauthorized', { status: 401 });
+   if (!email) return problem(401, 'Unauthorized', 'Não autenticado');
 
    const encoder = new TextEncoder();
    let unsubscribe: (() => void) | null = null;
