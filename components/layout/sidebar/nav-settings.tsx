@@ -16,7 +16,6 @@ import {
    FileText,
    Flame,
    HeartHandshake,
-   KeyRound,
    LucideIcon,
    MessageCircleQuestion,
    Rocket,
@@ -26,7 +25,6 @@ import {
    Tag,
    Target,
    UserRound,
-   Users,
    Zap,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -53,8 +51,6 @@ export const settingsNav: SettingsNavGroup[] = [
          { name: 'Profile', url: '/settings/profile', icon: UserRound },
          { name: 'Notifications', url: '/settings/notifications', icon: Bell },
          { name: 'Code & reviews', url: '/settings/code-and-reviews', icon: Code },
-         { name: 'Security & access', url: '/settings/security', icon: KeyRound },
-         { name: 'Connected accounts', url: '/settings/connected-accounts', icon: Users },
          { name: 'Agent personalization', url: '/settings/agent-personalization', icon: Bot },
       ],
    },
