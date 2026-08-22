@@ -91,6 +91,8 @@ function issueQuery(opts: IssueListOptions = {}): string {
    arr('cycle', opts.cycle);
    if (opts.q) sp.set('q', opts.q);
    if (opts.orderBy) sp.set('orderBy', opts.orderBy);
+   if (opts.limit != null) sp.set('limit', String(opts.limit));
+   if (opts.cursor) sp.set('cursor', opts.cursor);
    const s = sp.toString();
    return s ? `?${s}` : '';
 }

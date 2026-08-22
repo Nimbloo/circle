@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, inArray, isNull, or, sql, ilike, type SQL } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNull, or, sql, ilike, type SQL } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    issue,
@@ -87,6 +87,10 @@ export interface IssueFilter {
 
 export interface IssueListOptions extends IssueFilter {
    orderBy?: 'rank' | 'priority' | 'created' | 'title';
+   /** Tamanho da página. Default = DEFAULT_LIST_LIMIT (compat com chamadas sem paginação). */
+   limit?: number;
+   /** Cursor keyset = o `rank` do último item da página anterior (só na ordem default asc(rank)). */
+   cursor?: string;
 }
 
 interface CatalogMaps {
@@ -275,12 +279,17 @@ export async function listIssues(
       }
    }
    const where = buildWhere(db, opts, cat.statuses, meId);
+   // Keyset por rank: só na ordem default asc(rank) (o board). Cursor = último rank
+   // da página anterior → `rank > cursor`. Em outras ordens, sem cursor (cai no limit).
+   const rankOrder = !opts.orderBy || opts.orderBy === 'rank';
+   const keyset = opts.cursor && rankOrder ? gt(issue.rank, opts.cursor) : undefined;
+   const finalWhere = keyset ? (where ? and(where, keyset) : keyset) : where;
    const rows = await db
       .select()
       .from(issue)
-      .where(where)
+      .where(finalWhere)
       .orderBy(...listOrder(opts.orderBy, cat))
-      .limit(DEFAULT_LIST_LIMIT);
+      .limit(opts.limit ?? DEFAULT_LIST_LIMIT);
    const dtos = await assemble(db, rows, cat);
    return orderRows(dtos, opts.orderBy);
 }

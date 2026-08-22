@@ -128,7 +128,10 @@ export function parseIssueListOptions(
       cycle: multi(sp, 'cycle'),
       q: sp.get('q') ?? undefined,
       orderBy: (sp.get('orderBy') as IssueListOptions['orderBy']) ?? undefined,
+      cursor: sp.get('cursor') ?? undefined,
    };
+   const rawLimit = Number(sp.get('limit'));
+   if (Number.isFinite(rawLimit) && rawLimit > 0) opts.limit = Math.min(Math.floor(rawLimit), 200);
    if (sp.get('assignee') === 'me' || sp.get('mine') === 'true') opts.assigneeMe = meEmail;
    if (sp.get('createdBy') === 'me') opts.createdByMe = meEmail;
    return { opts, meEmail };

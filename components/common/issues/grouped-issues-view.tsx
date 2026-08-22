@@ -13,6 +13,7 @@ import { FC, useEffect, useMemo, useState } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { GroupIssues, IssueGroupDescriptor } from './group-issues';
+import { VirtualIssueList } from './virtual-issue-list';
 import { CustomDragLayer } from './issue-grid';
 import { BulkActionsBar } from './bulk-actions-bar';
 
@@ -351,22 +352,23 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
       <DndProvider backend={HTML5Backend}>
          <CustomDragLayer />
          <BulkActionsBar />
-         <div className="h-full overflow-y-auto">
-            {listGroups.length === 0 && !showFooter && (
-               <div className="flex items-center justify-center h-40">
-                  <IssuesEmptyState loading={loading} error={error} onRetry={onRetry} />
+         {listGroups.length === 0 && !showFooter ? (
+            <div className="h-full flex items-center justify-center">
+               <IssuesEmptyState loading={loading} error={error} onRetry={onRetry} />
+            </div>
+         ) : (
+            <div className="h-full flex flex-col min-h-0">
+               {/* Lista VIRTUALIZADA: só as linhas visíveis vão pro DOM (fluido a 1000+). */}
+               <div className="flex-1 min-h-0">
+                  <VirtualIssueList entries={listGroups} />
                </div>
-            )}
-            {listGroups.map((entry) => (
-               <GroupIssues
-                  key={entry.group.id}
-                  group={entry.group}
-                  issues={entry.issues}
-                  count={entry.issues.length}
-               />
-            ))}
-            {showFooter && <HiddenByFiltersFooter hiddenCount={hiddenCount} />}
-         </div>
+               {showFooter && (
+                  <div className="shrink-0 border-t bg-container">
+                     <HiddenByFiltersFooter hiddenCount={hiddenCount} />
+                  </div>
+               )}
+            </div>
+         )}
       </DndProvider>
    );
 };
