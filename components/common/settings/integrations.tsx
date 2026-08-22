@@ -1,9 +1,11 @@
 'use client';
 
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { api } from '@/lib/client';
-import { ChevronRight, Search } from 'lucide-react';
+import { ChevronRight, Search, Send } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { INTEGRATION_LOGOS } from './integration-logos';
 import {
    ENABLED_INTEGRATIONS,
@@ -170,6 +172,20 @@ export default function Integrations() {
       };
    }, []);
 
+   const [slackTesting, setSlackTesting] = useState(false);
+   const testSlack = async () => {
+      setSlackTesting(true);
+      try {
+         const res = await api.integrations.slackTest();
+         if (res.sent) toast.success('Mensagem de teste enviada ao Slack ✅');
+         else toast.error(`Slack não enviou (${res.reason ?? 'erro'})`);
+      } catch {
+         toast.error('Falha ao testar o Slack (só admin)');
+      } finally {
+         setSlackTesting(false);
+      }
+   };
+
    const searchResults = useMemo(() => {
       const needle = query.trim().toLowerCase();
       if (!needle) return null;
@@ -199,6 +215,21 @@ export default function Integrations() {
                   className="pl-8 h-9"
                />
             </div>
+
+            {connectedIds.has('slack') && (
+               <div className="flex items-center justify-between rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-2.5">
+                  <span className="text-sm">
+                     <span className="font-medium">Slack conectado.</span>{' '}
+                     <span className="text-muted-foreground">
+                        Notificações do Circle vão pro seu canal.
+                     </span>
+                  </span>
+                  <Button size="xs" variant="secondary" disabled={slackTesting} onClick={testSlack}>
+                     <Send className="size-3.5" />
+                     {slackTesting ? 'Enviando…' : 'Enviar teste'}
+                  </Button>
+               </div>
+            )}
 
             {searchResults ? (
                <section className="flex flex-col gap-3">

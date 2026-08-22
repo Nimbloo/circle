@@ -195,6 +195,8 @@ export const api = {
          get<{ github: boolean; slack: boolean; sentry: boolean; email: boolean }>(
             '/integrations/status'
          ),
+      /** Dispara uma mensagem de teste ao Slack (admin) — verificação da integração. */
+      slackTest: () => post<{ sent: boolean; reason?: string }>('/integrations/slack/test', {}),
    },
 
    members: {

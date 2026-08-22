@@ -245,18 +245,20 @@ async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike)
       const detail = detailByNumber.get(pr.number);
       const row = {
          id: `${repo}#${pr.number}`,
-         title: pr.title,
+         // clip: trunca ao limite da coluna — títulos/branches de PR podem passar de
+         // 512/196 chars e estouravam o insert (varchar overflow abortava o batch).
+         title: clip(pr.title, 512),
          status: statusOf(pr),
-         repo,
+         repo: clip(repo, 196),
          prNumber: pr.number,
-         url: pr.html_url ?? null,
-         author: pr.user?.login ?? null,
-         targetBranch: pr.base?.ref ?? null,
-         sourceBranch: pr.head?.ref ?? null,
+         url: clip(pr.html_url ?? null, 512),
+         author: clip(pr.user?.login ?? null, 128),
+         targetBranch: clip(pr.base?.ref ?? null, 196),
+         sourceBranch: clip(pr.head?.ref ?? null, 196),
          additions: detail?.additions ?? pr.additions ?? 0,
          deletions: detail?.deletions ?? pr.deletions ?? 0,
          resolvesIdentifier: resolvesId,
-         resolvesTitle: resolvesId ? pr.title : null,
+         resolvesTitle: resolvesId ? clip(pr.title, 512) : null,
          checksPassed: 0,
          checksTotal: 0,
          createdAt: new Date(pr.created_at),
@@ -283,8 +285,18 @@ async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike)
          set.deletions = row.deletions;
       }
 
-      await db.insert(review).values(row).onConflictDoUpdate({ target: review.id, set });
-      count += 1;
+      try {
+         await db.insert(review).values(row).onConflictDoUpdate({ target: review.id, set });
+         count += 1;
+      } catch (e) {
+         // Um PR com dado ruim NÃO aborta o sync do repo — loga e segue.
+         console.warn(`[circle] review upsert falhou (${row.id}):`, (e as Error).message);
+      }
    }
    return count;
+}
+
+/** Trunca uma string ao limite da coluna (null passa direto). Evita varchar overflow. */
+function clip<T extends string | null | undefined>(s: T, max: number): T {
+   return s != null && s.length > max ? (s.slice(0, max) as T) : s;
 }
