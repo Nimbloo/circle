@@ -11,8 +11,14 @@ export type UserRow = typeof appUser.$inferSelect;
 const BCRYPT_ROUNDS = 10;
 
 /** Token de convite forte (32 bytes → 64 chars hex, cabe no varchar(64)). */
-function generateInviteToken(): string {
+export function generateInviteToken(): string {
    return randomBytes(32).toString('hex');
+}
+
+/** Link de signup single-use (email + token) — usado pelos fluxos de convite. */
+export function signupUrl(email: string, token: string): string {
+   const base = process.env.AUTH_URL || 'https://circle.nimbloo.ai';
+   return `${base}/signup?email=${encodeURIComponent(email)}&token=${token}`;
 }
 
 /** Compara dois tokens em tempo constante, com guarda de tamanho (evita timing/length leak). */

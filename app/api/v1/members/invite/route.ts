@@ -6,8 +6,8 @@ import { isAdmin } from '@/lib/api/auth';
 import { ApiError } from '@/lib/api/errors';
 import { inviteUser } from '@/lib/api/users';
 import { MEMBER_ROLES } from '@/lib/api/members';
-import { escapeHtml } from '@/lib/api/notify';
 import { sendEmail } from '@/lib/api/integrations/mailer';
+import { ctaEmailHtml } from '@/lib/api/integrations/email-templates';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -36,8 +36,13 @@ export async function POST(req: Request) {
       const signupUrl = `${baseUrl}/signup?email=${encodeURIComponent(user.email)}&token=${user.inviteToken}`;
 
       // Best-effort: convite por e-mail (no-op se o mailer não estiver configurado).
-      const html = `<p>Você foi convidado para o Circle.</p><p>Defina sua senha em <a href="${escapeHtml(signupUrl)}">${escapeHtml(signupUrl)}</a>.</p>`;
-      const mail = await sendEmail(user.email, '[Circle] Você foi convidado', html).catch(() => ({
+      const html = ctaEmailHtml({
+         title: 'Você foi convidado para o Circle',
+         intro: `Você foi convidado como ${role}. Defina sua senha para ativar sua conta e começar a trabalhar no Circle.`,
+         buttonLabel: 'Definir minha senha',
+         buttonUrl: signupUrl,
+      });
+      const mail = await sendEmail(user.email, 'Seu convite para o Circle', html).catch(() => ({
          sent: false as const,
       }));
 

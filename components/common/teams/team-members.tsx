@@ -21,6 +21,7 @@ import { toast } from 'sonner';
 export default function TeamMembers() {
    const { teamId } = useParams<{ orgId: string; teamId: string }>();
    const teams = useWorkspaceStore((s) => s.teams);
+   const workspaceUsers = useWorkspaceStore((s) => s.users);
    const hydrate = useWorkspaceStore((s) => s.hydrate);
    const isAdmin = useWorkspaceStore((s) => s.me?.admin ?? false);
    const team = teams.find((t) => t.id === teamId) ?? teams[0];
@@ -28,6 +29,7 @@ export default function TeamMembers() {
    const [open, setOpen] = useState(false);
    const [email, setEmail] = useState('');
    const [busy, setBusy] = useState(false);
+   const [pick, setPick] = useState(''); // busca do picker de membros existentes
 
    // Solicitações de entrada pendentes (só admin enxerga/decide).
    const [requests, setRequests] = useState<JoinRequestDto[]>([]);
@@ -65,22 +67,32 @@ export default function TeamMembers() {
 
    const members = [...team.members].sort((a, b) => a.name.localeCompare(b.name));
 
-   const addMember = async () => {
-      const value = email.trim().toLowerCase();
+   const addMember = async (explicitEmail?: string) => {
+      const value = (explicitEmail ?? email).trim().toLowerCase();
       if (!value || busy) return;
       setBusy(true);
       try {
          await api.teams.addMember(team.id, value);
          await hydrate();
          setEmail('');
+         setPick('');
          setOpen(false);
-         toast.success(`${value} added to ${team.name}`);
+         toast.success(`${value} adicionado ao time ${team.name}`);
       } catch {
-         toast.error('Could not add the member');
+         toast.error('Não deu pra adicionar o membro');
       } finally {
          setBusy(false);
       }
    };
+
+   // Usuários do workspace que ainda NÃO estão no time (o picker "estilo Linear").
+   const nonMembers = workspaceUsers
+      .filter((u) => !team.members.some((m) => m.id === u.id))
+      .filter((u) => {
+         const q = pick.trim().toLowerCase();
+         return !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+      })
+      .slice(0, 8);
 
    const removeMember = async (id: string, name: string) => {
       setBusy(true);
@@ -108,24 +120,66 @@ export default function TeamMembers() {
                            Add a member
                         </Button>
                      </PopoverTrigger>
-                     <PopoverContent align="end" className="w-72 p-3">
-                        <p className="text-xs text-muted-foreground mb-2">
-                           Add by email (the user is provisioned if new).
-                        </p>
-                        <div className="flex items-center gap-1.5">
+                     <PopoverContent align="end" className="w-80 p-0">
+                        {/* Picker de membros JÁ na plataforma (estilo Linear) */}
+                        <div className="p-2 border-b">
                            <Input
-                              type="email"
-                              placeholder="name@nimbloo.ai"
-                              value={email}
-                              onChange={(e) => setEmail(e.target.value)}
-                              onKeyDown={(e) => {
-                                 if (e.key === 'Enter') void addMember();
-                              }}
+                              placeholder="Buscar membro do workspace…"
+                              value={pick}
+                              onChange={(e) => setPick(e.target.value)}
                               className="h-8"
                            />
-                           <Button size="xs" onClick={() => void addMember()} disabled={busy}>
-                              Add
-                           </Button>
+                        </div>
+                        <div className="max-h-56 overflow-auto py-1">
+                           {nonMembers.length === 0 ? (
+                              <p className="px-3 py-2 text-xs text-muted-foreground">
+                                 {pick
+                                    ? 'Ninguém encontrado.'
+                                    : 'Todos os membros do workspace já estão no time.'}
+                              </p>
+                           ) : (
+                              nonMembers.map((u) => (
+                                 <button
+                                    key={u.id}
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() => void addMember(u.email)}
+                                    className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50"
+                                 >
+                                    <Avatar className="size-6 shrink-0">
+                                       <AvatarImage src={u.avatarUrl || undefined} alt={u.name} />
+                                       <AvatarFallback>{u.name[0]}</AvatarFallback>
+                                    </Avatar>
+                                    <span className="flex flex-col min-w-0">
+                                       <span className="font-medium truncate">{u.name}</span>
+                                       <span className="text-xs text-muted-foreground truncate">
+                                          {u.email}
+                                       </span>
+                                    </span>
+                                 </button>
+                              ))
+                           )}
+                        </div>
+                        {/* Convidar alguém NOVO por e-mail (recebe link de acesso) */}
+                        <div className="p-2 border-t">
+                           <p className="text-[11px] text-muted-foreground mb-1.5">
+                              Convidar alguém novo por e-mail (recebe link de acesso):
+                           </p>
+                           <div className="flex items-center gap-1.5">
+                              <Input
+                                 type="email"
+                                 placeholder="nome@empresa.com"
+                                 value={email}
+                                 onChange={(e) => setEmail(e.target.value)}
+                                 onKeyDown={(e) => {
+                                    if (e.key === 'Enter') void addMember();
+                                 }}
+                                 className="h-8"
+                              />
+                              <Button size="xs" onClick={() => void addMember()} disabled={busy}>
+                                 Convidar
+                              </Button>
+                           </div>
                         </div>
                      </PopoverContent>
                   </Popover>

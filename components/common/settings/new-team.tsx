@@ -105,7 +105,9 @@ export default function NewTeam() {
             <SettingsCard>
                {notJoined.length === 0 ? (
                   <div className="p-4 text-sm text-muted-foreground">
-                     Você já faz parte de todos os times.
+                     {teams.length === 0
+                        ? 'Nenhum time ainda — crie o primeiro acima.'
+                        : 'Você já faz parte de todos os times.'}
                   </div>
                ) : (
                   notJoined.map((team) => (
