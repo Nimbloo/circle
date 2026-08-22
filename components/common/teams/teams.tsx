@@ -50,8 +50,9 @@ export default function Teams() {
             <span className="text-sm text-muted-foreground">
                {displayed.length} {displayed.length === 1 ? 'team' : 'teams'}
             </span>
+            {/* "New team" vive no header da página (headers/teams/header-nav) — não duplicar
+                aqui no toolbar da lista (era o 2º botão idêntico que o usuário via). */}
             <div className="flex items-center gap-1">
-               <NewTeamButton />
                <Filter />
                <TeamsDisplayOptions />
             </div>

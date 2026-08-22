@@ -13,8 +13,15 @@ import { useViewStore } from '@/store/view-store';
 import { useParams } from 'next/navigation';
 import { useMemo } from 'react';
 import { GroupedIssuesView } from './grouped-issues-view';
-import { InsightsPanel } from './insights-panel';
+import dynamic from 'next/dynamic';
 import { SearchIssues } from './search-issues';
+
+// Code-split: o painel de insights (pesado, com gráficos) só renderiza quando aberto
+// (openPanel === 'insights'). dynamic() tira o chunk do bundle da página core.
+const InsightsPanel = dynamic(
+   () => import('./insights-panel').then((m) => ({ default: m.InsightsPanel })),
+   { ssr: false }
+);
 
 interface AllIssuesProps {
    /**
