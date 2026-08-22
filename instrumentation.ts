@@ -18,8 +18,13 @@ export async function register() {
    // migrate — não no pool (statement_timeout=15s mataria a espera). Contendores esperam
    // o líder terminar e, como o migrate é idempotente, seguem como no-op.
    const { Client } = await import('pg');
+   const fs = await import('node:fs');
+   const path = await import('node:path');
    const LOCK_KEY = 4210771; // "circle" — constante estável, qualquer int64 serve
    const lockClient = new Client({ connectionString: process.env.DATABASE_URL });
+   // Path ABSOLUTO (defensivo): `./db/migrations` dependia da cwd; em Next standalone o
+   // migrate no boot já pulou uma migration silenciosamente (ver [[circle-deploy]] gotcha).
+   const migrationsFolder = path.resolve(process.cwd(), 'db/migrations');
    try {
       const { migrate } = await import('drizzle-orm/node-postgres/migrator');
       const { getDb } = await import('@/db');
@@ -27,8 +32,29 @@ export async function register() {
       await lockClient.connect();
       await lockClient.query('SELECT pg_advisory_lock($1)', [LOCK_KEY]);
       try {
-         await migrate(getDb(), { migrationsFolder: './db/migrations' });
+         // Quantas migrations existem no disco (journal) — pra detectar no-op suspeito.
+         const journal = JSON.parse(
+            fs.readFileSync(path.join(migrationsFolder, 'meta/_journal.json'), 'utf8')
+         );
+         const onDisk = Array.isArray(journal.entries) ? journal.entries.length : 0;
+
+         await migrate(getDb(), { migrationsFolder });
          await seedCatalogs(getDb());
+
+         const applied = (
+            await lockClient.query('SELECT count(*)::int AS c FROM drizzle.__drizzle_migrations')
+         ).rows[0].c as number;
+         console.log(
+            `[circle] migrate: disco=${onDisk} aplicadas=${applied} (folder=${migrationsFolder})`
+         );
+         // FAIL-FAST: se sobrou migration no disco não aplicada, o migrate no boot falhou
+         // (bug do standalone) — NÃO subir com schema drift. Aplique manualmente (memória).
+         if (applied < onDisk) {
+            throw new Error(
+               `migrate no-op suspeito: aplicadas=${applied} < disco=${onDisk} (schema drift). ` +
+                  `Aplique a migration manualmente — ver [[circle-deploy]].`
+            );
+         }
       } finally {
          await lockClient.query('SELECT pg_advisory_unlock($1)', [LOCK_KEY]).catch(() => {});
       }
