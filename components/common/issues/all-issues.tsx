@@ -10,6 +10,7 @@ import { IssueFilterBar } from './issue-filter-bar';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useSearchStore } from '@/store/search-store';
 import { useViewStore } from '@/store/view-store';
+import { useParams } from 'next/navigation';
 import { useMemo } from 'react';
 import { GroupedIssuesView } from './grouped-issues-view';
 import { InsightsPanel } from './insights-panel';
@@ -42,11 +43,14 @@ export default function AllIssues({ categories }: AllIssuesProps) {
       [categories, displayOrderedStatus]
    );
 
-   const scopedIssues = useMemo<Issue[]>(
-      () =>
-         categories ? issues.filter((issue) => categories.includes(issue.status.category)) : issues,
-      [issues, categories]
-   );
+   // Escopo por TIME (rota /team/<teamId>/...): antes o board ignorava o teamId e
+   // mostrava as issues de TODOS os times (bug + perf). Agora filtra pelo time da rota.
+   const { teamId } = useParams<{ teamId?: string }>();
+   const scopedIssues = useMemo<Issue[]>(() => {
+      let list = teamId ? issues.filter((issue) => issue.teamId === teamId) : issues;
+      if (categories) list = list.filter((issue) => categories.includes(issue.status.category));
+      return list;
+   }, [issues, categories, teamId]);
 
    const displayedIssues = useMemo(
       () => applyIssueFilters(scopedIssues, filters),

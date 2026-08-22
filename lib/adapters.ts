@@ -87,6 +87,7 @@ export function adaptIssue(dto: IssueDto): Issue {
    return {
       id: dto.id,
       identifier: dto.identifier,
+      teamId: dto.teamId,
       title: dto.title,
       description: '',
       status: adaptStatus(dto.status),

@@ -7,6 +7,7 @@ import type { User } from './users';
 export interface Issue {
    id: string;
    identifier: string;
+   teamId?: string; // key do time dono (CORE, DESIGN) — usado p/ escopar as views por time
    title: string;
    description: string;
    status: Status;
