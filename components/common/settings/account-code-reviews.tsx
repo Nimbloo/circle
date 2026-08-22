@@ -2,48 +2,27 @@
 
 import { Switch } from '@/components/ui/switch';
 import { usePreferencesStore } from '@/store/preferences-store';
-import { useState } from 'react';
 import { SelectMenu, SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
-
-/** Fake diff shown in the "Code theme" preview (invented snippet). */
-const DIFF_LINES: { number?: string; text: string; kind: 'context' | 'removed' | 'added' }[] = [
-   { number: '1', text: 'const config = {', kind: 'context' },
-   { number: '2', text: '  apiUrl: "https://api.example.com",', kind: 'context' },
-   { number: '3', text: '  timeout: 5000,', kind: 'context' },
-   { number: '-', text: '  debug: true,', kind: 'removed' },
-   { number: '4', text: '  headers: { "Content-Type": "application/json" },', kind: 'added' },
-   { number: '5', text: '};', kind: 'context' },
-   { number: '-', text: 'async function fetchUser(id: string): Promise<User> {', kind: 'removed' },
-   { number: '-', text: '  const url = `${config.apiUrl}/users/${id}`;', kind: 'removed' },
-   {
-      number: '6',
-      text: 'async function fetchUser(id: string): Promise<User | null> {',
-      kind: 'added',
-   },
-   { number: '7', text: '  const url = `${config.apiUrl}/v2/users/${id}`;', kind: 'added' },
-   { number: '8', text: '  const res = await fetch(url);', kind: 'context' },
-   { number: '-', text: '  return res.json();', kind: 'removed' },
-];
 
 /**
  * Personal "Code & reviews" settings. As opções persistem por-usuário
- * (preferences-store → PUT /settings). O fluxo real de review de PR do GitHub
- * (chave de assinatura, coding tools externas) ainda não existe → "Soon".
+ * (preferences-store → PUT /settings). "Enable code reviews" controla a aba Reviews
+ * no sidebar (efeito real). O fluxo completo de review de PR (auto-convert de drafts,
+ * merge queue, chave de assinatura) depende de integrações que ainda não existem.
  */
 export default function AccountCodeReviews() {
    const prefs = usePreferencesStore();
-   const [previewLang, setPreviewLang] = useState('TypeScript');
 
    return (
       <SettingsShell
          title="Code & reviews"
-         description="Review GitHub pull requests and agent code diffs in Nimbloo"
+         description="Revise pull requests do GitHub no Circle, a partir da aba Reviews no sidebar"
       >
          <SettingsSection>
             <SettingsCard>
                <SettingsRow
                   title="Enable code reviews"
-                  description="Review GitHub pull requests, accessible from the sidebar"
+                  description="Mostra a aba Reviews no sidebar para revisar pull requests do GitHub"
                   trailing={
                      <Switch
                         checked={prefs.codeReviewsEnabled}
@@ -98,36 +77,6 @@ export default function AccountCodeReviews() {
                      />
                   }
                />
-               <div className="p-3">
-                  <div className="relative rounded-md border overflow-hidden bg-container">
-                     <div className="absolute top-2 right-2 z-10">
-                        <SelectMenu
-                           options={['TypeScript', 'JavaScript', 'Python']}
-                           value={previewLang}
-                           onChange={setPreviewLang}
-                        />
-                     </div>
-                     <pre className="text-xs leading-5 font-mono overflow-x-auto py-2">
-                        {DIFF_LINES.map((line) => (
-                           <div
-                              key={`${line.kind}-${line.number}-${line.text}`}
-                              className={
-                                 line.kind === 'removed'
-                                    ? 'bg-red-500/10 border-l-2 border-red-500 px-3 flex gap-3'
-                                    : line.kind === 'added'
-                                      ? 'bg-green-500/10 border-l-2 border-green-500 px-3 flex gap-3'
-                                      : 'px-3 flex gap-3 border-l-2 border-transparent'
-                              }
-                           >
-                              <span className="w-4 text-right text-muted-foreground/60 select-none shrink-0">
-                                 {line.number}
-                              </span>
-                              <code>{line.text}</code>
-                           </div>
-                        ))}
-                     </pre>
-                  </div>
-               </div>
             </SettingsCard>
          </SettingsSection>
 

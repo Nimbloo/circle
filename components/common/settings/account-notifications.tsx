@@ -5,32 +5,50 @@ import { useNotificationPrefsStore } from '@/store/notification-prefs-store';
 import { Mail, Monitor, Slack, Smartphone } from 'lucide-react';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
 
-const CHANNELS = [
-   { icon: <Monitor className="size-4" />, title: 'Desktop' },
-   { icon: <Smartphone className="size-4" />, title: 'Mobile' },
-   { icon: <Mail className="size-4" />, title: 'Email' },
-   { icon: <Slack className="size-4" />, title: 'Slack' },
-];
-
 /** Personal notification settings (push channels + product updates). */
 export default function AccountNotifications() {
    const prefs = useNotificationPrefsStore();
    return (
       <SettingsShell title="Notifications">
          <SettingsSection
-            title="Push notifications"
-            description="Choose which notifications are pushed to your devices. All notifications will still appear in your inbox."
+            title="Notification channels"
+            description="Escolha por onde receber notificações de issues (atribuição, comentários, menções). O histórico completo sempre aparece no seu inbox."
          >
             <SettingsCard>
-               {CHANNELS.map((channel) => (
-                  <SettingsRow
-                     key={channel.title}
-                     icon={channel.icon}
-                     title={channel.title}
-                     description="Em breve"
-                     muted
-                  />
-               ))}
+               <SettingsRow
+                  icon={<Mail className="size-4" />}
+                  title="Email"
+                  description="Recebe um e-mail quando algo importante acontece nas suas issues"
+                  trailing={
+                     <Switch
+                        checked={prefs.emailNotifications}
+                        onCheckedChange={(v) => prefs.setPref('emailNotifications', v)}
+                     />
+                  }
+               />
+               <SettingsRow
+                  icon={<Slack className="size-4" />}
+                  title="Slack"
+                  description="Envia as notificações para o canal do Slack conectado ao workspace"
+                  trailing={
+                     <Switch
+                        checked={prefs.slackNotifications}
+                        onCheckedChange={(v) => prefs.setPref('slackNotifications', v)}
+                     />
+                  }
+               />
+               <SettingsRow
+                  icon={<Monitor className="size-4" />}
+                  title="Desktop"
+                  description="Em breve"
+                  muted
+               />
+               <SettingsRow
+                  icon={<Smartphone className="size-4" />}
+                  title="Mobile"
+                  description="Em breve"
+                  muted
+               />
             </SettingsCard>
          </SettingsSection>
 

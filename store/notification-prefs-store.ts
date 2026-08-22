@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 
 export type NotificationPrefKey =
    | 'emailNotifications'
+   | 'slackNotifications'
    | 'showUpdatesInSidebar'
    | 'changelogNewsletter'
    | 'marketing'
@@ -13,6 +14,7 @@ export type NotificationPrefs = Record<NotificationPrefKey, boolean>;
 
 const DEFAULT_PREFS: NotificationPrefs = {
    emailNotifications: true,
+   slackNotifications: true,
    showUpdatesInSidebar: true,
    changelogNewsletter: false,
    marketing: false,

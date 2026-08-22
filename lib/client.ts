@@ -23,6 +23,7 @@ import type {
 import type { TeamDto, CreateTeamInput, JoinRequestDto } from '@/lib/api/teams';
 import type { MemberDto } from '@/lib/api/members';
 import type { CycleDto, CreateCycleInput, UpdateCycleInput } from '@/lib/api/cycles';
+import type { TemplateDto, CreateTemplateInput, UpdateTemplateInput } from '@/lib/api/templates';
 import type {
    InitiativeDto,
    CreateInitiativeInput,
@@ -195,6 +196,14 @@ export const api = {
          get<IssueDto[]>(`/teams/${key}/issues${issueQuery(opts)}`),
       cycles: (key: string) => get<CycleDto[]>(`/teams/${key}/cycles`),
       documents: (key: string) => get<FolderDto[]>(`/teams/${key}/documents`),
+      /** Templates de issue do time (CRUD; escrita exige admin). */
+      templates: (key: string) => get<TemplateDto[]>(`/teams/${key}/templates`),
+      createTemplate: (key: string, input: Omit<CreateTemplateInput, 'teamId'>) =>
+         post<TemplateDto>(`/teams/${key}/templates`, input),
+      updateTemplate: (key: string, id: string, body: UpdateTemplateInput) =>
+         patch<TemplateDto>(`/teams/${key}/templates/${id}`, body),
+      deleteTemplate: (key: string, id: string) =>
+         del<{ deleted: boolean }>(`/teams/${key}/templates/${id}`),
    },
 
    integrations: {

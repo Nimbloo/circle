@@ -517,3 +517,21 @@ export const teamDocument = pgTable('team_document', {
    createdAt: timestamp('created_at').notNull().defaultNow(),
    updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
+
+/** Templates de issue por time: pré-preenchem título/descrição/status/prioridade no New Issue. */
+export const issueTemplate = pgTable(
+   'issue_template',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      teamId: varchar('team_id', { length: 36 })
+         .notNull()
+         .references(() => team.id),
+      name: varchar('name', { length: 128 }).notNull(),
+      title: varchar('title', { length: 512 }),
+      description: text('description'),
+      statusId: varchar('status_id', { length: 64 }).references(() => status.id),
+      priorityId: varchar('priority_id', { length: 64 }).references(() => priority.id),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_issue_template_team').on(t.teamId)]
+);

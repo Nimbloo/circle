@@ -52,13 +52,13 @@ export async function dispatchNotification(db: Db, input: NotifyInput): Promise<
       const summary = `[Circle] ${iss.identifier}: ${rawContent}`;
       const html = `<p>${escapeHtml(rawContent)}</p><p><strong>${escapeHtml(iss.identifier)}</strong> — ${escapeHtml(iss.title)}</p><p><a href="https://circle.nimbloo.ai">Abrir no Circle</a></p>`;
 
-      // Respeita a preferência do destinatário: e-mail só sai se `emailNotifications`
-      // não estiver explicitamente desativado. O in-app (createNotification acima) já
-      // gravou — é o histórico e ignora a pref. Fail-open: erro ao ler settings → manda.
-      const emailEnabled = recipient?.email ? await emailAllowedFor(db, input.recipientId) : false;
+      // Respeita as preferências do destinatário (`settings.notifications.*`). O in-app
+      // (createNotification acima) já gravou — é o histórico e ignora as prefs. Fail-open:
+      // erro ao ler settings → canal habilitado (não silenciar notificação por acidente).
+      const [emailEnabled, slackEnabled] = await channelPrefs(db, input.recipientId);
 
       await Promise.allSettled([
-         sendSlack(`${summary}\n${iss.title}`),
+         slackEnabled ? sendSlack(`${summary}\n${iss.title}`) : Promise.resolve({ sent: false }),
          recipient?.email && emailEnabled
             ? sendEmail(recipient.email, summary, html)
             : Promise.resolve({ sent: false }),
@@ -69,20 +69,22 @@ export async function dispatchNotification(db: Db, input: NotifyInput): Promise<
 }
 
 /**
- * True se o usuário permite e-mail (pref `notifications.emailNotifications`).
- * Default = permite (true) quando a chave está ausente. Fail-open: qualquer erro
- * ao ler as settings retorna true (o e-mail é enviado — não silenciar por acidente).
+ * Preferências de canal do destinatário: [emailEnabled, slackEnabled] a partir de
+ * `settings.notifications.{emailNotifications,slackNotifications}`. Cada canal é
+ * permitido a menos que explicitamente `false`. Fail-open: erro ao ler settings →
+ * ambos habilitados (não silenciar notificação por acidente).
  */
-async function emailAllowedFor(db: Db, userId: string): Promise<boolean> {
+async function channelPrefs(db: Db, userId: string): Promise<[boolean, boolean]> {
    try {
       const settings = await getUserSettings(db, userId);
       const notifs = settings.notifications;
       if (notifs && typeof notifs === 'object' && !Array.isArray(notifs)) {
-         return (notifs as Record<string, unknown>).emailNotifications !== false;
+         const n = notifs as Record<string, unknown>;
+         return [n.emailNotifications !== false, n.slackNotifications !== false];
       }
-      return true;
+      return [true, true];
    } catch (err) {
-      console.error('[circle] leitura de settings de e-mail falhou (fail-open):', err);
-      return true;
+      console.error('[circle] leitura de settings de notificação falhou (fail-open):', err);
+      return [true, true];
    }
 }

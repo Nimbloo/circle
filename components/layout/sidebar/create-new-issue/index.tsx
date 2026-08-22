@@ -18,8 +18,12 @@ import { AssigneeSelector } from './assignee-selector';
 import { ProjectSelector } from './project-selector';
 import { LabelSelector } from './label-selector';
 import { EstimateSelector } from './estimate-selector';
+import { TemplateSelector } from './template-selector';
 import { LexoRank } from '@/lib/utils';
 import { DialogTitle } from '@radix-ui/react-dialog';
+import { useParams } from 'next/navigation';
+import { useWorkspaceStore } from '@/store/workspace-store';
+import type { TemplateDto } from '@/lib/api/templates';
 
 export function CreateNewIssue() {
    const [createMore, setCreateMore] = useState<boolean>(false);
@@ -27,6 +31,10 @@ export function CreateNewIssue() {
    const { addIssue, getAllIssues } = useIssuesStore();
    const status = useStatuses();
    const priorities = usePriorities();
+   const params = useParams<{ teamId?: string }>();
+   const teams = useWorkspaceStore((s) => s.teams);
+   // Time do contexto (URL /team/[teamId]/...) ou o 1º time do usuário.
+   const teamId = params?.teamId ?? teams[0]?.id ?? '';
 
    const generateUniqueIdentifier = useCallback(() => {
       const identifiers = getAllIssues().map((issue) => issue.identifier);
@@ -68,6 +76,19 @@ export function CreateNewIssue() {
    }, [createDefaultData]);
 
    const [submitting, setSubmitting] = useState(false);
+
+   const applyTemplate = (t: TemplateDto) => {
+      setAddIssueForm((f) => ({
+         ...f,
+         title: t.title || f.title,
+         description: t.description || f.description,
+         status: t.statusId ? (status.find((s) => s.id === t.statusId) ?? f.status) : f.status,
+         priority: t.priorityId
+            ? (priorities.find((p) => p.id === t.priorityId) ?? f.priority)
+            : f.priority,
+      }));
+      toast.success(`Template "${t.name}" aplicado`);
+   };
 
    const createIssue = async () => {
       if (submitting) return; // guarda contra double-submit (duplo-clique)
@@ -122,6 +143,7 @@ export function CreateNewIssue() {
                />
 
                <div className="w-full flex items-center justify-start gap-1.5 flex-wrap">
+                  <TemplateSelector teamId={teamId} onApply={applyTemplate} />
                   <StatusSelector
                      status={addIssueForm.status}
                      onChange={(newStatus) =>

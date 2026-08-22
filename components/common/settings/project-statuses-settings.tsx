@@ -46,7 +46,7 @@ export default function ProjectStatusesSettings() {
    return (
       <SettingsShell
          title="Project statuses"
-         description="Project statuses define the workflow that projects go through from start to completion"
+         description="Os estágios que os projetos percorrem, do início à conclusão, e quantos projetos há em cada um. A personalização do workflow por time chega em breve."
       >
          <div className="rounded-lg border bg-container overflow-hidden">
             {groups.map((group) => (

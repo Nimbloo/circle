@@ -10,6 +10,7 @@ import {
 import { fetchReviews } from '@/lib/adapters-reviews';
 import { inboxItems } from '@/mock-data/side-bar-nav';
 import { useNotificationsStore } from '@/store/notifications-store';
+import { usePreferencesStore } from '@/store/preferences-store';
 import {
    isSidebarItemVisible,
    resolveOrder,
@@ -51,6 +52,7 @@ export function NavInbox() {
    }, []);
 
    const unread = mounted ? getUnreadCount() : 0;
+   const codeReviewsEnabled = usePreferencesStore((s) => s.codeReviewsEnabled);
 
    const orderedItems = mounted
       ? resolveOrder(order.personal, inboxItems.map((item) => ITEM_KEYS[item.name]).filter(Boolean))
@@ -62,6 +64,8 @@ export function NavInbox() {
       if (!mounted) return true;
       const key = ITEM_KEYS[item.name];
       if (!key) return true;
+      // "Enable code reviews" (settings → Code & reviews) controla a aba Reviews.
+      if (key === 'reviews' && !codeReviewsEnabled) return false;
       const badge = key === 'inbox' ? unread : key === 'reviews' ? reviewCount : 0;
       return isSidebarItemVisible(visibility[key], badge);
    });
