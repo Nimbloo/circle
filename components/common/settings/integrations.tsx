@@ -1,8 +1,9 @@
 'use client';
 
 import { Input } from '@/components/ui/input';
+import { api } from '@/lib/client';
 import { ChevronRight, Search } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { INTEGRATION_LOGOS } from './integration-logos';
 import {
    ENABLED_INTEGRATIONS,
@@ -64,14 +65,33 @@ function StatusBadge({ status }: { status: NonNullable<Integration['status']> })
  * de conexão real (OAuth de terceiros) ainda não existe — evita afordância falsa
  * de clique. O status ("Enabled"/"Pre-installed") vem dos dados do diretório.
  */
-function IntegrationCard({ integration }: { integration: Integration }) {
+function ConnectedBadge() {
+   return (
+      <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 border border-emerald-500/40 bg-emerald-500/10 rounded px-1 py-px leading-none shrink-0 inline-flex items-center gap-1">
+         <span className="size-1.5 rounded-full bg-emerald-500" />
+         Conectado
+      </span>
+   );
+}
+
+function IntegrationCard({
+   integration,
+   connected,
+}: {
+   integration: Integration;
+   connected?: boolean;
+}) {
    return (
       <div className="flex items-start gap-3 rounded-lg border bg-container p-3 text-left">
          <IntegrationIcon integration={integration} />
          <span className="flex flex-col gap-0.5 min-w-0">
             <span className="flex items-center gap-2">
                <span className="text-sm font-medium truncate">{integration.name}</span>
-               {integration.status && <StatusBadge status={integration.status} />}
+               {connected ? (
+                  <ConnectedBadge />
+               ) : (
+                  integration.status && <StatusBadge status={integration.status} />
+               )}
             </span>
             <span className="text-xs text-muted-foreground line-clamp-2">
                {integration.description}
@@ -81,7 +101,15 @@ function IntegrationCard({ integration }: { integration: Integration }) {
    );
 }
 
-function CategorySection({ label, items }: { label: string; items: Integration[] }) {
+function CategorySection({
+   label,
+   items,
+   connectedIds,
+}: {
+   label: string;
+   items: Integration[];
+   connectedIds: Set<string>;
+}) {
    const [expanded, setExpanded] = useState(false);
    const visible = expanded ? items : items.slice(0, VISIBLE_PER_CATEGORY);
    return (
@@ -89,7 +117,11 @@ function CategorySection({ label, items }: { label: string; items: Integration[]
          <h2 className="text-base font-medium">{label}</h2>
          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {visible.map((integration) => (
-               <IntegrationCard key={integration.id} integration={integration} />
+               <IntegrationCard
+                  key={integration.id}
+                  integration={integration}
+                  connected={connectedIds.has(integration.id)}
+               />
             ))}
          </div>
          {!expanded && items.length > VISIBLE_PER_CATEGORY && (
@@ -111,6 +143,32 @@ function CategorySection({ label, items }: { label: string; items: Integration[]
  */
 export default function Integrations() {
    const [query, setQuery] = useState('');
+
+   // Quais integrações estão realmente CONFIGURADAS (por env, via API) → badge "Conectado".
+   // Mapa status→id do card do diretório (o Sentry aqui é o card "sentry-agent").
+   const [connectedIds, setConnectedIds] = useState<Set<string>>(new Set());
+   useEffect(() => {
+      let alive = true;
+      void api.integrations
+         .status()
+         .then((s) => {
+            if (!alive) return;
+            const ids = new Set<string>();
+            if (s.github) ids.add('github');
+            if (s.slack) {
+               ids.add('slack');
+               ids.add('asks-for-slack');
+            }
+            if (s.sentry) ids.add('sentry-agent');
+            setConnectedIds(ids);
+         })
+         .catch(() => {
+            /* silencioso — sem badge se o status falhar */
+         });
+      return () => {
+         alive = false;
+      };
+   }, []);
 
    const searchResults = useMemo(() => {
       const needle = query.trim().toLowerCase();
@@ -149,7 +207,11 @@ export default function Integrations() {
                   </h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                      {searchResults.map((integration) => (
-                        <IntegrationCard key={integration.id} integration={integration} />
+                        <IntegrationCard
+                           key={integration.id}
+                           integration={integration}
+                           connected={connectedIds.has(integration.id)}
+                        />
                      ))}
                   </div>
                </section>
@@ -177,6 +239,7 @@ export default function Integrations() {
 
                   {INTEGRATION_CATEGORIES.map((category) => (
                      <CategorySection
+                        connectedIds={connectedIds}
                         key={category.id}
                         label={category.label}
                         items={category.items.map((id) => INTEGRATIONS[id])}

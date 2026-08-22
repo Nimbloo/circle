@@ -189,6 +189,14 @@ export const api = {
       documents: (key: string) => get<FolderDto[]>(`/teams/${key}/documents`),
    },
 
+   integrations: {
+      /** Quais integrações estão configuradas (por env) — pro badge "Conectado". */
+      status: () =>
+         get<{ github: boolean; slack: boolean; sentry: boolean; email: boolean }>(
+            '/integrations/status'
+         ),
+   },
+
    members: {
       list: (q = '') => get<MemberDto[]>(`/members${q}`),
       get: (id: string) => get<MemberDto>(`/members/${id}`),
