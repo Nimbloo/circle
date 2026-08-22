@@ -438,6 +438,9 @@ export async function deleteTeam(db: Db, id: string): Promise<boolean> {
          `Team '${id}' tem issues/projects/cycles/views/folders — esvazie antes de apagar`
       );
 
+   // Solicitações de entrada (histórico) NÃO bloqueiam a deleção — limpa antes do time,
+   // senão o FK (team_join_request.team_id, sem onDelete) estoura 23503 → 404 enganoso.
+   await db.delete(teamJoinRequest).where(eq(teamJoinRequest.teamId, id));
    await db.delete(teamMember).where(eq(teamMember.teamId, id));
    await db.delete(teamT).where(eq(teamT.id, id));
    publish({ entity: 'team', action: 'deleted', id });

@@ -4,7 +4,7 @@ import { ok, notFound } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
 import { isAdmin } from '@/lib/api/auth';
 import { ApiError } from '@/lib/api/errors';
-import { getMember, updateMemberRole } from '@/lib/api/members';
+import { getMember, updateMemberRole, MEMBER_ROLES } from '@/lib/api/members';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,7 +19,7 @@ export async function GET(_req: Request, { params }: Params) {
    });
 }
 
-const UpdateSchema = z.object({ role: z.string().min(1) });
+const UpdateSchema = z.object({ role: z.enum(MEMBER_ROLES) });
 
 export async function PATCH(req: Request, { params }: Params) {
    return handle(async () => {

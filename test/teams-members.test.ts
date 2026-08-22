@@ -353,4 +353,15 @@ describe('team membership: creator + request-to-join', () => {
       await removeTeamMember(db, 'CORE', uid);
       expect(await listTeamMembers(db, 'CORE')).toHaveLength(0);
    });
+
+   it('deleteTeam limpa join_requests (não estoura FK 23503)', async () => {
+      const db = await makeTestDb();
+      // Time vazio (sem issues/projects) MAS com uma solicitação de entrada histórica.
+      await createTeam(db, { id: 'TMP', name: 'Temp' });
+      await requestToJoin(db, 'TMP', 'x@nimbloo.ai');
+      expect(await listJoinRequests(db, 'TMP')).toHaveLength(1);
+      // Antes do fix, o FK team_join_request.team_id (sem onDelete) estourava aqui.
+      expect(await deleteTeam(db, 'TMP')).toBe(true);
+      expect(await getTeam(db, 'TMP')).toBeNull();
+   });
 });

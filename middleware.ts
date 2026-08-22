@@ -16,10 +16,21 @@ const { auth } = NextAuth(authConfig);
  * o handler lembrar do `requireEmail` (defesa em profundidade).
  */
 const PUBLIC_PAGE_PREFIXES = ['/login', '/signup'];
-const PUBLIC_API_EXACT = new Set(['/api/healthz', '/api/readyz', '/api/metrics']);
-// `/api/auth` = NextAuth; `/api/v1/integrations/sentry` = webhooks/UI-components do Sentry,
-// autenticados por assinatura HMAC (Sentry-Hook-Signature), não por sessão.
-const PUBLIC_API_PREFIXES = ['/api/auth', '/api/v1/integrations/sentry'];
+// Probes do kubelet (sem sessão) + os 4 paths EXATOS do Sentry. Sentry usa esses
+// endpoints (webhooks/UI-components) autenticados por HMAC (Sentry-App/Hook-Signature),
+// não por sessão. EXATO (não prefixo): assim uma rota NOVA sob …/sentry/ NÃO nasce
+// pública por acidente — quem adicionar tem que liberar explicitamente aqui.
+const PUBLIC_API_EXACT = new Set([
+   '/api/healthz',
+   '/api/readyz',
+   '/api/metrics',
+   '/api/v1/integrations/sentry/issues/create',
+   '/api/v1/integrations/sentry/issues/link',
+   '/api/v1/integrations/sentry/webhook',
+   '/api/v1/integrations/sentry/teams/options',
+]);
+// Só o NextAuth precisa do subtree inteiro (/api/auth/*).
+const PUBLIC_API_PREFIXES = ['/api/auth'];
 
 function unauthorized(): Response {
    return new Response(JSON.stringify({ title: 'Unauthorized', status: 401 }), {

@@ -42,6 +42,7 @@ function hydrateTarget(target: SyncTarget): void {
 
 interface CircleEventLike {
    entity?: CircleEntity;
+   action?: string; // created|updated|deleted
    actorEmail?: string;
    id?: string;
 }
@@ -90,14 +91,20 @@ export function useLiveSync(): void {
             }
             const entity = parsed.entity;
             if (!entity) return;
-            const target = TARGET_BY_ENTITY[entity];
-            if (!target) return;
 
-            // NÃO pulamos por "ator sou eu": o mesmo usuário pode ter várias abas/
-            // dispositivos, e as OUTRAS abas não receberam o update otimista → precisam
-            // do refetch. O refetch é idempotente e debounced (custo desprezível) e ainda
-            // reconcilia o estado otimista da aba do ator com a verdade do servidor.
-            scheduleHydrate(target);
+            // NÃO pulamos por "ator sou eu": outras abas/dispositivos do mesmo usuário
+            // não receberam o update otimista → precisam reconciliar com o servidor.
+            //
+            // TARGETED (fim do "reload idiota"): um evento de ISSUE com id re-busca
+            // SÓ aquela issue e faz splice (sem re-hidratar as ~500). O coarse debounced
+            // fica só pra comment/label (id não é o da issue) e workspace/notifications.
+            if (entity === 'issue' && parsed.id) {
+               if (parsed.action === 'deleted') useIssuesStore.getState().removeRemote(parsed.id);
+               else void useIssuesStore.getState().applyRemote(parsed.id); // created|updated
+            } else {
+               const target = TARGET_BY_ENTITY[entity];
+               if (target) scheduleHydrate(target);
+            }
 
             // Detalhe/feed aberto (cross-usuário): avisa o painel de detalhe pra refazer
             // seu próprio fetch (comments/activity não vivem no issues-store).

@@ -8,6 +8,7 @@ import { create } from 'zustand';
 import { toast } from 'sonner';
 import { api } from '@/lib/client';
 import { adaptIssues } from '@/lib/adapters';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import type { CreateIssueInput, UpdateIssueInput, IssueListOptions } from '@/lib/api/issues';
 
 interface FilterOptions {
@@ -35,6 +36,12 @@ interface IssuesState {
    addIssue: (issue: Issue) => Promise<void>;
    updateIssue: (id: string, updatedIssue: Partial<Issue>) => void;
    deleteIssue: (id: string) => void;
+
+   /** Sync em tempo real TARGETED: re-busca UMA issue e faz splice no store (sem
+    *  re-hidratar as ~500). Fallback pra hydrate() só se o GET falhar (ex.: deletada). */
+   applyRemote: (id: string) => Promise<void>;
+   /** Remove UMA issue do store (evento remoto de delete) — sem refetch. */
+   removeRemote: (id: string) => void;
 
    filterByStatus: (statusId: string) => Issue[];
    filterByPriority: (priorityId: string) => Issue[];
@@ -105,7 +112,13 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
       });
       const input: CreateIssueInput = {
-         teamId: (issue.project as { teamId?: string } | undefined)?.teamId ?? 'CORE',
+         // Time: o do próprio issue (rota) → o do projeto → 1º time do workspace.
+         // (Antes hardcodava 'CORE' — quebrava FK em workspace sem o time CORE.)
+         teamId:
+            issue.teamId ??
+            (issue.project as { teamId?: string } | undefined)?.teamId ??
+            useWorkspaceStore.getState().teams[0]?.id ??
+            '',
          title: issue.title,
          description: issue.description || null, // era descartado → issue nascia sem descrição
          statusId: issue.status.id,
@@ -126,6 +139,32 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
             set(snapshot);
             throw err;
          });
+   },
+
+   applyRemote: async (id: string) => {
+      try {
+         const dto = await api.issues.get(id);
+         const fresh = adaptIssues([dto])[0];
+         set((state) => {
+            const exists = state.issues.some((i) => i.id === id);
+            const next = exists
+               ? state.issues.map((i) => (i.id === id ? fresh : i))
+               : [...state.issues, fresh];
+            const sorted = sortByRank(next);
+            return { issues: sorted, issuesByStatus: groupIssuesByStatus(sorted) };
+         });
+      } catch {
+         // GET falhou (issue deletada / erro) → reconcilia com um hydrate completo (raro).
+         void get().hydrate();
+      }
+   },
+
+   removeRemote: (id: string) => {
+      set((state) => {
+         if (!state.issues.some((i) => i.id === id)) return {};
+         const next = state.issues.filter((i) => i.id !== id);
+         return { issues: next, issuesByStatus: groupIssuesByStatus(next) };
+      });
    },
 
    updateIssue: (id: string, updatedIssue: Partial<Issue>) => {
