@@ -11,6 +11,7 @@ export default function HeaderNav() {
    const { orgId, teamId } = useParams<{ orgId: string; teamId: string }>();
    const teams = useWorkspaceStore((s) => s.teams);
    const team = teams.find((t) => t.id === teamId) ?? teams[0];
+   if (!team) return <div className="w-full border-b h-10" />; // store não hidratou → evita crash
 
    return (
       <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">

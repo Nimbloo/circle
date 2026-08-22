@@ -15,6 +15,7 @@ export default function HeaderNav({ cycleView }: { cycleView: CycleView }) {
       cycleView === 'active' ? s.getCurrentCycle() : s.getUpcomingCycle()
    );
    const team = teams.find((t) => t.id === teamId) ?? teams[0];
+   if (!team) return <div className="w-full border-b h-10" />; // store não hidratou → evita crash
 
    return (
       <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">
