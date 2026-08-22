@@ -111,6 +111,12 @@ const me = Object.assign(() => get<MeDto>('/me'), {
 export const api = {
    me,
 
+   /** Agent com IA real (Bedrock/Claude via IRSA) + contexto do workspace. */
+   agent: {
+      chat: (messages: { role: 'user' | 'assistant'; content: string }[]) =>
+         post<{ reply: string }>('/agent/chat', { messages }),
+   },
+
    settings: {
       get: () => get<Record<string, unknown>>('/settings'),
       put: (data: Record<string, unknown>) =>

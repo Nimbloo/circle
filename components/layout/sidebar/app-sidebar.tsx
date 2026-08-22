@@ -16,9 +16,10 @@ import { BackToApp } from '@/components/layout/sidebar/back-to-app';
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
    const pathname = usePathname();
    const isSettings = pathname.includes('/settings');
+   const orgId = pathname.split('/')[1] || 'nimbloo';
    return (
       <Sidebar collapsible="offcanvas" {...props}>
-         <SidebarHeader>{isSettings ? <BackToApp /> : <OrgSwitcher />}</SidebarHeader>
+         <SidebarHeader>{isSettings ? <BackToApp orgId={orgId} /> : <OrgSwitcher />}</SidebarHeader>
          <SidebarContent>
             {isSettings ? (
                <>

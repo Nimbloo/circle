@@ -41,7 +41,10 @@ export function NavInbox() {
          .then((page) => {
             if (active) setReviewCount(page.total);
          })
-         .catch(() => {});
+         .catch((e) => {
+            // Badge best-effort: não quebra a navegação, mas não engolir em silêncio.
+            console.warn('[nav-inbox] falha ao buscar review count', e);
+         });
       return () => {
          active = false;
       };

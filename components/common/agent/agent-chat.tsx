@@ -4,11 +4,36 @@ import { InlineText } from '@/components/common/issues/details/content-blocks';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { agentExamples } from '@/mock-data/agent';
+import { api } from '@/lib/client';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useAgentChatStore } from '@/store/agent-chat-store';
-import { ArrowUp, Bot, X } from 'lucide-react';
+import { ArrowUp, Bot, CalendarClock, ListTodo, Sparkles, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+
+/** Prompts de exemplo — perguntas reais que o Agent responde consultando o workspace. */
+const agentExamples = [
+   {
+      id: 'in-progress',
+      icon: ListTodo,
+      title: 'O que está em andamento?',
+      description: 'Lista as issues em progresso de um time.',
+      prompt: 'Quais issues estão em "In Progress" no time ENG?',
+   },
+   {
+      id: 'my-issues',
+      icon: Sparkles,
+      title: 'Minhas issues',
+      description: 'Resume as suas issues em aberto por status.',
+      prompt: 'Quais são as minhas issues em aberto? Agrupe por status.',
+   },
+   {
+      id: 'cycles',
+      icon: CalendarClock,
+      title: 'Ciclos do time',
+      description: 'Mostra os ciclos e suas datas.',
+      prompt: 'Quais ciclos existem no time ENG e quais as datas?',
+   },
+];
 
 /** Streams the canned reply into the assistant message, word by word. */
 function useStreamReply() {
@@ -37,14 +62,15 @@ function useStreamReply() {
    };
 }
 
-/** Makes explicit that replies are canned examples, not a live LLM/backlog analysis. */
+/** Aviso honesto: respostas são geradas por IA sobre dados reais e podem conter erros. */
 function DemoBadge() {
    return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-         <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 font-medium text-amber-600 dark:text-amber-400">
-            Demo
+         <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-medium text-primary">
+            <Sparkles className="size-3" />
+            IA
          </span>
-         <span>Example responses — not a live analysis of the backlog.</span>
+         <span>Respostas geradas por IA sobre os seus dados — confira o que for crítico.</span>
       </div>
    );
 }
@@ -147,7 +173,7 @@ function ChatComposer({
  * client store and can be revisited from the header dropdown.
  */
 export default function AgentChat() {
-   const { chats, activeChatId, sendMessage } = useAgentChatStore();
+   const { chats, activeChatId, sendMessage, failMessage } = useAgentChatStore();
    const me = useWorkspaceStore((s) => s.me);
    const stream = useStreamReply();
    const [bannerDismissed, setBannerDismissed] = useState(false);
@@ -161,10 +187,19 @@ export default function AgentChat() {
       scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
    }, [activeChat?.messages]);
 
-   const handleSend = (input: string) => {
+   const handleSend = async (input: string) => {
       if (isStreaming) return;
-      const { chatId, assistantMessageId, reply } = sendMessage(input);
-      stream(chatId, assistantMessageId, reply);
+      const { chatId, assistantMessageId, history } = sendMessage(input);
+      try {
+         const { reply } = await api.agent.chat(history);
+         stream(chatId, assistantMessageId, reply);
+      } catch {
+         failMessage(
+            chatId,
+            assistantMessageId,
+            'Não consegui responder agora. Verifique a conexão e tente de novo.'
+         );
+      }
    };
 
    /* ------------------------------- Hero ------------------------------- */
