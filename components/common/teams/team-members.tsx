@@ -5,11 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { api } from '@/lib/client';
+import type { JoinRequestDto } from '@/lib/api/teams';
 import { RoleControl } from '@/components/common/members/role-control';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { Plus, X } from 'lucide-react';
+import { Check, Plus, X } from 'lucide-react';
 import { useParams } from 'next/navigation';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 /**
@@ -27,6 +28,36 @@ export default function TeamMembers() {
    const [open, setOpen] = useState(false);
    const [email, setEmail] = useState('');
    const [busy, setBusy] = useState(false);
+
+   // Solicitações de entrada pendentes (só admin enxerga/decide).
+   const [requests, setRequests] = useState<JoinRequestDto[]>([]);
+   const refreshRequests = useCallback(async () => {
+      if (!isAdmin || !teamId) {
+         setRequests([]);
+         return;
+      }
+      try {
+         setRequests(await api.teams.joinRequests(teamId));
+      } catch {
+         /* silencioso — o painel só não popula */
+      }
+   }, [isAdmin, teamId]);
+   useEffect(() => {
+      void refreshRequests();
+   }, [refreshRequests]);
+
+   const decide = async (id: string, decision: 'approved' | 'denied') => {
+      setBusy(true);
+      try {
+         await api.teams.decideJoinRequest(teamId, id, decision);
+         await Promise.all([refreshRequests(), hydrate()]);
+         toast.success(decision === 'approved' ? 'Solicitação aprovada' : 'Solicitação negada');
+      } catch {
+         toast.error('Não deu pra decidir a solicitação');
+      } finally {
+         setBusy(false);
+      }
+   };
 
    if (!team) {
       return <div className="p-6 text-sm text-muted-foreground">Team not found.</div>;
@@ -101,6 +132,49 @@ export default function TeamMembers() {
                )}
             </div>
          </div>
+
+         {isAdmin && requests.length > 0 && (
+            <div className="mx-6 mb-3 rounded-lg border border-amber-500/30 bg-amber-500/5">
+               <div className="px-4 py-2 text-xs font-medium text-amber-600 dark:text-amber-400 border-b border-amber-500/20">
+                  Solicitações de entrada ({requests.length})
+               </div>
+               {requests.map((r) => (
+                  <div
+                     key={r.id}
+                     className="flex items-center gap-2.5 px-4 h-12 border-b border-amber-500/10 last:border-b-0 text-sm"
+                  >
+                     <Avatar className="size-6 shrink-0">
+                        <AvatarImage src={r.user.avatarUrl || undefined} alt={r.user.name} />
+                        <AvatarFallback>{r.user.name[0]}</AvatarFallback>
+                     </Avatar>
+                     <div className="flex flex-col min-w-0 flex-1">
+                        <span className="font-medium truncate">{r.user.name}</span>
+                        <span className="text-xs text-muted-foreground truncate">
+                           {r.user.email}
+                        </span>
+                     </div>
+                     <Button
+                        size="xs"
+                        variant="secondary"
+                        disabled={busy}
+                        onClick={() => void decide(r.id, 'approved')}
+                     >
+                        <Check className="size-3.5" />
+                        Aprovar
+                     </Button>
+                     <Button
+                        size="xs"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => void decide(r.id, 'denied')}
+                     >
+                        <X className="size-3.5" />
+                        Negar
+                     </Button>
+                  </div>
+               ))}
+            </div>
+         )}
 
          <div className="bg-container px-6 py-1.5 text-sm flex items-center text-muted-foreground border-b sticky top-0 z-10">
             <div className="w-[55%] md:w-[45%]">Name</div>

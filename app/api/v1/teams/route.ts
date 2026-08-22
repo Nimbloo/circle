@@ -28,8 +28,9 @@ const CreateTeamSchema = z.object({
 
 export async function POST(req: Request) {
    return handle(async () => {
-      await requireEmail(req);
+      const email = await requireEmail(req);
       const input = CreateTeamSchema.parse(await req.json());
-      return ok(await createTeam(db, input));
+      // Passa o criador → entra automaticamente como membro (senão o time nasce órfão).
+      return ok(await createTeam(db, input, email));
    });
 }

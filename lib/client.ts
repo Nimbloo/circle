@@ -20,7 +20,7 @@ import type {
    AddResourceInput,
    PostUpdateInput,
 } from '@/lib/api/project-detail';
-import type { TeamDto, CreateTeamInput } from '@/lib/api/teams';
+import type { TeamDto, CreateTeamInput, JoinRequestDto } from '@/lib/api/teams';
 import type { MemberDto } from '@/lib/api/members';
 import type { CycleDto, CreateCycleInput, UpdateCycleInput } from '@/lib/api/cycles';
 import type {
@@ -174,6 +174,15 @@ export const api = {
          post<MemberDto[]>(`/teams/${key}/members`, { email }),
       removeMember: (key: string, userId: string) =>
          del<MemberDto[]>(`/teams/${key}/members/${userId}`),
+      /** O usuário atual sai do time (self-service). */
+      leave: (key: string) => del<MemberDto[]>(`/teams/${key}/members/self`),
+      /** O usuário atual solicita entrada no time (request-to-join). */
+      requestJoin: (key: string) => post<{ status: string }>(`/teams/${key}/join-requests`, {}),
+      /** Solicitações pendentes do time (admin). */
+      joinRequests: (key: string) => get<JoinRequestDto[]>(`/teams/${key}/join-requests`),
+      /** Admin aprova/nega uma solicitação. */
+      decideJoinRequest: (key: string, id: string, decision: 'approved' | 'denied') =>
+         post<JoinRequestDto[]>(`/teams/${key}/join-requests/${id}`, { decision }),
       issues: (key: string, opts?: IssueListOptions) =>
          get<IssueDto[]>(`/teams/${key}/issues${issueQuery(opts)}`),
       cycles: (key: string) => get<CycleDto[]>(`/teams/${key}/cycles`),

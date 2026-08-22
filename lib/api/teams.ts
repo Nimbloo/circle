@@ -1,8 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import { eq, count, and } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    team as teamT,
    teamMember,
+   teamJoinRequest,
    appUser,
    project as projectT,
    issue as issueT,
@@ -12,6 +14,7 @@ import {
 } from '@/db/schema';
 import { getOrCreateUser } from './users';
 import { sendEmail } from './integrations/mailer';
+import { escapeHtml } from './notify';
 import { ApiError } from './errors';
 import { publish } from './events';
 
@@ -25,6 +28,7 @@ export interface TeamDto {
    memberCount: number;
    projectCount: number;
    joined: boolean;
+   requested: boolean; // o usuário atual tem solicitação de entrada PENDENTE
 }
 
 export type TeamSort = 'name' | 'members' | 'projects';
@@ -55,7 +59,8 @@ async function joinedTeamIds(db: Db, userId?: string): Promise<Set<string>> {
 function toDto(
    t: TeamRow,
    counts: { members: Map<string, number>; projects: Map<string, number> },
-   joined: Set<string>
+   joined: Set<string>,
+   requested?: Set<string>
 ): TeamDto {
    return {
       id: t.id,
@@ -65,6 +70,7 @@ function toDto(
       memberCount: counts.members.get(t.id) ?? 0,
       projectCount: counts.projects.get(t.id) ?? 0,
       joined: joined.has(t.id),
+      requested: requested?.has(t.id) ?? false,
    };
 }
 
@@ -79,12 +85,14 @@ export async function listTeams(
    opts: ListTeamsOptions = {},
    meId?: string
 ): Promise<TeamDto[]> {
-   const [teams, counts, joined] = await Promise.all([
+   const [teams, counts, joined, requested] = await Promise.all([
       db.select().from(teamT),
       countsByTeam(db),
       joinedTeamIds(db, meId),
+      pendingRequestTeamIds(db, meId),
    ]);
-   let dtos = teams.map((t) => toDto(t, counts, joined));
+   const requestedSet = new Set(requested);
+   let dtos = teams.map((t) => toDto(t, counts, joined, requestedSet));
 
    if (opts.membership?.length) {
       const wantJoined = opts.membership.includes('Joined');
@@ -109,8 +117,12 @@ export async function listTeams(
 export async function getTeam(db: Db, id: string, meId?: string): Promise<TeamDto | null> {
    const rows = await db.select().from(teamT).where(eq(teamT.id, id)).limit(1);
    if (rows.length === 0) return null;
-   const [counts, joined] = await Promise.all([countsByTeam(db), joinedTeamIds(db, meId)]);
-   return toDto(rows[0], counts, joined);
+   const [counts, joined, requested] = await Promise.all([
+      countsByTeam(db),
+      joinedTeamIds(db, meId),
+      pendingRequestTeamIds(db, meId),
+   ]);
+   return toDto(rows[0], counts, joined, new Set(requested));
 }
 
 export async function listTeamMembers(db: Db, teamId: string) {
@@ -135,8 +147,16 @@ export interface CreateTeamInput {
    color?: string | null;
 }
 
-/** Cria um time. A key (id) vira o prefixo do identifier das issues (<KEY>-<n>). */
-export async function createTeam(db: Db, input: CreateTeamInput): Promise<TeamDto> {
+/**
+ * Cria um time. A key (id) vira o prefixo do identifier das issues (<KEY>-<n>).
+ * O CRIADOR entra automaticamente como membro — senão o time nasce órfão (0 membros)
+ * e ninguém consegue entrar, já que join direto exige aprovação de admin (request-to-join).
+ */
+export async function createTeam(
+   db: Db,
+   input: CreateTeamInput,
+   creatorEmail?: string
+): Promise<TeamDto> {
    const id = input.id.trim().toUpperCase();
    if (!/^[A-Z][A-Z0-9]{1,15}$/.test(id))
       throw new ApiError(
@@ -152,8 +172,17 @@ export async function createTeam(db: Db, input: CreateTeamInput): Promise<TeamDt
       color: input.color?.trim() || '#6e7bdb',
       issueSeq: 0,
    });
+   let creatorId: string | undefined;
+   if (creatorEmail) {
+      const creator = await getOrCreateUser(db, creatorEmail);
+      creatorId = creator.id;
+      await db
+         .insert(teamMember)
+         .values({ teamId: id, userId: creator.id, joined: true })
+         .onConflictDoNothing();
+   }
    publish({ entity: 'team', action: 'created', id });
-   return (await getTeam(db, id))!;
+   return (await getTeam(db, id, creatorId))!;
 }
 
 /** Adiciona (idempotente) um membro ao time pelo e-mail — provisiona o usuário se novo. */
@@ -193,6 +222,139 @@ export async function removeTeamMember(db: Db, teamId: string, userId: string): 
       .delete(teamMember)
       .where(and(eq(teamMember.teamId, teamId), eq(teamMember.userId, userId)));
    publish({ entity: 'member', action: 'updated', id: userId });
+}
+
+// ── Request-to-join (Linear-style) ───────────────────────────────────────────
+// Pra entrar num time: OU um admin adiciona (addTeamMember, convite), OU o usuário
+// SOLICITA e um admin aprova. Sem self-join direto — evita que qualquer um entre em
+// qualquer time. `leaveTeam` (self) é livre.
+
+export interface JoinRequestDto {
+   id: string;
+   teamId: string;
+   status: string;
+   createdAt: string;
+   user: { id: string; name: string; email: string; avatarUrl: string | null };
+}
+
+/** True se o usuário já é membro do time. */
+async function isTeamMember(db: Db, teamId: string, userId: string): Promise<boolean> {
+   const rows = await db
+      .select({ userId: teamMember.userId })
+      .from(teamMember)
+      .where(and(eq(teamMember.teamId, teamId), eq(teamMember.userId, userId)))
+      .limit(1);
+   return rows.length > 0;
+}
+
+/**
+ * Usuário solicita entrada num time. Idempotente: 1 linha por (team,user) — re-pedido
+ * (após negação) volta pra `pending`. 409 se já for membro. Notifica admins best-effort.
+ */
+export async function requestToJoin(
+   db: Db,
+   teamId: string,
+   email: string
+): Promise<{ status: 'pending' }> {
+   const t = await db
+      .select({ id: teamT.id, name: teamT.name })
+      .from(teamT)
+      .where(eq(teamT.id, teamId))
+      .limit(1);
+   if (!t.length) throw new ApiError(404, `Team '${teamId}' não existe`);
+   const user = await getOrCreateUser(db, email);
+   if (await isTeamMember(db, teamId, user.id))
+      throw new ApiError(409, 'Você já é membro deste time');
+   await db
+      .insert(teamJoinRequest)
+      .values({ id: randomUUID(), teamId, userId: user.id, status: 'pending' })
+      .onConflictDoUpdate({
+         target: [teamJoinRequest.teamId, teamJoinRequest.userId],
+         set: { status: 'pending', createdAt: new Date(), decidedAt: null, decidedBy: null },
+      });
+   publish({ entity: 'member', action: 'updated', id: user.id });
+   notifyAdminsOfJoinRequest(t[0].name, user.name).catch(() => {});
+   return { status: 'pending' };
+}
+
+/** Lista as solicitações PENDENTES de um time (admin). */
+export async function listJoinRequests(db: Db, teamId: string): Promise<JoinRequestDto[]> {
+   const rows = await db
+      .select({
+         id: teamJoinRequest.id,
+         teamId: teamJoinRequest.teamId,
+         status: teamJoinRequest.status,
+         createdAt: teamJoinRequest.createdAt,
+         uid: appUser.id,
+         name: appUser.name,
+         email: appUser.email,
+         avatarUrl: appUser.avatarUrl,
+      })
+      .from(teamJoinRequest)
+      .innerJoin(appUser, eq(teamJoinRequest.userId, appUser.id))
+      .where(and(eq(teamJoinRequest.teamId, teamId), eq(teamJoinRequest.status, 'pending')));
+   return rows.map((r) => ({
+      id: r.id,
+      teamId: r.teamId,
+      status: r.status,
+      createdAt: r.createdAt.toISOString(),
+      user: { id: r.uid, name: r.name, email: r.email, avatarUrl: r.avatarUrl },
+   }));
+}
+
+/** Aprova/nega uma solicitação (admin). Aprovar insere o team_member (idempotente). */
+export async function decideJoinRequest(
+   db: Db,
+   teamId: string,
+   requestId: string,
+   decision: 'approved' | 'denied',
+   deciderId: string
+): Promise<void> {
+   const rows = await db
+      .select()
+      .from(teamJoinRequest)
+      .where(and(eq(teamJoinRequest.id, requestId), eq(teamJoinRequest.teamId, teamId)))
+      .limit(1);
+   if (!rows.length) throw new ApiError(404, 'Solicitação não encontrada');
+   if (rows[0].status !== 'pending') throw new ApiError(409, 'Solicitação já foi decidida');
+   if (decision === 'approved') {
+      await db
+         .insert(teamMember)
+         .values({ teamId, userId: rows[0].userId, joined: true })
+         .onConflictDoNothing();
+   }
+   await db
+      .update(teamJoinRequest)
+      .set({ status: decision, decidedAt: new Date(), decidedBy: deciderId })
+      .where(eq(teamJoinRequest.id, requestId));
+   publish({ entity: 'member', action: 'updated', id: rows[0].userId });
+}
+
+/** teamIds com solicitação PENDENTE do usuário — pra UI mostrar "Solicitado". */
+export async function pendingRequestTeamIds(db: Db, userId?: string): Promise<string[]> {
+   if (!userId) return [];
+   const rows = await db
+      .select({ teamId: teamJoinRequest.teamId })
+      .from(teamJoinRequest)
+      .where(and(eq(teamJoinRequest.userId, userId), eq(teamJoinRequest.status, 'pending')));
+   return rows.map((r) => r.teamId);
+}
+
+/** E-mail best-effort pros admins (allowlist) quando alguém solicita entrada. */
+async function notifyAdminsOfJoinRequest(teamName: string, requesterName: string): Promise<void> {
+   if (!process.env.CIRCLE_MAIL_FROM) return;
+   const admins = (process.env.CIRCLE_ADMIN_EMAILS ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+   if (!admins.length) return;
+   const html =
+      `<p><strong>${escapeHtml(requesterName)}</strong> solicitou entrada no time ` +
+      `<strong>${escapeHtml(teamName)}</strong> no Circle.</p>` +
+      `<p><a href="https://circle.nimbloo.ai">Revisar solicitações</a></p>`;
+   await Promise.allSettled(
+      admins.map((a) => sendEmail(a, `Solicitação de entrada: ${teamName}`, html))
+   );
 }
 
 export interface UpdateTeamInput {

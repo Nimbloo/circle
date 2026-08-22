@@ -4,20 +4,36 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/client';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { Check } from 'lucide-react';
-import { useState } from 'react';
+import type { TeamDto } from '@/lib/api/teams';
+import { Check, Clock } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
 
 /** "Join or create a team" settings page. */
 export default function NewTeam() {
-   const teams = useWorkspaceStore((s) => s.teams);
    const hydrate = useWorkspaceStore((s) => s.hydrate);
-   const notJoined = teams.filter((team) => !team.joined);
+
+   // Fonte autoritativa: a API traz `joined` + `requested` + contagens (o store adaptado
+   // não carrega o `requested`). Settings não é hot-path — um fetch dedicado é ok e correto.
+   const [teams, setTeams] = useState<TeamDto[]>([]);
+   const notJoined = teams.filter((t) => !t.joined);
+
+   const refresh = useCallback(async () => {
+      try {
+         setTeams(await api.teams.list());
+      } catch {
+         /* silencioso — a seção só não popula */
+      }
+   }, []);
+   useEffect(() => {
+      void refresh();
+   }, [refresh]);
 
    const [key, setKey] = useState('');
    const [name, setName] = useState('');
    const [busy, setBusy] = useState(false);
+   const [pendingId, setPendingId] = useState<string | null>(null);
 
    const create = async () => {
       const id = key.trim().toUpperCase();
@@ -25,34 +41,48 @@ export default function NewTeam() {
       setBusy(true);
       try {
          await api.teams.create({ id, name: name.trim() });
-         await hydrate();
+         await Promise.all([hydrate(), refresh()]);
          setKey('');
          setName('');
-         toast.success(`Team ${id} created`);
+         toast.success(`Time ${id} criado — você já é membro`);
       } catch {
-         toast.error('Could not create the team (key inválida ou já existe)');
+         toast.error('Não deu pra criar o time (key inválida ou já existe)');
       } finally {
          setBusy(false);
       }
    };
 
+   const requestJoin = async (team: TeamDto) => {
+      if (pendingId) return;
+      setPendingId(team.id);
+      try {
+         await api.teams.requestJoin(team.id);
+         await refresh();
+         toast.success(`Solicitação enviada para ${team.name} — aguarde aprovação`);
+      } catch {
+         toast.error('Não deu pra solicitar entrada');
+      } finally {
+         setPendingId(null);
+      }
+   };
+
    return (
       <SettingsShell
-         title="Join or create a team"
-         description="Teams organize issues, cycles and projects around the people working together"
+         title="Entrar ou criar um time"
+         description="Times organizam issues, ciclos e projetos em torno das pessoas que trabalham juntas"
       >
-         <SettingsSection title="Create a new team">
+         <SettingsSection title="Criar um novo time">
             <SettingsCard>
                <div className="flex items-center gap-3 p-4">
                   <Input
-                     placeholder="Key, e.g. CORE"
+                     placeholder="Key, ex.: CORE"
                      value={key}
                      onChange={(e) => setKey(e.target.value.toUpperCase())}
                      maxLength={16}
                      className="h-8 w-32"
                   />
                   <Input
-                     placeholder="Team name, e.g. Mobile"
+                     placeholder="Nome do time, ex.: Mobile"
                      value={name}
                      onChange={(e) => setName(e.target.value)}
                      onKeyDown={(e) => {
@@ -65,33 +95,46 @@ export default function NewTeam() {
                      onClick={() => void create()}
                      disabled={busy || !key.trim() || !name.trim()}
                   >
-                     Create team
+                     Criar time
                   </Button>
                </div>
             </SettingsCard>
          </SettingsSection>
 
-         <SettingsSection title="Join an existing team">
+         <SettingsSection title="Entrar num time existente">
             <SettingsCard>
-               {notJoined.map((team) => (
-                  <SettingsRow
-                     key={team.id}
-                     icon={<span className="text-sm">{team.icon}</span>}
-                     title={team.name}
-                     description={`${team.members.length} members · ${team.projects.length} projects`}
-                     trailing={
-                        <div className="flex items-center gap-2">
-                           <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                              Soon
-                           </span>
-                           <Button size="xs" variant="secondary" disabled>
-                              <Check className="size-3.5" />
-                              Join
-                           </Button>
-                        </div>
-                     }
-                  />
-               ))}
+               {notJoined.length === 0 ? (
+                  <div className="p-4 text-sm text-muted-foreground">
+                     Você já faz parte de todos os times.
+                  </div>
+               ) : (
+                  notJoined.map((team) => (
+                     <SettingsRow
+                        key={team.id}
+                        icon={<span className="text-sm">{team.icon}</span>}
+                        title={team.name}
+                        description={`${team.memberCount} membros · ${team.projectCount} projetos`}
+                        trailing={
+                           team.requested ? (
+                              <Button size="xs" variant="secondary" disabled>
+                                 <Clock className="size-3.5" />
+                                 Solicitado
+                              </Button>
+                           ) : (
+                              <Button
+                                 size="xs"
+                                 variant="secondary"
+                                 disabled={pendingId === team.id}
+                                 onClick={() => void requestJoin(team)}
+                              >
+                                 <Check className="size-3.5" />
+                                 Solicitar entrada
+                              </Button>
+                           )
+                        }
+                     />
+                  ))
+               )}
             </SettingsCard>
          </SettingsSection>
       </SettingsShell>

@@ -108,6 +108,30 @@ export const teamMember = pgTable(
    ]
 );
 
+// Solicitação de entrada num time (Linear-style "request to join"). Um usuário pede,
+// um admin aprova (vira team_member) ou nega. 1 linha por (team,user) — re-pedido
+// reusa a linha (volta pra pending). Convite direto pelo admin NÃO passa por aqui.
+export const teamJoinRequest = pgTable(
+   'team_join_request',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      teamId: varchar('team_id', { length: 16 })
+         .notNull()
+         .references(() => team.id),
+      userId: varchar('user_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      status: varchar('status', { length: 16 }).notNull().default('pending'), // pending|approved|denied
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+      decidedAt: timestamp('decided_at'),
+      decidedBy: varchar('decided_by', { length: 36 }).references(() => appUser.id),
+   },
+   (t) => [
+      unique('team_join_request_team_user_unique').on(t.teamId, t.userId),
+      index('idx_team_join_request_team').on(t.teamId),
+   ]
+);
+
 // ─────────────────────────────────────────────────────────────
 // Initiatives / Projects
 // ─────────────────────────────────────────────────────────────

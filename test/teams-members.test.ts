@@ -11,6 +11,10 @@ import {
    removeTeamMember,
    updateTeam,
    deleteTeam,
+   requestToJoin,
+   listJoinRequests,
+   decideJoinRequest,
+   pendingRequestTeamIds,
 } from '@/lib/api/teams';
 import { listMembers, getMember, updateMemberRole } from '@/lib/api/members';
 import { createView } from '@/lib/api/views';
@@ -272,5 +276,81 @@ describe('getOrCreateUser provisioning', () => {
       const db = await makeTestDb();
       const boss = await getOrCreateUser(db, 'boss@nimbloo.ai');
       expect(boss.role).toBe('Admin');
+   });
+});
+
+describe('team membership: creator + request-to-join', () => {
+   afterEach(() => {
+      delete process.env.CIRCLE_MAIL_FROM;
+      delete process.env.CIRCLE_ADMIN_EMAILS;
+   });
+
+   it('createTeam adds the CREATOR as the first member (no more orphan teams)', async () => {
+      const db = await makeTestDb();
+      const dto = await createTeam(db, { id: 'PLAT', name: 'Platform' }, 'founder@nimbloo.ai');
+      expect(dto.joined).toBe(true);
+      expect(dto.memberCount).toBe(1);
+      const members = await listTeamMembers(db, 'PLAT');
+      expect(members.map((m) => m.email)).toEqual(['founder@nimbloo.ai']);
+   });
+
+   it('requestToJoin creates a pending request; admin approve adds the member', async () => {
+      const db = await makeTestDb();
+      await createTeam(db, { id: 'PLAT', name: 'Platform' }, 'founder@nimbloo.ai');
+      const admin = await getOrCreateUser(db, 'founder@nimbloo.ai'); // creator, will decide
+
+      const res = await requestToJoin(db, 'PLAT', 'newbie@nimbloo.ai');
+      expect(res.status).toBe('pending');
+
+      // aparece na fila de pendentes + no set de "solicitado" do usuário
+      const pending = await listJoinRequests(db, 'PLAT');
+      expect(pending).toHaveLength(1);
+      expect(pending[0].user.email).toBe('newbie@nimbloo.ai');
+      const newbie = await getOrCreateUser(db, 'newbie@nimbloo.ai');
+      expect(await pendingRequestTeamIds(db, newbie.id)).toContain('PLAT');
+
+      // admin aprova → vira membro, fila esvazia, "solicitado" some
+      await decideJoinRequest(db, 'PLAT', pending[0].id, 'approved', admin.id);
+      const members = await listTeamMembers(db, 'PLAT');
+      expect(members.map((m) => m.email).sort()).toEqual([
+         'founder@nimbloo.ai',
+         'newbie@nimbloo.ai',
+      ]);
+      expect(await listJoinRequests(db, 'PLAT')).toHaveLength(0);
+      expect(await pendingRequestTeamIds(db, newbie.id)).not.toContain('PLAT');
+   });
+
+   it('deny keeps the user out; re-request reopens the same row (idempotent)', async () => {
+      const db = await makeTestDb();
+      await createTeam(db, { id: 'PLAT', name: 'Platform' }, 'founder@nimbloo.ai');
+      const admin = await getOrCreateUser(db, 'founder@nimbloo.ai');
+
+      await requestToJoin(db, 'PLAT', 'newbie@nimbloo.ai');
+      const [req1] = await listJoinRequests(db, 'PLAT');
+      await decideJoinRequest(db, 'PLAT', req1.id, 'denied', admin.id);
+      expect(await listJoinRequests(db, 'PLAT')).toHaveLength(0);
+      expect(await listTeamMembers(db, 'PLAT')).toHaveLength(1); // só o criador
+
+      // re-solicita → mesma linha volta pra pending (sem duplicar)
+      await requestToJoin(db, 'PLAT', 'newbie@nimbloo.ai');
+      const pending = await listJoinRequests(db, 'PLAT');
+      expect(pending).toHaveLength(1);
+      expect(pending[0].id).toBe(req1.id);
+   });
+
+   it('requestToJoin rejects a user who is already a member (409)', async () => {
+      const db = await makeTestDb();
+      await createTeam(db, { id: 'PLAT', name: 'Platform' }, 'founder@nimbloo.ai');
+      await expect(requestToJoin(db, 'PLAT', 'founder@nimbloo.ai')).rejects.toMatchObject({
+         status: 409,
+      });
+   });
+
+   it('leave (removeTeamMember for self) removes the membership', async () => {
+      const db = await makeTestDb();
+      await seedTeam(db, 'CORE', 'Core');
+      const uid = await seedUser(db, { name: 'Zoe', email: 'zoe@nimbloo.ai', teamIds: ['CORE'] });
+      await removeTeamMember(db, 'CORE', uid);
+      expect(await listTeamMembers(db, 'CORE')).toHaveLength(0);
    });
 });
