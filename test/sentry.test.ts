@@ -137,6 +137,24 @@ describe('sentry integration', () => {
       expect(other.identifier).toBe('CORE-2');
    });
 
+   it('createCardFromSentry: aceita sentryIssueId NUMÉRICO (o Sentry manda number) e dedup funciona', async () => {
+      const db = await makeTestDb();
+      await seedTeam(db, 'CORE', 'Core');
+      // O Sentry envia issueId como número — não pode quebrar com .trim() (era o 500).
+      const first = await createCardFromSentry(db, {
+         title: 'Erro numérico',
+         teamId: 'CORE',
+         sentryIssueId: 7685502426,
+      });
+      expect(first.identifier).toBe('CORE-1');
+      const replay = await createCardFromSentry(db, {
+         title: 'Erro numérico (replay)',
+         teamId: 'CORE',
+         sentryIssueId: 7685502426,
+      });
+      expect(replay.identifier).toBe('CORE-1'); // dedup por id numérico coagido
+   });
+
    it('teamOptions: lista os times como {label,value}', async () => {
       const db = await makeTestDb();
       await seedTeam(db, 'CORE', 'Core');

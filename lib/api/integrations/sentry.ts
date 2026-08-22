@@ -144,8 +144,9 @@ export interface SentryCardInput {
    teamId?: string | null;
    /** URL da issue no Sentry (rodapé do card, pra voltar ao erro). */
    sentryWebUrl?: string | null;
-   /** Id da issue no Sentry — dedup: reenvio/replay do mesmo erro reusa o card. */
-   sentryIssueId?: string | null;
+   /** Id da issue no Sentry — dedup: reenvio/replay do mesmo erro reusa o card.
+    *  O Sentry manda como NÚMERO (id numérico da issue); coagimos pra string. */
+   sentryIssueId?: string | number | null;
 }
 
 /** Monta o resultado a partir de um card existente (por identifier + teamId). */
@@ -178,7 +179,9 @@ export async function createCardFromSentry(
    if (!title) throw new ApiError(400, 'title é obrigatório');
 
    // Dedup: replay/retry do Sentry pro mesmo erro reusa o card existente (não duplica).
-   const sentryId = input.sentryIssueId?.trim() || null;
+   // O Sentry manda issueId como número → coage pra string antes de usar/persistir.
+   const sentryIdStr = input.sentryIssueId != null ? String(input.sentryIssueId).trim() : '';
+   const sentryId = sentryIdStr !== '' ? sentryIdStr : null;
    if (sentryId) {
       const existing = await findBySentryId(db, sentryId);
       if (existing) return existing;
