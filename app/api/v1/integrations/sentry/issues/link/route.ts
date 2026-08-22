@@ -1,5 +1,5 @@
 import { db } from '@/db';
-import { linkCardFromSentry, verifySignature } from '@/lib/api/integrations/sentry';
+import { linkCardFromSentry, verifySignature, signatureFrom } from '@/lib/api/integrations/sentry';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,7 +18,7 @@ function json(body: unknown, status = 200): Response {
  */
 export async function POST(req: Request) {
    const raw = await req.text();
-   const sig = req.headers.get('sentry-hook-signature');
+   const sig = signatureFrom(req.headers);
    if (!verifySignature(raw, sig)) return json({ error: 'assinatura inválida' }, 401);
 
    let body: { fields?: Record<string, string> };

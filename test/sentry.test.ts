@@ -4,6 +4,7 @@ import { makeTestDb } from './helpers/db';
 import { seedTeam } from './helpers/fixtures';
 import {
    verifySignature,
+   signatureFrom,
    createCardFromSentry,
    linkCardFromSentry,
    teamOptions,
@@ -35,6 +36,25 @@ describe('sentry integration', () => {
       delete process.env.CIRCLE_SENTRY_CLIENT_SECRET;
       expect(verifySignature(body, sign(body))).toBe(false); // integração off
       process.env.CIRCLE_SENTRY_CLIENT_SECRET = saved;
+   });
+
+   it('signatureFrom: lê Sentry-App-Signature (UI components) E Sentry-Hook-Signature (webhooks)', () => {
+      // UI components (issue-link create/link) mandam Sentry-App-Signature — foi o bug do 401.
+      const appSig = new Headers({ 'sentry-app-signature': 'aaa' });
+      expect(signatureFrom(appSig)).toBe('aaa');
+      // Webhooks de evento mandam Sentry-Hook-Signature.
+      const hookSig = new Headers({ 'sentry-hook-signature': 'bbb' });
+      expect(signatureFrom(hookSig)).toBe('bbb');
+      // App-Signature tem precedência quando ambos vierem; sem nenhum → null.
+      const both = new Headers({ 'sentry-app-signature': 'aaa', 'sentry-hook-signature': 'bbb' });
+      expect(signatureFrom(both)).toBe('aaa');
+      expect(signatureFrom(new Headers())).toBeNull();
+   });
+
+   it('signatureFrom + verifySignature: assinatura via Sentry-App-Signature valida (fluxo real do create)', () => {
+      const body = JSON.stringify({ fields: { title: 'x' }, issueId: 'e-1' });
+      const headers = new Headers({ 'sentry-app-signature': sign(body) });
+      expect(verifySignature(body, signatureFrom(headers))).toBe(true);
    });
 
    it('createCardFromSentry: cria card com label sentry, status triage, priority high', async () => {

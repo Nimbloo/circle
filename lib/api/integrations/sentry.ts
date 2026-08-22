@@ -14,8 +14,9 @@ import { ApiError } from '../errors';
 /**
  * Integração Sentry → Circle (Integration Platform, UI component `issue-link`).
  * O Sentry chama os endpoints `create`/`link` com POST `{fields, issueId, webUrl, project, actor}`
- * assinado em `Sentry-Hook-Signature` (HMAC-SHA256 do body cru com o Client Secret da
- * integração). Devolvemos `{webUrl, project, identifier}` — o Sentry mostra `project#identifier`
+ * assinado em `Sentry-App-Signature` (UI components) — HMAC-SHA256 do body cru com o Client
+ * Secret da integração (webhooks de evento usam `Sentry-Hook-Signature`; ver signatureFrom).
+ * Devolvemos `{webUrl, project, identifier}` — o Sentry mostra `project#identifier`
  * linkando pro card. Toda config é via env; sem `CIRCLE_SENTRY_CLIENT_SECRET` a integração
  * fica DESLIGADA (verify falha → 401), never lança em runtime por config ausente.
  */
@@ -39,6 +40,17 @@ function actorEmail(): string {
 /** URL pública do card no Circle (rota por identifier: /{org}/issue/CORE-1). */
 export function cardUrl(identifier: string): string {
    return `${appUrl()}/${workspaceSlug()}/issue/${identifier}`;
+}
+
+/**
+ * Extrai a assinatura do Sentry dos headers. São DOIS headers, ambos HMAC-SHA256 do body
+ * cru com o Client Secret — só muda o nome conforme a origem da request:
+ *   - `Sentry-App-Signature`  → requests de UI component (issue-link `create`/`link`, select)
+ *   - `Sentry-Hook-Signature` → webhooks de evento (installation.*, issue.* etc.)
+ * (Confirmado no código do Sentry: sentry_apps/external_requests usa Sentry-App-Signature.)
+ */
+export function signatureFrom(headers: Headers): string | null {
+   return headers.get('sentry-app-signature') ?? headers.get('sentry-hook-signature');
 }
 
 /**
