@@ -93,9 +93,28 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
    hydrate: async (opts?: IssueListOptions) => {
       set({ loading: true, error: false });
       try {
-         const dtos = await api.issues.list(opts);
-         const issues = sortByRank(adaptIssues(dtos));
-         set({ issues, issuesByStatus: groupIssuesByStatus(issues), loading: false, error: false });
+         // Paginação KEYSET por rank (cursor = último rank): carrega TODAS as issues em
+         // páginas (fim do truncamento silencioso do cap de 500) e preenche o board
+         // PROGRESSIVAMENTE (a 1ª página aparece rápido; as demais chegam em background).
+         // Só pagina na ordem default (rank); em outras ordens, uma página (cap do server).
+         const PAGE = 200;
+         const canPaginate = !opts?.orderBy || opts.orderBy === 'rank';
+         const acc: Awaited<ReturnType<typeof api.issues.list>> = [];
+         let cursor: string | undefined;
+         for (let guard = 0; guard < 200; guard++) {
+            const page = await api.issues.list({ ...opts, limit: PAGE, cursor });
+            acc.push(...page);
+            const issues = sortByRank(adaptIssues(acc));
+            const done = !canPaginate || page.length < PAGE;
+            set({
+               issues,
+               issuesByStatus: groupIssuesByStatus(issues),
+               loading: !done,
+               error: false,
+            });
+            if (done) break;
+            cursor = page[page.length - 1].rank; // keyset: próximo `rank > cursor`
+         }
       } catch {
          // mantém o estado atual (mock ou anterior) e sinaliza a falha p/ o board.
          set({ loading: false, error: true });
