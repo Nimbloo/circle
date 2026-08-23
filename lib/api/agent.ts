@@ -6,16 +6,20 @@ import {
    type Tool,
    type ToolConfiguration,
 } from '@aws-sdk/client-bedrock-runtime';
+import { eq } from 'drizzle-orm';
 import type { Db } from '@/db';
+import { issue as issueT, appUser } from '@/db/schema';
 import { getOrCreateUser } from './users';
 import { listTeams } from './teams';
-import { listIssues, type IssueListOptions } from './issues';
+import { listIssues, createIssue, updateIssue, type IssueListOptions } from './issues';
 import { listCyclesByTeam } from './cycles';
+import { getCachedCatalogs } from './catalogs';
 
 /**
  * Agent do Circle — chat com IA REAL (AWS Bedrock/Claude via IRSA) e contexto
- * do workspace. O modelo consulta os dados vivos (times/issues/ciclos) por
- * ferramentas SOMENTE-LEITURA que reusam a camada lib/api; nunca escreve.
+ * do workspace. O modelo consulta (times/issues/ciclos) e AGE (criar issue,
+ * atualizar status/prioridade/responsável) por ferramentas que reusam lib/api,
+ * sempre com o e-mail do usuário como ator. Não apaga nada.
  *
  * Credenciais: default provider chain → Web Identity Token (IRSA) do pod, igual
  * ao SES. Requer `bedrock:InvokeModel` na role e model access habilitado.
@@ -37,11 +41,13 @@ export interface AgentChatMessage {
 
 const SYSTEM = `Você é o assistente do Circle, uma ferramenta de gestão de projetos estilo Linear da Nimbloo.
 Responda SEMPRE em português brasileiro, de forma concisa, direta e útil.
-Você tem ferramentas para consultar os dados REAIS do workspace do usuário (times, issues, ciclos).
-Use as ferramentas antes de responder qualquer pergunta sobre o backlog — NUNCA invente dados, ids ou números.
+Você tem ferramentas para CONSULTAR (times, issues, ciclos) e para AGIR (criar issue, atualizar status/prioridade/responsável de uma issue).
+Use as ferramentas de leitura antes de responder perguntas sobre o backlog — NUNCA invente dados, ids ou números.
 Se uma consulta não retornar nada, diga honestamente que não encontrou.
-Você é SOMENTE-LEITURA: não pode criar, editar nem apagar nada; se pedirem, explique como fazer na interface.
-Ao listar issues, use o identificador (ex: ENG-42) e seja sucinto.`;
+Para AGIR: só execute uma ação de escrita quando o pedido do usuário for CLARO e inequívoco. Se for ambíguo
+(qual issue? qual time? qual status?), pergunte antes em vez de adivinhar. Após agir, confirme o que foi feito
+citando o identificador (ex: "Criei ENG-42" / "Movi ENG-42 para In Progress"). Você NÃO apaga nada.
+Ao listar ou referenciar issues, use sempre o identificador (ex: ENG-42) e seja sucinto.`;
 
 const TOOLS: Tool[] = [
    {
@@ -98,9 +104,63 @@ const TOOLS: Tool[] = [
          },
       },
    },
+   {
+      toolSpec: {
+         name: 'create_issue',
+         description:
+            'Cria uma nova issue num time. Use só quando o usuário pedir explicitamente para criar. Retorna o identificador (ex: ENG-42).',
+         inputSchema: {
+            json: {
+               type: 'object',
+               properties: {
+                  team: { type: 'string', description: 'Chave do time (ex: ENG).' },
+                  title: { type: 'string', description: 'Título da issue.' },
+                  description: { type: 'string', description: 'Descrição (opcional).' },
+                  status: {
+                     type: 'string',
+                     description: 'Nome do status (opcional; padrão Todo).',
+                  },
+                  priority: {
+                     type: 'string',
+                     description: 'Nome da prioridade (opcional; padrão No priority).',
+                  },
+               },
+               required: ['team', 'title'],
+            },
+         },
+      },
+   },
+   {
+      toolSpec: {
+         name: 'update_issue',
+         description:
+            'Atualiza uma issue existente (status, prioridade ou responsável). Identifique a issue pelo identificador (ex: ENG-42).',
+         inputSchema: {
+            json: {
+               type: 'object',
+               properties: {
+                  issue: { type: 'string', description: 'Identificador da issue (ex: ENG-42).' },
+                  status: { type: 'string', description: 'Novo status (nome, ex: "In Progress").' },
+                  priority: { type: 'string', description: 'Nova prioridade (nome, ex: "High").' },
+                  assignee: {
+                     type: 'string',
+                     description: '"me" para atribuir a si mesmo, ou o e-mail do responsável.',
+                  },
+               },
+               required: ['issue'],
+            },
+         },
+      },
+   },
 ];
 
 type ToolInput = Record<string, unknown>;
+
+/** Resolve id de catálogo (status/priority) por nome, case-insensitive. */
+function findByName(rows: { id: string; name: string }[], name: string): string | undefined {
+   const n = name.trim().toLowerCase();
+   return rows.find((r) => r.name.toLowerCase() === n)?.id;
+}
 
 async function runTool(
    db: Db,
@@ -161,6 +221,77 @@ async function runTool(
                completed: c.completed,
             }))
          );
+      }
+      if (name === 'create_issue') {
+         const team = typeof input.team === 'string' ? input.team : '';
+         const title = typeof input.title === 'string' ? input.title.trim() : '';
+         if (!team || !title) return 'Erro: "team" e "title" são obrigatórios.';
+         const cat = await getCachedCatalogs(db);
+         const statusId =
+            (typeof input.status === 'string' && findByName(cat.statuses, input.status)) || 'to-do';
+         const priorityId =
+            (typeof input.priority === 'string' && findByName(cat.priorities, input.priority)) ||
+            'no-priority';
+         const created = await createIssue(
+            db,
+            {
+               teamId: team,
+               title,
+               statusId,
+               priorityId,
+               description: typeof input.description === 'string' ? input.description : null,
+            },
+            email
+         );
+         return JSON.stringify({
+            created: created.identifier,
+            title: created.title,
+            status: created.status?.name ?? null,
+            priority: created.priority?.name ?? null,
+         });
+      }
+      if (name === 'update_issue') {
+         const ident = typeof input.issue === 'string' ? input.issue.trim() : '';
+         if (!ident) return 'Erro: informe o identificador da issue (ex: ENG-42).';
+         const [row] = await db
+            .select({ id: issueT.id })
+            .from(issueT)
+            .where(eq(issueT.identifier, ident))
+            .limit(1);
+         if (!row) return `Issue "${ident}" não encontrada.`;
+         const cat = await getCachedCatalogs(db);
+         const patch: Record<string, unknown> = {};
+         if (typeof input.status === 'string') {
+            const sid = findByName(cat.statuses, input.status);
+            if (!sid) return `Status "${input.status}" não existe.`;
+            patch.statusId = sid;
+         }
+         if (typeof input.priority === 'string') {
+            const pid = findByName(cat.priorities, input.priority);
+            if (!pid) return `Prioridade "${input.priority}" não existe.`;
+            patch.priorityId = pid;
+         }
+         if (input.assignee === 'me') {
+            patch.assigneeId = meId;
+         } else if (typeof input.assignee === 'string') {
+            const [u] = await db
+               .select({ id: appUser.id })
+               .from(appUser)
+               .where(eq(appUser.email, input.assignee.trim().toLowerCase()))
+               .limit(1);
+            if (!u) return `Usuário "${input.assignee}" não encontrado.`;
+            patch.assigneeId = u.id;
+         }
+         if (Object.keys(patch).length === 0) {
+            return 'Nada para atualizar — informe status, priority ou assignee.';
+         }
+         const updated = await updateIssue(db, row.id, patch, email);
+         return JSON.stringify({
+            updated: ident,
+            status: updated?.status?.name ?? null,
+            priority: updated?.priority?.name ?? null,
+            assignee: updated?.assignee?.name ?? null,
+         });
       }
       return `Ferramenta desconhecida: ${name}`;
    } catch (e) {

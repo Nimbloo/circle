@@ -80,7 +80,7 @@ export function adaptMemberToUser(m: MemberDto): User {
       status: (m.presence as User['status']) ?? 'offline',
       role: (m.role as User['role']) ?? 'Member',
       joinedDate: m.joinedAt,
-      teamIds: [],
+      teamIds: m.teamIds,
       timezone: m.timezone ?? 'UTC',
    };
 }

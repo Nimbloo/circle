@@ -1,4 +1,4 @@
-import { eq, count } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { appUser, teamMember } from '@/db/schema';
 import { ApiError } from './errors';
@@ -17,11 +17,13 @@ export interface MemberDto {
    timezone: string | null;
    joinedAt: string;
    teamCount: number;
+   /** Times (ids/keys) dos quais o membro participa. */
+   teamIds: string[];
 }
 
 export type MemberSort = 'name' | 'joined' | 'teams';
 
-function toDto(u: UserRow, teamCount: number): MemberDto {
+function toDto(u: UserRow, teamIds: string[]): MemberDto {
    return {
       id: u.id,
       slug: u.slug,
@@ -32,16 +34,23 @@ function toDto(u: UserRow, teamCount: number): MemberDto {
       presence: u.presence,
       timezone: u.timezone,
       joinedAt: u.joinedAt,
-      teamCount,
+      teamCount: teamIds.length,
+      teamIds,
    };
 }
 
-async function teamCounts(db: Db): Promise<Map<string, number>> {
+/** Map userId -> lista de teamIds (a contagem deriva do length). */
+async function teamMemberships(db: Db): Promise<Map<string, string[]>> {
    const rows = await db
-      .select({ userId: teamMember.userId, n: count() })
-      .from(teamMember)
-      .groupBy(teamMember.userId);
-   return new Map(rows.map((r) => [r.userId, Number(r.n)]));
+      .select({ userId: teamMember.userId, teamId: teamMember.teamId })
+      .from(teamMember);
+   const map = new Map<string, string[]>();
+   for (const r of rows) {
+      const arr = map.get(r.userId);
+      if (arr) arr.push(r.teamId);
+      else map.set(r.userId, [r.teamId]);
+   }
+   return map;
 }
 
 export interface ListMembersOptions {
@@ -51,8 +60,8 @@ export interface ListMembersOptions {
 }
 
 export async function listMembers(db: Db, opts: ListMembersOptions = {}): Promise<MemberDto[]> {
-   const [users, counts] = await Promise.all([db.select().from(appUser), teamCounts(db)]);
-   let dtos = users.map((u) => toDto(u, counts.get(u.id) ?? 0));
+   const [users, memberships] = await Promise.all([db.select().from(appUser), teamMemberships(db)]);
+   let dtos = users.map((u) => toDto(u, memberships.get(u.id) ?? []));
 
    if (opts.role?.length) {
       const set = new Set(opts.role);
@@ -76,8 +85,8 @@ export async function listMembers(db: Db, opts: ListMembersOptions = {}): Promis
 export async function getMember(db: Db, id: string): Promise<MemberDto | null> {
    const rows = await db.select().from(appUser).where(eq(appUser.id, id)).limit(1);
    if (rows.length === 0) return null;
-   const counts = await teamCounts(db);
-   return toDto(rows[0], counts.get(id) ?? 0);
+   const memberships = await teamMemberships(db);
+   return toDto(rows[0], memberships.get(id) ?? []);
 }
 
 export const MEMBER_ROLES = ['Member', 'Admin', 'Guest', 'Application'] as const;

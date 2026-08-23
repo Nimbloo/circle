@@ -16,7 +16,7 @@ vi.mock('@aws-sdk/client-bedrock-runtime', () => ({
 
 import { makeTestDb } from './helpers/db';
 import { seedTeam } from './helpers/fixtures';
-import { createIssue } from '@/lib/api/issues';
+import { createIssue, listIssues } from '@/lib/api/issues';
 import { runAgent } from '@/lib/api/agent';
 
 const ME = 'dev@nimbloo.ai';
@@ -81,5 +81,44 @@ describe('agent (Bedrock tool-use)', () => {
       await seedTeam(db, 'CORE');
       sendMock.mockRejectedValueOnce(new Error('AccessDeniedException'));
       await expect(runAgent(db, ME, [{ role: 'user', content: 'oi' }])).rejects.toThrow();
+   });
+
+   it('tool de escrita create_issue cria a issue de verdade no db', async () => {
+      const db = await makeTestDb();
+      await seedTeam(db, 'CORE');
+
+      sendMock
+         .mockResolvedValueOnce({
+            stopReason: 'tool_use',
+            output: {
+               message: {
+                  role: 'assistant',
+                  content: [
+                     {
+                        toolUse: {
+                           name: 'create_issue',
+                           toolUseId: 'w1',
+                           input: { team: 'CORE', title: 'Corrigir login', priority: 'High' },
+                        },
+                     },
+                  ],
+               },
+            },
+         })
+         .mockResolvedValueOnce({
+            stopReason: 'end_turn',
+            output: { message: { role: 'assistant', content: [{ text: 'Criei CORE-1.' }] } },
+         });
+
+      const reply = await runAgent(db, ME, [
+         { role: 'user', content: 'crie uma issue "Corrigir login" no CORE com prioridade alta' },
+      ]);
+      expect(reply).toBe('Criei CORE-1.');
+
+      // A issue foi realmente persistida (com a prioridade resolvida por nome).
+      const issues = await listIssues(db, { team: 'CORE' });
+      expect(issues).toHaveLength(1);
+      expect(issues[0].title).toBe('Corrigir login');
+      expect(issues[0].priority?.name).toBe('High');
    });
 });

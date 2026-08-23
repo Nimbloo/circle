@@ -24,6 +24,7 @@ import type { TeamDto, CreateTeamInput, JoinRequestDto } from '@/lib/api/teams';
 import type { MemberDto } from '@/lib/api/members';
 import type { CycleDto, CreateCycleInput, UpdateCycleInput } from '@/lib/api/cycles';
 import type { TemplateDto, CreateTemplateInput, UpdateTemplateInput } from '@/lib/api/templates';
+import type { StatusDto, CreateStatusInput, UpdateStatusInput } from '@/lib/api/statuses';
 import type {
    InitiativeDto,
    CreateInitiativeInput,
@@ -124,10 +125,12 @@ export const api = {
          request<Record<string, unknown>>('PUT', '/settings', data),
    },
 
-   statuses: () =>
-      get<{ id: string; name: string; color: string; category: string; position: number }[]>(
-         '/statuses'
-      ),
+   statuses: Object.assign(() => get<StatusDto[]>('/statuses'), {
+      create: (input: CreateStatusInput) => post<StatusDto>('/statuses', input),
+      update: (id: string, body: UpdateStatusInput) => patch<StatusDto>(`/statuses/${id}`, body),
+      remove: (id: string) => del<{ deleted: boolean }>(`/statuses/${id}`),
+      reorder: (ids: string[]) => patch<StatusDto[]>('/statuses', { ids }),
+   }),
    priorities: () =>
       get<{ id: string; name: string; position: number; sortRank: number }[]>('/priorities'),
    labels: {

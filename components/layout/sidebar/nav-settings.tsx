@@ -65,7 +65,6 @@ export const settingsNav: SettingsNavGroup[] = [
    {
       label: 'Projects',
       items: [
-         { name: 'Labels', url: '/settings/project-labels', icon: Tag },
          { name: 'Templates', url: '/settings/project-templates', icon: FileText },
          { name: 'Statuses', url: '/settings/project-statuses', icon: Target },
          { name: 'Updates', url: '/settings/project-updates', icon: Zap },
