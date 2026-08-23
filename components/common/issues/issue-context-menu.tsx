@@ -184,20 +184,18 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
                      <ContextMenuItem onClick={() => handleAssigneeChange(null)}>
                         <User className="size-4" /> Unassigned
                      </ContextMenuItem>
-                     {users
-                        .filter((user) => user.teamIds.includes('CORE'))
-                        .map((user) => (
-                           <ContextMenuItem
-                              key={user.id}
-                              onClick={() => handleAssigneeChange(user.id)}
-                           >
-                              <Avatar className="size-4">
-                                 <AvatarImage src={user.avatarUrl || undefined} alt={user.name} />
-                                 <AvatarFallback>{user.name[0]}</AvatarFallback>
-                              </Avatar>
-                              {user.name}
-                           </ContextMenuItem>
-                        ))}
+                     {users.map((user) => (
+                        <ContextMenuItem
+                           key={user.id}
+                           onClick={() => handleAssigneeChange(user.id)}
+                        >
+                           <Avatar className="size-4">
+                              <AvatarImage src={user.avatarUrl || undefined} alt={user.name} />
+                              <AvatarFallback>{user.name[0]}</AvatarFallback>
+                           </Avatar>
+                           {user.name}
+                        </ContextMenuItem>
+                     ))}
                   </ContextMenuSubContent>
                </ContextMenuSub>
 
