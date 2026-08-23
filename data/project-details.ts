@@ -140,9 +140,19 @@ const detailsById: Record<string, Omit<ProjectDetail, 'projectId'>> = {
          },
       ],
       activity: [
-         { id: 'a1', user: users[4], date: '2026-07-24', text: 'commented “Tested on the staging playground — focus return works across nested portals.”' },
+         {
+            id: 'a1',
+            user: users[4],
+            date: '2026-07-24',
+            text: 'commented “Tested on the staging playground — focus return works across nested portals.”',
+         },
          { id: 'a2', user: users[7], date: '2026-07-17', text: 'added themselves as a member' },
-         { id: 'a3', user: users[0], date: '2026-07-10', text: 'changed the target date to Sep 25' },
+         {
+            id: 'a3',
+            user: users[0],
+            date: '2026-07-10',
+            text: 'changed the target date to Sep 25',
+         },
       ],
    },
 
@@ -256,8 +266,18 @@ const detailsById: Record<string, Omit<ProjectDetail, 'projectId'>> = {
          },
       ],
       activity: [
-         { id: 'a1', user: users[10], date: '2026-07-22', text: 'commented “Grouping API looks great with aggregate footers.”' },
-         { id: 'a2', user: users[4], date: '2026-07-15', text: 'created the milestone “Row grouping + GA”' },
+         {
+            id: 'a1',
+            user: users[10],
+            date: '2026-07-22',
+            text: 'commented “Grouping API looks great with aggregate footers.”',
+         },
+         {
+            id: 'a2',
+            user: users[4],
+            date: '2026-07-15',
+            text: 'created the milestone “Row grouping + GA”',
+         },
       ],
    },
 };

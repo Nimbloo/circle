@@ -35,7 +35,7 @@ import {
    AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { api } from '@/lib/client';
-import { Initiative, INITIATIVE_STATUS_META, InitiativeStatus } from '@/mock-data/initiatives';
+import { Initiative, INITIATIVE_STATUS_META, InitiativeStatus } from '@/data/initiatives';
 import { usePriorities, useHealthStates } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';

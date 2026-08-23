@@ -11,7 +11,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useMemo, useState } from 'react';
 import { CheckIcon, ChevronRight, ListFilter, Shield } from 'lucide-react';
-import { Team } from '@/mock-data/teams';
+import { Team } from '@/data/teams';
 import { useTeamsFilterStore } from '@/store/team-filter-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 

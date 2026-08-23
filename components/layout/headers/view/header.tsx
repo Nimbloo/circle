@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import { filterIssuesForView, filterProjectsForView } from '@/mock-data/views';
+import { filterIssuesForView, filterProjectsForView } from '@/data/views';
 import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useWorkspaceStore } from '@/store/workspace-store';

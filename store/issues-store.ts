@@ -1,13 +1,14 @@
-import { groupIssuesByStatus, Issue } from '@/mock-data/issues';
-import { LabelInterface } from '@/mock-data/labels';
-import { Priority } from '@/mock-data/priorities';
-import { Project } from '@/mock-data/projects';
-import { Status } from '@/mock-data/status';
-import { User } from '@/mock-data/users';
+import { groupIssuesByStatus, Issue } from '@/data/issues';
+import { LabelInterface } from '@/data/labels';
+import { Priority } from '@/data/priorities';
+import { Project } from '@/data/projects';
+import { Status } from '@/data/status';
+import { User } from '@/data/users';
 import { create } from 'zustand';
 import { toast } from 'sonner';
 import { api } from '@/lib/client';
 import { adaptIssues } from '@/lib/adapters';
+import { rankBetween } from '@/lib/api/rank';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import type { CreateIssueInput, UpdateIssueInput, IssueListOptions } from '@/lib/api/issues';
 
@@ -124,8 +125,6 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
    getAllIssues: () => get().issues,
 
    addIssue: (issue: Issue) => {
-      // Snapshot p/ rollback: a issue otimista tem id/rank falsos até o servidor responder.
-      const snapshot = { issues: get().issues, issuesByStatus: get().issuesByStatus };
       set((state) => {
          const newIssues = [...state.issues, issue];
          return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
@@ -162,7 +161,11 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
             });
          })
          .catch((err) => {
-            set(snapshot);
+            // Rollback DIRECIONADO: remove só a issue otimista (não clobra criações concorrentes).
+            set((state) => {
+               const next = state.issues.filter((i) => i.id !== issue.id);
+               return { issues: next, issuesByStatus: groupIssuesByStatus(next) };
+            });
             throw err;
          });
    },
@@ -301,25 +304,29 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
    updateIssueProject: (issueId, newProject) => get().updateIssue(issueId, { project: newProject }),
 
    reorderIssue: (id, beforeId, afterId) => {
-      // Otimista: move a issue na ordem do array (o grouping preserva a ordem do array).
-      const snapshot = { issues: get().issues, issuesByStatus: get().issuesByStatus };
-      set((state) => {
-         const arr = state.issues.filter((i) => i.id !== id);
-         const moved = state.issues.find((i) => i.id === id);
-         if (!moved) return {};
-         let insertAt: number;
-         if (afterId) insertAt = arr.findIndex((i) => i.id === afterId);
-         else if (beforeId) insertAt = arr.findIndex((i) => i.id === beforeId) + 1;
-         else insertAt = arr.length;
-         if (insertAt < 0) insertAt = arr.length;
-         arr.splice(insertAt, 0, moved);
-         return { issues: arr, issuesByStatus: groupIssuesByStatus(arr) };
-      });
-      // O servidor calcula o rank real (rankBetween) — reconcilia SPLICE de 1 item com o
-      // DTO da resposta (troca só o rank da issue movida), sem re-baixar todo o board.
+      const current = get().issues;
+      const moved = current.find((i) => i.id === id);
+      if (!moved) return;
+      const prevRank = moved.rank; // p/ rollback direcionado (só esta issue)
+
+      // Rank otimista LOCAL entre os vizinhos (o servidor recalcula o real). A ordem é
+      // derivada do RANK, não da posição do array — assim um reconcile concorrente que
+      // re-sorta por rank (SSE/outro reorder) não desfaz este move, e o rollback fica
+      // direcionado à issue movida (não clobra reorders concorrentes que já sucederam).
+      const rankOf = (nid: string | null) =>
+         nid ? (current.find((i) => i.id === nid)?.rank ?? null) : null;
+      const optimisticRank = rankBetween(rankOf(beforeId), rankOf(afterId));
+
+      const applyRank = (rank: string) => (state: IssuesState) => {
+         const next = sortByRank(state.issues.map((i) => (i.id === id ? { ...i, rank } : i)));
+         return { issues: next, issuesByStatus: groupIssuesByStatus(next) };
+      };
+      set(applyRank(optimisticRank));
+
       api.issues
          .reorder(id, beforeId, afterId)
          .then((dto) => {
+            // Reconcilia com o rank REAL do servidor (splice de 1 item).
             const fresh = adaptIssues([dto])[0];
             set((state) => {
                const next = sortByRank(state.issues.map((i) => (i.id === id ? fresh : i)));
@@ -327,7 +334,7 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
             });
          })
          .catch(() => {
-            set(snapshot);
+            set(applyRank(prevRank)); // rollback só desta issue
             toast.error('Falha ao reordenar a issue');
          });
    },

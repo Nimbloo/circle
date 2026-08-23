@@ -1,10 +1,10 @@
 import { create } from 'zustand';
 import { useMemo } from 'react';
 import { Circle } from 'lucide-react';
-import { status as mockStatuses, Status, StatusCategory } from '@/mock-data/status';
-import { priorities as mockPriorities, Priority } from '@/mock-data/priorities';
-import { LabelInterface, labels as mockLabels } from '@/mock-data/labels';
-import { Health, health as mockHealth } from '@/mock-data/projects';
+import { status as mockStatuses, Status, StatusCategory } from '@/data/status';
+import { priorities as mockPriorities, Priority } from '@/data/priorities';
+import { LabelInterface, labels as mockLabels } from '@/data/labels';
+import { Health, health as mockHealth } from '@/data/projects';
 import type { WorkspaceBootstrap } from '@/lib/api/workspace';
 
 /**

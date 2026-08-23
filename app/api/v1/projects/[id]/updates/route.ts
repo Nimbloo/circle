@@ -5,7 +5,7 @@ import { handle, requireEmail } from '@/lib/api/http';
 import { getOrCreateUser } from '@/lib/api/users';
 import { listUpdates, postProjectUpdate } from '@/lib/api/project-detail';
 import type { ProjectUpdateHealth } from '@/lib/api/project-detail';
-import type { ContentBlock } from '@/mock-data/issue-details';
+import type { ContentBlock } from '@/data/issue-details';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { api } from '@/lib/client';
 import { ApiError } from '@/lib/api/errors';
-import type { StatusCategory } from '@/mock-data/status';
+import type { StatusCategory } from '@/data/status';
 import { useStatuses } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Pencil, Plus, Trash2 } from 'lucide-react';

@@ -13,7 +13,7 @@ import {
 import { ApiError } from './errors';
 import { publish } from './events';
 import type { UserRef } from './issues';
-import type { ContentBlock } from '@/mock-data/issue-details';
+import type { ContentBlock } from '@/data/issue-details';
 
 /* -------------------------------------------------------------------------- */
 /*                                    DTOs                                     */

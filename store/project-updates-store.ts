@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { ProjectUpdate, ProjectUpdateHealth } from '@/mock-data/project-details';
-import type { User } from '@/mock-data/users';
+import { ProjectUpdate, ProjectUpdateHealth } from '@/data/project-details';
+import type { User } from '@/data/users';
 import { useWorkspaceStore } from '@/store/workspace-store';
 
 /** Autor da update = usuário corrente (SSO); do workspace store, com fallback mínimo. */

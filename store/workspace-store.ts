@@ -1,10 +1,10 @@
 import { create } from 'zustand';
-import { Project } from '@/mock-data/projects';
-import { Team } from '@/mock-data/teams';
-import { User } from '@/mock-data/users';
-import { Cycle } from '@/mock-data/cycles';
-import { Initiative } from '@/mock-data/initiatives';
-import { View } from '@/mock-data/views';
+import { Project } from '@/data/projects';
+import { Team } from '@/data/teams';
+import { User } from '@/data/users';
+import { Cycle } from '@/data/cycles';
+import { Initiative } from '@/data/initiatives';
+import { View } from '@/data/views';
 import {
    adaptProject,
    adaptTeam,

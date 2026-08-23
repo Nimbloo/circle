@@ -8,7 +8,7 @@ import {
    SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { fetchReviews } from '@/lib/adapters-reviews';
-import { inboxItems } from '@/mock-data/side-bar-nav';
+import { inboxItems } from '@/data/side-bar-nav';
 import { useNotificationsStore } from '@/store/notifications-store';
 import { usePreferencesStore } from '@/store/preferences-store';
 import {

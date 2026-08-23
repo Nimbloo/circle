@@ -34,7 +34,7 @@ import {
    AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { api } from '@/lib/client';
-import { Cycle, CycleStatus, cycleStatusLabel } from '@/mock-data/cycles';
+import { Cycle, CycleStatus, cycleStatusLabel } from '@/data/cycles';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';

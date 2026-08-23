@@ -8,7 +8,7 @@ import {
    DropdownMenuSeparator,
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { statusUserColors, User } from '@/mock-data/users';
+import { statusUserColors, User } from '@/data/users';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { CheckIcon, CircleUserRound, UserIcon } from 'lucide-react';

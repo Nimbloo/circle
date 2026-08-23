@@ -18,7 +18,7 @@ import {
    ProjectUpdateHealth,
    projectUpdateHealthColor,
    projectUpdateHealthLabel,
-} from '@/mock-data/project-details';
+} from '@/data/project-details';
 import { useIssuesStore } from '@/store/issues-store';
 import { useProjectUpdatesStore } from '@/store/project-updates-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -70,7 +70,7 @@ function UpdateCard({ update }: { update: ProjectUpdate }) {
 export default function ProjectActivity({ projectId }: ProjectActivityProps) {
    const project = useWorkspaceStore((s) => s.getProjectById(projectId));
    const loaded = useWorkspaceStore((s) => s.loaded);
-   const { issues: allIssues } = useIssuesStore();
+   const allIssues = useIssuesStore((s) => s.issues);
    const issues = useMemo(
       () => allIssues.filter((issue) => issue.project?.id === projectId),
       [allIssues, projectId]

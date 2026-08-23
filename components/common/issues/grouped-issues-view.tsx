@@ -2,8 +2,8 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
-import { Issue, sortIssuesByPriority } from '@/mock-data/issues';
-import { Status } from '@/mock-data/status';
+import { Issue, sortIssuesByPriority } from '@/data/issues';
+import { Status } from '@/data/status';
 import { usePriorities } from '@/store/catalog-store';
 import { useDisplaySettingsStore } from '@/store/display-settings-store';
 import { useFilterStore } from '@/store/filter-store';

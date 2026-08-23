@@ -4,7 +4,7 @@ import { GroupedIssuesView } from '@/components/common/issues/grouped-issues-vie
 import { InsightsPanel } from '@/components/common/issues/insights-panel';
 import ProjectsList from '@/components/common/projects/projects-list';
 import { ProjectGroup } from '@/components/common/projects/projects';
-import { filterIssuesForView, filterProjectsForView, View } from '@/mock-data/views';
+import { filterIssuesForView, filterProjectsForView, View } from '@/data/views';
 import { useStatuses } from '@/store/catalog-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';

@@ -15,7 +15,7 @@ import { useParams } from 'next/navigation';
  */
 export default function HeaderNav() {
    const { orgId, issueId } = useParams<{ orgId: string; issueId: string }>();
-   const { issues } = useIssuesStore();
+   const issues = useIssuesStore((s) => s.issues);
    const teams = useWorkspaceStore((s) => s.teams);
 
    const team = teams[0];

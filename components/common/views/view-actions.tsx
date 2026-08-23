@@ -27,7 +27,7 @@ import {
    AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { api, ApiError } from '@/lib/client';
-import { View } from '@/mock-data/views';
+import { View } from '@/data/views';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';

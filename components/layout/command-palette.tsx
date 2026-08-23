@@ -9,12 +9,13 @@ import {
    CommandItem,
    CommandList,
 } from '@/components/ui/command';
-import { formatCycleDateRange } from '@/mock-data/cycles';
-import { Issue } from '@/mock-data/issues';
+import { formatCycleDateRange } from '@/data/cycles';
+import { Issue } from '@/data/issues';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useLabels, usePriorities, useStatuses } from '@/store/catalog-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
 import { useIssuesStore } from '@/store/issues-store';
+import { useShallow } from 'zustand/react/shallow';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import {
    Box,
@@ -88,7 +89,18 @@ export function CommandPalette() {
       removeIssueLabel,
       updateIssueProject,
       updateIssue,
-   } = useIssuesStore();
+   } = useIssuesStore(
+      useShallow((s) => ({
+         issues: s.issues,
+         updateIssueStatus: s.updateIssueStatus,
+         updateIssuePriority: s.updateIssuePriority,
+         updateIssueAssignee: s.updateIssueAssignee,
+         addIssueLabel: s.addIssueLabel,
+         removeIssueLabel: s.removeIssueLabel,
+         updateIssueProject: s.updateIssueProject,
+         updateIssue: s.updateIssue,
+      }))
+   );
    const { openModal } = useCreateIssueStore();
    const allStatus = useStatuses();
    const priorities = usePriorities();

@@ -1,6 +1,6 @@
 'use client';
 
-import { Issue } from '@/mock-data/issues';
+import { Issue } from '@/data/issues';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useDisplaySettingsStore } from '@/store/display-settings-store';
 import { useBulkSelectionStore } from '@/store/bulk-selection-store';
@@ -15,11 +15,12 @@ import { PrioritySelector } from './priority-selector';
 import { ProjectBadge } from './project-badge';
 import { StatusSelector } from './status-selector';
 import { motion } from 'motion/react';
+import { memo } from 'react';
 
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { IssueContextMenu } from './issue-context-menu';
 
-export function IssueLine({ issue, layoutId = false }: { issue: Issue; layoutId?: boolean }) {
+function IssueLineComponent({ issue, layoutId = false }: { issue: Issue; layoutId?: boolean }) {
    const { orgId } = useParams<{ orgId: string }>();
    const { displayProperties } = useDisplaySettingsStore();
    const getCycleById = useWorkspaceStore((s) => s.getCycleById);
@@ -112,3 +113,7 @@ export function IssueLine({ issue, layoutId = false }: { issue: Issue; layoutId?
       </ContextMenu>
    );
 }
+
+/** Memoizada: só re-renderiza quando `issue`/`layoutId` mudam — importante na lista
+ *  virtualizada, onde o container re-renderiza ao rolar (evita re-render das linhas). */
+export const IssueLine = memo(IssueLineComponent);

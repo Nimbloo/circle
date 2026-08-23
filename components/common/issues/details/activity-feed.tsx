@@ -2,7 +2,7 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { ActivityItem, CommentReaction } from '@/mock-data/issue-details';
+import { ActivityItem, CommentReaction } from '@/data/issue-details';
 import { api } from '@/lib/client';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/store/workspace-store';

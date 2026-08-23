@@ -11,7 +11,7 @@ import { CycleView } from '@/components/common/issues/cycle-issues';
 
 export default function HeaderOptions({ cycleView }: { cycleView: CycleView }) {
    const { openPanel, togglePanel } = useRightPanelStore();
-   const { issues } = useIssuesStore();
+   const issues = useIssuesStore((s) => s.issues);
    const cycle = useWorkspaceStore((s) =>
       cycleView === 'active' ? s.getCurrentCycle() : s.getUpcomingCycle()
    );

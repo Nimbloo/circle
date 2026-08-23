@@ -1,7 +1,7 @@
 'use client';
 
-import { Issue } from '@/mock-data/issues';
-import { Project } from '@/mock-data/projects';
+import { Issue } from '@/data/issues';
+import { Project } from '@/data/projects';
 import { useIssuesStore } from '@/store/issues-store';
 import { useProjectsDisplayStore } from '@/store/projects-display-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -45,7 +45,7 @@ const countIssues = (issues: Issue[], projectId: string) =>
 
 export default function ProjectLine({ project }: ProjectLineProps) {
    const { orgId } = useParams<{ orgId: string }>();
-   const { issues } = useIssuesStore();
+   const issues = useIssuesStore((s) => s.issues);
    const { displayProperties } = useProjectsDisplayStore();
    const hydrate = useWorkspaceStore((s) => s.hydrate);
    const [confirmOpen, setConfirmOpen] = useState(false);

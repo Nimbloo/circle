@@ -7,8 +7,8 @@ import { IssueFilterBar } from '@/components/common/issues/issue-filter-bar';
 import { SearchIssues } from '@/components/common/issues/search-issues';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Issue } from '@/mock-data/issues';
-import { statusUserColors, User } from '@/mock-data/users';
+import { Issue } from '@/data/issues';
+import { statusUserColors, User } from '@/data/users';
 import { useDisplayOrderedStatuses, useLabels, usePriorities } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
 import { useIssuesStore } from '@/store/issues-store';
@@ -98,7 +98,7 @@ function useClientTimes(member: User) {
  * per-label / priority / project / team breakdowns.
  */
 export default function MemberProfile({ member }: { member: User }) {
-   const { issues } = useIssuesStore();
+   const issues = useIssuesStore((s) => s.issues);
    const [activeTab] = useQueryState('tab', parseAsString.withDefault('assigned'));
    const { localTime, joinedAgo } = useClientTimes(member);
    const { isSearchOpen, searchQuery } = useSearchStore();

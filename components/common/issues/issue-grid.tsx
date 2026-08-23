@@ -1,6 +1,6 @@
 'use client';
 
-import { Issue } from '@/mock-data/issues';
+import { Issue } from '@/data/issues';
 import { useDisplaySettingsStore } from '@/store/display-settings-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { format } from 'date-fns';
@@ -25,6 +25,9 @@ type IssueGridProps = {
    issue: Issue;
    /** Issues do grupo na ordem de exibição (asc rank) — usado p/ calcular os vizinhos no reorder. */
    orderedIssues: Issue[];
+   /** Animação de layout do motion (layoutId). Desligada na coluna virtualizada
+    *  (o mount/unmount da virtualização brigaria com a animação de layout). */
+   layout?: boolean;
 };
 
 // Custom DragLayer component to render the drag preview
@@ -82,7 +85,7 @@ export function CustomDragLayer() {
    );
 }
 
-export function IssueGrid({ issue, orderedIssues }: IssueGridProps) {
+export function IssueGrid({ issue, orderedIssues, layout = true }: IssueGridProps) {
    const ref = useRef<HTMLDivElement>(null);
    const { orgId } = useParams<{ orgId: string }>();
    const { displayProperties } = useDisplaySettingsStore();
@@ -147,7 +150,7 @@ export function IssueGrid({ issue, orderedIssues }: IssueGridProps) {
             <motion.div
                ref={ref}
                className="w-full p-3 bg-background rounded-md shadow-xs border border-border/50 cursor-default"
-               layoutId={`issue-grid-${issue.identifier}`}
+               layoutId={layout ? `issue-grid-${issue.identifier}` : undefined}
                style={{
                   opacity: isDragging ? 0.5 : 1,
                   cursor: isDragging ? 'grabbing' : 'default',

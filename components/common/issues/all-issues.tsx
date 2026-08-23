@@ -1,7 +1,7 @@
 'use client';
 
-import { Issue } from '@/mock-data/issues';
-import { StatusCategory } from '@/mock-data/status';
+import { Issue } from '@/data/issues';
+import { StatusCategory } from '@/data/status';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
 import { useIssuesStore } from '@/store/issues-store';

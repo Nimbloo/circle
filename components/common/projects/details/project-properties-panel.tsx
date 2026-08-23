@@ -3,9 +3,9 @@
 import { CapacityRing } from '@/components/common/cycles/capacity-ring';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Issue } from '@/mock-data/issues';
-import { ProjectDetail } from '@/mock-data/project-details';
-import { Project } from '@/mock-data/projects';
+import { Issue } from '@/data/issues';
+import { ProjectDetail } from '@/data/project-details';
+import { Project } from '@/data/projects';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { PanelFilterTarget, usePanelFilter } from '@/components/common/issues/use-panel-filter';
 import { api } from '@/lib/client';

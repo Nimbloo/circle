@@ -4,8 +4,8 @@
  * blocos de parágrafo (split em linhas em branco) e resolvemos os UserRef em User.
  */
 import { adaptUser } from '@/lib/adapters';
-import type { User } from '@/mock-data/users';
-import type { ContentBlock, ActivityItem, IssueDetail, PrLink } from '@/mock-data/issue-details';
+import type { User } from '@/data/users';
+import type { ContentBlock, ActivityItem, IssueDetail, PrLink } from '@/data/issue-details';
 import type { IssueDetailDto, ActivityItem as ActivityDto } from '@/lib/api/issue-detail';
 
 /** Usuário sintético para eventos/comentários sem actor conhecido (ex.: sistema). */

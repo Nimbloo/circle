@@ -5,11 +5,11 @@
  * rico, sem mudança. Para dados demo (= os próprios mock-data) tudo resolve com ícone.
  */
 import { Circle, Cuboid } from 'lucide-react';
-import { status as statusCatalog, Status } from '@/mock-data/status';
-import { priorities as priorityCatalog, Priority } from '@/mock-data/priorities';
-import { projects as projectCatalog, health as healthCatalog, Project } from '@/mock-data/projects';
-import { users as userCatalog, User } from '@/mock-data/users';
-import type { Issue } from '@/mock-data/issues';
+import { status as statusCatalog, Status } from '@/data/status';
+import { priorities as priorityCatalog, Priority } from '@/data/priorities';
+import { projects as projectCatalog, health as healthCatalog, Project } from '@/data/projects';
+import { users as userCatalog, User } from '@/data/users';
+import type { Issue } from '@/data/issues';
 import type { IssueDto, UserRef, ProjectRef } from '@/lib/api/issues';
 
 const statusById = new Map(statusCatalog.map((s) => [s.id, s]));

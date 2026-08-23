@@ -1,7 +1,9 @@
 'use client';
 
-import type { IssueDetail } from '@/mock-data/issue-details';
+import type { Issue } from '@/data/issues';
+import type { IssueDetail } from '@/data/issue-details';
 import { adaptIssueDetail } from '@/lib/adapters-issue-detail';
+import { adaptIssues } from '@/lib/adapters';
 import { api } from '@/lib/client';
 import { ISSUE_CHANGED_EVENT } from '@/lib/use-live-sync';
 import { useIssuesStore } from '@/store/issues-store';
@@ -20,16 +22,42 @@ import { RelationEditor } from './relation-editor';
  */
 export default function IssueDetails() {
    const { orgId, issueId } = useParams<{ orgId: string; issueId: string }>();
-   const { issues } = useIssuesStore();
+   const issues = useIssuesStore((s) => s.issues);
 
-   const issue = useMemo(
+   // Issue do store (se já hidratado) — reusa sem request.
+   const storeIssue = useMemo(
       () => issues.find((candidate) => candidate.identifier === issueId),
       [issues, issueId]
    );
+   // Fallback: se o deep-link foi aberto direto (store ainda vazio), busca a issue por
+   // identifier na API — sem esperar o board inteiro hidratar (fim do waterfall de ~500).
+   // undefined = ainda buscando; null = buscou e não existe; Issue = encontrada.
+   const [fetchedIssue, setFetchedIssue] = useState<Issue | null | undefined>(undefined);
+   const issue = storeIssue ?? fetchedIssue ?? undefined;
+   const resolvingIssue = !storeIssue && fetchedIssue === undefined;
 
    const [detail, setDetail] = useState<IssueDetail | null>(null);
    const [loading, setLoading] = useState(true);
    const [reloadKey, setReloadKey] = useState(0);
+
+   useEffect(() => {
+      if (storeIssue) return; // já temos a issue no store
+      let active = true;
+      // Reset ao trocar de issueId (navegação entre deep-links) → volta a "Carregando…"
+      // em vez de mostrar a issue anterior sob a nova URL enquanto o GET não resolve.
+      setFetchedIssue(undefined);
+      api.issues
+         .get(issueId)
+         .then((dto) => {
+            if (active) setFetchedIssue(adaptIssues([dto])[0]);
+         })
+         .catch(() => {
+            if (active) setFetchedIssue(null);
+         });
+      return () => {
+         active = false;
+      };
+   }, [issueId, storeIssue]);
 
    useEffect(() => {
       if (!issue) return;
@@ -63,6 +91,14 @@ export default function IssueDetails() {
    }, [issue]);
 
    if (!issue) {
+      // Ainda resolvendo o deep-link → loading (não "not found" prematuro).
+      if (resolvingIssue) {
+         return (
+            <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+               Carregando…
+            </div>
+         );
+      }
       return (
          <div className="flex flex-col items-center justify-center h-full gap-2 text-sm text-muted-foreground">
             <p>Issue {issueId} not found.</p>

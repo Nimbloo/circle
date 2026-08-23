@@ -3,7 +3,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { adaptFolders } from '@/lib/adapters-documents';
 import { api } from '@/lib/client';
-import type { TeamDocument } from '@/mock-data/documents';
+import type { TeamDocument } from '@/data/documents';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { RiDonutChartFill } from '@remixicon/react';
 import { Box, CopyMinus, Layers, Settings } from 'lucide-react';

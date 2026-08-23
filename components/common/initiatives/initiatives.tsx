@@ -19,8 +19,8 @@ import {
    SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { Initiative, INITIATIVE_STATUS_META, InitiativeStatus } from '@/mock-data/initiatives';
-import { health as allHealth } from '@/mock-data/projects';
+import { Initiative, INITIATIVE_STATUS_META, InitiativeStatus } from '@/data/initiatives';
+import { health as allHealth } from '@/data/projects';
 import { usePriorities } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { InitiativesFilterType, useInitiativesFilterStore } from '@/store/initiatives-filter-store';

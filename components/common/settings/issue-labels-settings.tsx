@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { api, ApiError } from '@/lib/client';
-import type { LabelInterface } from '@/mock-data/labels';
+import type { LabelInterface } from '@/data/labels';
 import { useLabels } from '@/store/catalog-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';

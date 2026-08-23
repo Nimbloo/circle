@@ -3,7 +3,7 @@ import { db } from '@/db';
 import { ok, notFound } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
 import { getProjectDetail, updateProjectDetail } from '@/lib/api/project-detail';
-import type { ContentBlock } from '@/mock-data/issue-details';
+import type { ContentBlock } from '@/data/issue-details';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

@@ -3,7 +3,7 @@
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
-import type { Review } from '@/mock-data/reviews';
+import type { Review } from '@/data/reviews';
 import {
    Check,
    FileCode2,

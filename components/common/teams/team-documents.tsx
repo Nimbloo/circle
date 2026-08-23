@@ -4,7 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { adaptFolders } from '@/lib/adapters-documents';
 import { api } from '@/lib/client';
-import type { DocumentFolder } from '@/mock-data/documents';
+import type { DocumentFolder } from '@/data/documents';
 import { formatDistanceToNowStrict, parseISO } from 'date-fns';
 import { ChevronRight, Pin } from 'lucide-react';
 import { useParams } from 'next/navigation';

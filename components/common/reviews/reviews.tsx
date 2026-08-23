@@ -4,7 +4,7 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { fetchReviews, syncReviews } from '@/lib/adapters-reviews';
-import { Review, ReviewList, ReviewStatus } from '@/mock-data/reviews';
+import { Review, ReviewList, ReviewStatus } from '@/data/reviews';
 import { ListFilter, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';

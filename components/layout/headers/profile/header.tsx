@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import { User } from '@/mock-data/users';
+import { User } from '@/data/users';
 import { cn } from '@/lib/utils';
 import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
@@ -118,7 +118,7 @@ function HeaderSearch() {
 export default function Header({ member }: { member: User }) {
    const { orgId } = useParams<{ orgId: string }>();
    const [activeTab] = useQueryState('tab', parseAsString.withDefault('assigned'));
-   const { issues } = useIssuesStore();
+   const issues = useIssuesStore((s) => s.issues);
    const { openPanel, togglePanel } = useRightPanelStore();
 
    const count =

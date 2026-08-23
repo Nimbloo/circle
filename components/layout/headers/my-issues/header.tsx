@@ -92,7 +92,7 @@ function HeaderNav() {
 
 function HeaderOptions() {
    const [tab, setTab] = useMyIssuesTab();
-   const { issues } = useIssuesStore();
+   const issues = useIssuesStore((s) => s.issues);
    const { openPanel, togglePanel } = useRightPanelStore();
    const meId = useWorkspaceStore((s) => s.me?.id);
 

@@ -2,7 +2,7 @@
 
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
-import { Review, ReviewFileCategory } from '@/mock-data/reviews';
+import { Review, ReviewFileCategory } from '@/data/reviews';
 import {
    ChevronDown,
    ChevronRight,

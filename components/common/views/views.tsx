@@ -11,7 +11,7 @@ import {
    SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { View } from '@/mock-data/views';
+import { View } from '@/data/views';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useViewsDisplayStore, ViewsOrdering } from '@/store/views-display-store';
 import { ArrowDown, SlidersHorizontal } from 'lucide-react';

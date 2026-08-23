@@ -4,8 +4,8 @@
  * icon string e creator User. Aplicamos fallbacks de ícone e resolvemos o UserRef.
  */
 import { adaptUser } from '@/lib/adapters';
-import type { User } from '@/mock-data/users';
-import type { DocumentFolder, TeamDocument } from '@/mock-data/documents';
+import type { User } from '@/data/users';
+import type { DocumentFolder, TeamDocument } from '@/data/documents';
 import type { FolderDto, DocumentDto } from '@/lib/api/documents';
 
 const FALLBACK_FOLDER_ICON = '📁';

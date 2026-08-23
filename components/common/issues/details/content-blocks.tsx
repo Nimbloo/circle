@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { ContentBlock } from '@/mock-data/issue-details';
+import { ContentBlock } from '@/data/issue-details';
 import { useIssuesStore } from '@/store/issues-store';
 import { Check, ImageIcon, Play } from 'lucide-react';
 import Link from 'next/link';
@@ -87,7 +87,7 @@ function VideoPlaceholder({ title, duration }: { title: string; duration?: strin
 
 function IssueRef({ identifier, note }: { identifier: string; note?: string }) {
    const { orgId } = useParams<{ orgId: string }>();
-   const { issues } = useIssuesStore();
+   const issues = useIssuesStore((s) => s.issues);
    const issue = issues.find((candidate) => candidate.identifier === identifier);
 
    return (
@@ -239,7 +239,7 @@ export { ImagePlaceholder, VideoPlaceholder };
 /** Small helper used by lists of referenced issues in the side panel. */
 export function IssueRefRow({ identifier }: { identifier: string }) {
    const { orgId } = useParams<{ orgId: string }>();
-   const { issues } = useIssuesStore();
+   const issues = useIssuesStore((s) => s.issues);
    // `identifier` pode vir como id (relações da API) ou como identifier (blocos de texto).
    const issue = issues.find(
       (candidate) => candidate.id === identifier || candidate.identifier === identifier

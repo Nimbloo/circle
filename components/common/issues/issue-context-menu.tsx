@@ -35,6 +35,7 @@ import {
    Clipboard,
 } from 'lucide-react';
 import { useIssuesStore } from '@/store/issues-store';
+import { useShallow } from 'zustand/react/shallow';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useStatuses, usePriorities, useLabels } from '@/store/catalog-store';
 import { toast } from 'sonner';
@@ -62,7 +63,19 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
       updateIssue,
       deleteIssue,
       getIssueById,
-   } = useIssuesStore();
+   } = useIssuesStore(
+      useShallow((s) => ({
+         updateIssueStatus: s.updateIssueStatus,
+         updateIssuePriority: s.updateIssuePriority,
+         updateIssueAssignee: s.updateIssueAssignee,
+         addIssueLabel: s.addIssueLabel,
+         removeIssueLabel: s.removeIssueLabel,
+         updateIssueProject: s.updateIssueProject,
+         updateIssue: s.updateIssue,
+         deleteIssue: s.deleteIssue,
+         getIssueById: s.getIssueById,
+      }))
+   );
 
    const handleDelete = () => {
       if (!issueId) return;

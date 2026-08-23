@@ -3,7 +3,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { adaptProjectDetail, emptyProjectDetail } from '@/lib/adapters-project-detail';
 import { api } from '@/lib/client';
-import type { ProjectDetail } from '@/mock-data/project-details';
+import type { ProjectDetail } from '@/data/project-details';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
@@ -53,7 +53,7 @@ function Card({ children, className }: { children: React.ReactNode; className?: 
  */
 export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) {
    const { orgId } = useParams<{ orgId: string }>();
-   const { issues: allIssues } = useIssuesStore();
+   const allIssues = useIssuesStore((s) => s.issues);
    const teams = useWorkspaceStore((s) => s.teams);
 
    const project = useWorkspaceStore((s) => s.getProjectById(projectId));

@@ -2,7 +2,7 @@
 
 import { cn } from '@/lib/utils';
 import { fetchReview } from '@/lib/adapters-reviews';
-import type { Review } from '@/mock-data/reviews';
+import type { Review } from '@/data/reviews';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';

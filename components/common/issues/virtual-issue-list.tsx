@@ -2,7 +2,7 @@
 
 import { useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { Issue } from '@/mock-data/issues';
+import type { Issue } from '@/data/issues';
 import { IssueLine } from './issue-line';
 import type { IssueGroupDescriptor } from './group-issues';
 

@@ -1,13 +1,13 @@
 /** Adapters das entidades de referência: API DTO -> tipos ricos do frontend. */
 import { Cuboid } from 'lucide-react';
-import { status as statusCatalog, Status } from '@/mock-data/status';
-import { priorities as priorityCatalog, Priority } from '@/mock-data/priorities';
-import { User } from '@/mock-data/users';
-import { Health, Project } from '@/mock-data/projects';
-import { Team } from '@/mock-data/teams';
-import { Cycle } from '@/mock-data/cycles';
-import { Initiative } from '@/mock-data/initiatives';
-import { View } from '@/mock-data/views';
+import { status as statusCatalog, Status } from '@/data/status';
+import { priorities as priorityCatalog, Priority } from '@/data/priorities';
+import { User } from '@/data/users';
+import { Health, Project } from '@/data/projects';
+import { Team } from '@/data/teams';
+import { Cycle } from '@/data/cycles';
+import { Initiative } from '@/data/initiatives';
+import { View } from '@/data/views';
 import type { ProjectDto } from '@/lib/api/projects';
 import type { TeamFull } from '@/lib/api/workspace';
 import type { MemberDto } from '@/lib/api/members';

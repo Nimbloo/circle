@@ -16,8 +16,8 @@ import type {
    ProjectActivityDto,
 } from '@/lib/api/project-detail';
 import type { UserRef } from '@/lib/api/issues';
-import type { ProjectDetail } from '@/mock-data/project-details';
-import type { User } from '@/mock-data/users';
+import type { ProjectDetail } from '@/data/project-details';
+import type { User } from '@/data/users';
 
 /** ProjectDetail "casca" — só o id, com o conteúdo editorial vazio (estado de loading/erro). */
 export function emptyProjectDetail(projectId: string): ProjectDetail {

@@ -6,7 +6,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { RiEditLine } from '@remixicon/react';
 import { useState, useEffect, useCallback } from 'react';
-import { Issue } from '@/mock-data/issues';
+import { Issue } from '@/data/issues';
 import { usePriorities, useStatuses } from '@/store/catalog-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
@@ -28,7 +28,8 @@ import type { TemplateDto } from '@/lib/api/templates';
 export function CreateNewIssue() {
    const [createMore, setCreateMore] = useState<boolean>(false);
    const { isOpen, defaultStatus, openModal, closeModal } = useCreateIssueStore();
-   const { addIssue, getAllIssues } = useIssuesStore();
+   const addIssue = useIssuesStore((s) => s.addIssue);
+   const getAllIssues = useIssuesStore((s) => s.getAllIssues);
    const status = useStatuses();
    const priorities = usePriorities();
    const params = useParams<{ teamId?: string }>();

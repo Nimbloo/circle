@@ -3,8 +3,8 @@
 import ProjectsTimeline from '@/components/common/projects/projects-timeline';
 import { ProjectGroup } from '@/components/common/projects/projects';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Initiative, INITIATIVE_STATUS_META } from '@/mock-data/initiatives';
-import { Project } from '@/mock-data/projects';
+import { Initiative, INITIATIVE_STATUS_META } from '@/data/initiatives';
+import { Project } from '@/data/projects';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { CalendarRange, ChevronDown, Plus, Tag, UserRound } from 'lucide-react';
 import Link from 'next/link';

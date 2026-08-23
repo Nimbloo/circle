@@ -1,6 +1,6 @@
 'use client';
 
-import type { Review } from '@/mock-data/reviews';
+import type { Review } from '@/data/reviews';
 import { DiffStat, PrIcon } from './review-shared';
 
 /**

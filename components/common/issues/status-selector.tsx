@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useIssuesStore } from '@/store/issues-store';
-import { Status } from '@/mock-data/status';
+import { Status } from '@/data/status';
 import { useStatuses } from '@/store/catalog-store';
 import { CheckIcon } from 'lucide-react';
 import { useId, useState } from 'react';
@@ -29,7 +29,8 @@ export function StatusSelector({ status, issueId }: StatusSelectorProps) {
    const value = status.id;
 
    const allStatus = useStatuses();
-   const { updateIssueStatus, filterByStatus } = useIssuesStore();
+   const updateIssueStatus = useIssuesStore((s) => s.updateIssueStatus);
+   const filterByStatus = useIssuesStore((s) => s.filterByStatus);
 
    const handleStatusChange = (statusId: string) => {
       setOpen(false);

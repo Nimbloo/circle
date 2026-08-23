@@ -23,13 +23,13 @@ import {
    notification,
 } from './schema';
 
-import { users } from '@/mock-data/users';
-import { teams } from '@/mock-data/teams';
-import { projects } from '@/mock-data/projects';
-import { issues } from '@/mock-data/issues';
-import { cycles } from '@/mock-data/cycles';
-import { initiatives } from '@/mock-data/initiatives';
-import { views } from '@/mock-data/views';
+import { users } from '@/data/users';
+import { teams } from '@/data/teams';
+import { projects } from '@/data/projects';
+import { issues } from '@/data/issues';
+import { cycles } from '@/data/cycles';
+import { initiatives } from '@/data/initiatives';
+import { views } from '@/data/views';
 
 function ts(dateish: string | undefined): Date {
    const d = dateish ? new Date(dateish) : new Date('2026-01-01');

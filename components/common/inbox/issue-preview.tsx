@@ -6,11 +6,11 @@ import { LabelBadge } from '@/components/common/issues/label-badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { getNotificationIcon } from '@/lib/notification-utils';
-import type { IssueDetail } from '@/mock-data/issue-details';
+import type { IssueDetail } from '@/data/issue-details';
 import { adaptIssueDetail } from '@/lib/adapters-issue-detail';
 import { api } from '@/lib/client';
 import { ISSUE_CHANGED_EVENT } from '@/lib/use-live-sync';
-import { InboxItem } from '@/mock-data/inbox';
+import { InboxItem } from '@/data/inbox';
 import { useIssuesStore } from '@/store/issues-store';
 import { useNotificationsStore } from '@/store/notifications-store';
 import { ArrowUpRight, Check } from 'lucide-react';
@@ -32,7 +32,7 @@ interface IssuePreviewProps {
 export default function IssuePreview({ notification, onMarkAsRead }: IssuePreviewProps) {
    const { orgId } = useParams<{ orgId: string }>();
    const { getUnreadCount } = useNotificationsStore();
-   const { issues } = useIssuesStore();
+   const issues = useIssuesStore((s) => s.issues);
 
    // Issue viva atrás da notificação (para status/assignee/labels em tempo real).
    const issue = notification

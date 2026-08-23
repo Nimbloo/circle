@@ -1,5 +1,5 @@
-import { InboxItem, NotificationType } from '@/mock-data/inbox';
-import type { Issue } from '@/mock-data/issues';
+import { InboxItem, NotificationType } from '@/data/inbox';
+import type { Issue } from '@/data/issues';
 import type { NotificationDto } from '@/lib/api/notifications';
 import { adaptUser } from '@/lib/adapters';
 import { api } from '@/lib/client';

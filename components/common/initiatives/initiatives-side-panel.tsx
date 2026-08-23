@@ -2,8 +2,8 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
-import { Initiative } from '@/mock-data/initiatives';
-import { health as allHealth } from '@/mock-data/projects';
+import { Initiative } from '@/data/initiatives';
+import { health as allHealth } from '@/data/projects';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { UserRound } from 'lucide-react';
 import { useMemo, useState } from 'react';

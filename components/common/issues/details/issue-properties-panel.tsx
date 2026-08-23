@@ -13,9 +13,9 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useIssuesStore } from '@/store/issues-store';
-import { IssueDetail } from '@/mock-data/issue-details';
-import { Issue } from '@/mock-data/issues';
-import { LabelInterface } from '@/mock-data/labels';
+import { IssueDetail } from '@/data/issue-details';
+import { Issue } from '@/data/issues';
+import { LabelInterface } from '@/data/labels';
 import { Ban, CheckIcon, GitPullRequestArrow } from 'lucide-react';
 import { useState } from 'react';
 import { LabelBadge } from '../label-badge';

@@ -30,7 +30,7 @@ export default function CycleIssues({ cycleView }: CycleIssuesProps) {
    const { isSearchOpen, searchQuery } = useSearchStore();
    const { viewType } = useViewStore();
    const { filters } = useFilterStore();
-   const { issues } = useIssuesStore();
+   const issues = useIssuesStore((s) => s.issues);
    const { openPanel } = useRightPanelStore();
    const getCurrentCycle = useWorkspaceStore((s) => s.getCurrentCycle);
    const getUpcomingCycle = useWorkspaceStore((s) => s.getUpcomingCycle);

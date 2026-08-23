@@ -9,7 +9,7 @@
  *
  * Os fetchers usam o cliente tipado global (`api.reviews`, em lib/client.ts).
  */
-import type { Review, ReviewStatus } from '@/mock-data/reviews';
+import type { Review, ReviewStatus } from '@/data/reviews';
 import type { ReviewDto } from '@/lib/api/reviews';
 import { api, ApiError } from '@/lib/client';
 

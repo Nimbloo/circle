@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { adaptProjectDetail, emptyProjectDetail } from '@/lib/adapters-project-detail';
 import { api } from '@/lib/client';
-import type { ProjectDetail } from '@/mock-data/project-details';
+import type { ProjectDetail } from '@/data/project-details';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
@@ -27,7 +27,7 @@ const formatDay = (iso?: string) => (iso ? format(parseISO(iso), 'MMM do') : 'â€
 export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    const project = useWorkspaceStore((s) => s.getProjectById(projectId));
    const loaded = useWorkspaceStore((s) => s.loaded);
-   const { issues: allIssues } = useIssuesStore();
+   const allIssues = useIssuesStore((s) => s.issues);
    const { orgId } = useParams<{ orgId: string }>();
    const teams = useWorkspaceStore((s) => s.teams);
    const scrollRef = useRef<HTMLDivElement>(null);

@@ -2,8 +2,8 @@
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Issue } from '@/mock-data/issues';
-import type { Status } from '@/mock-data/status';
+import { Issue } from '@/data/issues';
+import type { Status } from '@/data/status';
 import { usePriorities, useWorkflowOrderedStatuses } from '@/store/catalog-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { X } from 'lucide-react';

@@ -1,6 +1,6 @@
 'use client';
 
-import { Issue } from '@/mock-data/issues';
+import { Issue } from '@/data/issues';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
 
 export const MY_ISSUES_TABS = ['assigned', 'created', 'subscribed', 'activity'] as const;

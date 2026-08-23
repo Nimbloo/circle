@@ -12,7 +12,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { User } from '@/mock-data/users';
+import { User } from '@/data/users';
 import { CheckIcon, UserCircle } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -27,7 +27,7 @@ export function AssigneeSelector({ assignee, onChange }: AssigneeSelectorProps) 
    const [open, setOpen] = useState<boolean>(false);
    const [value, setValue] = useState<string | null>(assignee?.id || null);
 
-   const { filterByAssignee } = useIssuesStore();
+   const filterByAssignee = useIssuesStore((s) => s.filterByAssignee);
    const users = useWorkspaceStore((s) => s.users);
 
    useEffect(() => {

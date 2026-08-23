@@ -2,17 +2,21 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { ok, notFound } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
-import { getIssue, updateIssue, deleteIssue } from '@/lib/api/issues';
+import { getIssue, getIssueByIdentifier, updateIssue, deleteIssue } from '@/lib/api/issues';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 type Params = { params: Promise<{ id: string }> };
 
+// UUID v4 (o id interno). Se o path NÃO for UUID, é um identifier (ex: ENG-42) —
+// permite abrir /issue/ENG-42 direto sem precisar do store hidratado (elimina o waterfall).
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function GET(_req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      const dto = await getIssue(db, id);
+      const dto = UUID_RE.test(id) ? await getIssue(db, id) : await getIssueByIdentifier(db, id);
       return dto ? ok(dto) : notFound(`Issue '${id}' não encontrada`);
    });
 }

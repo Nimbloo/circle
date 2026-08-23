@@ -25,6 +25,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { usePriorities, useStatuses } from '@/store/catalog-store';
 import { useBulkSelectionStore } from '@/store/bulk-selection-store';
 import { useIssuesStore } from '@/store/issues-store';
+import { useShallow } from 'zustand/react/shallow';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { BarChart3, CircleDot, Trash2, User as UserIcon, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -40,7 +41,14 @@ export function BulkActionsBar() {
    const allStatus = useStatuses();
    const priorities = usePriorities();
    const { updateIssueStatus, updateIssuePriority, updateIssueAssignee, deleteIssue } =
-      useIssuesStore();
+      useIssuesStore(
+         useShallow((s) => ({
+            updateIssueStatus: s.updateIssueStatus,
+            updateIssuePriority: s.updateIssuePriority,
+            updateIssueAssignee: s.updateIssueAssignee,
+            deleteIssue: s.deleteIssue,
+         }))
+      );
 
    const ids = [...selected];
    if (ids.length === 0) return null;
