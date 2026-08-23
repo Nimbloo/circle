@@ -45,7 +45,7 @@ import { toast } from 'sonner';
 
 const STATUS_IDS = Object.keys(INITIATIVE_STATUS_META) as InitiativeStatus[];
 
-function EditInitiativeDialog({
+export function EditInitiativeDialog({
    initiative,
    open,
    onOpenChange,

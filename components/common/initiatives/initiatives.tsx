@@ -43,9 +43,11 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
 import { useMemo, useState } from 'react';
-import { CreateInitiativeButton } from './create-initiative-dialog';
 import { InitiativeStatusIcon } from './initiative-status-icon';
 import { InitiativesSidePanel } from './initiatives-side-panel';
+import { InlineNewInitiative } from './inline-new-initiative';
+import { InitiativeContextMenu } from './initiative-context-menu';
+import { useInlineInitiativeStore } from '@/store/inline-initiative-store';
 
 const TABS = ['active', 'planned', 'all'] as const;
 
@@ -327,82 +329,84 @@ function InitiativeRow({
    const { completed } = countCompletedProjects(initiative.id);
 
    return (
-      <Link
-         href={`/${orgId}/initiative/${initiative.id}`}
-         className="flex items-center gap-2 px-6 py-2 border-b border-border/50 hover:bg-sidebar/50 transition-colors text-sm"
-      >
-         <span className="inline-flex size-6 items-center justify-center rounded bg-muted/50 text-sm shrink-0">
-            {initiative.icon}
-         </span>
-         <span className="flex flex-col min-w-0 flex-1">
-            <span className="font-medium truncate">{initiative.name}</span>
-            {displayProperties.description && initiative.description && (
-               <span className="text-xs text-muted-foreground truncate">
-                  {initiative.description}
-               </span>
-            )}
-         </span>
-         {showStatus && displayProperties.status && (
-            <span className="hidden md:flex items-center gap-1.5 w-28 shrink-0 text-xs">
-               <InitiativeStatusIcon status={initiative.status} />
-               {INITIATIVE_STATUS_META[initiative.status].label}
+      <InitiativeContextMenu initiative={initiative}>
+         <Link
+            href={`/${orgId}/initiative/${initiative.id}`}
+            className="flex items-center gap-2 px-6 py-2 border-b border-border/50 hover:bg-sidebar/50 transition-colors text-sm"
+         >
+            <span className="inline-flex size-6 items-center justify-center rounded bg-muted/50 text-sm shrink-0">
+               {initiative.icon}
             </span>
-         )}
-         {displayProperties.priority && (
-            <span className="hidden sm:flex w-16 shrink-0 items-center">
-               <initiative.priority.icon className="size-4 text-muted-foreground" />
-            </span>
-         )}
-         {displayProperties.owner && (
-            <span className="hidden sm:flex w-14 shrink-0">
-               {initiative.owner ? (
-                  <Avatar className="size-5">
-                     <AvatarImage
-                        src={initiative.owner.avatarUrl || undefined}
-                        alt={initiative.owner.name}
-                     />
-                     <AvatarFallback className="text-[9px]">
-                        {initiative.owner.name[0]}
-                     </AvatarFallback>
-                  </Avatar>
-               ) : (
-                  <UserRound className="size-4 text-muted-foreground" />
+            <span className="flex flex-col min-w-0 flex-1">
+               <span className="font-medium truncate">{initiative.name}</span>
+               {displayProperties.description && initiative.description && (
+                  <span className="text-xs text-muted-foreground truncate">
+                     {initiative.description}
+                  </span>
                )}
             </span>
-         )}
-         {displayProperties.target && (
-            <span className="hidden md:block w-20 shrink-0 text-xs text-muted-foreground">
-               {initiative.target ?? '—'}
-            </span>
-         )}
-         {displayProperties.projects && (
-            <span className="hidden md:flex items-center gap-1 w-16 shrink-0 text-xs text-muted-foreground">
-               <BadgeCheck className="size-3.5 text-violet-400" />
-               {completed} / {projects.length}
-            </span>
-         )}
-         {displayProperties.health && (
-            <span className="hidden xl:flex items-center gap-1.5 w-28 shrink-0 text-xs text-muted-foreground">
-               <span
-                  className={cn(
-                     'size-3.5 rounded-full border-2 shrink-0',
-                     initiative.health.id === 'no-update' && 'border-muted-foreground/40'
+            {showStatus && displayProperties.status && (
+               <span className="hidden md:flex items-center gap-1.5 w-28 shrink-0 text-xs">
+                  <InitiativeStatusIcon status={initiative.status} />
+                  {INITIATIVE_STATUS_META[initiative.status].label}
+               </span>
+            )}
+            {displayProperties.priority && (
+               <span className="hidden sm:flex w-16 shrink-0 items-center">
+                  <initiative.priority.icon className="size-4 text-muted-foreground" />
+               </span>
+            )}
+            {displayProperties.owner && (
+               <span className="hidden sm:flex w-14 shrink-0">
+                  {initiative.owner ? (
+                     <Avatar className="size-5">
+                        <AvatarImage
+                           src={initiative.owner.avatarUrl || undefined}
+                           alt={initiative.owner.name}
+                        />
+                        <AvatarFallback className="text-[9px]">
+                           {initiative.owner.name[0]}
+                        </AvatarFallback>
+                     </Avatar>
+                  ) : (
+                     <UserRound className="size-4 text-muted-foreground" />
                   )}
-                  style={
-                     initiative.health.id !== 'no-update'
-                        ? { borderColor: initiative.health.color }
-                        : undefined
-                  }
-               />
-               {initiative.health.id === 'no-update' ? 'No updates' : initiative.health.name}
-            </span>
-         )}
-         {displayProperties.activeProjects && (
-            <span className="hidden xl:block w-24 shrink-0">
-               <ActiveProjectDots initiative={initiative} />
-            </span>
-         )}
-      </Link>
+               </span>
+            )}
+            {displayProperties.target && (
+               <span className="hidden md:block w-20 shrink-0 text-xs text-muted-foreground">
+                  {initiative.target ?? '—'}
+               </span>
+            )}
+            {displayProperties.projects && (
+               <span className="hidden md:flex items-center gap-1 w-16 shrink-0 text-xs text-muted-foreground">
+                  <BadgeCheck className="size-3.5 text-violet-400" />
+                  {completed} / {projects.length}
+               </span>
+            )}
+            {displayProperties.health && (
+               <span className="hidden xl:flex items-center gap-1.5 w-28 shrink-0 text-xs text-muted-foreground">
+                  <span
+                     className={cn(
+                        'size-3.5 rounded-full border-2 shrink-0',
+                        initiative.health.id === 'no-update' && 'border-muted-foreground/40'
+                     )}
+                     style={
+                        initiative.health.id !== 'no-update'
+                           ? { borderColor: initiative.health.color }
+                           : undefined
+                     }
+                  />
+                  {initiative.health.id === 'no-update' ? 'No updates' : initiative.health.name}
+               </span>
+            )}
+            {displayProperties.activeProjects && (
+               <span className="hidden xl:block w-24 shrink-0">
+                  <ActiveProjectDots initiative={initiative} />
+               </span>
+            )}
+         </Link>
+      </InitiativeContextMenu>
    );
 }
 
@@ -415,6 +419,8 @@ export default function Initiatives() {
    const { grouping, ordering, displayProperties } = useInitiativesDisplayStore();
    const [showPanel, setShowPanel] = useState(true);
    const allInitiatives = useWorkspaceStore((s) => s.initiatives);
+   const creating = useInlineInitiativeStore((s) => s.creating);
+   const startCreate = useInlineInitiativeStore((s) => s.start);
 
    const displayed = useMemo(() => {
       let list = allInitiatives.slice();
@@ -510,7 +516,10 @@ export default function Initiatives() {
                )}
             </div>
 
-            {displayed.length === 0 ? (
+            {/* Criação INLINE (padrão Linear): linha editável no topo da lista, sem modal. */}
+            {creating && <InlineNewInitiative defaultStatus={tab as InitiativeStatus} />}
+
+            {displayed.length === 0 && !creating ? (
                <div className="flex flex-col items-center justify-center gap-4 py-24 text-center">
                   <div className="flex size-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
                      <Goal className="size-6" />
@@ -527,7 +536,11 @@ export default function Initiatives() {
                            : 'Try switching tabs or clearing the filters.'}
                      </p>
                   </div>
-                  {allInitiatives.length === 0 && <CreateInitiativeButton />}
+                  {allInitiatives.length === 0 && (
+                     <Button size="sm" onClick={startCreate}>
+                        New initiative
+                     </Button>
+                  )}
                </div>
             ) : groups ? (
                groups.map((group) => (
