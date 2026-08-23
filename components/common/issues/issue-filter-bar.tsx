@@ -17,7 +17,7 @@ import { useIssueFilterColumns } from './issue-filter-columns';
  * <IssueFilterTrigger/>), like Linear.
  */
 export function IssueFilterBar() {
-   const { issues } = useIssuesStore();
+   const issues = useIssuesStore((s) => s.issues);
    const { filters, setFilters } = useFilterStore();
    const issueFilterColumns = useIssueFilterColumns();
 

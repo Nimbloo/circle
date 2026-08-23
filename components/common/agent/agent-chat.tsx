@@ -168,9 +168,10 @@ function ChatComposer({
 }
 
 /**
- * Functional mock of the Linear Agent page: ask anything, get a canned
- * (deterministic) reply streamed word by word. Conversations live in a
- * client store and can be revisited from the header dropdown.
+ * Página do Agent: pergunte qualquer coisa e obtenha uma resposta de IA REAL
+ * (Bedrock/Claude via `api.agent.chat`) sobre os dados vivos do workspace. A resposta
+ * é transmitida palavra a palavra na bolha. As conversas vivem num store client e
+ * podem ser revisitadas pelo dropdown do header.
  */
 export default function AgentChat() {
    const { chats, activeChatId, sendMessage, failMessage } = useAgentChatStore();

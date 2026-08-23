@@ -149,11 +149,18 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          dueDate: issue.dueDate ?? null,
          estimate: issue.estimate ?? null,
       };
-      // após criar, re-hidrata p/ obter identifier/rank gerados no servidor.
-      // Em falha, remove a issue otimista e propaga o erro p/ o chamador dar o toast.
+      // Reconcilia com o DTO real do servidor (identifier/rank gerados): SPLICE de 1 item
+      // — troca a issue otimista pela real, sem re-baixar todo o board (fim do "reload").
+      // Em falha, restaura o snapshot e propaga o erro p/ o chamador dar o toast.
       return api.issues
          .create(input)
-         .then(() => get().hydrate())
+         .then((dto) => {
+            const fresh = adaptIssues([dto])[0];
+            set((state) => {
+               const next = sortByRank([...state.issues.filter((i) => i.id !== issue.id), fresh]);
+               return { issues: next, issuesByStatus: groupIssuesByStatus(next) };
+            });
+         })
          .catch((err) => {
             set(snapshot);
             throw err;
@@ -295,7 +302,6 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
 
    reorderIssue: (id, beforeId, afterId) => {
       // Otimista: move a issue na ordem do array (o grouping preserva a ordem do array).
-      // O servidor calcula o rank real (rankBetween) — re-hidratamos p/ reconciliar.
       const snapshot = { issues: get().issues, issuesByStatus: get().issuesByStatus };
       set((state) => {
          const arr = state.issues.filter((i) => i.id !== id);
@@ -309,9 +315,17 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          arr.splice(insertAt, 0, moved);
          return { issues: arr, issuesByStatus: groupIssuesByStatus(arr) };
       });
+      // O servidor calcula o rank real (rankBetween) — reconcilia SPLICE de 1 item com o
+      // DTO da resposta (troca só o rank da issue movida), sem re-baixar todo o board.
       api.issues
          .reorder(id, beforeId, afterId)
-         .then(() => get().hydrate())
+         .then((dto) => {
+            const fresh = adaptIssues([dto])[0];
+            set((state) => {
+               const next = sortByRank(state.issues.map((i) => (i.id === id ? fresh : i)));
+               return { issues: next, issuesByStatus: groupIssuesByStatus(next) };
+            });
+         })
          .catch(() => {
             set(snapshot);
             toast.error('Falha ao reordenar a issue');

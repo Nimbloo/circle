@@ -26,7 +26,10 @@ export default function MyIssues() {
    const { isSearchOpen, searchQuery } = useSearchStore();
    const { viewType } = useViewStore();
    const { filters } = useFilterStore();
-   const { issues, loading, error, hydrate } = useIssuesStore();
+   const issues = useIssuesStore((s) => s.issues);
+   const loading = useIssuesStore((s) => s.loading);
+   const error = useIssuesStore((s) => s.error);
+   const hydrate = useIssuesStore((s) => s.hydrate);
    const { openPanel } = useRightPanelStore();
    const meId = useWorkspaceStore((s) => s.me?.id);
    const displayOrderedStatus = useDisplayOrderedStatuses();

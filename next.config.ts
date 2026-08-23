@@ -35,6 +35,10 @@ const nextConfig: NextConfig = {
    /* config options here */
    output: 'standalone',
    devIndicators: false,
+   // Tree-shake barrels grandes (ícones/UI/charts) — só o que é usado entra no chunk.
+   experimental: {
+      optimizePackageImports: ['lucide-react', 'react-icons', 'recharts', '@radix-ui/react-icons'],
+   },
    async headers() {
       return [{ source: '/:path*', headers: SECURITY_HEADERS }];
    },

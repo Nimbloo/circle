@@ -35,7 +35,11 @@ export default function AllIssues({ categories }: AllIssuesProps) {
    const { isSearchOpen, searchQuery } = useSearchStore();
    const { viewType } = useViewStore();
    const { filters } = useFilterStore();
-   const { issues, loading, error, hydrate } = useIssuesStore();
+   // Selectors granulares: só re-renderiza quando o campo lido muda (não o store inteiro).
+   const issues = useIssuesStore((s) => s.issues);
+   const loading = useIssuesStore((s) => s.loading);
+   const error = useIssuesStore((s) => s.error);
+   const hydrate = useIssuesStore((s) => s.hydrate);
    const { openPanel } = useRightPanelStore();
 
    const isSearching = isSearchOpen && searchQuery.trim() !== '';

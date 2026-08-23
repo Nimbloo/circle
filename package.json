@@ -1,6 +1,6 @@
 {
    "name": "circle",
-   "version": "0.14.32",
+   "version": "0.14.33",
    "private": true,
    "scripts": {
       "dev": "next dev --turbopack",
@@ -44,6 +44,7 @@
       "@tanstack/react-virtual": "^3.14.10",
       "bcryptjs": "^3.0.3",
       "class-variance-authority": "^0.7.1",
+      "client-only": "^0.0.1",
       "clsx": "^2.1.1",
       "cmdk": "1.0.0",
       "date-fns": "^4.1.0",
