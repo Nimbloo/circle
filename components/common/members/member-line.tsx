@@ -48,6 +48,11 @@ export default function MemberLine({ user }: MemberLineProps) {
             </div>
          </div>
 
+         {/* Email */}
+         <div className="hidden lg:block w-[220px] shrink-0 text-xs text-muted-foreground truncate pr-2">
+            {user.email}
+         </div>
+
          {/* Status (role) */}
          <div className="w-[110px] shrink-0">
             {isApplication ? (
