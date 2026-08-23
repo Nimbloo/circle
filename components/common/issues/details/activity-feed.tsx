@@ -21,6 +21,7 @@ import {
    Unlock,
 } from 'lucide-react';
 import { ReactNode, useState } from 'react';
+import { useCustomEmojis, customEmojiUrl } from '@/hooks/use-custom-emojis';
 import { toast } from 'sonner';
 import { ContentBlocks } from './content-blocks';
 
@@ -71,6 +72,7 @@ function CommentCard({
    const [draft, setDraft] = useState('');
    const [busy, setBusy] = useState(false);
    const [picking, setPicking] = useState(false);
+   const customEmojis = useCustomEmojis();
 
    // `reactedByMe` é server-truth (vem do DTO), agora modelado em CommentReaction.
    const reactions: CommentReaction[] = item.reactions ?? [];
@@ -204,7 +206,16 @@ function CommentCard({
                         : 'bg-accent/60 border-border/60 hover:bg-accent'
                   )}
                >
-                  {reaction.emoji} {reaction.count}
+                  {(() => {
+                     const url = customEmojiUrl(reaction.emoji);
+                     return url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={url} alt={reaction.emoji} className="size-4 object-contain" />
+                     ) : (
+                        <span>{reaction.emoji}</span>
+                     );
+                  })()}{' '}
+                  {reaction.count}
                </button>
             ))}
             <button
@@ -217,7 +228,7 @@ function CommentCard({
                <SmilePlus className="size-3.5" />
             </button>
             {picking && (
-               <div className="flex items-center gap-1 rounded-full border bg-container px-1.5 py-0.5 shadow-xs">
+               <div className="flex items-center flex-wrap gap-1 rounded-full border bg-container px-1.5 py-0.5 shadow-xs max-w-[220px]">
                   {['👍', '❤️', '🎉'].map((emoji) => (
                      <button
                         key={emoji}
@@ -227,6 +238,19 @@ function CommentCard({
                         className="text-sm transition-transform hover:scale-125 disabled:opacity-40"
                      >
                         {emoji}
+                     </button>
+                  ))}
+                  {customEmojis.map((e) => (
+                     <button
+                        key={e.id}
+                        type="button"
+                        onClick={() => void react(`:${e.shortcode}:`)}
+                        disabled={busy}
+                        title={`:${e.shortcode}:`}
+                        className="transition-transform hover:scale-125 disabled:opacity-40"
+                     >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={e.url} alt={e.shortcode} className="size-4 object-contain" />
                      </button>
                   ))}
                </div>

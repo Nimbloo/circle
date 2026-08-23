@@ -25,6 +25,12 @@ import type { MemberDto } from '@/lib/api/members';
 import type { CycleDto, CreateCycleInput, UpdateCycleInput } from '@/lib/api/cycles';
 import type { TemplateDto, CreateTemplateInput, UpdateTemplateInput } from '@/lib/api/templates';
 import type { StatusDto, CreateStatusInput, UpdateStatusInput } from '@/lib/api/statuses';
+import type { EmojiDto } from '@/lib/api/emojis';
+import type {
+   ProjectTemplateDto,
+   CreateProjectTemplateInput,
+   UpdateProjectTemplateInput,
+} from '@/lib/api/project-templates';
 import type {
    InitiativeDto,
    CreateInitiativeInput,
@@ -131,6 +137,14 @@ export const api = {
       remove: (id: string) => del<{ deleted: boolean }>(`/statuses/${id}`),
       reorder: (ids: string[]) => patch<StatusDto[]>('/statuses', { ids }),
    }),
+
+   /** Custom emojis do workspace (imagem no S3/CDN); escrita exige admin. */
+   emojis: {
+      list: () => get<EmojiDto[]>('/emojis'),
+      create: (input: { shortcode: string; dataUrl: string; contentType: string }) =>
+         post<EmojiDto>('/emojis', input),
+      remove: (id: string) => del<{ deleted: boolean }>(`/emojis/${id}`),
+   },
    priorities: () =>
       get<{ id: string; name: string; position: number; sortRank: number }[]>('/priorities'),
    labels: {
@@ -207,6 +221,15 @@ export const api = {
          patch<TemplateDto>(`/teams/${key}/templates/${id}`, body),
       deleteTemplate: (key: string, id: string) =>
          del<{ deleted: boolean }>(`/teams/${key}/templates/${id}`),
+      /** Templates de PROJETO do time (CRUD; escrita exige admin). */
+      projectTemplates: (key: string) =>
+         get<ProjectTemplateDto[]>(`/teams/${key}/project-templates`),
+      createProjectTemplate: (key: string, input: Omit<CreateProjectTemplateInput, 'teamId'>) =>
+         post<ProjectTemplateDto>(`/teams/${key}/project-templates`, input),
+      updateProjectTemplate: (key: string, id: string, body: UpdateProjectTemplateInput) =>
+         patch<ProjectTemplateDto>(`/teams/${key}/project-templates/${id}`, body),
+      deleteProjectTemplate: (key: string, id: string) =>
+         del<{ deleted: boolean }>(`/teams/${key}/project-templates/${id}`),
    },
 
    integrations: {

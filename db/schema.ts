@@ -535,3 +535,33 @@ export const issueTemplate = pgTable(
    },
    (t) => [index('idx_issue_template_team').on(t.teamId)]
 );
+
+/** Templates de projeto por time: pré-preenchem nome/descrição/status/prioridade/health no novo projeto. */
+export const projectTemplate = pgTable(
+   'project_template',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      teamId: varchar('team_id', { length: 36 })
+         .notNull()
+         .references(() => team.id),
+      name: varchar('name', { length: 128 }).notNull(),
+      projectName: varchar('project_name', { length: 256 }),
+      description: text('description'),
+      statusId: varchar('status_id', { length: 64 }).references(() => status.id),
+      priorityId: varchar('priority_id', { length: 64 }).references(() => priority.id),
+      healthId: varchar('health_id', { length: 64 }).references(() => health.id),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_project_template_team').on(t.teamId)]
+);
+
+/** Emojis customizados do workspace (imagem no S3/CDN), usados em reações. */
+export const customEmoji = pgTable('custom_emoji', {
+   id: varchar('id', { length: 36 }).primaryKey(),
+   shortcode: varchar('shortcode', { length: 64 }).notNull().unique(),
+   s3Key: varchar('s3_key', { length: 256 }).notNull(),
+   url: varchar('url', { length: 512 }).notNull(),
+   contentType: varchar('content_type', { length: 64 }).notNull(),
+   createdBy: varchar('created_by', { length: 36 }).references(() => appUser.id),
+   createdAt: timestamp('created_at').notNull().defaultNow(),
+});

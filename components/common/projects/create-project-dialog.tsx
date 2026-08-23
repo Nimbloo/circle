@@ -20,8 +20,9 @@ import {
    SelectValue,
 } from '@/components/ui/select';
 import { api } from '@/lib/client';
+import type { ProjectTemplateDto } from '@/lib/api/project-templates';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { Plus } from 'lucide-react';
+import { FileText, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -29,6 +30,8 @@ interface Option {
    id: string;
    name: string;
 }
+
+const NO_TEMPLATE = '__none__';
 
 /**
  * Cria um projeto via api.projects.create e re-hidrata o workspace.
@@ -51,6 +54,35 @@ export function CreateProjectButton() {
    const [statuses, setStatuses] = useState<Option[]>([]);
    const [priorities, setPriorities] = useState<Option[]>([]);
    const [healths, setHealths] = useState<Option[]>([]);
+   const [templates, setTemplates] = useState<ProjectTemplateDto[]>([]);
+   const [templateId, setTemplateId] = useState(NO_TEMPLATE);
+
+   // Templates do time selecionado (para pré-preencher). Recarrega ao trocar de time.
+   useEffect(() => {
+      if (!open || !teamId) {
+         setTemplates([]);
+         return;
+      }
+      let alive = true;
+      api.teams
+         .projectTemplates(teamId)
+         .then((t) => alive && setTemplates(t))
+         .catch(() => alive && setTemplates([]));
+      return () => {
+         alive = false;
+      };
+   }, [open, teamId]);
+
+   const applyTemplate = (id: string) => {
+      setTemplateId(id);
+      if (id === NO_TEMPLATE) return;
+      const t = templates.find((x) => x.id === id);
+      if (!t) return;
+      if (t.projectName) setName(t.projectName);
+      if (t.statusId) setStatusId(t.statusId);
+      if (t.priorityId) setPriorityId(t.priorityId);
+      if (t.healthId) setHealthId(t.healthId);
+   };
 
    // Carrega os catálogos (status/priority/health) só ao abrir o diálogo.
    useEffect(() => {
@@ -121,6 +153,27 @@ export function CreateProjectButton() {
                <DialogDescription>Novo projeto no workspace.</DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-3">
+               {templates.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                     <Label className="flex items-center gap-1.5">
+                        <FileText className="size-3.5" />
+                        Template
+                     </Label>
+                     <Select value={templateId} onValueChange={applyTemplate}>
+                        <SelectTrigger>
+                           <SelectValue placeholder="Nenhum" />
+                        </SelectTrigger>
+                        <SelectContent>
+                           <SelectItem value={NO_TEMPLATE}>Nenhum</SelectItem>
+                           {templates.map((t) => (
+                              <SelectItem key={t.id} value={t.id}>
+                                 {t.name}
+                              </SelectItem>
+                           ))}
+                        </SelectContent>
+                     </Select>
+                  </div>
+               )}
                <div className="flex flex-col gap-1.5">
                   <Label htmlFor="project-name">Name</Label>
                   <Input

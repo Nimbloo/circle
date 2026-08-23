@@ -12,13 +12,8 @@ import {
    Blocks,
    Bot,
    Code,
-   Compass,
    FileText,
-   Flame,
-   HeartHandshake,
    LucideIcon,
-   MessageCircleQuestion,
-   Rocket,
    Settings,
    Smile,
    Sparkles,
@@ -59,7 +54,6 @@ export const settingsNav: SettingsNavGroup[] = [
       items: [
          { name: 'Labels', url: '/settings/issue-labels', icon: Tag },
          { name: 'Templates', url: '/settings/issue-templates', icon: FileText },
-         { name: 'SLAs', url: '/settings/slas', icon: Flame },
       ],
    },
    {
@@ -67,19 +61,13 @@ export const settingsNav: SettingsNavGroup[] = [
       items: [
          { name: 'Templates', url: '/settings/project-templates', icon: FileText },
          { name: 'Statuses', url: '/settings/project-statuses', icon: Target },
-         { name: 'Updates', url: '/settings/project-updates', icon: Zap },
       ],
    },
    {
       label: 'Features',
       items: [
          { name: 'AI & Agents', url: '/settings/ai', icon: Sparkles },
-         { name: 'Initiatives', url: '/settings/initiatives', icon: Compass },
-         { name: 'Documents', url: '/settings/documents', icon: FileText },
-         { name: 'Customer requests', url: '/settings/customer-requests', icon: HeartHandshake },
-         { name: 'Releases', url: '/settings/releases', icon: Rocket },
          { name: 'Pulse', url: '/settings/pulse', icon: Zap },
-         { name: 'Asks', url: '/settings/asks', icon: MessageCircleQuestion },
          { name: 'Emojis', url: '/settings/emojis', icon: Smile },
          { name: 'Integrations', url: '/settings/integrations', icon: Blocks },
       ],
