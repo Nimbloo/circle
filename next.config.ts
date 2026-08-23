@@ -2,12 +2,17 @@ import type { NextConfig } from 'next';
 
 // Headers de segurança em toda resposta (defesa em profundidade além do gateway Istio).
 // CSP permite o mínimo do Next (styles inline do runtime; imagens data:/blob: pro avatar
-// base64) e bloqueia embedding (anti-clickjacking) + framing de terceiros.
+// base64 + o CDN CloudFront pros custom emojis) e bloqueia embedding + framing de terceiros.
+// CDN: lido de env no build; fallback pro domínio da distribution (estável).
+const CDN = (process.env.CIRCLE_CDN_URL || 'https://d23ibma5syugvj.cloudfront.net').replace(
+   /\/$/,
+   ''
+);
 const CSP = [
    "default-src 'self'",
    "script-src 'self' 'unsafe-inline'",
    "style-src 'self' 'unsafe-inline'",
-   "img-src 'self' data: blob:",
+   `img-src 'self' data: blob: ${CDN}`,
    "font-src 'self' data:",
    "connect-src 'self'",
    "frame-ancestors 'none'",
