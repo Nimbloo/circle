@@ -36,6 +36,7 @@ import {
    Clipboard,
 } from 'lucide-react';
 import { useIssuesStore } from '@/store/issues-store';
+import { useParams } from 'next/navigation';
 import { useShallow } from 'zustand/react/shallow';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useStatuses, usePriorities, useLabels } from '@/store/catalog-store';
@@ -52,7 +53,9 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
    const status = useStatuses();
    const priorities = usePriorities();
    const labels = useLabels();
+   const { orgId } = useParams<{ orgId: string }>();
    const statusCompleted = status.find((s) => s.category === 'completed');
+   const statusCanceled = status.find((s) => s.category === 'canceled');
    const [confirmOpen, setConfirmOpen] = useState(false);
 
    const {
@@ -149,19 +152,33 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
       toast.success('Due date set to 7 days from now');
    };
 
-   const handleMarkCompleted = () => {
-      if (!issueId || !statusCompleted) return;
-      updateIssueStatus(issueId, statusCompleted);
-      toast.success(`Marked as ${statusCompleted.name}`);
+   const handleMarkAs = (target?: (typeof status)[number]) => {
+      if (!issueId || !target) return;
+      updateIssueStatus(issueId, target);
+      toast.success(`Marked as ${target.name}`);
    };
 
-   const handleCopy = () => {
-      if (!issueId) return;
-      const issue = getIssueById(issueId);
-      if (issue) {
-         navigator.clipboard.writeText(issue.title);
-         toast.success('Copied to clipboard');
-      }
+   const copyToClipboard = (text: string, msg: string) => {
+      void navigator.clipboard.writeText(text).then(() => toast.success(msg));
+   };
+
+   const copyLink = () => {
+      const issue = issueId ? getIssueById(issueId) : undefined;
+      if (!issue) return;
+      copyToClipboard(
+         `${window.location.origin}/${orgId ?? 'nimbloo'}/issue/${issue.identifier}`,
+         'Link copiado'
+      );
+   };
+
+   const copyId = () => {
+      const issue = issueId ? getIssueById(issueId) : undefined;
+      if (issue) copyToClipboard(issue.identifier, 'ID copiado');
+   };
+
+   const copyTitle = () => {
+      const issue = issueId ? getIssueById(issueId) : undefined;
+      if (issue) copyToClipboard(issue.title, 'Título copiado');
    };
 
    // Cycles do time da issue (Linear lista os cycles do time da própria issue).
@@ -297,15 +314,36 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
 
             <ContextMenuSeparator />
 
-            {statusCompleted && (
-               <ContextMenuItem onClick={handleMarkCompleted}>
-                  <CheckCircle2 className="size-4" /> Mark as {statusCompleted.name}
-               </ContextMenuItem>
+            {(statusCompleted || statusCanceled) && (
+               <ContextMenuSub>
+                  <ContextMenuSubTrigger>
+                     <CheckCircle2 className="mr-2 size-4" /> Mark as
+                  </ContextMenuSubTrigger>
+                  <ContextMenuSubContent className="w-48">
+                     {statusCompleted && (
+                        <ContextMenuItem onClick={() => handleMarkAs(statusCompleted)}>
+                           <statusCompleted.icon /> {statusCompleted.name}
+                        </ContextMenuItem>
+                     )}
+                     {statusCanceled && (
+                        <ContextMenuItem onClick={() => handleMarkAs(statusCanceled)}>
+                           <statusCanceled.icon /> {statusCanceled.name}
+                        </ContextMenuItem>
+                     )}
+                  </ContextMenuSubContent>
+               </ContextMenuSub>
             )}
 
-            <ContextMenuItem onClick={handleCopy}>
-               <Clipboard className="size-4" /> Copy
-            </ContextMenuItem>
+            <ContextMenuSub>
+               <ContextMenuSubTrigger>
+                  <Clipboard className="mr-2 size-4" /> Copy
+               </ContextMenuSubTrigger>
+               <ContextMenuSubContent className="w-44">
+                  <ContextMenuItem onClick={copyLink}>Copy link</ContextMenuItem>
+                  <ContextMenuItem onClick={copyId}>Copy ID</ContextMenuItem>
+                  <ContextMenuItem onClick={copyTitle}>Copy title</ContextMenuItem>
+               </ContextMenuSubContent>
+            </ContextMenuSub>
 
             <ContextMenuSeparator />
 
