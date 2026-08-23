@@ -197,9 +197,11 @@ export function CreateProjectButton() {
                });
          }
          await hydrate();
-         reset();
+         // Fecha PRIMEIRO (o reset durante a animação de fechamento evita o flash
+         // do formulário limpo antes do modal sumir).
          setOpen(false);
          toast.success('Project created');
+         reset();
       } catch {
          toast.error('Could not create the project');
       } finally {

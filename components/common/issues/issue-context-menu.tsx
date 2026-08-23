@@ -30,6 +30,7 @@ import {
    Tag,
    Folder,
    CalendarClock,
+   IterationCcw,
    Trash2,
    CheckCircle2,
    Clipboard,
@@ -47,6 +48,7 @@ interface IssueContextMenuProps {
 export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
    const users = useWorkspaceStore((s) => s.users);
    const projects = useWorkspaceStore((s) => s.projects);
+   const getCyclesByTeam = useWorkspaceStore((s) => s.getCyclesByTeam);
    const status = useStatuses();
    const priorities = usePriorities();
    const labels = useLabels();
@@ -133,6 +135,12 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
       toast.success(newProject ? `Project set to ${newProject.name}` : 'Project removed');
    };
 
+   const handleCycleChange = (cycleId: string, label: string) => {
+      if (!issueId) return;
+      updateIssue(issueId, { cycleId });
+      toast.success(cycleId ? `Cycle → ${label}` : 'Removido do cycle');
+   };
+
    const handleSetDueDate = () => {
       if (!issueId) return;
       const dueDate = new Date();
@@ -155,6 +163,10 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
          toast.success('Copied to clipboard');
       }
    };
+
+   // Cycles do time da issue (Linear lista os cycles do time da própria issue).
+   const issue = issueId ? getIssueById(issueId) : undefined;
+   const teamCycles = issue?.teamId ? getCyclesByTeam(issue.teamId) : [];
 
    return (
       <>
@@ -249,6 +261,31 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
                            <project.icon className="size-4" /> {project.name}
                         </ContextMenuItem>
                      ))}
+                  </ContextMenuSubContent>
+               </ContextMenuSub>
+
+               <ContextMenuSub>
+                  <ContextMenuSubTrigger>
+                     <IterationCcw className="mr-2 size-4" /> Cycle
+                  </ContextMenuSubTrigger>
+                  <ContextMenuSubContent className="w-56">
+                     <ContextMenuItem onClick={() => handleCycleChange('', '')}>
+                        <IterationCcw className="size-4 text-muted-foreground" /> No cycle
+                     </ContextMenuItem>
+                     {teamCycles.map((cycle) => (
+                        <ContextMenuItem
+                           key={cycle.id}
+                           onClick={() => handleCycleChange(cycle.id, cycle.name)}
+                        >
+                           <IterationCcw className="size-4" /> {cycle.name}
+                           {issue?.cycleId === cycle.id && (
+                              <CheckCircle2 className="ml-auto size-3.5" />
+                           )}
+                        </ContextMenuItem>
+                     ))}
+                     {teamCycles.length === 0 && (
+                        <ContextMenuItem disabled>Sem cycles no time</ContextMenuItem>
+                     )}
                   </ContextMenuSubContent>
                </ContextMenuSub>
 
