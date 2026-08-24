@@ -19,6 +19,7 @@ import {
 } from '@/db/schema';
 import { ApiError } from './errors';
 import { publish } from './events';
+import { getOrCreateUser } from './users';
 import type { UserRef } from './issues';
 
 type ProjectRow = typeof projectT.$inferSelect;
@@ -287,10 +288,23 @@ export interface UpdateProjectInput {
    initiativeId?: string | null;
 }
 
+/** Rótulos legíveis dos campos, para o feed de atividade do projeto. */
+const PROJECT_FIELD_LABELS: Partial<Record<keyof UpdateProjectInput, string>> = {
+   name: 'name',
+   statusId: 'status',
+   priorityId: 'priority',
+   healthId: 'health',
+   leadId: 'lead',
+   startDate: 'start date',
+   targetDate: 'target date',
+   initiativeId: 'initiative',
+};
+
 export async function updateProject(
    db: Db,
    id: string,
-   patch: UpdateProjectInput
+   patch: UpdateProjectInput,
+   actorEmail?: string
 ): Promise<ProjectDto | null> {
    const existing = await db
       .select({ id: projectT.id, healthId: projectT.healthId })
@@ -325,6 +339,24 @@ export async function updateProject(
                .insert(initiativeProject)
                .values({ initiativeId: patch.initiativeId, projectId: id })
                .onConflictDoNothing();
+         }
+      }
+
+      // Feed de atividade (Linear loga toda mudança). Uma linha por update, resumindo
+      // os campos alterados. Sem actor conhecido, não loga.
+      if (actorEmail) {
+         const changed = (Object.keys(patch) as (keyof UpdateProjectInput)[])
+            .filter((k) => patch[k] !== undefined && PROJECT_FIELD_LABELS[k])
+            .map((k) => PROJECT_FIELD_LABELS[k]);
+         if (changed.length > 0) {
+            const actor = await getOrCreateUser(db, actorEmail);
+            await tx.insert(projectActivity).values({
+               id: randomUUID(),
+               projectId: id,
+               userId: actor.id,
+               text: `changed ${changed.join(', ')}`,
+               createdAt: new Date(),
+            });
          }
       }
    });

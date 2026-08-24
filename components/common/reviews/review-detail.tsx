@@ -1,26 +1,18 @@
 'use client';
 
-import { cn } from '@/lib/utils';
 import { fetchReview } from '@/lib/adapters-reviews';
 import type { Review } from '@/data/reviews';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { ReviewDiff } from './review-diff';
-import { ReviewGuide } from './review-guide';
 import { ReviewOverview } from './review-overview';
 import { DiffStat, IssueCheckIcon, PrIcon } from './review-shared';
 
+// Mantido para compat da assinatura da rota; a UI só mostra Overview (ver abaixo).
 export type ReviewSection = 'overview' | 'guide' | 'diff';
 
-const SECTION_TABS: { key: ReviewSection; label: string; path: string }[] = [
-   { key: 'overview', label: 'Overview', path: '' },
-   { key: 'guide', label: 'Guide', path: '/review' },
-   { key: 'diff', label: 'Diff', path: '/changes' },
-];
-
-/** Right pane of the Reviews split view: breadcrumb, tabs and section body. */
-export function ReviewDetail({ reviewId, section }: { reviewId: string; section: ReviewSection }) {
+/** Right pane of the Reviews split view: breadcrumb + Overview do PR. */
+export function ReviewDetail({ reviewId }: { reviewId: string; section?: ReviewSection }) {
    const { orgId } = useParams<{ orgId: string }>();
    const [review, setReview] = useState<Review | null>(null);
    const [loading, setLoading] = useState(true);
@@ -62,41 +54,29 @@ export function ReviewDetail({ reviewId, section }: { reviewId: string; section:
    return (
       <div className="h-full flex flex-col overflow-hidden">
          <div className="flex items-center gap-2 px-4 h-10 border-b shrink-0 min-w-0">
-            <Link
-               href={`/${orgId}/issue/${review.resolves.identifier}`}
-               className="flex items-center gap-1.5 shrink-0 hover:opacity-80"
-            >
-               <IssueCheckIcon />
-               <span className="text-sm font-medium">{review.resolves.identifier}</span>
-            </Link>
-            <span className="text-muted-foreground text-xs shrink-0">›</span>
+            {/* Só linka pra issue quando o PR resolve uma (título com [ABC-123]);
+                senão o link ia pra /issue/ (morto). */}
+            {review.resolves.identifier && (
+               <>
+                  <Link
+                     href={`/${orgId}/issue/${review.resolves.identifier}`}
+                     className="flex items-center gap-1.5 shrink-0 hover:opacity-80"
+                  >
+                     <IssueCheckIcon />
+                     <span className="text-sm font-medium">{review.resolves.identifier}</span>
+                  </Link>
+                  <span className="text-muted-foreground text-xs shrink-0">›</span>
+               </>
+            )}
             <PrIcon status={review.status} />
             <span className="text-sm font-medium truncate">{review.title}</span>
             <DiffStat additions={review.additions} deletions={review.deletions} />
             <span className="flex-1" />
          </div>
-         <div className="flex items-center justify-between px-4 h-10 border-b shrink-0">
-            <div className="flex items-center gap-1.5">
-               {SECTION_TABS.map((tab) => (
-                  <Link
-                     key={tab.key}
-                     href={`/${orgId}/review/${review.id}${tab.path}`}
-                     className={cn(
-                        'px-2.5 py-1 rounded-md border text-xs font-medium transition-colors',
-                        section === tab.key
-                           ? 'bg-accent border-transparent'
-                           : 'text-muted-foreground hover:bg-accent/50'
-                     )}
-                  >
-                     {tab.label}
-                  </Link>
-               ))}
-            </div>
-         </div>
+         {/* Só Overview: o backend espelha metadata do PR (título/status/branches/
+             counts/checks), sem files/commits/diff — as abas Guide/Diff seriam vazias. */}
          <div className="flex-1 min-h-0 overflow-hidden">
-            {section === 'overview' && <ReviewOverview review={review} />}
-            {section === 'guide' && <ReviewGuide review={review} />}
-            {section === 'diff' && <ReviewDiff review={review} />}
+            <ReviewOverview review={review} />
          </div>
       </div>
    );

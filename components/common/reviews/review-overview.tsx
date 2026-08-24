@@ -3,15 +3,7 @@
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { Review, ReviewFileCategory } from '@/data/reviews';
-import {
-   ChevronDown,
-   ChevronRight,
-   FileCode2,
-   GitCommitHorizontal,
-   Paperclip,
-   Plus,
-   Send,
-} from 'lucide-react';
+import { ChevronDown, ChevronRight, FileCode2, GitCommitHorizontal, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { DiffStat, InlineText, IssueCheckIcon, PrIcon } from './review-shared';
@@ -88,46 +80,50 @@ export function ReviewOverview({ review }: { review: Review }) {
                   </div>
                </div>
 
-               <div className="flex flex-col gap-3">
-                  <div className="flex items-center gap-1 text-sm font-medium">
-                     Description
-                     <ChevronDown className="size-3.5 text-muted-foreground" />
+               {review.summary.length > 0 && (
+                  <div className="flex flex-col gap-3">
+                     <h2 className="text-lg font-semibold">Summary</h2>
+                     <ul className="flex flex-col gap-2 list-disc pl-5 text-sm leading-relaxed">
+                        {review.summary.map((bullet, index) => (
+                           <li key={index}>
+                              <InlineText text={bullet} />
+                           </li>
+                        ))}
+                     </ul>
                   </div>
-                  <h2 className="text-lg font-semibold">Summary</h2>
-                  <ul className="flex flex-col gap-2 list-disc pl-5 text-sm leading-relaxed">
-                     {review.summary.map((bullet, index) => (
-                        <li key={index}>
-                           <InlineText text={bullet} />
-                        </li>
-                     ))}
-                  </ul>
-               </div>
+               )}
 
-               <div className="flex flex-col gap-2">
-                  <h2 className="text-lg font-semibold">Ticket</h2>
-                  <Link
-                     href={`/${orgId}/issue/${review.resolves.identifier}`}
-                     className="inline-flex items-center gap-2 rounded-md bg-muted/60 border border-border/60 px-2 py-1.5 text-sm hover:bg-muted transition-colors self-start"
-                  >
-                     <IssueCheckIcon />
-                     <span className="font-medium">{review.resolves.identifier}</span>
-                     <span className="text-muted-foreground truncate">{review.resolves.title}</span>
-                  </Link>
-               </div>
-
-               <div className="flex flex-col gap-2">
-                  <h2 className="text-lg font-semibold">Test plan</h2>
-                  <div className="flex flex-col gap-1.5">
-                     {review.testPlan.map((item, index) => (
-                        <label key={index} className="flex items-start gap-2 text-sm">
-                           <Checkbox checked={item.checked} disabled className="size-4 mt-0.5" />
-                           <span>
-                              <InlineText text={item.text} />
-                           </span>
-                        </label>
-                     ))}
+               {review.resolves.identifier && (
+                  <div className="flex flex-col gap-2">
+                     <h2 className="text-lg font-semibold">Ticket</h2>
+                     <Link
+                        href={`/${orgId}/issue/${review.resolves.identifier}`}
+                        className="inline-flex items-center gap-2 rounded-md bg-muted/60 border border-border/60 px-2 py-1.5 text-sm hover:bg-muted transition-colors self-start"
+                     >
+                        <IssueCheckIcon />
+                        <span className="font-medium">{review.resolves.identifier}</span>
+                        <span className="text-muted-foreground truncate">
+                           {review.resolves.title}
+                        </span>
+                     </Link>
                   </div>
-               </div>
+               )}
+
+               {review.testPlan.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                     <h2 className="text-lg font-semibold">Test plan</h2>
+                     <div className="flex flex-col gap-1.5">
+                        {review.testPlan.map((item, index) => (
+                           <label key={index} className="flex items-start gap-2 text-sm">
+                              <Checkbox checked={item.checked} disabled className="size-4 mt-0.5" />
+                              <span>
+                                 <InlineText text={item.text} />
+                              </span>
+                           </label>
+                        ))}
+                     </div>
+                  </div>
+               )}
 
                {review.deployment && (
                   <div className="rounded-lg border overflow-hidden text-sm">
@@ -156,22 +152,15 @@ export function ReviewOverview({ review }: { review: Review }) {
                   </div>
                )}
 
-               <div className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm text-muted-foreground">
-                  <span className="size-5 rounded-full bg-muted inline-block shrink-0" />
-                  <span className="flex-1">Leave a reply...</span>
-                  <Paperclip className="size-4" />
-                  <Send className="size-4" />
-               </div>
-
-               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <GitCommitHorizontal className="size-3.5 shrink-0" />
-                  <span className="truncate">
-                     Atlas committed via Nimbloo Agent{' '}
-                     <span className="font-mono">{review.commits.at(-1)?.sha}</span>{' '}
-                     {review.commits.at(-1)?.message} ({review.resolves.identifier}) ·{' '}
-                     {review.commits.at(-1)?.timeAgo}
-                  </span>
-               </div>
+               {review.commits.length > 0 && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                     <GitCommitHorizontal className="size-3.5 shrink-0" />
+                     <span className="truncate">
+                        <span className="font-mono">{review.commits.at(-1)?.sha}</span>{' '}
+                        {review.commits.at(-1)?.message} · {review.commits.at(-1)?.timeAgo}
+                     </span>
+                  </div>
+               )}
 
                {review.reviewNote && (
                   <div className="rounded-lg border p-4 flex flex-col gap-3">

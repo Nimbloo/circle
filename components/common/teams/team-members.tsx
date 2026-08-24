@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { api } from '@/lib/client';
 import type { JoinRequestDto } from '@/lib/api/teams';
-import { RoleControl } from '@/components/common/members/role-control';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Check, Plus, X } from 'lucide-react';
 import { useParams } from 'next/navigation';
@@ -257,11 +256,12 @@ export default function TeamMembers() {
                   {member.email}
                </div>
                <div className="w-[45%] md:w-[20%] flex items-center justify-between">
-                  <RoleControl
-                     userId={member.id}
-                     role={member.role}
-                     className="text-xs px-2 py-1 rounded-md bg-accent text-muted-foreground"
-                  />
+                  {/* Role é workspace-level e só editável na página Members — editar aqui
+                      mudava a role GLOBAL do usuário (escalonamento silencioso). Aqui só
+                      exibe a role atual (read-only). */}
+                  <span className="text-xs px-2 py-1 rounded-md bg-accent text-muted-foreground">
+                     {member.role}
+                  </span>
                   {isAdmin && (
                      <button
                         type="button"

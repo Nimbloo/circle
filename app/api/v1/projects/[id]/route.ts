@@ -33,9 +33,9 @@ const UpdateSchema = z.object({
 export async function PATCH(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      await requireEmail(req);
+      const email = await requireEmail(req);
       const patch = UpdateSchema.parse(await req.json());
-      const dto = await updateProject(db, id, patch);
+      const dto = await updateProject(db, id, patch, email);
       return dto ? ok(dto) : notFound(`Project '${id}' não encontrado`);
    });
 }
