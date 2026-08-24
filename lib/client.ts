@@ -248,8 +248,6 @@ export const api = {
       list: (q = '') => get<MemberDto[]>(`/members${q}`),
       get: (id: string) => get<MemberDto>(`/members/${id}`),
       updateRole: (id: string, role: string) => patch<MemberDto>(`/members/${id}`, { role }),
-      invite: (email: string, role: string) =>
-         post<{ id: string; email: string; role: string }>('/members/invite', { email, role }),
    },
 
    projects: {
