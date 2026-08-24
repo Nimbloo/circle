@@ -124,6 +124,7 @@ export function ProjectPropertiesPanel({
 }: ProjectPropertiesPanelProps) {
    const panelFilter = usePanelFilter();
    const teams = useWorkspaceStore((s) => s.teams);
+   const initiatives = useWorkspaceStore((s) => s.initiatives);
    const completed = issues.filter(isCompleted).length;
 
    const team = teams.find((candidate) => candidate.id === project.teamId);
@@ -306,7 +307,13 @@ export function ProjectPropertiesPanel({
                </PropertyRow>
                <PropertyRow label="Initiatives">
                   {project.initiative ? (
-                     <span className="truncate max-w-44">{project.initiative}</span>
+                     <span className="inline-flex items-center gap-1.5 truncate max-w-44">
+                        <span>
+                           {initiatives.find((i) => i.id === project.initiative)?.icon ?? '🎯'}
+                        </span>
+                        {initiatives.find((i) => i.id === project.initiative)?.name ??
+                           project.initiative}
+                     </span>
                   ) : (
                      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
                         <Compass className="size-3.5" />

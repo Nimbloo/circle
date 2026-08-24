@@ -167,7 +167,11 @@ export default function Inbox() {
                      key={notification.id}
                      notification={notification}
                      isSelected={selectedNotification?.id === notification.id}
-                     onClick={() => setSelectedNotification(notification)}
+                     onClick={() => {
+                        setSelectedNotification(notification);
+                        // Padrão Linear: abrir a notificação já a marca como lida.
+                        if (!notification.read) markAsRead(notification.id);
+                     }}
                      showId={showId}
                      showStatusIcon={showStatusIcon}
                   />

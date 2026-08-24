@@ -28,10 +28,12 @@ import {
 } from '@/components/ui/alert-dialog';
 import { api, ApiError } from '@/lib/client';
 import { View } from '@/data/views';
+import type { ViewFilter } from '@/lib/api/views';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { ViewFilterEditor } from './view-filter-editor';
 
 const errMsg = (e: unknown, fallback: string) =>
    e instanceof ApiError && e.message ? e.message : fallback;
@@ -49,6 +51,7 @@ function RenameViewDialog({
    const [busy, setBusy] = useState(false);
    const [name, setName] = useState(view.name);
    const [description, setDescription] = useState(view.description ?? '');
+   const [filter, setFilter] = useState<ViewFilter>(view.filter ?? {});
 
    const save = async () => {
       if (!name.trim() || busy) return;
@@ -57,6 +60,7 @@ function RenameViewDialog({
          await api.views.update(view.id, {
             name: name.trim(),
             description: description.trim() || null,
+            filter,
          });
          await hydrate();
          onOpenChange(false);
@@ -72,7 +76,7 @@ function RenameViewDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
          <DialogContent>
             <DialogHeader>
-               <DialogTitle>Rename view</DialogTitle>
+               <DialogTitle>Edit view</DialogTitle>
             </DialogHeader>
             <div className="flex flex-col gap-3">
                <div className="flex flex-col gap-1.5">
@@ -90,6 +94,10 @@ function RenameViewDialog({
                      value={description}
                      onChange={(e) => setDescription(e.target.value)}
                   />
+               </div>
+               <div className="flex flex-col gap-1.5">
+                  <Label>Filters</Label>
+                  <ViewFilterEditor type={view.type} filter={filter} onChange={setFilter} />
                </div>
             </div>
             <DialogFooter>
@@ -140,7 +148,7 @@ export function ViewActions({ view }: { view: View }) {
                   }}
                >
                   <Pencil className="size-4" />
-                  Rename
+                  Edit
                </DropdownMenuItem>
                <DropdownMenuItem
                   variant="destructive"

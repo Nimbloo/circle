@@ -20,10 +20,12 @@ import {
    SelectValue,
 } from '@/components/ui/select';
 import { api } from '@/lib/client';
+import type { ViewFilter } from '@/lib/api/views';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { ViewFilterEditor } from './view-filter-editor';
 
 function slugify(v: string): string {
    return v
@@ -45,6 +47,7 @@ export function CreateViewButton({ teamId }: { teamId?: string } = {}) {
    const [name, setName] = useState('');
    const [slug, setSlug] = useState('');
    const [type, setType] = useState<'issue' | 'project'>('issue');
+   const [filter, setFilter] = useState<ViewFilter>({});
 
    const effectiveSlug = slug.trim() || slugify(name);
 
@@ -56,7 +59,7 @@ export function CreateViewButton({ teamId }: { teamId?: string } = {}) {
             slug: effectiveSlug,
             name: name.trim(),
             type,
-            filter: {},
+            filter,
             // View criada no contexto de um time fica team-scoped (senão nascia
             // workspace-level e sumia da lista filtrada por time).
             teamId: teamId ?? null,
@@ -64,6 +67,7 @@ export function CreateViewButton({ teamId }: { teamId?: string } = {}) {
          await hydrate();
          setName('');
          setSlug('');
+         setFilter({});
          setOpen(false);
          toast.success('View created');
       } catch {
@@ -115,6 +119,13 @@ export function CreateViewButton({ teamId }: { teamId?: string } = {}) {
                         <SelectItem value="project">Projects</SelectItem>
                      </SelectContent>
                   </Select>
+               </div>
+               <div className="flex flex-col gap-1.5">
+                  <Label>Filters</Label>
+                  <ViewFilterEditor type={type} filter={filter} onChange={setFilter} />
+                  <p className="text-xs text-muted-foreground">
+                     Sem filtros, a view mostra todos os {type === 'issue' ? 'issues' : 'projects'}.
+                  </p>
                </div>
             </div>
             <DialogFooter>

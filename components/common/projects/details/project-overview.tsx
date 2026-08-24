@@ -27,6 +27,7 @@ const formatDay = (iso?: string) => (iso ? format(parseISO(iso), 'MMM do') : '�
 export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    const project = useWorkspaceStore((s) => s.getProjectById(projectId));
    const loaded = useWorkspaceStore((s) => s.loaded);
+   const initiatives = useWorkspaceStore((s) => s.initiatives);
    const allIssues = useIssuesStore((s) => s.issues);
    const { orgId } = useParams<{ orgId: string }>();
    const teams = useWorkspaceStore((s) => s.teams);
@@ -180,7 +181,15 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                         <div className="flex items-center gap-3">
                            <span className="w-24 text-muted-foreground shrink-0">Initiatives</span>
                            <span className="inline-flex items-center gap-1.5">
-                              📄 {project.initiative}
+                              {(() => {
+                                 const init = initiatives.find((i) => i.id === project.initiative);
+                                 return (
+                                    <>
+                                       <span>{init?.icon ?? '🎯'}</span>
+                                       {init?.name ?? project.initiative}
+                                    </>
+                                 );
+                              })()}
                            </span>
                         </div>
                      )}

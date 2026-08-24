@@ -55,6 +55,7 @@ export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) 
    const { orgId } = useParams<{ orgId: string }>();
    const allIssues = useIssuesStore((s) => s.issues);
    const teams = useWorkspaceStore((s) => s.teams);
+   const initiatives = useWorkspaceStore((s) => s.initiatives);
 
    const project = useWorkspaceStore((s) => s.getProjectById(projectId));
 
@@ -208,7 +209,13 @@ export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) 
                </PropertyRow>
                <PropertyRow label="Initiatives">
                   {project.initiative ? (
-                     <span className="truncate max-w-44">{project.initiative}</span>
+                     <span className="inline-flex items-center gap-1.5 truncate max-w-44">
+                        <span>
+                           {initiatives.find((i) => i.id === project.initiative)?.icon ?? '🎯'}
+                        </span>
+                        {initiatives.find((i) => i.id === project.initiative)?.name ??
+                           project.initiative}
+                     </span>
                   ) : (
                      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
                         <Compass className="size-3.5" />
