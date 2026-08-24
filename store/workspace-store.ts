@@ -15,6 +15,8 @@ import {
 } from '@/lib/adapters-workspace';
 import type { WorkspaceBootstrap } from '@/lib/api/workspace';
 import type { MeDto } from '@/lib/api/users';
+import type { ProjectDto } from '@/lib/api/projects';
+import type { InitiativeDto } from '@/lib/api/initiatives';
 import { useCatalogStore } from '@/store/catalog-store';
 
 interface WorkspaceState {
@@ -29,6 +31,13 @@ interface WorkspaceState {
    views: View[];
 
    hydrate: () => Promise<void>;
+
+   /** Splice de UM project/initiative a partir do DTO do servidor (após uma mutação),
+    * em vez de re-hidratar o workspace inteiro — mesmo padrão do issues-store. */
+   applyProject: (dto: ProjectDto) => void;
+   applyInitiative: (dto: InitiativeDto) => void;
+   removeProjectLocal: (id: string) => void;
+   removeInitiativeLocal: (id: string) => void;
 
    // Helpers (mesmos nomes dos mocks)
    getProjectById: (id: string) => Project | undefined;
@@ -83,6 +92,27 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
          set({ loading: false });
       }
    },
+
+   applyProject: (dto) => {
+      const adapted = adaptProject(dto);
+      set((s) => ({
+         projects: s.projects.some((p) => p.id === adapted.id)
+            ? s.projects.map((p) => (p.id === adapted.id ? adapted : p))
+            : [...s.projects, adapted],
+      }));
+   },
+   applyInitiative: (dto) => {
+      const usersById = new Map(get().users.map((u) => [u.id, u]));
+      const adapted = adaptInitiative(dto, usersById);
+      set((s) => ({
+         initiatives: s.initiatives.some((i) => i.id === adapted.id)
+            ? s.initiatives.map((i) => (i.id === adapted.id ? adapted : i))
+            : [...s.initiatives, adapted],
+      }));
+   },
+   removeProjectLocal: (id) => set((s) => ({ projects: s.projects.filter((p) => p.id !== id) })),
+   removeInitiativeLocal: (id) =>
+      set((s) => ({ initiatives: s.initiatives.filter((i) => i.id !== id) })),
 
    getProjectById: (id) => get().projects.find((p) => p.id === id),
    getProjectsByTeam: (teamId) => get().projects.filter((p) => p.teamId === teamId),

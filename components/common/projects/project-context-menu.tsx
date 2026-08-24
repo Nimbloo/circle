@@ -50,6 +50,8 @@ export function ProjectContextMenu({
 }) {
    const { orgId } = useParams<{ orgId: string }>();
    const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const applyProject = useWorkspaceStore((s) => s.applyProject);
+   const removeProjectLocal = useWorkspaceStore((s) => s.removeProjectLocal);
    const users = useWorkspaceStore((s) => s.users);
    const initiatives = useWorkspaceStore((s) => s.initiatives);
    const statuses = useStatuses();
@@ -60,8 +62,11 @@ export function ProjectContextMenu({
 
    const patch = async (body: UpdateProjectInput, msg: string) => {
       try {
-         await api.projects.update(project.id, body);
-         await hydrate();
+         const dto = await api.projects.update(project.id, body);
+         applyProject(dto);
+         // Mudar o vínculo de initiative afeta o projectIds da initiative (relacional):
+         // reconcilia em background para o detalhe da initiative não ficar stale.
+         if ('initiativeId' in body) void hydrate();
          toast.success(msg);
       } catch {
          toast.error('Could not update the project');
@@ -78,7 +83,7 @@ export function ProjectContextMenu({
       setBusy(true);
       try {
          await api.projects.remove(project.id);
-         await hydrate();
+         removeProjectLocal(project.id);
          toast.success('Project deleted');
          setConfirmOpen(false);
       } catch {

@@ -48,7 +48,8 @@ export default function ProjectLine({ project }: ProjectLineProps) {
    const { orgId } = useParams<{ orgId: string }>();
    const issues = useIssuesStore((s) => s.issues);
    const { displayProperties } = useProjectsDisplayStore();
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const applyProject = useWorkspaceStore((s) => s.applyProject);
+   const removeProjectLocal = useWorkspaceStore((s) => s.removeProjectLocal);
    const [confirmOpen, setConfirmOpen] = useState(false);
    const [busy, setBusy] = useState(false);
 
@@ -68,8 +69,9 @@ export default function ProjectLine({ project }: ProjectLineProps) {
 
    const patchProject = async (patch: UpdateProjectInput, okMsg: string) => {
       try {
-         await api.projects.update(project.id, patch);
-         await hydrate();
+         // Splice do DTO retornado — sem re-hidratar o workspace inteiro.
+         const dto = await api.projects.update(project.id, patch);
+         applyProject(dto);
          toast.success(okMsg);
       } catch {
          toast.error('Could not update the project');
@@ -81,7 +83,7 @@ export default function ProjectLine({ project }: ProjectLineProps) {
       setBusy(true);
       try {
          await api.projects.remove(project.id);
-         await hydrate();
+         removeProjectLocal(project.id);
          toast.success('Project deleted');
          setConfirmOpen(false);
       } catch {

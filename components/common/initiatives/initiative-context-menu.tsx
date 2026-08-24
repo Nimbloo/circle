@@ -48,7 +48,8 @@ export function InitiativeContextMenu({
    children: React.ReactNode;
 }) {
    const { orgId } = useParams<{ orgId: string }>();
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const applyInitiative = useWorkspaceStore((s) => s.applyInitiative);
+   const removeInitiativeLocal = useWorkspaceStore((s) => s.removeInitiativeLocal);
    const users = useWorkspaceStore((s) => s.users);
    const priorities = usePriorities();
    const [editOpen, setEditOpen] = useState(false);
@@ -57,8 +58,8 @@ export function InitiativeContextMenu({
 
    const patch = async (body: Parameters<typeof api.initiatives.update>[1], msg: string) => {
       try {
-         await api.initiatives.update(initiative.id, body);
-         await hydrate();
+         const dto = await api.initiatives.update(initiative.id, body);
+         applyInitiative(dto);
          toast.success(msg);
       } catch {
          toast.error('Não foi possível atualizar a initiative');
@@ -75,7 +76,7 @@ export function InitiativeContextMenu({
       setBusy(true);
       try {
          await api.initiatives.remove(initiative.id);
-         await hydrate();
+         removeInitiativeLocal(initiative.id);
          toast.success('Initiative deleted');
          setConfirmOpen(false);
       } catch {
