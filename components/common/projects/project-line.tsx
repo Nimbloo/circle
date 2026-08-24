@@ -57,6 +57,15 @@ export default function ProjectLine({ project }: ProjectLineProps) {
    const computed = useMemo(() => countIssues(issues, project.id), [issues, project.id]);
    const issueCount = project.issueCount ?? computed;
 
+   // % de conclusão REAL derivado das issues do projeto (o campo project.percentComplete
+   // é estático/0 e nenhuma UI o atualiza — mostrava 0% congelado para todo projeto).
+   const percentComplete = useMemo(() => {
+      const projectIssues = issues.filter((i) => i.project?.id === project.id);
+      if (projectIssues.length === 0) return project.percentComplete;
+      const done = projectIssues.filter((i) => i.status.category === 'completed').length;
+      return Math.round((done / projectIssues.length) * 100);
+   }, [issues, project.id, project.percentComplete]);
+
    const patchProject = async (patch: UpdateProjectInput, okMsg: string) => {
       try {
          await api.projects.update(project.id, patch);
@@ -162,7 +171,7 @@ export default function ProjectLine({ project }: ProjectLineProps) {
                <div className="w-[90px] shrink-0">
                   <StatusWithPercent
                      status={project.status}
-                     percentComplete={project.percentComplete}
+                     percentComplete={percentComplete}
                      onStatusChange={(statusId) => patchProject({ statusId }, 'Status updated')}
                   />
                </div>

@@ -111,6 +111,28 @@ export function CommandPalette() {
 
    const orgId = pathname.split('/')[1] || 'nimbloo';
 
+   // Busca de entidades no ⌘K (padrão Linear): quando o usuário digita, além dos
+   // comandos estáticos, mostra issues/projects/members que casam com o texto e
+   // navega direto. Antes o ⌘K só filtrava a lista fixa de comandos.
+   const searchResults = useMemo(() => {
+      const q = query.trim().toLowerCase();
+      if (!q) return { issues: [], projects: [], members: [] };
+      return {
+         issues: issues
+            .filter(
+               (i) => i.title.toLowerCase().includes(q) || i.identifier.toLowerCase().includes(q)
+            )
+            .slice(0, 6),
+         projects: allProjects.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 4),
+         members: users
+            .filter((u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q))
+            .slice(0, 4),
+      };
+   }, [query, issues, allProjects, users]);
+   const hasSearchResults =
+      searchResults.issues.length + searchResults.projects.length + searchResults.members.length >
+      0;
+
    const contextIssue = useMemo<Issue | undefined>(() => {
       const match = pathname.match(/^\/[^/]+\/issue\/([^/]+)/);
       if (!match) return undefined;
@@ -405,6 +427,63 @@ export function CommandPalette() {
 
                   {route === 'root' && !issue && (
                      <>
+                        {hasSearchResults && (
+                           <>
+                              {searchResults.issues.length > 0 && (
+                                 <CommandGroup heading="Issues">
+                                    {searchResults.issues.map((i) => (
+                                       <CommandItem
+                                          key={i.id}
+                                          value={`${query} ${i.identifier} ${i.title}`}
+                                          onSelect={() => go(`/issue/${i.identifier}`)}
+                                       >
+                                          <CircleDot className="text-muted-foreground" />
+                                          <span className="text-muted-foreground text-xs shrink-0">
+                                             {i.identifier}
+                                          </span>
+                                          <span className="truncate">{i.title}</span>
+                                       </CommandItem>
+                                    ))}
+                                 </CommandGroup>
+                              )}
+                              {searchResults.projects.length > 0 && (
+                                 <CommandGroup heading="Projects">
+                                    {searchResults.projects.map((p) => (
+                                       <CommandItem
+                                          key={p.id}
+                                          value={`${query} ${p.name}`}
+                                          onSelect={() => go(`/project/${p.id}/overview`)}
+                                       >
+                                          <Box className="text-muted-foreground" />
+                                          <span className="truncate">{p.name}</span>
+                                       </CommandItem>
+                                    ))}
+                                 </CommandGroup>
+                              )}
+                              {searchResults.members.length > 0 && (
+                                 <CommandGroup heading="Members">
+                                    {searchResults.members.map((u) => (
+                                       <CommandItem
+                                          key={u.id}
+                                          value={`${query} ${u.name} ${u.email}`}
+                                          onSelect={() => go(`/profiles/${u.id}`)}
+                                       >
+                                          <Avatar className="size-5">
+                                             <AvatarImage
+                                                src={u.avatarUrl || undefined}
+                                                alt={u.name}
+                                             />
+                                             <AvatarFallback className="text-[9px]">
+                                                {u.name[0]}
+                                             </AvatarFallback>
+                                          </Avatar>
+                                          <span className="truncate">{u.name}</span>
+                                       </CommandItem>
+                                    ))}
+                                 </CommandGroup>
+                              )}
+                           </>
+                        )}
                         <CommandGroup heading="Actions">
                            <CommandItem
                               onSelect={() => {

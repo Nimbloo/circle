@@ -3,17 +3,27 @@
 import { CapacityRing } from '@/components/common/cycles/capacity-ring';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Project } from '@/data/projects';
+import { useIssuesStore } from '@/store/issues-store';
 import { useProjectsDisplayStore } from '@/store/projects-display-store';
 import { format, parseISO } from 'date-fns';
 import { Calendar } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { useMemo } from 'react';
 import { ProjectGroup } from './projects';
 import { ProjectContextMenu } from './project-context-menu';
 
 function ProjectCard({ project }: { project: Project }) {
    const { orgId } = useParams<{ orgId: string }>();
    const { displayProperties } = useProjectsDisplayStore();
+   const issues = useIssuesStore((s) => s.issues);
+   // % de conclusão real (o campo estático project.percentComplete fica em 0).
+   const percentComplete = useMemo(() => {
+      const projectIssues = issues.filter((i) => i.project?.id === project.id);
+      if (projectIssues.length === 0) return project.percentComplete;
+      const done = projectIssues.filter((i) => i.status.category === 'completed').length;
+      return Math.round((done / projectIssues.length) * 100);
+   }, [issues, project.id, project.percentComplete]);
 
    return (
       <ProjectContextMenu project={project}>
@@ -63,8 +73,8 @@ function ProjectCard({ project }: { project: Project }) {
             <div className="mt-2.5 flex items-center gap-2 text-xs text-muted-foreground">
                {displayProperties.status && (
                   <span className="inline-flex items-center gap-1">
-                     <CapacityRing value={project.percentComplete} color="#6771c5" />
-                     {project.percentComplete}%
+                     <CapacityRing value={percentComplete} color="#6771c5" />
+                     {percentComplete}%
                   </span>
                )}
                {displayProperties.priority && (
