@@ -68,22 +68,32 @@ describe('cycles', () => {
       expect(cycles[0].number).toBe(2);
    });
 
-   it('current cycle has a burnup, upcoming does not', async () => {
+   it('completed cycle has a burnup, upcoming does not (status derivado das datas)', async () => {
       const db = await setup();
+      // c1 tem datas no passado → status derivado 'completed' → tem burnup.
+      expect((await getCycle(db, 'c1'))?.status).toBe('completed');
       expect((await getCycle(db, 'c1'))?.burnup).not.toBeNull();
-      expect((await getCycle(db, 'c2'))?.burnup).toBeNull();
+      // um ciclo com datas no futuro → 'upcoming' → sem burnup.
+      const future = await createCycle(db, {
+         teamId: 'CORE',
+         name: 'Future',
+         startDate: '2099-01-05',
+         endDate: '2099-01-18',
+      });
+      expect((await getCycle(db, future.id))?.status).toBe('upcoming');
+      expect((await getCycle(db, future.id))?.burnup).toBeNull();
    });
 
-   it('creates a cycle auto-numbering by team, defaults to planned', async () => {
+   it('creates a cycle auto-numbering by team; status é derivado das datas', async () => {
       const db = await setup(); // já tem c1 (n=1) e c2 (n=2)
       const created = await createCycle(db, {
          teamId: 'CORE',
          name: 'Cycle 3',
-         startDate: '2026-01-29',
-         endDate: '2026-02-11',
+         startDate: '2099-01-29',
+         endDate: '2099-02-11',
       });
       expect(created.number).toBe(3);
-      expect(created.status).toBe('planned');
+      expect(created.status).toBe('upcoming'); // datas no futuro
       expect(created.capacity).toBe(0);
       expect(created.scope).toBe(0);
 
@@ -103,16 +113,15 @@ describe('cycles', () => {
       ).rejects.toThrow(ApiError);
    });
 
-   it('updates status and dates', async () => {
+   it('updates dates (status segue as datas — derivado)', async () => {
       const db = await setup();
       const updated = await updateCycle(db, 'c2', {
-         status: 'current',
-         startDate: '2026-02-01',
-         endDate: '2026-02-14',
+         startDate: '2099-02-01',
+         endDate: '2099-02-14',
       });
-      expect(updated?.status).toBe('current');
-      expect(updated?.startDate).toBe('2026-02-01');
-      expect(updated?.endDate).toBe('2026-02-14');
+      expect(updated?.startDate).toBe('2099-02-01');
+      expect(updated?.endDate).toBe('2099-02-14');
+      expect(updated?.status).toBe('upcoming'); // datas no futuro → derivado 'upcoming'
       expect(await updateCycle(db, 'missing', { name: 'x' })).toBeNull();
    });
 

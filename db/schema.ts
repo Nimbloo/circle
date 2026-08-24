@@ -89,6 +89,19 @@ export const team = pgTable('team', {
    icon: varchar('icon', { length: 16 }),
    color: varchar('color', { length: 16 }),
    issueSeq: integer('issue_seq').notNull().default(0), // contador p/ identifier <KEY>-<n>
+   // ── Configuração de Cycles (estilo Linear: automáticos e repetitivos) ──
+   /** Cycles habilitados no time → o schedule é auto-gerado. */
+   cyclesEnabled: boolean('cycles_enabled').notNull().default(false),
+   /** Duração de cada ciclo em semanas (1–8). */
+   cycleDurationWeeks: integer('cycle_duration_weeks').notNull().default(2),
+   /** Dia da semana em que o ciclo começa (0=domingo … 6=sábado). */
+   cycleStartDay: integer('cycle_start_day').notNull().default(1),
+   /** Cooldown em semanas entre ciclos (0 = sem cooldown). */
+   cycleCooldownWeeks: integer('cycle_cooldown_weeks').notNull().default(0),
+   /** Quantos ciclos futuros manter pré-criados (1–15). */
+   cycleUpcomingCount: integer('cycle_upcoming_count').notNull().default(2),
+   /** Auto-add: issues iniciadas entram no ciclo corrente automaticamente. */
+   cycleAutoAdd: boolean('cycle_auto_add').notNull().default(true),
 });
 
 export const teamMember = pgTable(
@@ -224,10 +237,17 @@ export const cycle = pgTable(
       teamId: varchar('team_id', { length: 16 })
          .notNull()
          .references(() => team.id),
-      status: varchar('status', { length: 16 }).notNull(), // planned|upcoming|current|completed
+      status: varchar('status', { length: 16 }).notNull(), // legado: status agora é DERIVADO das datas
       startDate: date('start_date').notNull(),
       endDate: date('end_date').notNull(),
       capacity: integer('capacity').notNull().default(0),
+      /** Cooldown (semanas) que SEGUE este ciclo — pra desenhar o gap "Cycles paused". */
+      cooldownWeeks: integer('cooldown_weeks').notNull().default(0),
+      /** Snapshot histórico congelado no fechamento do ciclo (Linear preserva o gráfico
+       *  do ciclo completo). NULL enquanto não fechou → usa agregado ao vivo. */
+      snapshotScope: integer('snapshot_scope'),
+      snapshotStarted: integer('snapshot_started'),
+      snapshotCompleted: integer('snapshot_completed'),
    },
    (t) => [
       index('idx_cycle_team').on(t.teamId),

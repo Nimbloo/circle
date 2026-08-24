@@ -1,11 +1,23 @@
 import { randomUUID } from 'node:crypto';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { cycle as cycleT, issue as issueT, status as statusT, team as teamT } from '@/db/schema';
 import { ApiError } from './errors';
 import { publish } from './events';
+import {
+   type CycleScheduleSettings,
+   deriveStatus,
+   planEnsure,
+   addDays,
+   cycleEnd,
+} from './cycle-schedule';
 
 type CycleRow = typeof cycleT.$inferSelect;
+
+/** "Hoje" em ISO (yyyy-mm-dd, UTC) no runtime do request. */
+function todayISO(): string {
+   return new Date().toISOString().slice(0, 10);
+}
 
 export interface BurnupPoint {
    date: string;
@@ -29,6 +41,10 @@ export interface CycleDto {
    completed: number;
    scopeDelta: number;
    successRate: number | null;
+   /** Cooldown (semanas) que segue este ciclo. */
+   cooldownWeeks: number;
+   /** Velocidade do time (média de completed dos últimos 3 ciclos fechados). */
+   velocity: number;
    burnup: BurnupPoint[] | null;
 }
 
@@ -36,6 +52,34 @@ interface Agg {
    scope: number;
    started: number;
    completed: number;
+}
+
+/** Lê as settings de ciclo do time (com defaults sãos). */
+function settingsOf(team: typeof teamT.$inferSelect): CycleScheduleSettings {
+   return {
+      durationWeeks: team.cycleDurationWeeks,
+      startDay: team.cycleStartDay,
+      cooldownWeeks: team.cycleCooldownWeeks,
+      upcomingCount: team.cycleUpcomingCount,
+   };
+}
+
+/**
+ * Velocidade do time = média de `completed` (snapshot quando houver) dos até 3 ciclos
+ * mais recentes JÁ FECHADOS (endDate < hoje). Usada pra estimar a capacity dos ciclos
+ * futuros. Sem histórico → 0 (o chamador cai no nº de membros como fallback).
+ */
+function computeVelocity(rows: CycleRow[], aggs: Map<string, Agg>, today: string): number {
+   const completed = rows
+      .filter((r) => r.endDate < today)
+      .sort((a, b) => b.endDate.localeCompare(a.endDate))
+      .slice(0, 3);
+   if (completed.length === 0) return 0;
+   const total = completed.reduce((sum, r) => {
+      const done = r.snapshotCompleted ?? aggs.get(r.id)?.completed ?? 0;
+      return sum + done;
+   }, 0);
+   return Math.round(total / completed.length);
 }
 
 /** Conta scope/started/completed por ciclo, a partir das issues reais. */
@@ -64,12 +108,11 @@ async function aggregatesByCycle(db: Db, cycleIds: string[]): Promise<Map<string
 }
 
 /**
- * Burn-up simplificado (2 pontos: início→hoje) a partir dos agregados atuais.
- * Série histórica real exigiria snapshots diários (fase futura); aqui aproximamos
- * sem inventar dados intermediários.
+ * Burn-up simplificado (2 pontos: início→hoje) a partir dos agregados. Série histórica
+ * real exigiria snapshots diários (fase futura); aproximamos sem inventar intermediários.
  */
-function buildBurnup(row: CycleRow, agg: Agg): BurnupPoint[] | null {
-   if (row.status !== 'current' && row.status !== 'completed') return null;
+function buildBurnup(row: CycleRow, agg: Agg, status: string): BurnupPoint[] | null {
+   if (status !== 'current' && status !== 'completed') return null;
    return [
       { date: row.startDate, scope: agg.scope, started: 0, completed: 0, ideal: 0 },
       {
@@ -82,62 +125,279 @@ function buildBurnup(row: CycleRow, agg: Agg): BurnupPoint[] | null {
    ];
 }
 
-function toDto(row: CycleRow, agg: Agg): CycleDto {
+/**
+ * DTO do ciclo. Status é DERIVADO das datas + hoje (não mais armazenado/stale). Ciclos
+ * FECHADOS usam o snapshot congelado (histórico é a verdade). `capacity` dos ciclos não
+ * fechados = quão cheio o ciclo está vs a velocidade do time (scope/velocity), a "dial"
+ * do Linear; sem histórico usa o campo `capacity` (fallback do nº de membros).
+ */
+function toDto(row: CycleRow, liveAgg: Agg, velocity: number, today: string): CycleDto {
+   const status = deriveStatus(row.startDate, row.endDate, today);
+   const useSnapshot = status === 'completed' && row.snapshotScope != null;
+   const agg: Agg = useSnapshot
+      ? {
+           scope: row.snapshotScope!,
+           started: row.snapshotStarted ?? 0,
+           completed: row.snapshotCompleted ?? 0,
+        }
+      : liveAgg;
    const successRate =
-      row.status === 'completed' && agg.scope > 0
-         ? Math.round((agg.completed / agg.scope) * 100)
-         : null;
+      status === 'completed' && agg.scope > 0 ? Math.round((agg.completed / agg.scope) * 100) : null;
+   const capacity =
+      status !== 'completed' && velocity > 0
+         ? Math.min(999, Math.round((agg.scope / velocity) * 100))
+         : row.capacity;
    return {
       id: row.id,
       number: row.number,
       name: row.name,
       teamId: row.teamId,
-      status: row.status,
+      status,
       startDate: row.startDate,
       endDate: row.endDate,
-      capacity: row.capacity,
+      capacity,
       scope: agg.scope,
       started: agg.started,
       completed: agg.completed,
-      scopeDelta: 0, // exige histórico (fase futura)
+      scopeDelta: 0, // exige histórico diário (fase futura)
       successRate,
-      burnup: buildBurnup(row, agg),
+      cooldownWeeks: row.cooldownWeeks,
+      velocity,
+      burnup: buildBurnup(row, agg, status),
    };
 }
 
-export async function listCyclesByTeam(db: Db, teamId: string): Promise<CycleDto[]> {
-   const rows = await db.select().from(cycleT).where(eq(cycleT.teamId, teamId));
+/** Monta os DTOs de um conjunto de ciclos DO MESMO time (compartilham velocity). */
+async function toDtos(db: Db, rows: CycleRow[], today: string): Promise<CycleDto[]> {
+   if (rows.length === 0) return [];
    const aggs = await aggregatesByCycle(
       db,
       rows.map((r) => r.id)
    );
-   return rows
-      .map((r) => toDto(r, aggs.get(r.id) ?? { scope: 0, started: 0, completed: 0 }))
-      .sort((a, b) => b.number - a.number);
+   // Velocity é por-time; agrupa e computa uma vez por time.
+   const byTeam = new Map<string, CycleRow[]>();
+   for (const r of rows) byTeam.set(r.teamId, [...(byTeam.get(r.teamId) ?? []), r]);
+   const velocityByTeam = new Map<string, number>();
+   for (const [teamId, teamRows] of byTeam)
+      velocityByTeam.set(teamId, computeVelocity(teamRows, aggs, today));
+   return rows.map((r) =>
+      toDto(r, aggs.get(r.id) ?? { scope: 0, started: 0, completed: 0 }, velocityByTeam.get(r.teamId) ?? 0, today)
+   );
+}
+
+export async function listCyclesByTeam(db: Db, teamId: string): Promise<CycleDto[]> {
+   await ensureCycles(db, teamId); // auto-gera/mantém o schedule (lazy)
+   const rows = await db.select().from(cycleT).where(eq(cycleT.teamId, teamId));
+   const dtos = await toDtos(db, rows, todayISO());
+   return dtos.sort((a, b) => b.number - a.number);
 }
 
 /**
- * Cycles de VÁRIOS times de uma vez, em 2 queries no total (1 cycles + 1 aggregate
- * pra todos os ids), em vez de N chamadas de listCyclesByTeam (cada uma re-escaneando
- * a tabela status). Usado no bootstrap do workspace — fim do N+1.
+ * Cycles de VÁRIOS times de uma vez. Garante o schedule de cada time (lazy) e monta os
+ * DTOs num batch (velocity por-time). Usado no bootstrap do workspace — fim do N+1.
  */
 export async function listCyclesForTeams(db: Db, teamIds: string[]): Promise<CycleDto[]> {
    if (teamIds.length === 0) return [];
+   await Promise.all(teamIds.map((t) => ensureCycles(db, t)));
    const rows = await db.select().from(cycleT).where(inArray(cycleT.teamId, teamIds));
-   const aggs = await aggregatesByCycle(
-      db,
-      rows.map((r) => r.id)
-   );
-   return rows
-      .map((r) => toDto(r, aggs.get(r.id) ?? { scope: 0, started: 0, completed: 0 }))
-      .sort((a, b) => b.number - a.number);
+   const dtos = await toDtos(db, rows, todayISO());
+   return dtos.sort((a, b) => b.number - a.number);
 }
 
 export async function getCycle(db: Db, id: string): Promise<CycleDto | null> {
    const rows = await db.select().from(cycleT).where(eq(cycleT.id, id)).limit(1);
    if (rows.length === 0) return null;
-   const aggs = await aggregatesByCycle(db, [id]);
-   return toDto(rows[0], aggs.get(id) ?? { scope: 0, started: 0, completed: 0 });
+   // Carrega os ciclos do MESMO time para a velocity (média dos últimos fechados).
+   const teamRows = await db.select().from(cycleT).where(eq(cycleT.teamId, rows[0].teamId));
+   const dtos = await toDtos(db, teamRows, todayISO());
+   return dtos.find((d) => d.id === id) ?? null;
+}
+
+// ── Settings de ciclo do time (Linear: automáticos e repetitivos) ────────
+export interface CycleSettingsDto {
+   enabled: boolean;
+   durationWeeks: number;
+   startDay: number;
+   cooldownWeeks: number;
+   upcomingCount: number;
+   autoAdd: boolean;
+}
+
+function teamToSettingsDto(t: typeof teamT.$inferSelect): CycleSettingsDto {
+   return {
+      enabled: t.cyclesEnabled,
+      durationWeeks: t.cycleDurationWeeks,
+      startDay: t.cycleStartDay,
+      cooldownWeeks: t.cycleCooldownWeeks,
+      upcomingCount: t.cycleUpcomingCount,
+      autoAdd: t.cycleAutoAdd,
+   };
+}
+
+export async function getCycleSettings(db: Db, teamId: string): Promise<CycleSettingsDto | null> {
+   const rows = await db.select().from(teamT).where(eq(teamT.id, teamId)).limit(1);
+   return rows.length ? teamToSettingsDto(rows[0]) : null;
+}
+
+export interface UpdateCycleSettingsInput {
+   enabled?: boolean;
+   durationWeeks?: number;
+   startDay?: number;
+   cooldownWeeks?: number;
+   upcomingCount?: number;
+   autoAdd?: boolean;
+}
+
+/** Atualiza as settings de ciclo do time e (re)gera o schedule se estiver habilitado. */
+export async function updateCycleSettings(
+   db: Db,
+   teamId: string,
+   patch: UpdateCycleSettingsInput
+): Promise<CycleSettingsDto> {
+   const rows = await db.select().from(teamT).where(eq(teamT.id, teamId)).limit(1);
+   if (rows.length === 0) throw new ApiError(404, `Team '${teamId}' não existe`);
+
+   const set: Record<string, unknown> = {};
+   if (patch.enabled !== undefined) set.cyclesEnabled = patch.enabled;
+   if (patch.durationWeeks !== undefined)
+      set.cycleDurationWeeks = Math.min(8, Math.max(1, patch.durationWeeks));
+   if (patch.startDay !== undefined) set.cycleStartDay = Math.min(6, Math.max(0, patch.startDay));
+   if (patch.cooldownWeeks !== undefined)
+      set.cycleCooldownWeeks = Math.min(4, Math.max(0, patch.cooldownWeeks));
+   if (patch.upcomingCount !== undefined)
+      set.cycleUpcomingCount = Math.min(15, Math.max(1, patch.upcomingCount));
+   if (patch.autoAdd !== undefined) set.cycleAutoAdd = patch.autoAdd;
+
+   if (Object.keys(set).length > 0)
+      await db.update(teamT).set(set).where(eq(teamT.id, teamId));
+
+   // Desabilitar: marca tudo e some com os futuros (Linear). Habilitar/ajustar: (re)gera.
+   if (patch.enabled === false) {
+      const today = todayISO();
+      await db
+         .delete(cycleT)
+         .where(and(eq(cycleT.teamId, teamId), sql`${cycleT.startDate} > ${today}`));
+   } else {
+      await ensureCycles(db, teamId);
+   }
+
+   publish({ entity: 'cycle', action: 'updated' });
+   return (await getCycleSettings(db, teamId))!;
+}
+
+/**
+ * Mantém o schedule do time (estilo Linear): (1) auto-gera ciclos futuros p/ ter
+ * `upcomingCount` à frente + garantir um current; (2) congela o snapshot histórico dos
+ * ciclos recém-fechados; (3) faz o rollover das issues abertas do ciclo fechado pro
+ * current. Idempotente e lazy (roda nas listagens). `today` injetável p/ teste.
+ */
+export async function ensureCycles(db: Db, teamId: string, today = todayISO()): Promise<void> {
+   const teams = await db.select().from(teamT).where(eq(teamT.id, teamId)).limit(1);
+   const team = teams[0];
+   if (!team || !team.cyclesEnabled) return;
+   const s = settingsOf(team);
+
+   const existing = await db.select().from(cycleT).where(eq(cycleT.teamId, teamId));
+   const plan = planEnsure(
+      existing.map((c) => ({
+         number: c.number,
+         startDate: c.startDate,
+         endDate: c.endDate,
+         cooldownWeeks: c.cooldownWeeks,
+      })),
+      s,
+      today
+   );
+   if (plan.toCreate.length) {
+      await db
+         .insert(cycleT)
+         .values(
+            plan.toCreate.map((p) => ({
+               id: randomUUID(),
+               number: p.number,
+               name: `Cycle ${p.number}`,
+               teamId,
+               status: 'upcoming', // legado; o status real é derivado das datas
+               startDate: p.startDate,
+               endDate: p.endDate,
+               capacity: 0,
+               cooldownWeeks: p.cooldownWeeks,
+            }))
+         )
+         .onConflictDoNothing();
+   }
+
+   // Snapshot + rollover dos recém-fechados.
+   const all = plan.toCreate.length
+      ? await db.select().from(cycleT).where(eq(cycleT.teamId, teamId))
+      : existing;
+   const current = all.find((c) => deriveStatus(c.startDate, c.endDate, today) === 'current');
+   const justClosed = all.filter(
+      (c) => deriveStatus(c.startDate, c.endDate, today) === 'completed' && c.snapshotScope == null
+   );
+   if (justClosed.length) {
+      const aggs = await aggregatesByCycle(
+         db,
+         justClosed.map((c) => c.id)
+      );
+      for (const c of justClosed) {
+         const a = aggs.get(c.id) ?? { scope: 0, started: 0, completed: 0 };
+         // 1º congela o snapshot (scope inclui as abertas), DEPOIS rola as abertas.
+         await db
+            .update(cycleT)
+            .set({ snapshotScope: a.scope, snapshotStarted: a.started, snapshotCompleted: a.completed })
+            .where(eq(cycleT.id, c.id));
+         if (current) await rolloverOpenIssues(db, c.id, current.id);
+      }
+   }
+}
+
+/** Move as issues ABERTAS (não completed/canceled) de um ciclo para outro. */
+async function rolloverOpenIssues(db: Db, fromCycleId: string, toCycleId: string): Promise<void> {
+   const statuses = await db.select().from(statusT);
+   const closedIds = statuses
+      .filter((s) => s.category === 'completed' || s.category === 'canceled')
+      .map((s) => s.id);
+   const conds = [eq(issueT.cycleId, fromCycleId)];
+   if (closedIds.length) conds.push(notInArray(issueT.statusId, closedIds));
+   await db.update(issueT).set({ cycleId: toCycleId }).where(and(...conds));
+}
+
+/**
+ * "Start cycle today" (Linear): encerra o ciclo corrente ontem e inicia o próximo HOJE
+ * (preservando a duração). O ensure congela o snapshot do encerrado e rola as abertas.
+ */
+export async function startCycleToday(db: Db, teamId: string): Promise<void> {
+   const today = todayISO();
+   const teams = await db.select().from(teamT).where(eq(teamT.id, teamId)).limit(1);
+   if (!teams.length) throw new ApiError(404, `Team '${teamId}' não existe`);
+   const dur = teams[0].cycleDurationWeeks;
+
+   const all = await db.select().from(cycleT).where(eq(cycleT.teamId, teamId));
+   const current = all.find((c) => deriveStatus(c.startDate, c.endDate, today) === 'current');
+   if (!current) throw new ApiError(400, 'Não há ciclo corrente para encerrar');
+
+   await db.update(cycleT).set({ endDate: addDays(today, -1) }).where(eq(cycleT.id, current.id));
+   const upcoming = all
+      .filter((c) => c.startDate > current.startDate)
+      .sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
+   if (upcoming)
+      await db
+         .update(cycleT)
+         .set({ startDate: today, endDate: cycleEnd(today, dur) })
+         .where(eq(cycleT.id, upcoming.id));
+
+   await ensureCycles(db, teamId, today); // snapshot do encerrado + rollover + top-up
+   publish({ entity: 'cycle', action: 'updated' });
+}
+
+/** "End cycle early" (Linear): encerra o ciclo ao fim do dia de hoje. */
+export async function endCycleEarly(db: Db, id: string): Promise<void> {
+   const today = todayISO();
+   const rows = await db.select().from(cycleT).where(eq(cycleT.id, id)).limit(1);
+   if (!rows.length) throw new ApiError(404, `Cycle '${id}' não encontrado`);
+   await db.update(cycleT).set({ endDate: today }).where(eq(cycleT.id, id));
+   publish({ entity: 'cycle', action: 'updated' });
 }
 
 // ── Mutações ─────────────────────────────────────────────────────────

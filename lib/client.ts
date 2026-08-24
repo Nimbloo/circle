@@ -22,7 +22,13 @@ import type {
 } from '@/lib/api/project-detail';
 import type { TeamDto, CreateTeamInput, JoinRequestDto } from '@/lib/api/teams';
 import type { MemberDto } from '@/lib/api/members';
-import type { CycleDto, CreateCycleInput, UpdateCycleInput } from '@/lib/api/cycles';
+import type {
+   CycleDto,
+   CreateCycleInput,
+   UpdateCycleInput,
+   CycleSettingsDto,
+   UpdateCycleSettingsInput,
+} from '@/lib/api/cycles';
 import type { TemplateDto, CreateTemplateInput, UpdateTemplateInput } from '@/lib/api/templates';
 import type { StatusDto, CreateStatusInput, UpdateStatusInput } from '@/lib/api/statuses';
 import type { EmojiDto } from '@/lib/api/emojis';
@@ -292,6 +298,15 @@ export const api = {
          post<CycleDto>(`/teams/${teamKey}/cycles`, input),
       update: (id: string, body: UpdateCycleInput) => patch<CycleDto>(`/cycles/${id}`, body),
       remove: (id: string) => del<{ deleted: boolean }>(`/cycles/${id}`),
+      /** "End cycle early": encerra o ciclo hoje. */
+      endEarly: (id: string) => post<{ ended: boolean }>(`/cycles/${id}/end-early`, {}),
+      /** Settings de ciclo do time (enable/duração/start-day/cooldown/upcoming/auto-add). */
+      settings: (teamKey: string) => get<CycleSettingsDto>(`/teams/${teamKey}/cycle-settings`),
+      updateSettings: (teamKey: string, body: UpdateCycleSettingsInput) =>
+         patch<CycleSettingsDto>(`/teams/${teamKey}/cycle-settings`, body),
+      /** "Start cycle today": encerra o corrente e inicia o próximo hoje. */
+      startToday: (teamKey: string) =>
+         post<{ started: boolean }>(`/teams/${teamKey}/cycles/start-today`, {}),
    },
 
    comments: {

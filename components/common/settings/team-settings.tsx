@@ -130,7 +130,6 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
    const teams = useWorkspaceStore((s) => s.teams);
    const me = useWorkspaceStore((s) => s.me);
    const hydrate = useWorkspaceStore((s) => s.hydrate);
-   const getCyclesByTeam = useWorkspaceStore((s) => s.getCyclesByTeam);
    const status = useStatuses();
    const labels = useLabels();
    const team = teams.find((candidate) => candidate.id === teamId);
@@ -150,7 +149,6 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
       );
    }
 
-   const cycles = getCyclesByTeam(team.id);
 
    const leaveTeam = async () => {
       if (busy) return;
@@ -287,7 +285,8 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
                         icon={<RefreshCcw className="size-4" />}
                         title="Cycles"
                         description="Focus your team over short, time-boxed windows"
-                        trailing={<span>{cycles.length > 0 ? 'Every 2 weeks' : 'Off'}</span>}
+                        chevron
+                        onClick={() => router.push(`/${orgId}/settings/teams/${teamId}/cycles`)}
                      />
                   </SettingsCard>
                </SettingsSection>

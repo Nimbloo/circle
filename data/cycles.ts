@@ -31,6 +31,10 @@ export interface Cycle {
    completed: number;
    /** Completed / scope, for finished cycles ("67% success"). */
    successRate?: number;
+   /** Cooldown (semanas) que segue este ciclo. */
+   cooldownWeeks?: number;
+   /** Velocidade do time (média de completed dos últimos 3 ciclos fechados). */
+   velocity?: number;
    /** Burn-up chart points (only meaningful for current / completed cycles). */
    burnup?: CycleBurnupPoint[];
 }

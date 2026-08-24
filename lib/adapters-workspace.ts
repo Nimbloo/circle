@@ -145,6 +145,8 @@ export function adaptCycle(c: CycleDto): Cycle {
       started: c.started,
       completed: c.completed,
       successRate: c.successRate ?? undefined,
+      cooldownWeeks: c.cooldownWeeks,
+      velocity: c.velocity,
       burnup: c.burnup ?? undefined,
    };
 }
