@@ -138,12 +138,15 @@ function __FilterSelector<TData>({
       }}
     >
       <PopoverTrigger asChild>
+        {/* Ícone-only estilo Linear (funil), sem texto — na toolbar do topo. */}
         <Button
-          variant="outline"
-          className={cn('h-7', hasFilters && 'w-fit !px-2')}
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          aria-label={t('filter', locale)}
+          title={t('filter', locale)}
         >
           <FilterIcon className="size-4" />
-          {!hasFilters && <span>{t('filter', locale)}</span>}
         </Button>
       </PopoverTrigger>
       <PopoverContent

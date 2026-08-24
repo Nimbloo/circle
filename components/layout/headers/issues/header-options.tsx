@@ -12,13 +12,15 @@ export default function HeaderOptions() {
    return (
       <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">
          <div />
-         <div className="flex items-center gap-1">
+         <div className="flex items-center gap-0.5">
             <IssueFilterTrigger />
             <Button
-               size="xs"
+               size="icon"
+               className="h-8 w-8"
                variant={openPanel === 'insights' ? 'secondary' : 'ghost'}
                onClick={() => togglePanel('insights')}
                aria-label="Toggle insights panel"
+               title="Insights"
             >
                <BarChart3 className="size-4" />
             </Button>

@@ -75,11 +75,17 @@ export function DisplayOptions() {
    return (
       <Popover>
          <PopoverTrigger asChild>
-            <Button className="relative" size="xs" variant="secondary">
-               <SlidersHorizontal className="size-4 mr-1" />
-               Display
+            {/* Ícone-only estilo Linear (sliders), sem texto — na toolbar do topo. */}
+            <Button
+               className="relative h-8 w-8"
+               size="icon"
+               variant="ghost"
+               aria-label="Display options"
+               title="Display"
+            >
+               <SlidersHorizontal className="size-4" />
                {(!isDefault || viewType === 'grid') && (
-                  <span className="absolute right-0 top-0 w-2 h-2 bg-orange-500 rounded-full" />
+                  <span className="absolute right-1 top-1 size-1.5 rounded-full bg-orange-500" />
                )}
             </Button>
          </PopoverTrigger>
