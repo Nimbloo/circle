@@ -1,58 +1,12 @@
-import { count, eq, inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    issue as issueT,
    status as statusT,
-   priority as priorityT,
    appUser,
    issueLabel,
    cycle as cycleT,
 } from '@/db/schema';
-
-/** Matriz status × priority (painel de insights). Conta issues por célula. */
-export interface IssueMatrix {
-   statuses: { id: string; name: string; color: string; category: string }[];
-   priorities: { id: string; name: string }[];
-   cells: Record<string, Record<string, number>>; // [statusId][priorityId] = count
-   totalsByStatus: Record<string, number>;
-   totalsByPriority: Record<string, number>;
-   total: number;
-}
-
-export async function issueMatrix(db: Db, opts: { team?: string } = {}): Promise<IssueMatrix> {
-   const [statuses, priorities, grouped] = await Promise.all([
-      db.select().from(statusT),
-      db.select().from(priorityT),
-      db
-         .select({ statusId: issueT.statusId, priorityId: issueT.priorityId, n: count() })
-         .from(issueT)
-         .where(opts.team ? eq(issueT.teamId, opts.team) : undefined)
-         .groupBy(issueT.statusId, issueT.priorityId),
-   ]);
-   const cells: Record<string, Record<string, number>> = {};
-   const totalsByStatus: Record<string, number> = {};
-   const totalsByPriority: Record<string, number> = {};
-   let total = 0;
-   for (const s of statuses) cells[s.id] = {};
-   for (const g of grouped) {
-      const n = Number(g.n);
-      cells[g.statusId] ??= {};
-      cells[g.statusId][g.priorityId] = n;
-      totalsByStatus[g.statusId] = (totalsByStatus[g.statusId] ?? 0) + n;
-      totalsByPriority[g.priorityId] = (totalsByPriority[g.priorityId] ?? 0) + n;
-      total += n;
-   }
-   const ordS = [...statuses].sort((a, b) => a.position - b.position);
-   const ordP = [...priorities].sort((a, b) => a.sortRank - b.sortRank);
-   return {
-      statuses: ordS.map((s) => ({ id: s.id, name: s.name, color: s.color, category: s.category })),
-      priorities: ordP.map((p) => ({ id: p.id, name: p.name })),
-      cells,
-      totalsByStatus,
-      totalsByPriority,
-      total,
-   };
-}
 
 /** Progresso de um projeto: scope/started/completed/% + breakdowns por assignee/label/cycle. */
 export interface Breakdown {

@@ -76,8 +76,10 @@ export function adaptIssueDetail(dto: IssueDetailDto, activity: ActivityDto[]): 
       description: textToBlocks(dto.description),
       activity: adaptActivity(activity),
       subIssueIds: dto.subIssueIds,
+      parentIds: dto.parentIds,
       relatedIds: dto.relatedIds,
       blockedByIds: dto.blockedByIds,
+      blockingIds: dto.blockingIds,
       prLinks: dto.prLinks.map((p) => ({ ...p, status: p.status as PrLink['status'] })),
       milestone: dto.milestone ?? undefined,
    };

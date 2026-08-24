@@ -6,7 +6,6 @@ import { createIssue, getIssue } from '@/lib/api/issues';
 import {
    listCyclesByTeam,
    getCycle,
-   getCycleByStatus,
    createCycle,
    updateCycle,
    deleteCycle,
@@ -73,12 +72,6 @@ describe('cycles', () => {
       const db = await setup();
       expect((await getCycle(db, 'c1'))?.burnup).not.toBeNull();
       expect((await getCycle(db, 'c2'))?.burnup).toBeNull();
-   });
-
-   it('resolves current and upcoming cycles by status', async () => {
-      const db = await setup();
-      expect((await getCycleByStatus(db, 'CORE', 'current'))?.id).toBe('c1');
-      expect((await getCycleByStatus(db, 'CORE', 'upcoming'))?.id).toBe('c2');
    });
 
    it('creates a cycle auto-numbering by team, defaults to planned', async () => {

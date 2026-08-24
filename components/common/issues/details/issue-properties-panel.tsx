@@ -197,6 +197,21 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
             )
          )}
 
+         {/* "Blocking" é o reverso de blocked_by (read-only aqui — pra remover, edita o
+             blocked_by da outra issue). Antes a contraparte não via nada. */}
+         {detail.blockingIds && detail.blockingIds.length > 0 && (
+            <Section title="Blocking">
+               <div className="flex flex-col">
+                  {detail.blockingIds.map((id) => (
+                     <div key={id} className="flex items-center gap-1.5 min-w-0">
+                        <Ban className="size-3.5 text-amber-500 shrink-0" />
+                        <IssueRefRow identifier={id} />
+                     </div>
+                  ))}
+               </div>
+            </Section>
+         )}
+
          {onChanged ? (
             <Section title="Related">
                <RelationEditor

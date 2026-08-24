@@ -2,7 +2,6 @@
 
 import { Issue } from '@/data/issues';
 import { Status } from '@/data/status';
-import { useIssuesStore } from '@/store/issues-store';
 import { useViewStore } from '@/store/view-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
 import { cn } from '@/lib/utils';
@@ -14,6 +13,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Button } from '../../ui/button';
 import { IssueDragType, IssueGrid } from './issue-grid';
 import { IssueLine } from './issue-line';
+import { IssueGroupDrop, issueInGroup, useApplyGroupDrop } from './use-board-grouping';
 
 /**
  * Generic descriptor of an issue group. Groups are usually statuses but the
@@ -24,8 +24,10 @@ export interface IssueGroupDescriptor {
    name: string;
    color: string;
    icon: ReactNode;
-   /** Set when grouping by status: enables board drop + "+" default status. */
+   /** Set when grouping by status: pré-preenche o "+" com o status da coluna. */
    status?: Status;
+   /** Dimensão da coluna — habilita o drop do board (status/assignee/priority/project). */
+   drop?: IssueGroupDrop;
 }
 
 interface GroupIssuesProps {
@@ -91,7 +93,7 @@ export function GroupIssues({ group, issues, count }: GroupIssuesProps) {
                ))}
             </div>
          ) : (
-            <IssueGridList issues={issues} status={group.status} />
+            <IssueGridList issues={issues} drop={group.drop} />
          )}
       </div>
    );
@@ -103,27 +105,32 @@ export function GroupIssues({ group, issues, count }: GroupIssuesProps) {
  * constante. Altura medida dinamicamente (cards variam com título/labels). O
  * overscan generoso (8) preserva o drop-target do DnD nas bordas do scroll.
  */
-const IssueGridList: FC<{ issues: Issue[]; status?: Status }> = ({ issues, status }) => {
+const IssueGridList: FC<{ issues: Issue[]; drop?: IssueGroupDrop }> = ({
+   issues,
+   drop: groupDrop,
+}) => {
    const ref = useRef<HTMLDivElement>(null);
-   const updateIssueStatus = useIssuesStore((s) => s.updateIssueStatus);
+   const applyGroupDrop = useApplyGroupDrop();
 
-   // Drop na área da coluna (fora de um card) → muda o status para o do grupo.
+   // Drop na área da coluna (fora de um card) → move a issue pro grupo aplicando a
+   // dimensão da coluna (status/assignee/priority/project). 'none' não tem campo a mudar.
+   const canApply = groupDrop !== undefined && groupDrop.dimension !== 'none';
    const [{ isOver }, drop] = useDrop(
       () => ({
          accept: IssueDragType,
-         canDrop: () => status !== undefined,
+         canDrop: () => canApply,
          drop(item: Issue, monitor) {
             // Só trata quando NENHUM card tratou o drop (área vazia do grupo). Se um card
-            // tratou (reorder ou status), `didDrop()` é true e o container não faz nada.
-            if (status && !monitor.didDrop() && item.status.id !== status.id) {
-               updateIssueStatus(item.id, status);
+            // tratou (reorder ou mudança de dimensão), `didDrop()` é true e o container não faz nada.
+            if (groupDrop && canApply && !monitor.didDrop() && !issueInGroup(item, groupDrop)) {
+               applyGroupDrop(item, groupDrop);
             }
          },
          collect: (monitor) => ({
             isOver: !!monitor.isOver() && !!monitor.canDrop(),
          }),
       }),
-      [status, updateIssueStatus]
+      [groupDrop, canApply, applyGroupDrop]
    );
    drop(ref);
 
@@ -154,7 +161,7 @@ const IssueGridList: FC<{ issues: Issue[]; status?: Status }> = ({ issues, statu
                   }}
                >
                   <div className="bg-background border border-border rounded-md p-3 shadow-md max-w-[90%]">
-                     <p className="text-sm font-medium text-center">Drop to update status</p>
+                     <p className="text-sm font-medium text-center">Drop here</p>
                   </div>
                </motion.div>
             )}
@@ -176,7 +183,12 @@ const IssueGridList: FC<{ issues: Issue[]; status?: Status }> = ({ issues, statu
                         paddingBottom: 8, // gap entre cards (medido junto com a altura)
                      }}
                   >
-                     <IssueGrid issue={issue} orderedIssues={issues} layout={false} />
+                     <IssueGrid
+                        issue={issue}
+                        orderedIssues={issues}
+                        groupDrop={groupDrop}
+                        layout={false}
+                     />
                   </div>
                );
             })}

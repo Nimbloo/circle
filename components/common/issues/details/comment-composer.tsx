@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { api } from '@/lib/client';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { usePreferencesStore } from '@/store/preferences-store';
 import { Plus } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -12,6 +13,21 @@ import { toast } from 'sonner';
 /** Slug do usuário: o real (do backend) quando disponível, senão o prefixo do e-mail. */
 function slugOf(user: { email: string; slug?: string }): string {
    return (user.slug ?? user.email.split('@')[0]).toLowerCase();
+}
+
+/** Emoticons comuns → emoji (pref "Convert text emoticons into emojis"). */
+const EMOTICONS: [RegExp, string][] = [
+   [/:\)/g, '🙂'],
+   [/:-\)/g, '🙂'],
+   [/:\(/g, '🙁'],
+   [/:-\(/g, '🙁'],
+   [/:D/g, '😃'],
+   [/;\)/g, '😉'],
+   [/:P/g, '😛'],
+   [/<3/g, '❤️'],
+];
+function convertEmoticons(text: string): string {
+   return EMOTICONS.reduce((acc, [re, emoji]) => acc.replace(re, emoji), text);
 }
 
 /** Detecta o token de menção (@algo) imediatamente antes do caret. */
@@ -29,6 +45,9 @@ function mentionTokenAt(text: string, caret: number): { query: string; start: nu
  */
 export function CommentComposer({ issueId, onPosted }: { issueId: string; onPosted: () => void }) {
    const users = useWorkspaceStore((s) => s.users);
+   // "Send comments on..." (Preferences): 'Enter' envia com Enter puro; senão só ⌘/Ctrl+Enter.
+   const sendOnEnter = usePreferencesStore((s) => s.sendCommentsOn) === 'Enter';
+   const emoticonsOn = usePreferencesStore((s) => s.convertEmoticons);
    const [draft, setDraft] = useState('');
    const [submitting, setSubmitting] = useState(false);
    const [mention, setMention] = useState<{ query: string; start: number } | null>(null);
@@ -70,7 +89,7 @@ export function CommentComposer({ issueId, onPosted }: { issueId: string; onPost
    };
 
    const submit = async () => {
-      const text = draft.trim();
+      const text = (emoticonsOn ? convertEmoticons(draft) : draft).trim();
       if (!text || submitting) return;
       setSubmitting(true);
       try {
@@ -141,8 +160,16 @@ export function CommentComposer({ issueId, onPosted }: { issueId: string; onPost
                      return;
                   }
                }
-               if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-                  void submit();
+               if (event.key === 'Enter') {
+                  // ⌘/Ctrl+Enter sempre envia; Enter puro envia só se a pref for 'Enter'
+                  // (Shift+Enter é sempre quebra de linha).
+                  if (event.metaKey || event.ctrlKey) {
+                     event.preventDefault();
+                     void submit();
+                  } else if (sendOnEnter && !event.shiftKey) {
+                     event.preventDefault();
+                     void submit();
+                  }
                }
             }}
             placeholder="Leave a comment... (@ to mention)"

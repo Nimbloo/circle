@@ -17,6 +17,7 @@ import { ProjectBadge } from './project-badge';
 import { StatusSelector } from './status-selector';
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { IssueContextMenu } from './issue-context-menu';
+import { IssueGroupDrop, issueInGroup, useApplyGroupDrop } from './use-board-grouping';
 
 export const IssueDragType = 'ISSUE';
 /** Resultado retornado pelo drop do card → o container (GroupIssues) lê `didDrop()`. */
@@ -25,6 +26,9 @@ type IssueGridProps = {
    issue: Issue;
    /** Issues do grupo na ordem de exibição (asc rank) — usado p/ calcular os vizinhos no reorder. */
    orderedIssues: Issue[];
+   /** Dimensão do grupo desta coluna — o drop entre grupos aplica esta dimensão
+    *  (status/assignee/priority/project); ausente = board sem agrupamento acionável. */
+   groupDrop?: IssueGroupDrop;
    /** Animação de layout do motion (layoutId). Desligada na coluna virtualizada
     *  (o mount/unmount da virtualização brigaria com a animação de layout). */
    layout?: boolean;
@@ -85,12 +89,12 @@ export function CustomDragLayer() {
    );
 }
 
-export function IssueGrid({ issue, orderedIssues, layout = true }: IssueGridProps) {
+export function IssueGrid({ issue, orderedIssues, groupDrop, layout = true }: IssueGridProps) {
    const ref = useRef<HTMLDivElement>(null);
    const { orgId } = useParams<{ orgId: string }>();
    const { displayProperties } = useDisplaySettingsStore();
    const reorderIssue = useIssuesStore((s) => s.reorderIssue);
-   const updateIssueStatus = useIssuesStore((s) => s.updateIssueStatus);
+   const applyGroupDrop = useApplyGroupDrop();
 
    // Set up drag functionality.
    const [{ isDragging }, drag, preview] = useDrag(() => ({
@@ -115,9 +119,10 @@ export function IssueGrid({ issue, orderedIssues, layout = true }: IssueGridProp
          drop(item, monitor): IssueDropResult | undefined {
             if (item.id === issue.id) return { handled: true };
 
-            // Grupo diferente: adota o status do card-alvo (equivale ao drop no grupo).
-            if (item.status.id !== issue.status.id) {
-               updateIssueStatus(item.id, issue.status);
+            // Grupo diferente: move a issue pra este grupo aplicando a dimensão da coluna
+            // (status/assignee/priority/project) — não mais só status.
+            if (groupDrop && !issueInGroup(item, groupDrop)) {
+               applyGroupDrop(item, groupDrop);
                return { handled: true };
             }
 
@@ -138,7 +143,7 @@ export function IssueGrid({ issue, orderedIssues, layout = true }: IssueGridProp
             return { handled: true };
          },
       }),
-      [issue, orderedIssues, reorderIssue, updateIssueStatus]
+      [issue, orderedIssues, reorderIssue, applyGroupDrop, groupDrop]
    );
 
    // Connect drag and drop to the element.

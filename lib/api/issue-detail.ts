@@ -58,8 +58,12 @@ export interface IssueDetailDto {
    description: string | null;
    milestone: string | null;
    subIssueIds: string[];
+   /** Issues das quais ESTA é sub (backlink de parent — direção reversa de 'sub'). */
+   parentIds: string[];
    relatedIds: string[];
    blockedByIds: string[];
+   /** Issues que ESTA bloqueia (direção reversa de 'blocked_by'). */
+   blockingIds: string[];
    prLinks: { id: string; title: string; status: string }[];
 }
 
@@ -103,18 +107,28 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
    const rows = await db.select().from(issueT).where(eq(issueT.id, issueId)).limit(1);
    if (rows.length === 0) return null;
    const iss = rows[0];
-   const [content, relations, prs] = await Promise.all([
+   // Lê relações nas DUAS direções (issueId=X e relatedId=X) para simetria: parent
+   // backlink (reverso de 'sub'), "blocking" (reverso de 'blocked_by') e related
+   // simétrico. Antes só lia a direção forward → a contraparte aparecia vazia.
+   const [content, forward, reverse, prs] = await Promise.all([
       db.select().from(issueContent).where(eq(issueContent.issueId, issueId)).limit(1),
       db.select().from(issueRelation).where(eq(issueRelation.issueId, issueId)),
+      db.select().from(issueRelation).where(eq(issueRelation.relatedId, issueId)),
       db.select().from(issuePrLink).where(eq(issuePrLink.issueId, issueId)),
    ]);
+   const dedup = (ids: string[]) => [...new Set(ids)];
    return {
       identifier: iss.identifier,
       description: content[0]?.description ?? null,
       milestone: content[0]?.milestone ?? null,
-      subIssueIds: relations.filter((r) => r.kind === 'sub').map((r) => r.relatedId),
-      relatedIds: relations.filter((r) => r.kind === 'related').map((r) => r.relatedId),
-      blockedByIds: relations.filter((r) => r.kind === 'blocked_by').map((r) => r.relatedId),
+      subIssueIds: forward.filter((r) => r.kind === 'sub').map((r) => r.relatedId),
+      parentIds: reverse.filter((r) => r.kind === 'sub').map((r) => r.issueId),
+      relatedIds: dedup([
+         ...forward.filter((r) => r.kind === 'related').map((r) => r.relatedId),
+         ...reverse.filter((r) => r.kind === 'related').map((r) => r.issueId),
+      ]),
+      blockedByIds: forward.filter((r) => r.kind === 'blocked_by').map((r) => r.relatedId),
+      blockingIds: reverse.filter((r) => r.kind === 'blocked_by').map((r) => r.issueId),
       prLinks: prs.map((p) => ({ id: p.id, title: p.title, status: p.status })),
    };
 }

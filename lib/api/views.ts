@@ -4,8 +4,6 @@ import type { Db } from '@/db';
 import { savedView } from '@/db/schema';
 import { getOrCreateUser } from './users';
 import { isAdmin } from './auth';
-import { listIssues, type IssueDto } from './issues';
-import { listProjects, type ProjectDto } from './projects';
 import { ApiError } from './errors';
 import { publish } from './events';
 
@@ -150,35 +148,4 @@ export async function deleteView(db: Db, id: string, actorEmail: string): Promis
    await db.delete(savedView).where(eq(savedView.id, id));
    publish({ entity: 'view', action: 'deleted', id, actorEmail });
    return true;
-}
-
-/** Aplica o filtro salvo da view a issues (ou projects). */
-export async function resolveView(
-   db: Db,
-   id: string
-): Promise<{ type: string; issues?: IssueDto[]; projects?: ProjectDto[] } | null> {
-   const view = await getView(db, id);
-   if (!view) return null;
-   const f = view.filter;
-
-   if (view.type === 'issue') {
-      let issues = await listIssues(db, {
-         statusType: f.statusCategories,
-         status: f.statusIds,
-         labels: f.labelIds,
-         priority: f.priorityIds,
-         assignee: f.unassigned ? ['unassigned'] : undefined,
-      });
-      if (f.hasProject) issues = issues.filter((i) => i.project !== null);
-      return { type: 'issue', issues };
-   }
-
-   // project view: aplica o que mapeia (status/priority/labels)
-   let projects = await listProjects(db, {});
-   if (f.statusIds?.length) projects = projects.filter((p) => f.statusIds!.includes(p.status.id));
-   if (f.priorityIds?.length)
-      projects = projects.filter((p) => f.priorityIds!.includes(p.priority.id));
-   if (f.labelIds?.length)
-      projects = projects.filter((p) => p.labels.some((l) => f.labelIds!.includes(l.id)));
-   return { type: 'project', projects };
 }

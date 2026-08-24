@@ -426,17 +426,8 @@ export interface UpdateIssueInput {
    estimate?: number | null;
 }
 
-export async function updateIssue(
-   db: Db,
-   id: string,
-   patch: UpdateIssueInput,
-   actorEmail: string
-): Promise<IssueDto | null> {
-   const existing = await db.select().from(issue).where(eq(issue.id, id)).limit(1);
-   if (existing.length === 0) return null;
-   const actor = await getOrCreateUser(db, actorEmail);
-   const prev = existing[0];
-
+/** Monta o SET do UPDATE a partir do patch. `""` (limpar) → null, consistente com as FKs. */
+function buildIssueSet(patch: UpdateIssueInput): Record<string, unknown> {
    const set: Record<string, unknown> = { updatedAt: new Date() };
    if (patch.title !== undefined) set.title = patch.title;
    if (patch.statusId !== undefined) set.statusId = patch.statusId;
@@ -448,10 +439,13 @@ export async function updateIssue(
    if (patch.cycleId !== undefined) set.cycleId = patch.cycleId || null;
    if (patch.dueDate !== undefined) set.dueDate = patch.dueDate;
    if (patch.estimate !== undefined) set.estimate = patch.estimate;
+   return set;
+}
 
-   await db.update(issue).set(set).where(eq(issue.id, id));
+type IssueRow = typeof issue.$inferSelect;
 
-   // eventos de atividade para transições relevantes
+/** Eventos de atividade para os campos que MUDARAM de fato entre `prev` e `patch`. */
+function changedEvents(patch: UpdateIssueInput, prev: IssueRow): { event: string; text: string }[] {
    const events: { event: string; text: string }[] = [];
    if (patch.statusId !== undefined && patch.statusId !== prev.statusId)
       events.push({ event: 'status', text: `changed status` });
@@ -469,6 +463,23 @@ export async function updateIssue(
       events.push({ event: 'estimate', text: `changed estimate` });
    if (patch.dueDate !== undefined && (patch.dueDate ?? null) !== prev.dueDate)
       events.push({ event: 'dueDate', text: `changed due date` });
+   return events;
+}
+
+export async function updateIssue(
+   db: Db,
+   id: string,
+   patch: UpdateIssueInput,
+   actorEmail: string
+): Promise<IssueDto | null> {
+   const existing = await db.select().from(issue).where(eq(issue.id, id)).limit(1);
+   if (existing.length === 0) return null;
+   const actor = await getOrCreateUser(db, actorEmail);
+   const prev = existing[0];
+
+   await db.update(issue).set(buildIssueSet(patch)).where(eq(issue.id, id));
+
+   const events = changedEvents(patch, prev);
    if (events.length) {
       const now = new Date();
       await db.insert(activityEvent).values(
@@ -503,6 +514,72 @@ export async function updateIssue(
 
    publish({ entity: 'issue', action: 'updated', id, actorEmail });
    return getIssue(db, id);
+}
+
+/**
+ * Aplica o MESMO patch a VÁRIAS issues numa transação (1 UPDATE via inArray +
+ * eventos de atividade em lote) — em vez de N PATCHes do cliente. Publica UM evento
+ * coarse (sem id) → os outros clientes fazem um único refetch debounced. Não dispara
+ * notificação por-issue (evita flood de Slack/e-mail no assign em lote). Retorna os
+ * DTOs atualizados.
+ */
+export async function bulkUpdateIssues(
+   db: Db,
+   ids: string[],
+   patch: UpdateIssueInput,
+   actorEmail: string
+): Promise<IssueDto[]> {
+   if (ids.length === 0) return [];
+   const set = buildIssueSet(patch);
+   // Só `updatedAt`? patch sem campo efetivo → no-op (não toca o banco).
+   if (Object.keys(set).length === 1) return [];
+
+   const actor = await getOrCreateUser(db, actorEmail);
+   const existing = await db.select().from(issue).where(inArray(issue.id, ids));
+   if (existing.length === 0) return [];
+   const foundIds = existing.map((r) => r.id);
+
+   await db.transaction(async (tx) => {
+      await tx.update(issue).set(set).where(inArray(issue.id, foundIds));
+      const now = new Date();
+      const rows = existing.flatMap((prev) =>
+         changedEvents(patch, prev).map((e) => ({
+            id: randomUUID(),
+            issueId: prev.id,
+            actorId: actor.id,
+            event: e.event,
+            text: e.text,
+            createdAt: now,
+         }))
+      );
+      if (rows.length) await tx.insert(activityEvent).values(rows);
+   });
+
+   publish({ entity: 'issue', action: 'updated', actorEmail });
+   const cat = await loadCatalogs(db);
+   const rows = await db.select().from(issue).where(inArray(issue.id, foundIds));
+   return assemble(db, rows, cat);
+}
+
+/**
+ * Adiciona UMA label a VÁRIAS issues (1 insert em lote, onConflictDoNothing). Label
+ * é join table (não coluna), então não passa pelo `bulkUpdateIssues`. Publica coarse.
+ */
+export async function bulkAddLabel(db: Db, ids: string[], labelId: string): Promise<void> {
+   if (ids.length === 0) return;
+   const labelRows = await db
+      .select({ id: labelT.id })
+      .from(labelT)
+      .where(eq(labelT.id, labelId))
+      .limit(1);
+   if (labelRows.length === 0) throw new ApiError(400, `Label '${labelId}' não existe`);
+   const existing = await db.select({ id: issue.id }).from(issue).where(inArray(issue.id, ids));
+   if (existing.length === 0) return;
+   await db
+      .insert(issueLabel)
+      .values(existing.map((r) => ({ issueId: r.id, labelId })))
+      .onConflictDoNothing();
+   publish({ entity: 'issue', action: 'updated' });
 }
 
 export async function deleteIssue(db: Db, id: string): Promise<boolean> {

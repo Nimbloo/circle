@@ -10,6 +10,7 @@ import { api } from '@/lib/client';
 import { adaptIssues } from '@/lib/adapters';
 import { rankBetween } from '@/lib/api/rank';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { usePreferencesStore } from '@/store/preferences-store';
 import type { CreateIssueInput, UpdateIssueInput, IssueListOptions } from '@/lib/api/issues';
 
 interface FilterOptions {
@@ -36,6 +37,10 @@ interface IssuesState {
 
    addIssue: (issue: Issue) => Promise<void>;
    updateIssue: (id: string, updatedIssue: Partial<Issue>) => void;
+   /** Aplica o MESMO patch a várias issues (otimista) num ÚNICO request batch. */
+   bulkUpdate: (ids: string[], patch: Partial<Issue>) => void;
+   /** Adiciona uma label a várias issues (otimista) num ÚNICO request batch. */
+   bulkAddLabel: (ids: string[], label: LabelInterface) => void;
    deleteIssue: (id: string) => void;
 
    /** Sync em tempo real TARGETED: re-busca UMA issue e faz splice no store (sem
@@ -210,6 +215,36 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
       });
    },
 
+   bulkUpdate: (ids, patch) => {
+      const idSet = new Set(ids);
+      const snapshot = { issues: get().issues, issuesByStatus: get().issuesByStatus };
+      set((state) => {
+         const newIssues = state.issues.map((i) => (idSet.has(i.id) ? { ...i, ...patch } : i));
+         return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
+      });
+      api.issues.bulk({ ids, patch: toUpdateInput(patch) }).catch(() => {
+         set(snapshot);
+         toast.error('Falha ao atualizar as issues');
+      });
+   },
+
+   bulkAddLabel: (ids, label) => {
+      const idSet = new Set(ids);
+      const snapshot = { issues: get().issues, issuesByStatus: get().issuesByStatus };
+      set((state) => {
+         const newIssues = state.issues.map((i) =>
+            idSet.has(i.id) && !i.labels.some((l) => l.id === label.id)
+               ? { ...i, labels: [...i.labels, label] }
+               : i
+         );
+         return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
+      });
+      api.issues.bulk({ ids, addLabelId: label.id }).catch(() => {
+         set(snapshot);
+         toast.error('Falha ao adicionar a label');
+      });
+   },
+
    deleteIssue: (id: string) => {
       const snapshot = { issues: get().issues, issuesByStatus: get().issuesByStatus };
       set((state) => {
@@ -265,7 +300,26 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
       return out;
    },
 
-   updateIssueStatus: (issueId, newStatus) => get().updateIssue(issueId, { status: newStatus }),
+   updateIssueStatus: (issueId, newStatus) => {
+      const patch: Partial<Issue> = { status: newStatus };
+      // "On move to started status, assign to yourself" (Preferences): se a issue está
+      // sem responsável e vai pra um status 'started', atribui ao usuário atual no MESMO
+      // patch (1 PATCH). Sem pref/sem self/já atribuída → só muda o status.
+      const current = get().getIssueById(issueId);
+      if (
+         current &&
+         !current.assignee &&
+         newStatus.category === 'started' &&
+         usePreferencesStore.getState().assignSelfOnStart
+      ) {
+         const ws = useWorkspaceStore.getState();
+         const self = ws.me
+            ? ws.users.find((u) => u.id === ws.me!.id || u.email === ws.me!.email)
+            : undefined;
+         if (self) patch.assignee = self;
+      }
+      get().updateIssue(issueId, patch);
+   },
    updateIssuePriority: (issueId, newPriority) =>
       get().updateIssue(issueId, { priority: newPriority }),
    updateIssueAssignee: (issueId, newAssignee) =>

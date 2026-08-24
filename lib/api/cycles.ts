@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { cycle as cycleT, issue as issueT, status as statusT, team as teamT } from '@/db/schema';
 import { ApiError } from './errors';
@@ -138,25 +138,6 @@ export async function getCycle(db: Db, id: string): Promise<CycleDto | null> {
    if (rows.length === 0) return null;
    const aggs = await aggregatesByCycle(db, [id]);
    return toDto(rows[0], aggs.get(id) ?? { scope: 0, started: 0, completed: 0 });
-}
-
-export async function getCycleByStatus(
-   db: Db,
-   teamId: string,
-   status: 'current' | 'upcoming'
-): Promise<CycleDto | null> {
-   const rows = await db
-      .select()
-      .from(cycleT)
-      // orderBy determinístico: sem ele, com vários 'upcoming' o resultado era arbitrário
-      // (ordem do heap). O mais próximo (menor startDate) é o "próximo" correto.
-      .where(and(eq(cycleT.teamId, teamId), eq(cycleT.status, status)))
-      .orderBy(asc(cycleT.startDate))
-      .limit(1);
-   if (rows.length === 0) return null;
-   const match = rows[0];
-   const aggs = await aggregatesByCycle(db, [match.id]);
-   return toDto(match, aggs.get(match.id) ?? { scope: 0, started: 0, completed: 0 });
 }
 
 // ── Mutações ─────────────────────────────────────────────────────────

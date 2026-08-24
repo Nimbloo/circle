@@ -41,7 +41,7 @@ import type { NotificationDto } from '@/lib/api/notifications';
 import type { ReviewDto } from '@/lib/api/reviews';
 import type { FolderDto } from '@/lib/api/documents';
 import type { IssueDetailDto, CommentDto, ActivityItem } from '@/lib/api/issue-detail';
-import type { IssueMatrix, ProjectProgress } from '@/lib/api/aggregations';
+import type { ProjectProgress } from '@/lib/api/aggregations';
 import type { MeDto } from '@/lib/api/users';
 
 export class ApiError extends Error {
@@ -166,6 +166,9 @@ export const api = {
       create: (input: CreateIssueInput) => post<IssueDto>('/issues', input),
       update: (id: string, patchInput: UpdateIssueInput) =>
          patch<IssueDto>(`/issues/${id}`, patchInput),
+      /** Mutação em LOTE: 1 request pra aplicar patch e/ou add-label a várias issues. */
+      bulk: (body: { ids: string[]; patch?: UpdateIssueInput; addLabelId?: string }) =>
+         post<{ updated: IssueDto[] }>('/issues/bulk', body),
       remove: (id: string) => del<{ deleted: boolean }>(`/issues/${id}`),
       reorder: (id: string, beforeId?: string | null, afterId?: string | null) =>
          patch<IssueDto>(`/issues/${id}/rank`, { beforeId, afterId }),
@@ -186,8 +189,6 @@ export const api = {
       comments: (id: string) => get<CommentDto[]>(`/issues/${id}/comments`),
       addComment: (id: string, body: string) =>
          post<CommentDto>(`/issues/${id}/comments`, { body }),
-      aggregate: (team?: string) =>
-         get<IssueMatrix>(`/issues/aggregate${team ? `?team=${team}` : ''}`),
    },
 
    teams: {
@@ -315,10 +316,6 @@ export const api = {
       create: (input: CreateViewInput) => post<ViewDto>('/views', input),
       update: (id: string, body: UpdateViewInput) => patch<ViewDto>(`/views/${id}`, body),
       remove: (id: string) => del<{ deleted: boolean }>(`/views/${id}`),
-      results: (id: string) =>
-         get<{ type: string; issues?: IssueDto[]; projects?: ProjectDto[] }>(
-            `/views/${id}/results`
-         ),
    },
 
    inbox: {

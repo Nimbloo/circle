@@ -3,14 +3,7 @@ import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
 import { createIssue } from '@/lib/api/issues';
 import { createProject } from '@/lib/api/projects';
-import {
-   createView,
-   resolveView,
-   listViews,
-   updateView,
-   deleteView,
-   getView,
-} from '@/lib/api/views';
+import { createView, listViews, updateView, deleteView, getView } from '@/lib/api/views';
 import {
    createNotification,
    listInbox,
@@ -25,7 +18,7 @@ import {
    updateDocument,
    deleteDocument,
 } from '@/lib/api/documents';
-import { issueMatrix, projectProgress } from '@/lib/api/aggregations';
+import { projectProgress } from '@/lib/api/aggregations';
 import { getMe } from '@/lib/api/users';
 
 const ME = 'dev@nimbloo.ai';
@@ -37,34 +30,6 @@ async function base() {
 }
 
 describe('views', () => {
-   it('creates an issue view and resolves it against the filter', async () => {
-      const db = await base();
-      await createIssue(
-         db,
-         { teamId: 'CORE', title: 'A', statusId: 'in-progress', priorityId: 'low' },
-         ME
-      );
-      await createIssue(
-         db,
-         { teamId: 'CORE', title: 'B', statusId: 'to-do', priorityId: 'low' },
-         ME
-      );
-      const view = await createView(
-         db,
-         {
-            slug: 'in-prog',
-            name: 'Em progresso',
-            type: 'issue',
-            filter: { statusIds: ['in-progress'] },
-         },
-         ME
-      );
-      const res = await resolveView(db, view.id);
-      expect(res?.type).toBe('issue');
-      expect(res?.issues).toHaveLength(1);
-      expect(res?.issues?.[0].status.id).toBe('in-progress');
-   });
-
    it('updates and deletes a view', async () => {
       const db = await base();
       const v = await createView(db, { slug: 's', name: 'V', type: 'issue', filter: {} }, ME);
@@ -175,30 +140,6 @@ describe('documents', () => {
 });
 
 describe('aggregations', () => {
-   it('builds the status × priority matrix', async () => {
-      const db = await base();
-      await createIssue(
-         db,
-         { teamId: 'CORE', title: 'A', statusId: 'in-progress', priorityId: 'urgent' },
-         ME
-      );
-      await createIssue(
-         db,
-         { teamId: 'CORE', title: 'B', statusId: 'in-progress', priorityId: 'urgent' },
-         ME
-      );
-      await createIssue(
-         db,
-         { teamId: 'CORE', title: 'C', statusId: 'to-do', priorityId: 'low' },
-         ME
-      );
-      const m = await issueMatrix(db);
-      expect(m.total).toBe(3);
-      expect(m.cells['in-progress']['urgent']).toBe(2);
-      expect(m.cells['to-do']['low']).toBe(1);
-      expect(m.totalsByStatus['in-progress']).toBe(2);
-   });
-
    it('computes project progress and breakdowns', async () => {
       const db = await base();
       const ana = await seedUser(db, { name: 'Ana', email: 'ana@nimbloo.ai' });

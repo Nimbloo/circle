@@ -12,7 +12,6 @@ import {
    initiativeProject,
    project,
    projectLabel,
-   cycle,
    issue,
    issueLabel,
    issueContent,
@@ -27,7 +26,6 @@ import { users } from '@/data/users';
 import { teams } from '@/data/teams';
 import { projects } from '@/data/projects';
 import { issues } from '@/data/issues';
-import { cycles } from '@/data/cycles';
 import { initiatives } from '@/data/initiatives';
 import { views } from '@/data/views';
 
@@ -165,24 +163,9 @@ export async function seedDemo(db: Db): Promise<void> {
          .values(dedupPairs(initProjRows, (r) => `${r.initiativeId}:${r.projectId}`))
          .onConflictDoNothing();
 
-   // 8) Cycles
-   if (cycles.length)
-      await db
-         .insert(cycle)
-         .values(
-            cycles.map((c) => ({
-               id: c.id,
-               number: c.number,
-               name: c.name,
-               teamId: c.teamId,
-               status: c.status,
-               startDate: c.startDate,
-               endDate: c.endDate,
-               capacity: c.capacity,
-            }))
-         )
-         .onConflictDoNothing();
-   const cycleIds = new Set(cycles.map((c) => c.id));
+   // 8) Cycles — sem seed de ciclos mock (o mock sempre foi vazio); issues nascem sem
+   // ciclo. Ciclos reais são criados via API/UI.
+   const cycleIds = new Set<string>();
 
    // 9) Issues
    const projectTeam = new Map(projects.map((p) => [p.id, p.teamId]));

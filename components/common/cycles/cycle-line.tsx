@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { CapacityRing } from './capacity-ring';
 import { CycleActions } from './cycle-actions';
+import { useCycleAggregates } from './use-cycle-aggregates';
 
 export function CyclePlayIcon({ className }: { className?: string }) {
    return (
@@ -35,6 +36,12 @@ interface CycleLineProps {
 export default function CycleLine({ cycle }: CycleLineProps) {
    const { orgId } = useParams<{ orgId: string }>();
 
+   // Agregados AO VIVO (o DTO do servidor fica stale após mover/completar issue).
+   const live = useCycleAggregates(cycle.id);
+   const scope = live.ready ? live.scope : cycle.scope;
+   const completed = live.ready ? live.completed : cycle.completed;
+   const successRate = live.ready ? live.successRate : (cycle.successRate ?? 0);
+
    // Usa o time REAL do cycle (não o da URL) — robusto se a lista misturar times.
    const href =
       cycle.status === 'current'
@@ -58,14 +65,13 @@ export default function CycleLine({ cycle }: CycleLineProps) {
             {cycle.status === 'completed' ? (
                <>
                   <div className="hidden sm:flex items-center gap-2 w-28 justify-end">
-                     <CapacityRing value={cycle.successRate ?? 0} color="#6771c5" />
+                     <CapacityRing value={successRate} color="#6771c5" />
                      <span className="text-sm">
-                        {cycle.successRate ?? 0}%{' '}
-                        <span className="text-muted-foreground">success</span>
+                        {successRate}% <span className="text-muted-foreground">success</span>
                      </span>
                   </div>
                   <span className="hidden md:inline-block text-sm w-28 text-right">
-                     {cycle.completed} <span className="text-muted-foreground">completed</span>
+                     {completed} <span className="text-muted-foreground">completed</span>
                   </span>
                </>
             ) : (
@@ -78,7 +84,7 @@ export default function CycleLine({ cycle }: CycleLineProps) {
             )}
 
             <span className="text-sm w-14 sm:w-20 text-right whitespace-nowrap">
-               {cycle.scope} <span className="text-muted-foreground">scope</span>
+               {scope} <span className="text-muted-foreground">scope</span>
             </span>
          </div>
       </div>

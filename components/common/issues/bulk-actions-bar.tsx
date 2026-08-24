@@ -22,33 +22,39 @@ import {
    CommandList,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { usePriorities, useStatuses } from '@/store/catalog-store';
+import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
+import { usePriorities, useStatuses, useLabels } from '@/store/catalog-store';
 import { useBulkSelectionStore } from '@/store/bulk-selection-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useShallow } from 'zustand/react/shallow';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { BarChart3, CircleDot, Trash2, User as UserIcon, X } from 'lucide-react';
+import { BarChart3, Box, CircleDot, Tag, Trash2, User as UserIcon, X } from 'lucide-react';
+import { ComponentType } from 'react';
 import { toast } from 'sonner';
 
+type IconCmp = ComponentType<{ className?: string }>;
+
 /**
- * Barra de ações em lote (Linear-style): aparece quando há issues selecionadas
- * e aplica status/prioridade/assignee/delete sobre a seleção via issues-store.
+ * Barra de ações em lote (Linear-style): aparece quando há issues selecionadas e
+ * aplica status/prioridade/assignee/project/cycle/label + delete sobre a seleção.
+ * As mudanças de campo vão num ÚNICO request batch (não N PATCHes) via `bulkUpdate`.
  */
 export function BulkActionsBar() {
    const selected = useBulkSelectionStore((s) => s.selected);
    const clear = useBulkSelectionStore((s) => s.clear);
    const users = useWorkspaceStore((s) => s.users);
+   const projects = useWorkspaceStore((s) => s.projects);
+   const cycles = useWorkspaceStore((s) => s.cycles);
    const allStatus = useStatuses();
    const priorities = usePriorities();
-   const { updateIssueStatus, updateIssuePriority, updateIssueAssignee, deleteIssue } =
-      useIssuesStore(
-         useShallow((s) => ({
-            updateIssueStatus: s.updateIssueStatus,
-            updateIssuePriority: s.updateIssuePriority,
-            updateIssueAssignee: s.updateIssueAssignee,
-            deleteIssue: s.deleteIssue,
-         }))
-      );
+   const labels = useLabels();
+   const { bulkUpdate, bulkAddLabel, deleteIssue } = useIssuesStore(
+      useShallow((s) => ({
+         bulkUpdate: s.bulkUpdate,
+         bulkAddLabel: s.bulkAddLabel,
+         deleteIssue: s.deleteIssue,
+      }))
+   );
 
    const ids = [...selected];
    if (ids.length === 0) return null;
@@ -56,23 +62,42 @@ export function BulkActionsBar() {
    const applyStatus = (statusId: string) => {
       const s = allStatus.find((x) => x.id === statusId);
       if (!s) return;
-      ids.forEach((id) => updateIssueStatus(id, s));
+      bulkUpdate(ids, { status: s });
       toast.success(`${ids.length} issues → ${s.name}`);
    };
 
    const applyPriority = (priorityId: string) => {
       const p = priorities.find((x) => x.id === priorityId);
       if (!p) return;
-      ids.forEach((id) => updateIssuePriority(id, p));
+      bulkUpdate(ids, { priority: p });
       toast.success(`${ids.length} issues → ${p.name}`);
    };
 
    const applyAssignee = (userId: string | null) => {
       const u = userId ? (users.find((x) => x.id === userId) ?? null) : null;
-      ids.forEach((id) => updateIssueAssignee(id, u));
+      bulkUpdate(ids, { assignee: u });
       toast.success(
          u ? `Assigned ${ids.length} issues to ${u.name}` : `Unassigned ${ids.length} issues`
       );
+   };
+
+   const applyProject = (projectId: string | null) => {
+      const p = projectId ? projects.find((x) => x.id === projectId) : undefined;
+      bulkUpdate(ids, { project: p });
+      toast.success(p ? `${ids.length} issues → ${p.name}` : `Removed ${ids.length} from project`);
+   };
+
+   const applyCycle = (cycleId: string) => {
+      const c = cycleId ? cycles.find((x) => x.id === cycleId) : undefined;
+      bulkUpdate(ids, { cycleId });
+      toast.success(c ? `${ids.length} issues → ${c.name}` : `Removed ${ids.length} from cycle`);
+   };
+
+   const applyLabel = (labelId: string) => {
+      const l = labels.find((x) => x.id === labelId);
+      if (!l) return;
+      bulkAddLabel(ids, l);
+      toast.success(`Added "${l.name}" to ${ids.length} issues`);
    };
 
    const remove = () => {
@@ -171,6 +196,104 @@ export function BulkActionsBar() {
                                     <AvatarFallback>{u.name[0]}</AvatarFallback>
                                  </Avatar>
                                  {u.name}
+                              </CommandItem>
+                           ))}
+                        </CommandGroup>
+                     </CommandList>
+                  </Command>
+               </PopoverContent>
+            </Popover>
+
+            <Popover>
+               <PopoverTrigger asChild>
+                  <Button size="xs" variant="ghost">
+                     <Box className="size-4" /> Project
+                  </Button>
+               </PopoverTrigger>
+               <PopoverContent align="center" className="w-56 p-0">
+                  <Command>
+                     <CommandInput placeholder="Set project..." />
+                     <CommandList>
+                        <CommandEmpty>No projects found.</CommandEmpty>
+                        <CommandGroup>
+                           <CommandItem value="no-project" onSelect={() => applyProject(null)}>
+                              <Box className="size-4 text-muted-foreground" />
+                              No project
+                           </CommandItem>
+                           {projects.map((p) => {
+                              const Icon = p.icon as IconCmp;
+                              return (
+                                 <CommandItem
+                                    key={p.id}
+                                    value={`${p.name} ${p.id}`}
+                                    onSelect={() => applyProject(p.id)}
+                                 >
+                                    <Icon className="size-4 text-muted-foreground" />
+                                    <span className="truncate">{p.name}</span>
+                                 </CommandItem>
+                              );
+                           })}
+                        </CommandGroup>
+                     </CommandList>
+                  </Command>
+               </PopoverContent>
+            </Popover>
+
+            <Popover>
+               <PopoverTrigger asChild>
+                  <Button size="xs" variant="ghost">
+                     <CyclePlayIcon className="size-4" /> Cycle
+                  </Button>
+               </PopoverTrigger>
+               <PopoverContent align="center" className="w-56 p-0">
+                  <Command>
+                     <CommandInput placeholder="Set cycle..." />
+                     <CommandList>
+                        <CommandEmpty>No cycles found.</CommandEmpty>
+                        <CommandGroup>
+                           <CommandItem value="no-cycle" onSelect={() => applyCycle('')}>
+                              <CyclePlayIcon className="size-4" />
+                              No cycle
+                           </CommandItem>
+                           {cycles.map((c) => (
+                              <CommandItem
+                                 key={c.id}
+                                 value={`${c.name} ${c.id}`}
+                                 onSelect={() => applyCycle(c.id)}
+                              >
+                                 <CyclePlayIcon className="size-4" />
+                                 <span className="truncate">{c.name}</span>
+                              </CommandItem>
+                           ))}
+                        </CommandGroup>
+                     </CommandList>
+                  </Command>
+               </PopoverContent>
+            </Popover>
+
+            <Popover>
+               <PopoverTrigger asChild>
+                  <Button size="xs" variant="ghost">
+                     <Tag className="size-4" /> Label
+                  </Button>
+               </PopoverTrigger>
+               <PopoverContent align="center" className="w-56 p-0">
+                  <Command>
+                     <CommandInput placeholder="Add label..." />
+                     <CommandList>
+                        <CommandEmpty>No labels found.</CommandEmpty>
+                        <CommandGroup>
+                           {labels.map((l) => (
+                              <CommandItem
+                                 key={l.id}
+                                 value={l.name}
+                                 onSelect={() => applyLabel(l.id)}
+                              >
+                                 <span
+                                    className="size-2.5 rounded-full"
+                                    style={{ backgroundColor: l.color }}
+                                 />
+                                 {l.name}
                               </CommandItem>
                            ))}
                         </CommandGroup>

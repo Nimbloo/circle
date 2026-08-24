@@ -5,10 +5,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { RiEditLine } from '@remixicon/react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Issue } from '@/data/issues';
 import { usePriorities, useStatuses } from '@/store/catalog-store';
 import { useIssuesStore } from '@/store/issues-store';
+import { usePreferencesStore } from '@/store/preferences-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
@@ -34,8 +35,17 @@ export function CreateNewIssue() {
    const priorities = usePriorities();
    const params = useParams<{ teamId?: string }>();
    const teams = useWorkspaceStore((s) => s.teams);
+   const me = useWorkspaceStore((s) => s.me);
+   const users = useWorkspaceStore((s) => s.users);
+   const autoAssignSelf = usePreferencesStore((s) => s.autoAssignSelf);
    // Time do contexto (URL /team/[teamId]/...) ou o 1º time do usuário.
    const teamId = params?.teamId ?? teams[0]?.id ?? '';
+
+   // Usuário atual como objeto User (pro default de assignee do "Auto-assign to self").
+   const selfUser = useMemo(
+      () => (me ? (users.find((u) => u.id === me.id || u.email === me.email) ?? null) : null),
+      [me, users]
+   );
 
    const generateUniqueIdentifier = useCallback(() => {
       const identifiers = getAllIssues().map((issue) => issue.identifier);
@@ -58,7 +68,8 @@ export function CreateNewIssue() {
          title: '',
          description: '',
          status: defaultStatus || status.find((s) => s.id === 'to-do')!,
-         assignee: null,
+         // "Auto-assign to self" (Preferences): já nasce atribuída ao usuário atual.
+         assignee: autoAssignSelf ? selfUser : null,
          priority: priorities.find((p) => p.id === 'no-priority')!,
          labels: [],
          createdAt: new Date().toISOString(),
@@ -71,7 +82,7 @@ export function CreateNewIssue() {
          // Rank otimista; o servidor reatribui o rank real no re-hydrate após o POST.
          rank: new LexoRank('a3c').toString(),
       };
-   }, [defaultStatus, generateUniqueIdentifier, status, priorities, teamId]);
+   }, [defaultStatus, generateUniqueIdentifier, status, priorities, teamId, autoAssignSelf, selfUser]);
 
    const [addIssueForm, setAddIssueForm] = useState<Issue>(createDefaultData());
 

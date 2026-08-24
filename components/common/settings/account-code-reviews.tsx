@@ -2,13 +2,25 @@
 
 import { Switch } from '@/components/ui/switch';
 import { usePreferencesStore } from '@/store/preferences-store';
-import { SelectMenu, SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
+import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
+
+/** Selo "Soon" — a linha existe (paridade com o Linear) mas o subsistema que a torna
+ *  efetiva (GitHub App: PR automation, merge queue, coding tools) ainda não existe. */
+function Soon() {
+   return (
+      <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+         Soon
+      </span>
+   );
+}
 
 /**
- * Personal "Code & reviews" settings. As opções persistem por-usuário
- * (preferences-store → PUT /settings). "Enable code reviews" controla a aba Reviews
- * no sidebar (efeito real). O fluxo completo de review de PR (auto-convert de drafts,
- * merge queue, chave de assinatura) depende de integrações que ainda não existem.
+ * Personal "Code & reviews" settings. A ÚNICA opção efetiva hoje é "Enable code
+ * reviews", que mostra/oculta a aba Reviews no sidebar (as reviews são INGESTÃO
+ * read-only de PRs). Todo o resto (auto-convert de draft, merge strategy/queue,
+ * checks, signed commits, coding tools) depende de um GitHub App que o Circle ainda
+ * não tem — então essas linhas ficam marcadas "Soon" em vez de fingir que persistem
+ * um efeito (antes eram toggles que gravavam sem fazer nada).
  */
 export default function AccountCodeReviews() {
    const prefs = usePreferencesStore();
@@ -33,23 +45,14 @@ export default function AccountCodeReviews() {
                <SettingsRow
                   title="Auto-convert draft pull requests"
                   description="Automatically mark your drafts as ready upon approval or requesting a review"
-                  trailing={
-                     <Switch
-                        checked={prefs.autoConvertDrafts}
-                        onCheckedChange={(v) => prefs.setPref('autoConvertDrafts', v)}
-                     />
-                  }
+                  muted
+                  trailing={<Soon />}
                />
                <SettingsRow
                   title="Merge strategy"
                   description="Choose the default merge strategy for pull requests. Repository configuration can affect available strategies"
-                  trailing={
-                     <SelectMenu
-                        options={['Squash and merge', 'Merge commit', 'Rebase and merge']}
-                        value={prefs.mergeStrategy}
-                        onChange={(v) => prefs.setPref('mergeStrategy', v)}
-                     />
-                  }
+                  muted
+                  trailing={<Soon />}
                />
             </SettingsCard>
          </SettingsSection>
@@ -59,24 +62,10 @@ export default function AccountCodeReviews() {
                <SettingsRow
                   title="Code theme"
                   description="Select the syntax highlighting theme used in code diffs and viewers"
-                  trailing={
-                     <SelectMenu
-                        options={['Nimbloo Light', 'Nimbloo Dark', 'Contrast']}
-                        value={prefs.codeTheme}
-                        onChange={(v) => prefs.setPref('codeTheme', v)}
-                     />
-                  }
+                  muted
+                  trailing={<Soon />}
                />
-               <SettingsRow
-                  title="Font"
-                  trailing={
-                     <SelectMenu
-                        options={['12px, Regular, Default', '13px, Medium']}
-                        value={prefs.codeFont}
-                        onChange={(v) => prefs.setPref('codeFont', v)}
-                     />
-                  }
-               />
+               <SettingsRow title="Font" muted trailing={<Soon />} />
             </SettingsCard>
          </SettingsSection>
 
@@ -88,43 +77,26 @@ export default function AccountCodeReviews() {
                <SettingsRow
                   title="Comments & reviews"
                   description="Comments, mentions, and submitted reviews"
-                  trailing={
-                     <SelectMenu
-                        options={['Exclude Bots', 'Everyone', 'None']}
-                        value={prefs.reviewComments}
-                        onChange={(v) => prefs.setPref('reviewComments', v)}
-                     />
-                  }
+                  muted
+                  trailing={<Soon />}
                />
                <SettingsRow
                   title="Review requests"
                   description="Requests for your personal review"
-                  trailing={
-                     <Switch
-                        checked={prefs.reviewRequests}
-                        onCheckedChange={(v) => prefs.setPref('reviewRequests', v)}
-                     />
-                  }
+                  muted
+                  trailing={<Soon />}
                />
                <SettingsRow
                   title="GitHub team review requests"
                   description="Requests for review from your GitHub teams with 10 or fewer members"
-                  trailing={
-                     <Switch
-                        checked={prefs.githubTeamRequests}
-                        onCheckedChange={(v) => prefs.setPref('githubTeamRequests', v)}
-                     />
-                  }
+                  muted
+                  trailing={<Soon />}
                />
                <SettingsRow
                   title="Checks & merge queue"
                   description="Check failures and merge queue updates"
-                  trailing={
-                     <Switch
-                        checked={prefs.checksMergeQueue}
-                        onCheckedChange={(v) => prefs.setPref('checksMergeQueue', v)}
-                     />
-                  }
+                  muted
+                  trailing={<Soon />}
                />
             </SettingsCard>
          </SettingsSection>
@@ -134,20 +106,8 @@ export default function AccountCodeReviews() {
                <SettingsRow
                   title="Require signed commits"
                   description="Users must upload a signing key before starting a coding session"
-                  trailing={
-                     <Switch
-                        checked={prefs.requireSignedCommits}
-                        onCheckedChange={(v) => prefs.setPref('requireSignedCommits', v)}
-                     />
-                  }
-               />
-               <SettingsRow
-                  title="No signing key added"
-                  trailing={
-                     <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                        Soon
-                     </span>
-                  }
+                  muted
+                  trailing={<Soon />}
                />
             </SettingsCard>
          </SettingsSection>
@@ -158,42 +118,25 @@ export default function AccountCodeReviews() {
                   title="Configure coding tools"
                   description="Configure the external coding tools you can open issues in"
                   muted
-                  trailing={
-                     <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                        Soon
-                     </span>
-                  }
+                  trailing={<Soon />}
                />
                <SettingsRow
                   title="Git attachment format"
                   description="The format of GitHub/GitLab attachments on issues"
-                  trailing={
-                     <SelectMenu
-                        options={['Title', 'URL', 'Compact']}
-                        value={prefs.gitAttachmentFormat}
-                        onChange={(v) => prefs.setPref('gitAttachmentFormat', v)}
-                     />
-                  }
+                  muted
+                  trailing={<Soon />}
                />
                <SettingsRow
                   title="On git branch copy, move issue to started status"
                   description="After copying the git branch name, issue status is moved to the team's first started workflow status. Hold ⌥ to disable."
-                  trailing={
-                     <Switch
-                        checked={prefs.gitBranchCopyMoveStarted}
-                        onCheckedChange={(v) => prefs.setPref('gitBranchCopyMoveStarted', v)}
-                     />
-                  }
+                  muted
+                  trailing={<Soon />}
                />
                <SettingsRow
                   title="On open in coding tool, move issue to started status"
                   description="After opening an issue in a coding tool or copying as prompt, issue status is moved to the team's first started workflow status. Hold ⌥ to disable."
-                  trailing={
-                     <Switch
-                        checked={prefs.openCodingToolMoveStarted}
-                        onCheckedChange={(v) => prefs.setPref('openCodingToolMoveStarted', v)}
-                     />
-                  }
+                  muted
+                  trailing={<Soon />}
                />
             </SettingsCard>
          </SettingsSection>

@@ -58,8 +58,10 @@ export interface IssueDetail {
    description: ContentBlock[];
    activity: ActivityItem[];
    subIssueIds?: string[];
+   parentIds?: string[];
    relatedIds?: string[];
    blockedByIds?: string[];
+   blockingIds?: string[];
    prLinks?: PrLink[];
    milestone?: string;
 }

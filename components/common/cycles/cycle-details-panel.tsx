@@ -110,8 +110,13 @@ export function CycleDetailsPanel({ cycle, issues }: CycleDetailsPanelProps) {
    const { closePanel } = useRightPanelStore();
    const { isActive, toggle } = usePanelFilter();
 
-   const completedPercent = cycle.scope > 0 ? Math.round((cycle.completed / cycle.scope) * 100) : 0;
-   const startedPercent = cycle.scope > 0 ? Math.round((cycle.started / cycle.scope) * 100) : 0;
+   // Agregados AO VIVO das issues do ciclo (o DTO do servidor fica stale após
+   // mover/completar uma issue). `issues` já é o conjunto vivo escopado pelo ciclo.
+   const scope = issues.length;
+   const started = issues.filter((i) => i.status.category === 'started').length;
+   const completed = issues.filter(isCompleted).length;
+   const completedPercent = scope > 0 ? Math.round((completed / scope) * 100) : 0;
+   const startedPercent = scope > 0 ? Math.round((started / scope) * 100) : 0;
 
    const assigneeRows = useMemo(
       () =>
@@ -255,7 +260,7 @@ export function CycleDetailsPanel({ cycle, issues }: CycleDetailsPanelProps) {
                      Scope
                   </div>
                   <div className="text-sm">
-                     <span className="font-medium">{cycle.scope}</span>{' '}
+                     <span className="font-medium">{scope}</span>{' '}
                      {cycle.scopeDelta !== 0 && (
                         <span
                            className={`text-xs ${cycle.scopeDelta > 0 ? 'text-red-500' : 'text-emerald-500'}`}
@@ -272,7 +277,7 @@ export function CycleDetailsPanel({ cycle, issues }: CycleDetailsPanelProps) {
                      Started
                   </div>
                   <div className="text-sm">
-                     <span className="font-medium">{cycle.started}</span>{' '}
+                     <span className="font-medium">{started}</span>{' '}
                      <span className="text-xs text-muted-foreground">• {startedPercent}%</span>
                   </div>
                </div>
@@ -282,7 +287,7 @@ export function CycleDetailsPanel({ cycle, issues }: CycleDetailsPanelProps) {
                      Completed
                   </div>
                   <div className="text-sm">
-                     <span className="font-medium">{cycle.completed}</span>{' '}
+                     <span className="font-medium">{completed}</span>{' '}
                      <span className="text-xs text-muted-foreground">• {completedPercent}%</span>
                   </div>
                </div>

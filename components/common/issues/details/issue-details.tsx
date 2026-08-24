@@ -133,6 +133,12 @@ export default function IssueDetails() {
       .map((id) => issues.find((candidate) => candidate.id === id))
       .filter((candidate) => candidate !== undefined);
 
+   // Parent backlink ("Sub-issue of X") — reverso de 'sub'; antes a issue-filha não
+   // mostrava de quem era sub.
+   const parent = (detail.parentIds ?? [])
+      .map((id) => issues.find((candidate) => candidate.id === id))
+      .find((candidate) => candidate !== undefined);
+
    // Persiste o título: pelo store (optimistic+rollback) quando a issue está no board,
    // ou direto na API + estado local quando é deep-link frio (fora do store).
    const applyTitle = async () => {
@@ -172,6 +178,16 @@ export default function IssueDetails() {
          {/* Main column */}
          <div className="flex-1 min-w-0 h-full overflow-y-auto">
             <div className="max-w-3xl mx-auto px-8 py-10">
+               {parent && (
+                  <Link
+                     href={`/${orgId ?? 'nimbloo'}/issue/${parent.identifier}`}
+                     className="inline-flex items-center gap-1.5 mb-3 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                     <parent.status.icon />
+                     Sub-issue of {parent.identifier}
+                     <span className="truncate max-w-xs">{parent.title}</span>
+                  </Link>
+               )}
                {editingTitle ? (
                   <textarea
                      autoFocus
