@@ -22,6 +22,7 @@ import { NotificationBox } from './icons/motification-box';
 interface IssuePreviewProps {
    notification?: InboxItem;
    onMarkAsRead?: (id: string) => void;
+   onMarkAsUnread?: (id: string) => void;
 }
 
 /**
@@ -29,7 +30,11 @@ interface IssuePreviewProps {
  * notification (live status/assignee from the store, rich description
  * from issue-details) plus the notification context.
  */
-export default function IssuePreview({ notification, onMarkAsRead }: IssuePreviewProps) {
+export default function IssuePreview({
+   notification,
+   onMarkAsRead,
+   onMarkAsUnread,
+}: IssuePreviewProps) {
    const { orgId } = useParams<{ orgId: string }>();
    const { getUnreadCount } = useNotificationsStore();
    const issues = useIssuesStore((s) => s.issues);
@@ -109,6 +114,16 @@ export default function IssuePreview({ notification, onMarkAsRead }: IssuePrevie
                   >
                      <Check className="size-4" />
                      Mark as read
+                  </Button>
+               )}
+               {notification.read && onMarkAsUnread && (
+                  <Button
+                     variant="outline"
+                     size="xs"
+                     onClick={() => onMarkAsUnread(notification.id)}
+                     className="gap-1"
+                  >
+                     Mark as unread
                   </Button>
                )}
                <Button variant="ghost" size="xs" asChild>

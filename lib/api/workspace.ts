@@ -1,13 +1,12 @@
-import { inArray } from 'drizzle-orm';
 import type { Db } from '@/db';
-import { teamMember, cycle as cycleT } from '@/db/schema';
+import { teamMember } from '@/db/schema';
 import { listStatuses, listPriorities, listLabels, listHealthStates } from './catalogs';
 import { listTeams, type TeamDto } from './teams';
 import { listProjects, type ProjectDto } from './projects';
 import { listMembers, type MemberDto } from './members';
 import { listInitiatives, type InitiativeDto } from './initiatives';
 import { listViews, type ViewDto } from './views';
-import { listCyclesByTeam, type CycleDto } from './cycles';
+import { listCyclesForTeams, type CycleDto } from './cycles';
 import { getMe, type MeDto } from './users';
 
 export interface TeamFull extends TeamDto {
@@ -78,18 +77,10 @@ export async function bootstrapWorkspace(db: Db, email: string): Promise<Workspa
       projects: projectsByTeam.get(t.id) ?? [],
    }));
 
-   // cycles de todos os times
+   // cycles de todos os times — 2 queries no total (era N+1: 1 chamada por time,
+   // cada uma re-escaneando a tabela status).
    const teamIds = teams.map((t) => t.id);
-   const cycles: CycleDto[] = [];
-   if (teamIds.length) {
-      const allCycleRows = await db
-         .select({ id: cycleT.id, teamId: cycleT.teamId })
-         .from(cycleT)
-         .where(inArray(cycleT.teamId, teamIds));
-      const uniqueTeams = [...new Set(allCycleRows.map((c) => c.teamId))];
-      const perTeam = await Promise.all(uniqueTeams.map((tid) => listCyclesByTeam(db, tid)));
-      for (const c of perTeam) cycles.push(...c);
-   }
+   const cycles: CycleDto[] = await listCyclesForTeams(db, teamIds);
 
    return {
       me,

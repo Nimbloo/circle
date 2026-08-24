@@ -116,6 +116,23 @@ export async function listCyclesByTeam(db: Db, teamId: string): Promise<CycleDto
       .sort((a, b) => b.number - a.number);
 }
 
+/**
+ * Cycles de VÁRIOS times de uma vez, em 2 queries no total (1 cycles + 1 aggregate
+ * pra todos os ids), em vez de N chamadas de listCyclesByTeam (cada uma re-escaneando
+ * a tabela status). Usado no bootstrap do workspace — fim do N+1.
+ */
+export async function listCyclesForTeams(db: Db, teamIds: string[]): Promise<CycleDto[]> {
+   if (teamIds.length === 0) return [];
+   const rows = await db.select().from(cycleT).where(inArray(cycleT.teamId, teamIds));
+   const aggs = await aggregatesByCycle(
+      db,
+      rows.map((r) => r.id)
+   );
+   return rows
+      .map((r) => toDto(r, aggs.get(r.id) ?? { scope: 0, started: 0, completed: 0 }))
+      .sort((a, b) => b.number - a.number);
+}
+
 export async function getCycle(db: Db, id: string): Promise<CycleDto | null> {
    const rows = await db.select().from(cycleT).where(eq(cycleT.id, id)).limit(1);
    if (rows.length === 0) return null;

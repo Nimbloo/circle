@@ -27,6 +27,7 @@ export default function Inbox() {
       selectedNotification,
       setSelectedNotification,
       markAsRead,
+      markAsUnread,
       markAllAsRead,
       getUnreadNotifications,
    } = useNotificationsStore();
@@ -192,7 +193,7 @@ export default function Inbox() {
                Inbox
             </button>
             <div className="flex-1 min-h-0">
-               <NotificationPreview notification={selectedNotification} onMarkAsRead={markAsRead} />
+               <NotificationPreview notification={selectedNotification} onMarkAsRead={markAsRead} onMarkAsUnread={markAsUnread} />
             </div>
          </div>
       ) : (
@@ -211,7 +212,7 @@ export default function Inbox() {
          </ResizablePanel>
          <ResizableHandle withHandle />
          <ResizablePanel defaultSize={350} maxSize={500}>
-            <NotificationPreview notification={selectedNotification} onMarkAsRead={markAsRead} />
+            <NotificationPreview notification={selectedNotification} onMarkAsRead={markAsRead} onMarkAsUnread={markAsUnread} />
          </ResizablePanel>
       </ResizablePanelGroup>
    );
