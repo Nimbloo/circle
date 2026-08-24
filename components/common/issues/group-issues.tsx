@@ -35,17 +35,22 @@ interface GroupIssuesProps {
    /** Issues of the group, already sorted upstream. */
    issues: Issue[];
    count: number;
+   /** Ordem da coluna/grupo — usada só para o stagger da animação de entrada. */
+   index?: number;
 }
 
-export function GroupIssues({ group, issues, count }: GroupIssuesProps) {
+export function GroupIssues({ group, issues, count, index = 0 }: GroupIssuesProps) {
    const { viewType } = useViewStore();
    const isViewTypeGrid = viewType === 'grid';
    const { openModal } = useCreateIssueStore();
 
    return (
       <div
+         // Entrada estilo Linear: fade + slide-up sutil, com stagger por coluna. `fill-mode`
+         // both mantém invisível durante o delay (sem flicker); toca só no mount da view.
+         style={{ animationDelay: `${index * 45}ms` }}
          className={cn(
-            'bg-conainer',
+            'animate-in fade-in-0 slide-in-from-bottom-2 fill-mode-both duration-300 ease-out',
             isViewTypeGrid
                ? 'overflow-hidden rounded-md h-full flex-shrink-0 w-[348px] flex flex-col'
                : ''
@@ -144,7 +149,7 @@ const IssueGridList: FC<{ issues: Issue[]; drop?: IssueGroupDrop }> = ({
    return (
       <div
          ref={ref}
-         className="flex-1 h-full overflow-y-auto p-2 bg-zinc-50/50 dark:bg-zinc-900/50 relative"
+         className="flex-1 h-full overflow-y-auto p-2 bg-muted/40 relative"
       >
          <AnimatePresence>
             {isOver && (

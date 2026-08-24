@@ -141,14 +141,14 @@ export function CreateNewIssue() {
                <RiEditLine />
             </Button>
          </DialogTrigger>
-         <DialogContent className="w-full sm:max-w-[750px] p-0 shadow-xl top-[30%]">
+         <DialogContent className="w-full sm:max-w-2xl p-0 gap-0">
             <DialogHeader>
                <DialogTitle className="px-4 pt-4 text-base font-medium">New issue</DialogTitle>
             </DialogHeader>
 
             <div className="px-4 pb-0 space-y-3 w-full">
                <Input
-                  className="border-none w-full shadow-none outline-none text-2xl font-medium px-0 h-auto focus-visible:ring-0 overflow-hidden text-ellipsis whitespace-normal break-words"
+                  className="border-none w-full shadow-none outline-none text-2xl font-semibold px-0 h-auto focus-visible:ring-0 overflow-hidden text-ellipsis whitespace-normal break-words"
                   placeholder="Issue title"
                   value={addIssueForm.title}
                   onChange={(e) => setAddIssueForm({ ...addIssueForm, title: e.target.value })}

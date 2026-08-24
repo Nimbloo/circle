@@ -95,7 +95,7 @@ export default function AllIssues({ categories }: AllIssuesProps) {
             </div>
 
             {openPanel === 'insights' && (
-               <aside className="hidden lg:flex w-[420px] shrink-0 border-l h-full overflow-hidden bg-container">
+               <aside className="hidden lg:flex w-[420px] shrink-0 border-l h-full overflow-hidden bg-container animate-in slide-in-from-right-4 fade-in duration-200 ease-out">
                   <InsightsPanel issues={displayedIssues} />
                </aside>
             )}

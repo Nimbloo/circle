@@ -37,7 +37,7 @@ type IssueGridProps = {
 // Custom DragLayer component to render the drag preview
 function IssueDragPreview({ issue }: { issue: Issue }) {
    return (
-      <div className="w-full p-3 bg-background rounded-md border border-border/50 overflow-hidden">
+      <div className="w-full p-3 bg-container rounded-md border border-border/50 overflow-hidden">
          <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-1.5">
                <PrioritySelector priority={issue.priority} issueId={issue.id} />
@@ -154,7 +154,7 @@ export function IssueGrid({ issue, orderedIssues, groupDrop, layout = true }: Is
          <ContextMenuTrigger asChild>
             <motion.div
                ref={ref}
-               className="w-full p-3 bg-background rounded-md shadow-xs border border-border/50 cursor-default"
+               className="w-full p-3 bg-container rounded-md shadow-xs border border-border/50 cursor-default hover:border-border transition-colors"
                layoutId={layout ? `issue-grid-${issue.identifier}` : undefined}
                style={{
                   opacity: isDragging ? 0.5 : 1,

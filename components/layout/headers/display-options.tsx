@@ -91,7 +91,7 @@ export function DisplayOptions() {
                      onClick={() => setViewType('list')}
                      className={cn(
                         'flex items-center justify-center gap-1.5 h-8 rounded text-xs font-medium transition-colors',
-                        viewType === 'list' ? 'bg-background shadow-sm' : 'text-muted-foreground'
+                        viewType === 'list' ? 'bg-container shadow-sm' : 'text-muted-foreground'
                      )}
                   >
                      <LayoutList className="size-3.5" />
@@ -101,7 +101,7 @@ export function DisplayOptions() {
                      onClick={() => setViewType('grid')}
                      className={cn(
                         'flex items-center justify-center gap-1.5 h-8 rounded text-xs font-medium transition-colors',
-                        viewType === 'grid' ? 'bg-background shadow-sm' : 'text-muted-foreground'
+                        viewType === 'grid' ? 'bg-container shadow-sm' : 'text-muted-foreground'
                      )}
                   >
                      <LayoutGrid className="size-3.5" />

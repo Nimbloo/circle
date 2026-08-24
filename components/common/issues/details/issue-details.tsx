@@ -308,7 +308,7 @@ export default function IssueDetails() {
          </div>
 
          {/* Properties sidebar */}
-         <aside className="hidden lg:block w-80 shrink-0 border-l h-full overflow-y-auto bg-container px-5 py-6">
+         <aside className="hidden lg:block w-80 shrink-0 border-l h-full overflow-y-auto bg-container px-5 py-6 animate-in slide-in-from-right-4 fade-in duration-200 ease-out">
             <IssuePropertiesPanel
                issue={issue}
                detail={detail}

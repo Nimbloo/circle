@@ -285,7 +285,7 @@ export function CreateProjectButton() {
                         onChange={(e) => setName(e.target.value)}
                         placeholder="Project name"
                         maxLength={196}
-                        className="w-full bg-transparent text-xl font-semibold outline-none placeholder:text-muted-foreground"
+                        className="w-full bg-transparent text-2xl font-semibold outline-none placeholder:text-muted-foreground"
                      />
                      <input
                         value={summary}

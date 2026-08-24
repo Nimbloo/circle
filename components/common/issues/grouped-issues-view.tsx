@@ -324,12 +324,13 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
             <div className="h-full flex flex-col">
                <div className="flex-1 min-h-0 overflow-x-auto">
                   <div className="flex h-full gap-3 px-2 py-2 min-w-max">
-                     {boardGroups.map((entry) => (
+                     {boardGroups.map((entry, i) => (
                         <GroupIssues
                            key={entry.group.id}
                            group={entry.group}
                            issues={entry.issues}
                            count={entry.issues.length}
+                           index={i}
                         />
                      ))}
                      {hiddenGroups.length > 0 && <HiddenColumns entries={hiddenGroups} />}

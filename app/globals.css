@@ -47,39 +47,42 @@
 }
 
 .dark {
-   --background: oklch(0.141 0.005 285.823);
+   /* Escala de ELEVAÇÃO (estilo Linear): canvas escuro → sidebar → card/modal elevado →
+      popover flutuante. Antes background/card/popover/container eram o MESMO ~0.141
+      (tudo preto, sem separação). Agora cada nível é um cinza distinto e legível. */
+   --background: oklch(0.152 0.004 285.8); /* canvas (mais escuro) */
    --foreground: oklch(0.985 0 0);
-   --card: oklch(0.141 0.005 285.823);
+   --card: oklch(0.205 0.006 285.9); /* superfície elevada (cards, modais) */
    --card-foreground: oklch(0.985 0 0);
-   --popover: oklch(0.141 0.005 285.823);
+   --popover: oklch(0.223 0.006 285.9); /* flutua acima do card (dropdowns/menus) */
    --popover-foreground: oklch(0.985 0 0);
    --primary: oklch(0.985 0 0);
    --primary-foreground: oklch(0.21 0.006 285.885);
-   --secondary: oklch(0.274 0.006 286.033);
+   --secondary: oklch(0.268 0.006 286);
    --secondary-foreground: oklch(0.985 0 0);
-   --muted: oklch(0.274 0.006 286.033);
-   --muted-foreground: oklch(0.705 0.015 286.067);
-   --accent: oklch(0.274 0.006 286.033);
+   --muted: oklch(0.248 0.006 286); /* preenchimento sutil (badges, chips) */
+   --muted-foreground: oklch(0.715 0.015 286.067);
+   --accent: oklch(0.278 0.007 286); /* HOVER/ativo — lê sobre o card 0.205 */
    --accent-foreground: oklch(0.985 0 0);
    --destructive: oklch(0.396 0.141 25.723);
    --destructive-foreground: oklch(0.637 0.237 25.331);
-   --border: oklch(0.274 0.006 286.033);
-   --input: oklch(0.274 0.006 286.033);
+   --border: oklch(0.279 0.006 286); /* borda visível sobre superfícies elevadas */
+   --input: oklch(0.279 0.006 286);
    --ring: oklch(0.442 0.017 285.786);
    --chart-1: oklch(0.488 0.243 264.376);
    --chart-2: oklch(0.696 0.17 162.48);
    --chart-3: oklch(0.769 0.188 70.08);
    --chart-4: oklch(0.627 0.265 303.9);
    --chart-5: oklch(0.645 0.246 16.439);
-   --sidebar: oklch(0.21 0.006 285.885);
+   --sidebar: oklch(0.183 0.005 285.8); /* painel: entre canvas e card */
    --sidebar-foreground: oklch(0.985 0 0);
    --sidebar-primary: oklch(0.488 0.243 264.376);
    --sidebar-primary-foreground: oklch(0.985 0 0);
-   --sidebar-accent: oklch(0.274 0.006 286.033);
+   --sidebar-accent: oklch(0.278 0.007 286);
    --sidebar-accent-foreground: oklch(0.985 0 0);
-   --sidebar-border: oklch(0.274 0.006 286.033);
+   --sidebar-border: oklch(0.259 0.006 286);
    --sidebar-ring: oklch(0.442 0.017 285.786);
-   --container: #101011;
+   --container: oklch(0.205 0.006 285.9); /* = card: superfície elevada branca-equivalente */
 }
 
 @theme inline {
