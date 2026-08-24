@@ -25,8 +25,10 @@ export interface NotifyInput {
 }
 
 /**
- * Cria a notificação in-app e dispara os canais externos (Slack + Email), best-effort.
- * Nunca lança — a notificação é secundária ao request principal.
+ * Cria a notificação IN-APP (awaited — durável, persiste antes de resolver) e dispara
+ * os canais EXTERNOS (Slack + Email) de forma fire-and-forget INTERNA (não bloqueiam o
+ * caller nem a persistência do in-app). Assim o chamador pode `await` este dispatch
+ * barato e garantir a linha no inbox, sem esperar Slack/SES. Nunca lança.
  */
 export async function dispatchNotification(db: Db, input: NotifyInput): Promise<void> {
    try {
@@ -34,7 +36,12 @@ export async function dispatchNotification(db: Db, input: NotifyInput): Promise<
    } catch (err) {
       console.error('[circle] createNotification falhou:', err);
    }
+   // Canais externos (lentos) rodam destacados — o in-app acima já está persistido.
+   void deliverExternal(db, input);
+}
 
+/** Entrega Slack/Email best-effort (fora do caminho crítico do request). Nunca lança. */
+async function deliverExternal(db: Db, input: NotifyInput): Promise<void> {
    try {
       const [recipient] = await db
          .select()
@@ -53,7 +60,7 @@ export async function dispatchNotification(db: Db, input: NotifyInput): Promise<
       const html = `<p>${escapeHtml(rawContent)}</p><p><strong>${escapeHtml(iss.identifier)}</strong> — ${escapeHtml(iss.title)}</p><p><a href="https://circle.nimbloo.ai">Abrir no Circle</a></p>`;
 
       // Respeita as preferências do destinatário (`settings.notifications.*`). O in-app
-      // (createNotification acima) já gravou — é o histórico e ignora as prefs. Fail-open:
+      // (createNotification) já gravou — é o histórico e ignora as prefs. Fail-open:
       // erro ao ler settings → canal habilitado (não silenciar notificação por acidente).
       const [emailEnabled, slackEnabled] = await channelPrefs(db, input.recipientId);
 
@@ -64,7 +71,7 @@ export async function dispatchNotification(db: Db, input: NotifyInput): Promise<
             : Promise.resolve({ sent: false }),
       ]);
    } catch (err) {
-      console.error('[circle] dispatch de notificação falhou:', err);
+      console.error('[circle] dispatch externo de notificação falhou:', err);
    }
 }
 

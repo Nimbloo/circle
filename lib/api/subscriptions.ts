@@ -17,6 +17,20 @@ export async function subscribeUsers(
       .onConflictDoNothing();
 }
 
+/** Inscreve UM usuário em VÁRIAS issues (idempotente). Usado no bulk-assign. */
+export async function subscribeUserToIssues(
+   db: Db,
+   issueIds: string[],
+   userId: string
+): Promise<void> {
+   const ids = [...new Set(issueIds.filter(Boolean))];
+   if (ids.length === 0 || !userId) return;
+   await db
+      .insert(issueSubscriber)
+      .values(ids.map((issueId) => ({ issueId, userId })))
+      .onConflictDoNothing();
+}
+
 /** Remove um usuário dos followers da issue. */
 export async function unsubscribeUser(db: Db, issueId: string, userId: string): Promise<void> {
    await db

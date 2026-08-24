@@ -17,7 +17,7 @@ import { IssueDetail } from '@/data/issue-details';
 import { Issue } from '@/data/issues';
 import { LabelInterface } from '@/data/labels';
 import { Ban, Bell, BellOff, CheckIcon, GitPullRequestArrow } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { api } from '@/lib/client';
 import { LabelBadge } from '../label-badge';
@@ -109,26 +109,38 @@ function SubscribeButton({
    const [subscribed, setSubscribed] = useState(initial);
    const [count, setCount] = useState(initialCount);
    const [busy, setBusy] = useState(false);
+   // busyRef (não state) para o effect de resync ler o valor ATUAL sem re-disparar:
+   // um refetch do detail que chega DURANTE o toggle não pode clobar o valor otimista.
+   const busyRef = useRef(false);
 
-   // Ressincroniza com o servidor quando o detail é refetchado (ex.: outro evento).
-   useEffect(() => setSubscribed(initial), [initial]);
-   useEffect(() => setCount(initialCount), [initialCount]);
+   // Ressincroniza com o servidor quando o detail é refetchado (ex.: auto-subscribe por
+   // virar responsável, ou atividade de outro usuário) — exceto durante um toggle em voo.
+   useEffect(() => {
+      if (!busyRef.current) setSubscribed(initial);
+   }, [initial]);
+   useEffect(() => {
+      if (!busyRef.current) setCount(initialCount);
+   }, [initialCount]);
 
    const toggle = async () => {
       if (busy) return;
       setBusy(true);
+      busyRef.current = true;
       const next = !subscribed;
       setSubscribed(next);
       setCount((c) => Math.max(0, c + (next ? 1 : -1)));
       try {
-         if (next) await api.issues.subscribe(issueId);
-         else await api.issues.unsubscribe(issueId);
+         const res = next
+            ? await api.issues.subscribe(issueId)
+            : await api.issues.unsubscribe(issueId);
+         setSubscribed(res.subscribed); // estado autoritativo do servidor (não descarta a resposta)
       } catch {
          setSubscribed(!next);
          setCount((c) => Math.max(0, c + (next ? -1 : 1)));
          toast.error('Falha ao atualizar a inscrição');
       } finally {
          setBusy(false);
+         busyRef.current = false;
       }
    };
 

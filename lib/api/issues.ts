@@ -23,7 +23,7 @@ import { getOrCreateUser } from './users';
 import { rankAfter, firstRank, rankBetween } from './rank';
 import { ApiError } from './errors';
 import { dispatchNotification } from './notify';
-import { subscribeUsers, notifySubscribers } from './subscriptions';
+import { subscribeUsers, subscribeUserToIssues, notifySubscribers } from './subscriptions';
 import { getCachedCatalogs } from './catalogs';
 import { publish } from './events';
 
@@ -482,33 +482,35 @@ export async function updateIssue(
    const actor = await getOrCreateUser(db, actorEmail);
    const prev = existing[0];
 
-   await db.update(issue).set(buildIssueSet(patch)).where(eq(issue.id, id));
-
    const events = changedEvents(patch, prev);
-   if (events.length) {
-      const now = new Date();
-      await db.insert(activityEvent).values(
-         events.map((e) => ({
-            id: randomUUID(),
-            issueId: id,
-            actorId: actor.id,
-            event: e.event,
-            text: e.text,
-            createdAt: now,
-         }))
-      );
-   }
+   // Transacional: o UPDATE e os eventos de atividade entram juntos (senão uma falha
+   // no insert dos eventos deixava a issue mudada sem histórico + 500 → retry duplicava).
+   await db.transaction(async (tx) => {
+      await tx.update(issue).set(buildIssueSet(patch)).where(eq(issue.id, id));
+      if (events.length) {
+         const now = new Date();
+         await tx.insert(activityEvent).values(
+            events.map((e) => ({
+               id: randomUUID(),
+               issueId: id,
+               actorId: actor.id,
+               event: e.event,
+               text: e.text,
+               createdAt: now,
+            }))
+         );
+      }
+   });
 
-   // Notifica o novo responsável (in-app + Slack/Email best-effort)
+   // Notifica o novo responsável. AWAIT: dispatchNotification só aguarda o INSERT in-app
+   // (Slack/SES rodam destacados dentro dele) — garante a linha no inbox do responsável.
    if (
       patch.assigneeId !== undefined &&
       patch.assigneeId &&
       patch.assigneeId !== prev.assigneeId &&
       patch.assigneeId !== actor.id
    ) {
-      // Fire-and-forget: notificação (Slack/SES) não bloqueia a resposta do PATCH.
-      // `dispatchNotification` captura os próprios erros (loga, não lança).
-      void dispatchNotification(db, {
+      await dispatchNotification(db, {
          type: 'assignment',
          issueId: id,
          recipientId: patch.assigneeId,
@@ -581,6 +583,12 @@ export async function bulkUpdateIssues(
       );
       if (rows.length) await tx.insert(activityEvent).values(rows);
    });
+
+   // Bulk-assign: o novo responsável passa a SEGUIR as issues (mesmo comportamento
+   // durável do assign individual). Sem notificação (anti-flood, decisão do bulk) — mas
+   // a inscrição garante que ele recebe a atividade FUTURA, senão viraria dono de N
+   // issues seguindo nenhuma.
+   if (patch.assigneeId) await subscribeUserToIssues(db, foundIds, patch.assigneeId);
 
    publish({ entity: 'issue', action: 'updated', actorEmail });
    const cat = await loadCatalogs(db);

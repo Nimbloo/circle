@@ -329,8 +329,10 @@ export async function addComment(
       excludeIds: externallyNotified,
    });
 
-   // Fire-and-forget: os canais EXTERNOS (Slack/SES) não bloqueiam a resposta.
-   void Promise.all(notifications).catch((e) =>
+   // AWAIT: agora dispatchNotification só aguarda o INSERT in-app (os canais externos
+   // Slack/SES rodam destacados dentro dele) — barato e garante a linha no inbox pro
+   // @mencionado e pro responsável, consistente com o fan-out de followers acima.
+   await Promise.all(notifications).catch((e) =>
       console.error('[circle] notificações de comentário falharam:', e)
    );
 

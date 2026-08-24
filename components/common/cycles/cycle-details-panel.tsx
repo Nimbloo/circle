@@ -111,10 +111,12 @@ export function CycleDetailsPanel({ cycle, issues }: CycleDetailsPanelProps) {
    const { isActive, toggle } = usePanelFilter();
 
    // Agregados AO VIVO das issues do ciclo (o DTO do servidor fica stale após
-   // mover/completar uma issue). `issues` já é o conjunto vivo escopado pelo ciclo.
-   const scope = issues.length;
-   const started = issues.filter((i) => i.status.category === 'started').length;
-   const completed = issues.filter(isCompleted).length;
+   // mover/completar uma issue). `issues` já é o conjunto vivo escopado pelo ciclo. MAS
+   // ciclo 'completed' usa o SNAPSHOT do servidor (histórico do ciclo encerrado é a verdade).
+   const done = cycle.status === 'completed';
+   const scope = done ? cycle.scope : issues.length;
+   const started = done ? cycle.started : issues.filter((i) => i.status.category === 'started').length;
+   const completed = done ? cycle.completed : issues.filter(isCompleted).length;
    const completedPercent = scope > 0 ? Math.round((completed / scope) * 100) : 0;
    const startedPercent = scope > 0 ? Math.round((started / scope) * 100) : 0;
 

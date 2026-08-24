@@ -6,6 +6,7 @@ export type NotificationType =
    | 'mention'
    | 'assignment'
    | 'status'
+   | 'update'
    | 'reopened'
    | 'closed'
    | 'edited'

@@ -36,11 +36,14 @@ interface CycleLineProps {
 export default function CycleLine({ cycle }: CycleLineProps) {
    const { orgId } = useParams<{ orgId: string }>();
 
-   // Agregados AO VIVO (o DTO do servidor fica stale após mover/completar issue).
+   // Agregados AO VIVO (o DTO do servidor fica stale após mover/completar issue). MAS
+   // ciclo 'completed' usa o SNAPSHOT do servidor (histórico é a verdade — issues movidas
+   // depois não devem reescrever o resultado final do ciclo encerrado).
    const live = useCycleAggregates(cycle.id);
-   const scope = live.ready ? live.scope : cycle.scope;
-   const completed = live.ready ? live.completed : cycle.completed;
-   const successRate = live.ready ? live.successRate : (cycle.successRate ?? 0);
+   const useLive = live.ready && cycle.status !== 'completed';
+   const scope = useLive ? live.scope : cycle.scope;
+   const completed = useLive ? live.completed : cycle.completed;
+   const successRate = useLive ? live.successRate : (cycle.successRate ?? 0);
 
    // Usa o time REAL do cycle (não o da URL) — robusto se a lista misturar times.
    const href =

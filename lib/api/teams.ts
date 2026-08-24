@@ -11,6 +11,8 @@ import {
    cycle as cycleT,
    savedView as savedViewT,
    documentFolder as documentFolderT,
+   issueTemplate,
+   projectTemplate,
 } from '@/db/schema';
 import { getOrCreateUser, generateInviteToken, signupUrl } from './users';
 import { sendEmail } from './integrations/mailer';
@@ -438,9 +440,12 @@ export async function deleteTeam(db: Db, id: string): Promise<boolean> {
          `Team '${id}' tem issues/projects/cycles/views/folders — esvazie antes de apagar`
       );
 
-   // Solicitações de entrada (histórico) NÃO bloqueiam a deleção — limpa antes do time,
-   // senão o FK (team_join_request.team_id, sem onDelete) estoura 23503 → 404 enganoso.
+   // Config disposável do time (join requests + templates) NÃO bloqueia a deleção — limpa
+   // antes do time, senão o FK (sem onDelete) estoura 23503 → 404 enganoso. (Templates
+   // faltavam: apagar um time que só tinha templates dava o 404.)
    await db.delete(teamJoinRequest).where(eq(teamJoinRequest.teamId, id));
+   await db.delete(issueTemplate).where(eq(issueTemplate.teamId, id));
+   await db.delete(projectTemplate).where(eq(projectTemplate.teamId, id));
    await db.delete(teamMember).where(eq(teamMember.teamId, id));
    await db.delete(teamT).where(eq(teamT.id, id));
    publish({ entity: 'team', action: 'deleted', id });

@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { RiEditLine } from '@remixicon/react';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Issue } from '@/data/issues';
 import { usePriorities, useStatuses } from '@/store/catalog-store';
 import { useIssuesStore } from '@/store/issues-store';
@@ -86,9 +86,15 @@ export function CreateNewIssue() {
 
    const [addIssueForm, setAddIssueForm] = useState<Issue>(createDefaultData());
 
+   // Reseta o form APENAS na transição fechado→aberto. Antes resetava a cada mudança
+   // de identidade de `createDefaultData` (que muda quando catálogos/workspace hidratam,
+   // ou `selfUser` vai null→user do auto-assign) → apagava o título/descrição já digitados
+   // enquanto o modal estava aberto. O ref-guard preserva o que o usuário digitou.
+   const wasOpen = useRef(false);
    useEffect(() => {
-      setAddIssueForm(createDefaultData());
-   }, [createDefaultData]);
+      if (isOpen && !wasOpen.current) setAddIssueForm(createDefaultData());
+      wasOpen.current = isOpen;
+   }, [isOpen, createDefaultData]);
 
    const [submitting, setSubmitting] = useState(false);
 

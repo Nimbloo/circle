@@ -9,6 +9,7 @@ import {
    Edit,
    Plus,
    Upload,
+   SlidersHorizontal,
 } from 'lucide-react';
 import { NotificationType } from '@/data/inbox';
 import { cn } from '@/lib/utils';
@@ -23,6 +24,8 @@ export function getNotificationIcon(type: NotificationType, className?: string) 
          return <UserPlus className={cn('text-green-500', className)} />;
       case 'status':
          return <GitPullRequest className={cn('text-purple-500', className)} />;
+      case 'update':
+         return <SlidersHorizontal className={cn('text-purple-500', className)} />;
       case 'reopened':
          return <RotateCcw className={cn('text-yellow-500', className)} />;
       case 'closed':
