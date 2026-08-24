@@ -157,6 +157,13 @@ function Sidebar({
 }) {
    const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
 
+   // Hover-peek (estilo Linear): com a sidebar colapsada (offcanvas), passar o mouse na
+   // borda esquerda revela a sidebar como overlay temporário; sai ao tirar o mouse.
+   const [peek, setPeek] = React.useState(false);
+   React.useEffect(() => {
+      if (state !== 'collapsed') setPeek(false);
+   }, [state]);
+
    if (collapsible === 'none') {
       return (
          <div
@@ -204,11 +211,20 @@ function Sidebar({
          data-collapsible={state === 'collapsed' ? collapsible : ''}
          data-variant={variant}
          data-side={side}
+         data-peek={peek ? 'true' : undefined}
          data-slot="sidebar"
       >
+         {/* Zona de hover na borda esquerda — só quando colapsada — que revela o peek. */}
+         {state === 'collapsed' && collapsible === 'offcanvas' && (
+            <div
+               className="fixed inset-y-0 left-0 z-30 w-2 hidden md:block"
+               onMouseEnter={() => setPeek(true)}
+               aria-hidden="true"
+            />
+         )}
          <div
             className={cn(
-               'relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear',
+               'relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-out',
                'group-data-[collapsible=offcanvas]:w-0',
                'group-data-[side=right]:rotate-180',
                variant === 'floating' || variant === 'inset'
@@ -217,11 +233,16 @@ function Sidebar({
             )}
          />
          <div
+            onMouseLeave={() => setPeek(false)}
             className={cn(
-               'fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex',
+               'fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-out md:flex',
                side === 'left'
                   ? 'left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]'
                   : 'right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]',
+               // Hover-peek: revela como overlay elevado (left-0 + z + sombra) quando peek.
+               side === 'left'
+                  ? 'group-data-[peek=true]:left-0 group-data-[peek=true]:z-40 group-data-[peek=true]:shadow-2xl'
+                  : 'group-data-[peek=true]:right-0 group-data-[peek=true]:z-40 group-data-[peek=true]:shadow-2xl',
                // Adjust the padding for floating and inset variants.
                variant === 'floating' || variant === 'inset'
                   ? 'p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]'

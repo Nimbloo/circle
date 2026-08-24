@@ -19,12 +19,11 @@ import {
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-   SidebarGroup,
-   SidebarGroupLabel,
    SidebarMenu,
    SidebarMenuButton,
    SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { CollapsibleSidebarGroup } from './collapsible-sidebar-group';
 import {
    isSidebarItemVisible,
    resolveOrder,
@@ -76,8 +75,12 @@ export function NavWorkspace() {
       : [];
 
    return (
-      <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-         <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+      <>
+      <CollapsibleSidebarGroup
+         label="Workspace"
+         sectionKey="workspace"
+         className="group-data-[collapsible=icon]:hidden"
+      >
          <SidebarMenu>
             {items.map((item) => (
                <SidebarMenuItem key={item.key}>
@@ -117,7 +120,8 @@ export function NavWorkspace() {
                </DropdownMenu>
             </SidebarMenuItem>
          </SidebarMenu>
-         <CustomizeSidebarDialog open={customizeOpen} onOpenChange={setCustomizeOpen} />
-      </SidebarGroup>
+      </CollapsibleSidebarGroup>
+      <CustomizeSidebarDialog open={customizeOpen} onOpenChange={setCustomizeOpen} />
+      </>
    );
 }

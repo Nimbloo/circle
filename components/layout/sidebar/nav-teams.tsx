@@ -23,8 +23,6 @@ import {
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-   SidebarGroup,
-   SidebarGroupLabel,
    SidebarMenu,
    SidebarMenuAction,
    SidebarMenuButton,
@@ -33,6 +31,7 @@ import {
    SidebarMenuSubButton,
    SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
+import { CollapsibleSidebarGroup } from './collapsible-sidebar-group';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { RiDonutChartFill } from '@remixicon/react';
 
@@ -40,8 +39,7 @@ export function NavTeams() {
    const teams = useWorkspaceStore((s) => s.teams);
    const joinedTeams = teams.filter((t) => t.joined);
    return (
-      <SidebarGroup>
-         <SidebarGroupLabel>Your teams</SidebarGroupLabel>
+      <CollapsibleSidebarGroup label="Your teams" sectionKey="teams">
          <SidebarMenu>
             {joinedTeams.map((item, index) => (
                <Collapsible
@@ -163,6 +161,6 @@ export function NavTeams() {
                </Collapsible>
             ))}
          </SidebarMenu>
-      </SidebarGroup>
+      </CollapsibleSidebarGroup>
    );
 }
