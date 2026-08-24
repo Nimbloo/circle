@@ -54,7 +54,7 @@ export function EditInitiativeDialog({
    open: boolean;
    onOpenChange: (v: boolean) => void;
 }) {
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const applyInitiative = useWorkspaceStore((s) => s.applyInitiative);
    const priorities = usePriorities();
    const healthStates = useHealthStates();
 
@@ -81,14 +81,14 @@ export function EditInitiativeDialog({
       if (!name.trim() || busy) return;
       setBusy(true);
       try {
-         await api.initiatives.update(initiative.id, {
+         const dto = await api.initiatives.update(initiative.id, {
             name: name.trim(),
             description: description.trim() || null,
             status,
             priorityId,
             healthId,
          });
-         await hydrate();
+         applyInitiative(dto);
          onOpenChange(false);
          toast.success('Initiative updated');
       } catch {
@@ -183,7 +183,7 @@ export function EditInitiativeDialog({
 export function InitiativeActions({ initiative }: { initiative: Initiative }) {
    const { orgId } = useParams<{ orgId: string }>();
    const router = useRouter();
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const removeInitiativeLocal = useWorkspaceStore((s) => s.removeInitiativeLocal);
    const [editOpen, setEditOpen] = useState(false);
    const [confirmOpen, setConfirmOpen] = useState(false);
    const [busy, setBusy] = useState(false);
@@ -193,7 +193,7 @@ export function InitiativeActions({ initiative }: { initiative: Initiative }) {
       setBusy(true);
       try {
          await api.initiatives.remove(initiative.id);
-         await hydrate();
+         removeInitiativeLocal(initiative.id);
          toast.success('Initiative deleted');
          setConfirmOpen(false);
          router.push(`/${orgId}/initiatives`);

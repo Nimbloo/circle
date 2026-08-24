@@ -25,7 +25,10 @@ import { useMemo } from 'react';
 const TABS = ['issues', 'projects'] as const;
 
 const formatDate = (iso: string): string => {
-   const [year, month, day] = iso.split('-').map(Number);
+   // `iso` é um timestamp ISO completo (createdAt/updatedAt) — split('-') pegava
+   // "24T12:34:56Z" no dia (→ NaN "Aug NaN, 2026"). Parse via Date.
+   const d = new Date(iso);
+   if (Number.isNaN(d.getTime())) return '—';
    const months = [
       'Jan',
       'Feb',
@@ -40,7 +43,7 @@ const formatDate = (iso: string): string => {
       'Nov',
       'Dec',
    ];
-   return `${months[(month ?? 1) - 1]} ${day}, ${year}`;
+   return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
 };
 
 function DisplayOptions() {

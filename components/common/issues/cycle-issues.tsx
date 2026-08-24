@@ -10,6 +10,7 @@ import { IssueFilterBar } from './issue-filter-bar';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useSearchStore } from '@/store/search-store';
 import { useViewStore } from '@/store/view-store';
+import { useParams } from 'next/navigation';
 import { useMemo } from 'react';
 import { GroupedIssuesView } from './grouped-issues-view';
 import { InsightsPanel } from './insights-panel';
@@ -36,7 +37,10 @@ export default function CycleIssues({ cycleView }: CycleIssuesProps) {
    const getUpcomingCycle = useWorkspaceStore((s) => s.getUpcomingCycle);
    const displayOrderedStatus = useDisplayOrderedStatuses();
 
-   const cycle = cycleView === 'active' ? getCurrentCycle() : getUpcomingCycle();
+   // Escopa pelo time da rota — senão pega o ciclo current/upcoming de QUALQUER time
+   // (em workspace multi-time, /team/B/cycle/active mostrava o ciclo do time A).
+   const { teamId } = useParams<{ teamId?: string }>();
+   const cycle = cycleView === 'active' ? getCurrentCycle(teamId) : getUpcomingCycle(teamId);
 
    const isSearching = isSearchOpen && searchQuery.trim() !== '';
    const isViewTypeGrid = viewType === 'grid';

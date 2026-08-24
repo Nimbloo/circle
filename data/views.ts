@@ -71,6 +71,9 @@ export function filterProjectsForView(view: View, source: Project[] = projects):
       if (filter.statusCategories && !filter.statusCategories.includes(project.status.category)) {
          return false;
       }
+      // statusIds era ignorado — o editor de project view seta statusIds, então
+      // filtrar project view por status virava no-op (mostrava tudo).
+      if (filter.statusIds && !filter.statusIds.includes(project.status.id)) return false;
       if (filter.priorityIds && !filter.priorityIds.includes(project.priority.id)) return false;
       return true;
    });

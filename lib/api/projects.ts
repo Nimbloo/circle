@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { eq, inArray, count } from 'drizzle-orm';
+import { eq, inArray, count, and } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    project as projectT,
@@ -79,7 +79,12 @@ async function assemble(db: Db, rows: ProjectRow[], maps: Maps): Promise<Project
    const ids = rows.map((r) => r.id);
    const leadIds = [...new Set(rows.map((r) => r.leadId).filter(Boolean) as string[])];
 
-   const [leads, labelLinks, issueCounts] = await Promise.all([
+   // IDs dos status "concluído" (para o % de conclusão real, derivado das issues).
+   const completedStatusIds = [...maps.statuses.values()]
+      .filter((s) => s.category === 'completed')
+      .map((s) => s.id);
+
+   const [leads, labelLinks, issueCounts, completedCounts] = await Promise.all([
       leadIds.length
          ? db.select().from(appUser).where(inArray(appUser.id, leadIds))
          : Promise.resolve([]),
@@ -89,9 +94,22 @@ async function assemble(db: Db, rows: ProjectRow[], maps: Maps): Promise<Project
          .from(issueT)
          .where(inArray(issueT.projectId, ids))
          .groupBy(issueT.projectId),
+      completedStatusIds.length
+         ? db
+              .select({ projectId: issueT.projectId, n: count() })
+              .from(issueT)
+              .where(
+                 and(
+                    inArray(issueT.projectId, ids),
+                    inArray(issueT.statusId, completedStatusIds)
+                 )
+              )
+              .groupBy(issueT.projectId)
+         : Promise.resolve([]),
    ]);
    const leadMap = new Map(leads.map((u) => [u.id, u]));
    const countMap = new Map(issueCounts.map((r) => [r.projectId, Number(r.n)]));
+   const completedMap = new Map(completedCounts.map((r) => [r.projectId, Number(r.n)]));
    const labelsByProject = new Map<string, LabelRow[]>();
    for (const link of labelLinks) {
       const lbl = maps.labels.get(link.labelId);
@@ -104,6 +122,12 @@ async function assemble(db: Db, rows: ProjectRow[], maps: Maps): Promise<Project
    return rows.map((r) => {
       const lead = r.leadId ? leadMap.get(r.leadId) : undefined;
       const ht = r.healthUpdatedAt;
+      // % de conclusão REAL derivado das issues (done/total). Sem issues, cai no
+      // campo estático do projeto. Calculado no servidor → o cliente não re-escaneia
+      // todas as issues por linha (era O(P·N) por mutação de issue).
+      const total = countMap.get(r.id) ?? 0;
+      const done = completedMap.get(r.id) ?? 0;
+      const pct = total > 0 ? Math.round((done / total) * 100) : r.percentComplete;
       return {
          id: r.id,
          name: r.name,
@@ -111,7 +135,7 @@ async function assemble(db: Db, rows: ProjectRow[], maps: Maps): Promise<Project
          priority: maps.priorities.get(r.priorityId)!,
          health: maps.healths.get(r.healthId)!,
          iconKey: r.iconKey,
-         percentComplete: r.percentComplete,
+         percentComplete: pct,
          startDate: r.startDate,
          targetDate: r.targetDate,
          lead: lead

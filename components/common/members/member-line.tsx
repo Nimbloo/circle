@@ -12,13 +12,6 @@ interface MemberLineProps {
    user: User;
 }
 
-/** "mason.carter" → "Mason Carter" (Linear shows display name + handle). */
-const displayNameOf = (user: User) =>
-   user.name
-      .split('.')
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' ');
-
 /** Joined date: ano corrente → "Mar 17", senão "Oct 2023". */
 const joinedLabel = (iso: string) => {
    const date = parseISO(iso);
@@ -43,8 +36,8 @@ export default function MemberLine({ user }: MemberLineProps) {
                <AvatarFallback>{user.name[0]}</AvatarFallback>
             </Avatar>
             <div className="flex flex-col items-start overflow-hidden">
-               <span className="font-medium truncate w-full">{displayNameOf(user)}</span>
-               <span className="text-xs text-muted-foreground truncate w-full">{user.name}</span>
+               <span className="font-medium truncate w-full">{user.name}</span>
+               <span className="text-xs text-muted-foreground truncate w-full">{user.slug}</span>
             </div>
          </div>
 

@@ -98,18 +98,6 @@ export default function TeamLine({ team }: TeamLineProps) {
                   {uniqueProjects}
                </div>
             )}
-
-            {displayProperties.created && (
-               <div className="hidden xl:block w-[90px] shrink-0 text-xs text-muted-foreground">
-                  —
-               </div>
-            )}
-
-            {displayProperties.updated && (
-               <div className="hidden xl:block w-[90px] shrink-0 text-xs text-muted-foreground">
-                  —
-               </div>
-            )}
          </Link>
       </TeamContextMenu>
    );

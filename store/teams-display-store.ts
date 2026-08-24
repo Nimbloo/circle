@@ -10,8 +10,6 @@ export type TeamDisplayPropertyKey =
    | 'owners'
    | 'projects'
    | 'cycle'
-   | 'created'
-   | 'updated'
    | 'members';
 
 export const TEAM_DISPLAY_PROPERTIES: { key: TeamDisplayPropertyKey; label: string }[] = [
@@ -19,8 +17,6 @@ export const TEAM_DISPLAY_PROPERTIES: { key: TeamDisplayPropertyKey; label: stri
    { key: 'owners', label: 'Owners' },
    { key: 'projects', label: 'Projects' },
    { key: 'cycle', label: 'Cycle' },
-   { key: 'created', label: 'Created' },
-   { key: 'updated', label: 'Updated' },
    { key: 'members', label: 'Members' },
 ];
 
@@ -29,8 +25,6 @@ const DEFAULT_PROPERTIES: Record<TeamDisplayPropertyKey, boolean> = {
    owners: false,
    projects: true,
    cycle: true,
-   created: false,
-   updated: false,
    members: true,
 };
 

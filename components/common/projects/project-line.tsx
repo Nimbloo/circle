@@ -1,15 +1,13 @@
 'use client';
 
-import { Issue } from '@/data/issues';
 import { Project } from '@/data/projects';
-import { useIssuesStore } from '@/store/issues-store';
 import { useProjectsDisplayStore } from '@/store/projects-display-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { api } from '@/lib/client';
 import type { UpdateProjectInput } from '@/lib/api/projects';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { MoreHorizontal, Trash2 } from 'lucide-react';
@@ -41,31 +39,19 @@ interface ProjectLineProps {
    project: Project;
 }
 
-const countIssues = (issues: Issue[], projectId: string) =>
-   issues.filter((issue) => issue.project?.id === projectId).length;
-
 export default function ProjectLine({ project }: ProjectLineProps) {
    const { orgId } = useParams<{ orgId: string }>();
-   const issues = useIssuesStore((s) => s.issues);
    const { displayProperties } = useProjectsDisplayStore();
    const applyProject = useWorkspaceStore((s) => s.applyProject);
    const removeProjectLocal = useWorkspaceStore((s) => s.removeProjectLocal);
    const [confirmOpen, setConfirmOpen] = useState(false);
    const [busy, setBusy] = useState(false);
 
-   // Prefere a contagem calculada pelo backend (issueCount); cai pro cálculo
-   // local só quando o DTO não a trouxe (ex: dados mock).
-   const computed = useMemo(() => countIssues(issues, project.id), [issues, project.id]);
-   const issueCount = project.issueCount ?? computed;
-
-   // % de conclusão REAL derivado das issues do projeto (o campo project.percentComplete
-   // é estático/0 e nenhuma UI o atualiza — mostrava 0% congelado para todo projeto).
-   const percentComplete = useMemo(() => {
-      const projectIssues = issues.filter((i) => i.project?.id === project.id);
-      if (projectIssues.length === 0) return project.percentComplete;
-      const done = projectIssues.filter((i) => i.status.category === 'completed').length;
-      return Math.round((done / projectIssues.length) * 100);
-   }, [issues, project.id, project.percentComplete]);
+   // issueCount e percentComplete vêm PRONTOS do backend (assemble calcula ambos por
+   // agregação SQL). Não assinamos mais o array de issues nem escaneamos por linha —
+   // era O(P·N) a cada mutação de qualquer issue.
+   const issueCount = project.issueCount ?? 0;
+   const percentComplete = project.percentComplete;
 
    const patchProject = async (patch: UpdateProjectInput, okMsg: string) => {
       try {

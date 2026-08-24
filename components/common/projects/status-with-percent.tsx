@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import type { Status } from '@/data/status';
 import { useStatuses } from '@/store/catalog-store';
 import { CheckIcon } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 
 interface StatusWithPercentProps {
    status: Status;
@@ -30,6 +30,13 @@ export function StatusWithPercent({
    const allStatus = useStatuses();
    const [open, setOpen] = useState<boolean>(false);
    const [value, setValue] = useState<string>(status.id);
+
+   // Ressincroniza com o prop quando o status muda por FORA (context menu, hydrate,
+   // splice) — o useState inicial só roda no mount e ficava stale, mostrando o ícone
+   // antigo até remount.
+   useEffect(() => {
+      setValue(status.id);
+   }, [status.id]);
 
    const handleStatusChange = (statusId: string) => {
       setValue(statusId);

@@ -12,7 +12,7 @@ export default function HeaderNav({ cycleView }: { cycleView: CycleView }) {
    const { orgId, teamId } = useParams<{ orgId: string; teamId: string }>();
    const teams = useWorkspaceStore((s) => s.teams);
    const cycle = useWorkspaceStore((s) =>
-      cycleView === 'active' ? s.getCurrentCycle() : s.getUpcomingCycle()
+      cycleView === 'active' ? s.getCurrentCycle(teamId) : s.getUpcomingCycle(teamId)
    );
    const team = teams.find((t) => t.id === teamId) ?? teams[0];
    if (!team) return <div className="w-full border-b h-10" />; // store não hidratou → evita crash

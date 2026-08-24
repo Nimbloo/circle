@@ -112,9 +112,15 @@ export function useLiveSync(): void {
 
             // Detalhe/feed aberto (cross-usuário): avisa o painel de detalhe pra refazer
             // seu próprio fetch (comments/activity não vivem no issues-store).
+            // Para 'issue', parsed.id É o issueId (recarrega só o detalhe daquela issue).
+            // Para 'comment'/'reaction', parsed.id é o COMMENT id — inútil pro guard do
+            // painel (que compara com issue.id); manda undefined → qualquer detalhe
+            // aberto recarrega (senão comentário de outro usuário nunca aparecia).
             if (DETAIL_ENTITIES.has(entity)) {
                window.dispatchEvent(
-                  new CustomEvent(ISSUE_CHANGED_EVENT, { detail: { id: parsed.id } })
+                  new CustomEvent(ISSUE_CHANGED_EVENT, {
+                     detail: { id: entity === 'issue' ? parsed.id : undefined },
+                  })
                );
             }
          };

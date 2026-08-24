@@ -74,12 +74,6 @@ export default function Teams() {
             {displayProperties.projects && (
                <div className="hidden sm:block w-[80px] shrink-0">Projects</div>
             )}
-            {displayProperties.created && (
-               <div className="hidden xl:block w-[90px] shrink-0">Created</div>
-            )}
-            {displayProperties.updated && (
-               <div className="hidden xl:block w-[90px] shrink-0">Updated</div>
-            )}
          </div>
 
          <div className="w-full">

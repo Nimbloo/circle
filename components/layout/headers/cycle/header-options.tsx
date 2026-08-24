@@ -6,14 +6,16 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { BarChart3, PanelRight } from 'lucide-react';
+import { useParams } from 'next/navigation';
 import { DisplayOptions } from '../display-options';
 import { CycleView } from '@/components/common/issues/cycle-issues';
 
 export default function HeaderOptions({ cycleView }: { cycleView: CycleView }) {
    const { openPanel, togglePanel } = useRightPanelStore();
    const issues = useIssuesStore((s) => s.issues);
+   const { teamId } = useParams<{ teamId?: string }>();
    const cycle = useWorkspaceStore((s) =>
-      cycleView === 'active' ? s.getCurrentCycle() : s.getUpcomingCycle()
+      cycleView === 'active' ? s.getCurrentCycle(teamId) : s.getUpcomingCycle(teamId)
    );
 
    const count = issues.filter((issue) => issue.cycleId === cycle?.id).length;
