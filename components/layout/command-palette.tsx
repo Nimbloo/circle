@@ -619,15 +619,22 @@ export function CommandPalette() {
                      <CommandGroup heading="Set due date…">
                         {(
                            [
-                              ['Today', '2026-08-04'],
-                              ['Tomorrow', '2026-08-05'],
-                              ['End of this week', '2026-08-09'],
-                              ['In one week', '2026-08-11'],
+                              ['Today', 0],
+                              ['Tomorrow', 1],
+                              ['End of this week', (7 - new Date().getDay()) % 7],
+                              ['In one week', 7],
                            ] as const
-                        ).map(([label, date]) => (
+                        ).map(([label, days]) => (
                            <CommandItem
                               key={label}
                               onSelect={() => {
+                                 // Data RELATIVA ao dia atual (antes eram datas absolutas
+                                 // hardcoded que já estavam no passado).
+                                 const d = new Date();
+                                 d.setDate(d.getDate() + days);
+                                 const date = `${d.getFullYear()}-${String(
+                                    d.getMonth() + 1
+                                 ).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
                                  updateIssue(issue.id, { dueDate: date });
                                  toast.success(`Due date set to ${label.toLowerCase()}`);
                                  close();

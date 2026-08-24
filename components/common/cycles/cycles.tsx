@@ -3,16 +3,26 @@
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
 import { IterationCcw } from 'lucide-react';
-import { Fragment } from 'react';
+import { useParams } from 'next/navigation';
+import { Fragment, useMemo } from 'react';
 import CycleLine from './cycle-line';
 import { CycleBurnupChart, CycleProgressLegend } from './cycle-burnup-chart';
 
 /**
  * Cycles timeline: a date rail on the left and one row per cycle,
  * newest first. The current cycle is expanded with its burn-up chart.
+ *
+ * A rota é team-scoped (/team/[teamId]/cycles) → filtra os cycles pelo time da URL.
+ * Sem isto a página mostrava os cycles de TODOS os times misturados, com links
+ * apontando para o time errado.
  */
 export default function Cycles() {
-   const cycles = useWorkspaceStore((s) => s.cycles);
+   const { teamId } = useParams<{ teamId?: string }>();
+   const allCycles = useWorkspaceStore((s) => s.cycles);
+   const cycles = useMemo(
+      () => (teamId ? allCycles.filter((c) => c.teamId === teamId) : allCycles),
+      [allCycles, teamId]
+   );
 
    if (cycles.length === 0) {
       return (

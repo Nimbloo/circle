@@ -37,7 +37,7 @@ function slugify(v: string): string {
  * Cria uma saved view via api.views.create e re-hidrata o workspace.
  * Campos obrigatórios da rota: slug, name, type, filter (começa vazio).
  */
-export function CreateViewButton() {
+export function CreateViewButton({ teamId }: { teamId?: string } = {}) {
    const hydrate = useWorkspaceStore((s) => s.hydrate);
 
    const [open, setOpen] = useState(false);
@@ -57,6 +57,9 @@ export function CreateViewButton() {
             name: name.trim(),
             type,
             filter: {},
+            // View criada no contexto de um time fica team-scoped (senão nascia
+            // workspace-level e sumia da lista filtrada por time).
+            teamId: teamId ?? null,
          });
          await hydrate();
          setName('');

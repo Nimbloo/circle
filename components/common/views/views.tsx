@@ -208,7 +208,7 @@ export default function Views({ teamId }: { teamId?: string }) {
                   · {team ? 'Team' : 'Workspace'}
                </span>
             </span>
-            <CreateViewButton />
+            <CreateViewButton teamId={teamId} />
          </div>
 
          {list.map((view) => (

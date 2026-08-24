@@ -101,7 +101,11 @@ export function useLiveSync(): void {
             if (entity === 'issue' && parsed.id) {
                if (parsed.action === 'deleted') useIssuesStore.getState().removeRemote(parsed.id);
                else void useIssuesStore.getState().applyRemote(parsed.id); // created|updated
-            } else {
+            } else if (entity !== 'comment') {
+               // 'comment' (e reactions, que publicam como comment) NÃO mexem na lista do
+               // board — só no detalhe/feed da issue aberta, que é atualizado via o
+               // ISSUE_CHANGED_EVENT abaixo. Re-hidratar o board inteiro aqui era puro
+               // desperdício (re-scan de todas as issues por cliente a cada comentário).
                const target = TARGET_BY_ENTITY[entity];
                if (target) scheduleHydrate(target);
             }

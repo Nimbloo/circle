@@ -144,12 +144,26 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
       toast.success(cycleId ? `Cycle → ${label}` : 'Removido do cycle');
    };
 
-   const handleSetDueDate = () => {
+   // Due date no formato YYYY-MM-DD (o que a rota exige: z.string().date()); mandar
+   // toISOString() (datetime) tomava 400 e nunca persistia. Presets relativos ao dia
+   // atual (padrão Linear), não offset fixo hardcoded.
+   const fmtDate = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+         d.getDate()
+      ).padStart(2, '0')}`;
+
+   const setDueInDays = (days: number, label: string) => {
       if (!issueId) return;
-      const dueDate = new Date();
-      dueDate.setDate(dueDate.getDate() + 7);
-      updateIssue(issueId, { dueDate: dueDate.toISOString() });
-      toast.success('Due date set to 7 days from now');
+      const d = new Date();
+      d.setDate(d.getDate() + days);
+      updateIssue(issueId, { dueDate: fmtDate(d) });
+      toast.success(`Due date → ${label}`);
+   };
+
+   const clearDueDate = () => {
+      if (!issueId) return;
+      updateIssue(issueId, { dueDate: undefined });
+      toast.success('Due date removida');
    };
 
    const handleMarkAs = (target?: (typeof status)[number]) => {
@@ -306,10 +320,23 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
                   </ContextMenuSubContent>
                </ContextMenuSub>
 
-               <ContextMenuItem onClick={handleSetDueDate}>
-                  <CalendarClock className="size-4" /> Set due date...
-                  <ContextMenuShortcut>D</ContextMenuShortcut>
-               </ContextMenuItem>
+               <ContextMenuSub>
+                  <ContextMenuSubTrigger>
+                     <CalendarClock className="mr-2 size-4" /> Due date
+                  </ContextMenuSubTrigger>
+                  <ContextMenuSubContent className="w-44">
+                     <ContextMenuItem onClick={() => setDueInDays(0, 'Today')}>
+                        Today
+                     </ContextMenuItem>
+                     <ContextMenuItem onClick={() => setDueInDays(1, 'Tomorrow')}>
+                        Tomorrow
+                     </ContextMenuItem>
+                     <ContextMenuItem onClick={() => setDueInDays(7, 'Next week')}>
+                        Next week
+                     </ContextMenuItem>
+                     <ContextMenuItem onClick={clearDueDate}>No due date</ContextMenuItem>
+                  </ContextMenuSubContent>
+               </ContextMenuSub>
             </ContextMenuGroup>
 
             <ContextMenuSeparator />

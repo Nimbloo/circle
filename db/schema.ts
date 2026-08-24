@@ -430,36 +430,49 @@ export const projectUpdate = pgTable(
    (t) => [index('idx_project_update_project').on(t.projectId)]
 );
 
-export const projectActivity = pgTable('project_activity', {
-   id: varchar('id', { length: 36 }).primaryKey(),
-   projectId: varchar('project_id', { length: 36 })
-      .notNull()
-      .references(() => project.id),
-   userId: varchar('user_id', { length: 36 })
-      .notNull()
-      .references(() => appUser.id),
-   text: varchar('text', { length: 1024 }).notNull(),
-   createdAt: timestamp('created_at').notNull().defaultNow(),
-});
+export const projectActivity = pgTable(
+   'project_activity',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      projectId: varchar('project_id', { length: 36 })
+         .notNull()
+         .references(() => project.id),
+      userId: varchar('user_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      text: varchar('text', { length: 1024 }).notNull(),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   // Consultado por projectId ORDER BY createdAt desc (feed de atividade do projeto).
+   (t) => [index('idx_project_activity_project').on(t.projectId, t.createdAt)]
+);
 
-export const projectMilestone = pgTable('project_milestone', {
-   id: varchar('id', { length: 36 }).primaryKey(),
-   projectId: varchar('project_id', { length: 36 })
-      .notNull()
-      .references(() => project.id),
-   name: varchar('name', { length: 196 }).notNull(),
-   targetDate: date('target_date'),
-   completed: boolean('completed').notNull().default(false),
-});
+export const projectMilestone = pgTable(
+   'project_milestone',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      projectId: varchar('project_id', { length: 36 })
+         .notNull()
+         .references(() => project.id),
+      name: varchar('name', { length: 196 }).notNull(),
+      targetDate: date('target_date'),
+      completed: boolean('completed').notNull().default(false),
+   },
+   (t) => [index('idx_project_milestone_project').on(t.projectId)]
+);
 
-export const projectResource = pgTable('project_resource', {
-   id: varchar('id', { length: 36 }).primaryKey(),
-   projectId: varchar('project_id', { length: 36 })
-      .notNull()
-      .references(() => project.id),
-   label: varchar('label', { length: 196 }).notNull(),
-   url: varchar('url', { length: 1024 }).notNull(),
-});
+export const projectResource = pgTable(
+   'project_resource',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      projectId: varchar('project_id', { length: 36 })
+         .notNull()
+         .references(() => project.id),
+      label: varchar('label', { length: 196 }).notNull(),
+      url: varchar('url', { length: 1024 }).notNull(),
+   },
+   (t) => [index('idx_project_resource_project').on(t.projectId)]
+);
 
 export const projectDetail = pgTable('project_detail', {
    projectId: varchar('project_id', { length: 36 })

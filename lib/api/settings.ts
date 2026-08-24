@@ -43,6 +43,10 @@ const NotificationsSchema = z
       // Master switch dos e-mails transacionais (menção/comentário/etc). Default true;
       // honrada em dispatchNotification (o in-app sempre grava, só o e-mail respeita).
       emailNotifications: z.boolean().optional(),
+      // Toggle dos alertas via Slack; o cliente (user-settings-sync) sempre envia
+      // esta chave e o backend (notify.ts) a lê — precisa estar no schema senão o
+      // .strict() rejeita TODO o save de settings com 400.
+      slackNotifications: z.boolean().optional(),
       showUpdatesInSidebar: z.boolean().optional(),
       changelogNewsletter: z.boolean().optional(),
       marketing: z.boolean().optional(),

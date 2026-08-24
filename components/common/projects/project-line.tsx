@@ -163,6 +163,7 @@ export default function ProjectLine({ project }: ProjectLineProps) {
                   <StatusWithPercent
                      status={project.status}
                      percentComplete={project.percentComplete}
+                     onStatusChange={(statusId) => patchProject({ statusId }, 'Status updated')}
                   />
                </div>
             )}

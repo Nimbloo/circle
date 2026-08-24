@@ -36,11 +36,25 @@ function InviteButton() {
       if (!value || busy) return;
       setBusy(true);
       try {
-         await api.members.invite(value, role);
+         const res = (await api.members.invite(value, role)) as {
+            inviteUrl?: string;
+            alreadyRegistered?: boolean;
+         };
          await hydrate();
          setEmail('');
          setOpen(false);
-         toast.success(`Invited ${value} as ${role}`);
+         if (res?.alreadyRegistered) {
+            toast.info(`${value} já é membro — role atualizada para ${role}`);
+         } else if (res?.inviteUrl) {
+            // Mailer indisponível: o backend devolve o link de signup pro admin
+            // entregar. Sem isto o link era perdido silenciosamente.
+            void navigator.clipboard.writeText(res.inviteUrl).catch(() => undefined);
+            toast.success(`Convite criado — link de acesso copiado (envie a ${value})`, {
+               duration: 8000,
+            });
+         } else {
+            toast.success(`Invited ${value} as ${role}`);
+         }
       } catch {
          toast.error('Could not invite (e-mail inválido ou sem permissão)');
       } finally {

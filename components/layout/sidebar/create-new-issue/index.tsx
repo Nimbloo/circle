@@ -64,11 +64,14 @@ export function CreateNewIssue() {
          createdAt: new Date().toISOString(),
          cycleId: '',
          project: undefined,
+         // Time do contexto (rota /team/[teamId]/...): sem isto a issue caía no time do
+         // projeto ou no 1º time do workspace → criada no time errado silenciosamente.
+         teamId,
          subissues: [],
          // Rank otimista; o servidor reatribui o rank real no re-hydrate após o POST.
          rank: new LexoRank('a3c').toString(),
       };
-   }, [defaultStatus, generateUniqueIdentifier, status, priorities]);
+   }, [defaultStatus, generateUniqueIdentifier, status, priorities, teamId]);
 
    const [addIssueForm, setAddIssueForm] = useState<Issue>(createDefaultData());
 

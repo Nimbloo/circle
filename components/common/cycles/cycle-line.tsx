@@ -33,13 +33,14 @@ interface CycleLineProps {
  * dedicated issue views ("/cycle/active" and "/cycle/upcoming").
  */
 export default function CycleLine({ cycle }: CycleLineProps) {
-   const { orgId, teamId } = useParams<{ orgId: string; teamId: string }>();
+   const { orgId } = useParams<{ orgId: string }>();
 
+   // Usa o time REAL do cycle (não o da URL) — robusto se a lista misturar times.
    const href =
       cycle.status === 'current'
-         ? `/${orgId}/team/${teamId}/cycle/active`
+         ? `/${orgId}/team/${cycle.teamId}/cycle/active`
          : cycle.status === 'upcoming'
-           ? `/${orgId}/team/${teamId}/cycle/upcoming`
+           ? `/${orgId}/team/${cycle.teamId}/cycle/upcoming`
            : undefined;
 
    const content = (

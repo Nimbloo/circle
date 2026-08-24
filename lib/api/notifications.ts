@@ -55,7 +55,13 @@ export interface ListInboxOptions {
    read?: boolean;
    type?: string[];
    actorId?: string;
+   limit?: number;
 }
+
+/** Teto default do inbox: as N notificações mais recentes. A tabela cresce sem teto
+ * (toda atribuição/menção/comentário gera linha) e o store re-baixa a cada evento SSE;
+ * sem LIMIT a latência/transferência cresciam linearmente com o histórico do usuário. */
+const DEFAULT_INBOX_LIMIT = 100;
 
 export async function listInbox(
    db: Db,
@@ -70,7 +76,8 @@ export async function listInbox(
       .select()
       .from(notification)
       .where(and(...conds))
-      .orderBy(desc(notification.createdAt));
+      .orderBy(desc(notification.createdAt))
+      .limit(Math.min(Math.max(opts.limit ?? DEFAULT_INBOX_LIMIT, 1), 500));
    return assemble(db, rows);
 }
 
