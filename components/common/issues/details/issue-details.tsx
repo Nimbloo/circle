@@ -10,6 +10,7 @@ import { useIssuesStore } from '@/store/issues-store';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { AssigneeUser } from '../assignee-user';
 import { ActivityFeed } from './activity-feed';
 import { ContentBlocks } from './content-blocks';
@@ -40,6 +41,14 @@ export default function IssueDetails() {
    const [loading, setLoading] = useState(true);
    const [reloadKey, setReloadKey] = useState(0);
 
+   // Edição inline de título e descrição (padrão Linear). `rawDescription` guarda o
+   // texto cru (o `detail.description` é ContentBlock[] só-leitura, adaptado do texto).
+   const [editingTitle, setEditingTitle] = useState(false);
+   const [titleDraft, setTitleDraft] = useState('');
+   const [editingDesc, setEditingDesc] = useState(false);
+   const [descDraft, setDescDraft] = useState('');
+   const [rawDescription, setRawDescription] = useState('');
+
    useEffect(() => {
       if (storeIssue) return; // já temos a issue no store
       let active = true;
@@ -65,7 +74,10 @@ export default function IssueDetails() {
       setLoading(true);
       Promise.all([api.issues.detail(issue.id), api.issues.activity(issue.id)])
          .then(([detailDto, activity]) => {
-            if (active) setDetail(adaptIssueDetail(detailDto, activity));
+            if (active) {
+               setDetail(adaptIssueDetail(detailDto, activity));
+               setRawDescription(detailDto.description ?? '');
+            }
          })
          .catch(() => {
             if (active) setDetail(null);
@@ -121,15 +133,105 @@ export default function IssueDetails() {
       .map((id) => issues.find((candidate) => candidate.id === id))
       .filter((candidate) => candidate !== undefined);
 
+   // Persiste o título: pelo store (optimistic+rollback) quando a issue está no board,
+   // ou direto na API + estado local quando é deep-link frio (fora do store).
+   const applyTitle = async () => {
+      const next = titleDraft.trim();
+      setEditingTitle(false);
+      if (!next || next === issue.title) return;
+      if (storeIssue) {
+         useIssuesStore.getState().updateIssue(issue.id, { title: next });
+      } else {
+         setFetchedIssue((prev) => (prev ? { ...prev, title: next } : prev));
+         try {
+            await api.issues.update(issue.id, { title: next });
+         } catch {
+            setFetchedIssue((prev) => (prev ? { ...prev, title: issue.title } : prev));
+            toast.error('Falha ao salvar o título');
+         }
+      }
+   };
+
+   const applyDescription = async () => {
+      const next = descDraft;
+      setEditingDesc(false);
+      if (next.trim() === rawDescription.trim()) return;
+      const prev = rawDescription;
+      setRawDescription(next);
+      try {
+         await api.issues.updateDetail(issue.id, { description: next.trim() || null });
+         setReloadKey((k) => k + 1);
+      } catch {
+         setRawDescription(prev);
+         toast.error('Falha ao salvar a descrição');
+      }
+   };
+
    return (
       <div className="w-full h-full flex overflow-hidden">
          {/* Main column */}
          <div className="flex-1 min-w-0 h-full overflow-y-auto">
             <div className="max-w-3xl mx-auto px-8 py-10">
-               <h1 className="text-3xl font-semibold leading-tight text-balance">{issue.title}</h1>
+               {editingTitle ? (
+                  <textarea
+                     autoFocus
+                     value={titleDraft}
+                     onChange={(e) => setTitleDraft(e.target.value)}
+                     onBlur={() => void applyTitle()}
+                     onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                           e.preventDefault();
+                           void applyTitle();
+                        } else if (e.key === 'Escape') {
+                           setEditingTitle(false);
+                        }
+                     }}
+                     rows={1}
+                     className="w-full resize-none bg-transparent text-3xl font-semibold leading-tight outline-none"
+                  />
+               ) : (
+                  <h1
+                     className="text-3xl font-semibold leading-tight text-balance cursor-text hover:bg-accent/20 rounded-md -mx-1 px-1 transition-colors"
+                     onClick={() => {
+                        setTitleDraft(issue.title);
+                        setEditingTitle(true);
+                     }}
+                  >
+                     {issue.title}
+                  </h1>
+               )}
 
                <div className="mt-6">
-                  <ContentBlocks blocks={detail.description} />
+                  {editingDesc ? (
+                     <textarea
+                        autoFocus
+                        value={descDraft}
+                        onChange={(e) => setDescDraft(e.target.value)}
+                        onBlur={() => void applyDescription()}
+                        onKeyDown={(e) => {
+                           if (e.key === 'Escape') setEditingDesc(false);
+                        }}
+                        placeholder="Add a description…"
+                        rows={Math.max(4, descDraft.split('\n').length + 1)}
+                        className="w-full resize-none bg-transparent text-sm leading-relaxed outline-none placeholder:text-muted-foreground/70"
+                     />
+                  ) : (
+                     <div
+                        className="cursor-text hover:bg-accent/10 rounded-md -mx-2 px-2 py-1 transition-colors min-h-[2rem]"
+                        onClick={() => {
+                           setDescDraft(rawDescription);
+                           setEditingDesc(true);
+                        }}
+                     >
+                        {rawDescription.trim() ? (
+                           <ContentBlocks blocks={detail.description} />
+                        ) : (
+                           <span className="text-sm text-muted-foreground/70">
+                              Add a description…
+                           </span>
+                        )}
+                     </div>
+                  )}
                </div>
 
                {/* Sub-issues */}

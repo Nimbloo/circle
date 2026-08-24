@@ -11,7 +11,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { adaptProjectDetail, emptyProjectDetail } from '@/lib/adapters-project-detail';
 import { api } from '@/lib/client';
-import { cn } from '@/lib/utils';
 import {
    ProjectDetail,
    ProjectUpdate,
@@ -76,7 +75,6 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
       [allIssues, projectId]
    );
    const { postedUpdates, postUpdate, removeUpdate } = useProjectUpdatesStore();
-   const [mode, setMode] = useState<'comment' | 'update'>('update');
    const [health, setHealth] = useState<ProjectUpdateHealth>('on-track');
    const [text, setText] = useState('');
    const [posting, setPosting] = useState(false);
@@ -118,23 +116,8 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
       return [...groups.entries()];
    }, [updates]);
 
-   const completedPercent =
-      issues.length > 0
-         ? Math.round(
-              (issues.filter((issue) => issue.status.category === 'completed').length /
-                 issues.length) *
-                 100
-           )
-         : 0;
-
    const handlePost = async () => {
       if (text.trim() === '' || posting) return;
-      if (mode !== 'update') {
-         // "Comment" ainda é local (sem tabela dedicada de comentário de projeto).
-         postUpdate(projectId, health, text);
-         setText('');
-         return;
-      }
       setPosting(true);
       // Otimista: mostra o update na hora; confirma/rollback depois do POST.
       const optimistic = postUpdate(projectId, health, text);
@@ -167,91 +150,37 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
                {/* Composer */}
                <div className="border rounded-lg p-4">
                   <div className="flex items-center gap-2">
-                     <div className="flex items-center rounded-md border p-0.5 text-xs">
-                        {(['comment', 'update'] as const).map((value) => (
-                           <button
-                              key={value}
-                              type="button"
-                              onClick={() => setMode(value)}
-                              className={cn(
-                                 'px-2 py-1 rounded-[5px] capitalize transition-colors',
-                                 mode === value
-                                    ? 'bg-accent text-foreground'
-                                    : 'text-muted-foreground hover:text-foreground'
-                              )}
-                           >
-                              {value}
-                           </button>
-                        ))}
-                     </div>
-                     {mode === 'update' && (
-                        <DropdownMenu>
-                           <DropdownMenuTrigger className="outline-none">
-                              <HealthBadge health={health} />
-                           </DropdownMenuTrigger>
-                           <DropdownMenuContent align="start" className="w-40">
-                              {(Object.keys(projectUpdateHealthLabel) as ProjectUpdateHealth[]).map(
-                                 (value) => (
-                                    <DropdownMenuItem key={value} onClick={() => setHealth(value)}>
-                                       <span
-                                          className="size-2 rounded-full"
-                                          style={{
-                                             backgroundColor: projectUpdateHealthColor[value],
-                                          }}
-                                       />
-                                       {projectUpdateHealthLabel[value]}
-                                    </DropdownMenuItem>
-                                 )
-                              )}
-                           </DropdownMenuContent>
-                        </DropdownMenu>
-                     )}
+                     <span className="text-xs font-medium text-muted-foreground px-1">
+                        Project update
+                     </span>
+                     <DropdownMenu>
+                        <DropdownMenuTrigger className="outline-none">
+                           <HealthBadge health={health} />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-40">
+                           {(Object.keys(projectUpdateHealthLabel) as ProjectUpdateHealth[]).map(
+                              (value) => (
+                                 <DropdownMenuItem key={value} onClick={() => setHealth(value)}>
+                                    <span
+                                       className="size-2 rounded-full"
+                                       style={{
+                                          backgroundColor: projectUpdateHealthColor[value],
+                                       }}
+                                    />
+                                    {projectUpdateHealthLabel[value]}
+                                 </DropdownMenuItem>
+                              )
+                           )}
+                        </DropdownMenuContent>
+                     </DropdownMenu>
                   </div>
 
                   <textarea
                      value={text}
                      onChange={(event) => setText(event.target.value)}
-                     placeholder={
-                        mode === 'update' ? 'Write a project update…' : 'Leave a comment…'
-                     }
+                     placeholder="Write a project update…"
                      className="mt-3 w-full min-h-24 resize-y bg-transparent text-sm outline-none placeholder:text-muted-foreground"
                   />
-
-                  {mode === 'update' && (
-                     <div className="mt-1 border-l-2 pl-4 py-1 flex flex-col gap-1.5 text-xs text-muted-foreground">
-                        <div className="flex gap-6">
-                           <span className="w-20">Priority</span>
-                           <span>
-                              No priority →{' '}
-                              <span className="text-foreground">{project.priority.name}</span>
-                           </span>
-                        </div>
-                        <div className="flex gap-6">
-                           <span className="w-20">Lead</span>
-                           <span>
-                              <span className="text-foreground">{project.lead?.name ?? '—'}</span>{' '}
-                              assigned
-                           </span>
-                        </div>
-                        <div className="flex gap-6">
-                           <span className="w-20">Target date</span>
-                           <span>
-                              set to{' '}
-                              <span className="text-foreground">
-                                 {project.targetDate
-                                    ? format(parseISO(project.targetDate), 'MMM do')
-                                    : '—'}
-                              </span>
-                           </span>
-                        </div>
-                        <div className="flex gap-6">
-                           <span className="w-20">Progress</span>
-                           <span>
-                              0% → <span className="text-foreground">{completedPercent}%</span>
-                           </span>
-                        </div>
-                     </div>
-                  )}
 
                   <div className="mt-3 flex items-center justify-end">
                      <Button
@@ -259,7 +188,7 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
                         onClick={handlePost}
                         disabled={text.trim() === '' || posting}
                      >
-                        Post {mode === 'update' ? 'update' : 'comment'}
+                        Post update
                      </Button>
                   </div>
                </div>

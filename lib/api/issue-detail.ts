@@ -119,6 +119,27 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
    };
 }
 
+/** Upsert da descrição (texto raw) da issue em `issue_content`. Antes só era gravada
+ * no create — não havia caminho de edição ponta-a-ponta. Retorna o detail atualizado. */
+export async function updateIssueContent(
+   db: Db,
+   issueId: string,
+   description: string | null
+): Promise<IssueDetailDto | null> {
+   const exists = await db
+      .select({ id: issueT.id })
+      .from(issueT)
+      .where(eq(issueT.id, issueId))
+      .limit(1);
+   if (exists.length === 0) return null;
+   await db
+      .insert(issueContent)
+      .values({ issueId, description })
+      .onConflictDoUpdate({ target: issueContent.issueId, set: { description } });
+   publish({ entity: 'issue', action: 'updated', id: issueId });
+   return getIssueDetail(db, issueId);
+}
+
 export type RelationKind = 'sub' | 'related' | 'blocked_by';
 export const RELATION_KINDS: readonly RelationKind[] = ['sub', 'related', 'blocked_by'];
 
