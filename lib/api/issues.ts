@@ -8,6 +8,7 @@ import {
    activityEvent,
    issueRelation,
    issuePrLink,
+   issueSubscriber,
    comment,
    commentReaction,
    notification,
@@ -22,6 +23,7 @@ import { getOrCreateUser } from './users';
 import { rankAfter, firstRank, rankBetween } from './rank';
 import { ApiError } from './errors';
 import { dispatchNotification } from './notify';
+import { subscribeUsers, notifySubscribers } from './subscriptions';
 import { getCachedCatalogs } from './catalogs';
 import { publish } from './events';
 
@@ -411,6 +413,9 @@ export async function createIssue(
       });
    });
 
+   // Auto-subscribe: criador e (se houver) responsável inicial passam a seguir a issue.
+   await subscribeUsers(db, id, [actor.id, input.assigneeId ?? null]);
+
    publish({ entity: 'issue', action: 'created', id, actorEmail });
    return (await getIssue(db, id))!;
 }
@@ -512,6 +517,28 @@ export async function updateIssue(
       });
    }
 
+   // Auto-subscribe: novo responsável passa a seguir a issue.
+   const newAssignee =
+      patch.assigneeId && patch.assigneeId !== prev.assigneeId ? patch.assigneeId : null;
+   if (newAssignee) await subscribeUsers(db, id, [newAssignee]);
+
+   // FOLLOWERS: notificação IN-APP das mudanças significativas (status/priority/
+   // assignee/cycle/project), menos o ator e o novo responsável (que já recebeu o
+   // dispatch de assignment acima). Campos ruidosos (título/estimate/due) ficam de fora.
+   const SIGNIFICANT = new Set(['status', 'priority', 'assignee', 'cycle', 'project']);
+   const sig = events.filter((e) => SIGNIFICANT.has(e.event));
+   if (sig.length) {
+      // AWAIT: in-app é insert rápido e precisa persistir de forma confiável (só o
+      // dispatch externo de assignment acima fica fire-and-forget).
+      await notifySubscribers(db, {
+         issueId: id,
+         actorId: actor.id,
+         type: 'update',
+         content: `${actor.name} ${sig.map((e) => e.text).join(', ')}`,
+         excludeIds: newAssignee ? [newAssignee] : [],
+      });
+   }
+
    publish({ entity: 'issue', action: 'updated', id, actorEmail });
    return getIssue(db, id);
 }
@@ -605,6 +632,7 @@ export async function deleteIssue(db: Db, id: string): Promise<boolean> {
          .where(or(eq(issueRelation.issueId, id), eq(issueRelation.relatedId, id)));
 
       await tx.delete(issuePrLink).where(eq(issuePrLink.issueId, id));
+      await tx.delete(issueSubscriber).where(eq(issueSubscriber.issueId, id));
       await tx.delete(notification).where(eq(notification.issueId, id));
       await tx.delete(activityEvent).where(eq(activityEvent.issueId, id));
       await tx.delete(issueLabel).where(eq(issueLabel.issueId, id));

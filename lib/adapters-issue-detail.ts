@@ -82,5 +82,7 @@ export function adaptIssueDetail(dto: IssueDetailDto, activity: ActivityDto[]): 
       blockingIds: dto.blockingIds,
       prLinks: dto.prLinks.map((p) => ({ ...p, status: p.status as PrLink['status'] })),
       milestone: dto.milestone ?? undefined,
+      subscriberIds: dto.subscriberIds,
+      subscribed: dto.subscribed,
    };
 }

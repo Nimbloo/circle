@@ -16,8 +16,10 @@ import { useIssuesStore } from '@/store/issues-store';
 import { IssueDetail } from '@/data/issue-details';
 import { Issue } from '@/data/issues';
 import { LabelInterface } from '@/data/labels';
-import { Ban, CheckIcon, GitPullRequestArrow } from 'lucide-react';
-import { useState } from 'react';
+import { Ban, Bell, BellOff, CheckIcon, GitPullRequestArrow } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
+import { api } from '@/lib/client';
 import { LabelBadge } from '../label-badge';
 import { PrioritySelector } from '../priority-selector';
 import { StatusSelector } from '../status-selector';
@@ -90,6 +92,65 @@ interface IssuePropertiesPanelProps {
    onChanged?: () => void;
 }
 
+/**
+ * Toggle "seguir" a issue: followers recebem notificação da atividade (comentário,
+ * status, assignee...) mesmo sem serem o responsável. Otimista + rollback; ressincroniza
+ * quando o detail é refetchado. Mostra a contagem de followers.
+ */
+function SubscribeButton({
+   issueId,
+   subscribed: initial,
+   count: initialCount,
+}: {
+   issueId: string;
+   subscribed: boolean;
+   count: number;
+}) {
+   const [subscribed, setSubscribed] = useState(initial);
+   const [count, setCount] = useState(initialCount);
+   const [busy, setBusy] = useState(false);
+
+   // Ressincroniza com o servidor quando o detail é refetchado (ex.: outro evento).
+   useEffect(() => setSubscribed(initial), [initial]);
+   useEffect(() => setCount(initialCount), [initialCount]);
+
+   const toggle = async () => {
+      if (busy) return;
+      setBusy(true);
+      const next = !subscribed;
+      setSubscribed(next);
+      setCount((c) => Math.max(0, c + (next ? 1 : -1)));
+      try {
+         if (next) await api.issues.subscribe(issueId);
+         else await api.issues.unsubscribe(issueId);
+      } catch {
+         setSubscribed(!next);
+         setCount((c) => Math.max(0, c + (next ? -1 : 1)));
+         toast.error('Falha ao atualizar a inscrição');
+      } finally {
+         setBusy(false);
+      }
+   };
+
+   return (
+      <Button
+         variant="ghost"
+         size="sm"
+         className="h-7 gap-2 px-1.5 -ml-1.5 justify-start w-full"
+         onClick={() => void toggle()}
+         disabled={busy}
+      >
+         {subscribed ? (
+            <Bell className="size-4 text-foreground" />
+         ) : (
+            <BellOff className="size-4 text-muted-foreground" />
+         )}
+         <span className="text-sm">{subscribed ? 'Subscribed' : 'Subscribe'}</span>
+         {count > 0 && <span className="ml-auto text-xs text-muted-foreground">{count}</span>}
+      </Button>
+   );
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
    return (
       <div>
@@ -121,6 +182,12 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
 
    return (
       <div className="flex flex-col gap-7">
+         <SubscribeButton
+            issueId={issue.id}
+            subscribed={detail.subscribed ?? false}
+            count={detail.subscriberIds?.length ?? 0}
+         />
+
          <Section title="Properties">
             <div className="flex flex-col gap-1.5">
                <div className="flex items-center gap-1.5 -ml-1.5">

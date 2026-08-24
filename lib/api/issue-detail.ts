@@ -13,6 +13,7 @@ import {
 } from '@/db/schema';
 import { getOrCreateUser } from './users';
 import { dispatchNotification } from './notify';
+import { listSubscriberIds, subscribeUsers, notifySubscribers } from './subscriptions';
 import { ApiError } from './errors';
 import { publish } from './events';
 import type { UserRef } from './issues';
@@ -65,6 +66,10 @@ export interface IssueDetailDto {
    /** Issues que ESTA bloqueia (direção reversa de 'blocked_by'). */
    blockingIds: string[];
    prLinks: { id: string; title: string; status: string }[];
+   /** Followers da issue (recebem notificação da atividade). */
+   subscriberIds: string[];
+   /** true se o usuário atual segue a issue (só quando `meId` é conhecido). */
+   subscribed: boolean;
 }
 
 async function loadUsers(db: Db, ids: string[]) {
@@ -103,18 +108,23 @@ async function reactionsByComment(db: Db, commentIds: string[], meUserId?: strin
    return map;
 }
 
-export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDetailDto | null> {
+export async function getIssueDetail(
+   db: Db,
+   issueId: string,
+   meId?: string
+): Promise<IssueDetailDto | null> {
    const rows = await db.select().from(issueT).where(eq(issueT.id, issueId)).limit(1);
    if (rows.length === 0) return null;
    const iss = rows[0];
    // Lê relações nas DUAS direções (issueId=X e relatedId=X) para simetria: parent
    // backlink (reverso de 'sub'), "blocking" (reverso de 'blocked_by') e related
    // simétrico. Antes só lia a direção forward → a contraparte aparecia vazia.
-   const [content, forward, reverse, prs] = await Promise.all([
+   const [content, forward, reverse, prs, subscriberIds] = await Promise.all([
       db.select().from(issueContent).where(eq(issueContent.issueId, issueId)).limit(1),
       db.select().from(issueRelation).where(eq(issueRelation.issueId, issueId)),
       db.select().from(issueRelation).where(eq(issueRelation.relatedId, issueId)),
       db.select().from(issuePrLink).where(eq(issuePrLink.issueId, issueId)),
+      listSubscriberIds(db, issueId),
    ]);
    const dedup = (ids: string[]) => [...new Set(ids)];
    return {
@@ -130,6 +140,8 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
       blockedByIds: forward.filter((r) => r.kind === 'blocked_by').map((r) => r.relatedId),
       blockingIds: reverse.filter((r) => r.kind === 'blocked_by').map((r) => r.issueId),
       prLinks: prs.map((p) => ({ id: p.id, title: p.title, status: p.status })),
+      subscriberIds,
+      subscribed: meId ? subscriberIds.includes(meId) : false,
    };
 }
 
@@ -278,6 +290,9 @@ export async function addComment(
       : [];
    const mentionedIds = new Set(mentioned.filter((u) => u.id !== author.id).map((u) => u.id));
 
+   // Auto-subscribe: quem comenta e quem é mencionado passam a seguir a issue.
+   await subscribeUsers(db, issueId, [author.id, ...mentionedIds]);
+
    const notifications: Promise<void>[] = [...mentionedIds].map((recipientId) =>
       dispatchNotification(db, {
          type: 'mention',
@@ -288,7 +303,8 @@ export async function addComment(
       })
    );
 
-   // Notifica o responsável (se não for o próprio autor nem já mencionado acima)
+   // Notifica o responsável via canal externo (se não for o autor nem já mencionado) —
+   // preserva o comportamento anterior (Slack/e-mail pro assignee).
    if (iss.assigneeId && iss.assigneeId !== author.id && !mentionedIds.has(iss.assigneeId)) {
       notifications.push(
          dispatchNotification(db, {
@@ -300,7 +316,20 @@ export async function addComment(
          })
       );
    }
-   // Fire-and-forget: as notificações (Slack/SES) não bloqueiam a resposta do comentário.
+   // Demais FOLLOWERS (fora assignee/mencionados/autor) → notificação IN-APP. AWAIT:
+   // é insert rápido e a notificação in-app precisa persistir de forma confiável (o
+   // dispatch EXTERNO abaixo é que fica fire-and-forget por causa do Slack/SES lentos).
+   const externallyNotified = [...mentionedIds];
+   if (iss.assigneeId) externallyNotified.push(iss.assigneeId);
+   await notifySubscribers(db, {
+      issueId,
+      actorId: author.id,
+      type: 'comment',
+      content: `${author.name} comentou nesta issue`,
+      excludeIds: externallyNotified,
+   });
+
+   // Fire-and-forget: os canais EXTERNOS (Slack/SES) não bloqueiam a resposta.
    void Promise.all(notifications).catch((e) =>
       console.error('[circle] notificações de comentário falharam:', e)
    );

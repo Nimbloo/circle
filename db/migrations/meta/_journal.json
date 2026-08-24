@@ -1,111 +1,118 @@
 {
-   "version": "7",
-   "dialect": "postgresql",
-   "entries": [
-      {
-         "idx": 0,
-         "version": "7",
-         "when": 1787181610253,
-         "tag": "0000_init",
-         "breakpoints": true
-      },
-      {
-         "idx": 1,
-         "version": "7",
-         "when": 1787193250150,
-         "tag": "0001_reviews",
-         "breakpoints": true
-      },
-      {
-         "idx": 2,
-         "version": "7",
-         "when": 1787198337522,
-         "tag": "0002_furry_violations",
-         "breakpoints": true
-      },
-      {
-         "idx": 3,
-         "version": "7",
-         "when": 1787259036668,
-         "tag": "0003_add_missing_indexes",
-         "breakpoints": true
-      },
-      {
-         "idx": 4,
-         "version": "7",
-         "when": 1787274622098,
-         "tag": "0004_add_password_hash",
-         "breakpoints": true
-      },
-      {
-         "idx": 5,
-         "version": "7",
-         "when": 1787275405132,
-         "tag": "0005_user_settings",
-         "breakpoints": true
-      },
-      {
-         "idx": 6,
-         "version": "7",
-         "when": 1787278047431,
-         "tag": "0006_invite_token",
-         "breakpoints": true
-      },
-      {
-         "idx": 7,
-         "version": "7",
-         "when": 1787278167431,
-         "tag": "0007_cycle_number_unique",
-         "breakpoints": true
-      },
-      {
-         "idx": 8,
-         "version": "7",
-         "when": 1787282488437,
-         "tag": "0008_user_avatar",
-         "breakpoints": true
-      },
-      {
-         "idx": 9,
-         "version": "7",
-         "when": 1787355380026,
-         "tag": "0009_broken_makkari",
-         "breakpoints": true
-      },
-      {
-         "idx": 10,
-         "version": "7",
-         "when": 1787367047421,
-         "tag": "0010_team_join_request",
-         "breakpoints": true
-      },
-      {
-         "idx": 11,
-         "version": "7",
-         "when": 1787441425394,
-         "tag": "0011_mysterious_emma_frost",
-         "breakpoints": true
-      },
-      {
-         "idx": 12,
-         "version": "7",
-         "when": 1787447177256,
-         "tag": "0012_adorable_storm",
-         "breakpoints": true
-      },
-      {
-         "idx": 13,
-         "version": "7",
-         "when": 1787447855762,
-         "tag": "0013_flippant_smiling_tiger",
-         "breakpoints": true
-      },
-      {
-         "idx": 14,
-         "version": "7",
-         "when": 1787531419021,
-         "tag": "0014_simple_agent_zero",
-         "breakpoints": true
-      }
-   ]
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1787181610253,
+      "tag": "0000_init",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787193250150,
+      "tag": "0001_reviews",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787198337522,
+      "tag": "0002_furry_violations",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787259036668,
+      "tag": "0003_add_missing_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787274622098,
+      "tag": "0004_add_password_hash",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787275405132,
+      "tag": "0005_user_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787278047431,
+      "tag": "0006_invite_token",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787278167431,
+      "tag": "0007_cycle_number_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787282488437,
+      "tag": "0008_user_avatar",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787355380026,
+      "tag": "0009_broken_makkari",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1787367047421,
+      "tag": "0010_team_join_request",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1787441425394,
+      "tag": "0011_mysterious_emma_frost",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1787447177256,
+      "tag": "0012_adorable_storm",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1787447855762,
+      "tag": "0013_flippant_smiling_tiger",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1787531419021,
+      "tag": "0014_simple_agent_zero",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1787598270283,
+      "tag": "0015_bent_dreaming_celestial",
+      "breakpoints": true
+    }
+  ]
 }

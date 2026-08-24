@@ -64,6 +64,10 @@ export interface IssueDetail {
    blockingIds?: string[];
    prLinks?: PrLink[];
    milestone?: string;
+   /** Followers da issue (recebem notificação da atividade). */
+   subscriberIds?: string[];
+   /** true se o usuário atual segue a issue. */
+   subscribed?: boolean;
 }
 
 /* -------------------------------------------------------------------------- */

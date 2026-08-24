@@ -177,6 +177,8 @@ export const api = {
       removeLabel: (id: string, labelId: string) =>
          del<IssueDto>(`/issues/${id}/labels/${labelId}`),
       detail: (id: string) => get<IssueDetailDto>(`/issues/${id}/detail`),
+      subscribe: (id: string) => post<{ subscribed: boolean }>(`/issues/${id}/subscription`, {}),
+      unsubscribe: (id: string) => del<{ subscribed: boolean }>(`/issues/${id}/subscription`),
       updateDetail: (id: string, body: { description: string | null }) =>
          patch<IssueDetailDto>(`/issues/${id}/detail`, body),
       addRelation: (id: string, relatedId: string, kind: string) =>

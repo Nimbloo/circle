@@ -328,6 +328,26 @@ export const issuePrLink = pgTable('issue_pr_link', {
    status: varchar('status', { length: 16 }).notNull(), // open|merged|draft
 });
 
+/** Followers de uma issue: recebem notificação in-app da atividade (comentário,
+ *  mudança de status/priority/assignee/cycle/project) mesmo sem serem o responsável.
+ *  Auto-preenchida (criador/assignee/autor de comentário/@mencionado) + toggle manual. */
+export const issueSubscriber = pgTable(
+   'issue_subscriber',
+   {
+      issueId: varchar('issue_id', { length: 36 })
+         .notNull()
+         .references(() => issue.id),
+      userId: varchar('user_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [
+      primaryKey({ columns: [t.issueId, t.userId] }),
+      index('idx_issue_subscriber_issue').on(t.issueId),
+   ]
+);
+
 export const comment = pgTable(
    'comment',
    {
