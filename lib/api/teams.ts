@@ -12,7 +12,7 @@ import {
    savedView as savedViewT,
    documentFolder as documentFolderT,
 } from '@/db/schema';
-import { getOrCreateUser, generateInviteToken, signupUrl } from './users';
+import { getOrCreateUser } from './users';
 import { sendEmail } from './integrations/mailer';
 import { ctaEmailHtml } from './integrations/email-templates';
 import { escapeHtml } from './notify';
@@ -202,46 +202,24 @@ export async function addTeamMember(db: Db, teamId: string, email: string): Prom
       .returning();
    if (inserted.length) publish({ entity: 'member', action: 'updated', id: user.id });
 
-   // E-mail (best-effort): só em inserção nova e com remetente configurado. Conta
-   // ATIVA (tem senha) → notificação simples "entrou no time"; conta PENDENTE (sem
-   // senha) → convite TOKENIZADO com link de signup (antes mandava um "adicionado"
-   // sem ação — o usuário novo não tinha como ativar a conta).
+   // E-mail (best-effort): só em inserção nova e com remetente configurado. Acesso ao
+   // Circle já é via SSO Keycloak (grupo `app-circle`) — aqui é só o aviso de que
+   // entrou no time, sem link de senha/convite nativo (retirado).
    if (inserted.length && process.env.CIRCLE_MAIL_FROM) {
       try {
          const teamName = t[0].name;
-         if (user.passwordHash) {
-            await sendEmail(
-               user.email,
-               `Você entrou no time ${teamName}`,
-               ctaEmailHtml({
-                  title: `Você foi adicionado ao time ${teamName}`,
-                  intro: `Agora você faz parte do time ${teamName} no Circle.`,
-                  buttonLabel: 'Abrir o Circle',
-                  buttonUrl: 'https://circle.nimbloo.ai',
-               })
-            );
-         } else {
-            let token = user.inviteToken;
-            if (!token) {
-               token = generateInviteToken();
-               await db
-                  .update(appUser)
-                  .set({ inviteToken: token, updatedAt: new Date() })
-                  .where(eq(appUser.id, user.id));
-            }
-            await sendEmail(
-               user.email,
-               `Seu convite para o time ${teamName}`,
-               ctaEmailHtml({
-                  title: `Convite para o time ${teamName}`,
-                  intro: `Você foi convidado para o time ${teamName} no Circle. Defina sua senha para ativar sua conta.`,
-                  buttonLabel: 'Definir minha senha',
-                  buttonUrl: signupUrl(user.email, token),
-               })
-            );
-         }
+         await sendEmail(
+            user.email,
+            `Você entrou no time ${teamName}`,
+            ctaEmailHtml({
+               title: `Você foi adicionado ao time ${teamName}`,
+               intro: `Agora você faz parte do time ${teamName} no Circle.`,
+               buttonLabel: 'Abrir o Circle',
+               buttonUrl: 'https://circle.nimbloo.ai',
+            })
+         );
       } catch (err) {
-         console.error('[circle] convite de time por e-mail falhou:', err);
+         console.error('[circle] notificação de time por e-mail falhou:', err);
       }
    }
 }

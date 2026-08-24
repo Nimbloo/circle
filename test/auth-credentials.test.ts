@@ -1,120 +1,54 @@
 import { describe, it, expect } from 'vitest';
-import bcrypt from 'bcryptjs';
-import { eq } from 'drizzle-orm';
-import { makeTestDb } from './helpers/db';
-import { seedUser } from './helpers/fixtures';
-import { appUser } from '@/db/schema';
-import { inviteUser, setPassword, getOrCreateUser } from '@/lib/api/users';
-import { ApiError } from '@/lib/api/errors';
+import { isAllowedKeycloakProfile, ALLOWED_EMAIL_DOMAIN, REQUIRED_GROUP } from '@/auth.config';
 
-describe('inviteUser', () => {
-   it('creates a user with the given role, no password, and a fresh invite token', async () => {
-      const db = await makeTestDb();
-      const u = await inviteUser(db, 'New.Person@Nimbloo.ai', 'Admin');
-      expect(u.email).toBe('new.person@nimbloo.ai');
-      expect(u.role).toBe('Admin');
-      expect(u.inviteToken).toMatch(/^[0-9a-f]{64}$/);
-      const [row] = await db
-         .select()
-         .from(appUser)
-         .where(eq(appUser.email, 'new.person@nimbloo.ai'));
-      expect(row.passwordHash).toBeNull();
-      expect(row.inviteToken).toBe(u.inviteToken);
+function profile(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+   return {
+      email: 'ana.silva@nimbloo.ai',
+      email_verified: true,
+      groups: [REQUIRED_GROUP],
+      ...overrides,
+   };
+}
+
+describe('isAllowedKeycloakProfile (gate do login Keycloak, provider único)', () => {
+   it('permite quando o e-mail é do domínio, verificado, e o grupo app-circle está presente', () => {
+      expect(isAllowedKeycloakProfile(profile())).toBe(true);
    });
 
-   it('is idempotent by email and updates the role of an existing user', async () => {
-      const db = await makeTestDb();
-      await seedUser(db, { name: 'Bob', email: 'bob@nimbloo.ai', role: 'Member' });
-      const u = await inviteUser(db, 'bob@nimbloo.ai', 'Admin');
-      expect(u.role).toBe('Admin');
-      const rows = await db.select().from(appUser).where(eq(appUser.email, 'bob@nimbloo.ai'));
-      expect(rows).toHaveLength(1);
-      expect(rows[0].role).toBe('Admin');
+   it('aceita o grupo tanto como "app-circle" quanto como full group path "/app-circle"', () => {
+      expect(isAllowedKeycloakProfile(profile({ groups: ['/app-circle'] }))).toBe(true);
    });
 
-   it('generates a new token on every (re-)invite while the account is still pending', async () => {
-      const db = await makeTestDb();
-      const first = await inviteUser(db, 'reinv@nimbloo.ai', 'Member');
-      const second = await inviteUser(db, 'reinv@nimbloo.ai', 'Member');
-      expect(second.inviteToken).toBeTruthy();
-      expect(second.inviteToken).not.toBe(first.inviteToken);
-      expect(second.alreadyRegistered).toBe(false);
+   it('nega quando o grupo app-circle está ausente entre outros grupos', () => {
+      expect(isAllowedKeycloakProfile(profile({ groups: ['app-other', 'app-dcr'] }))).toBe(false);
    });
 
-   it('does NOT reset a registered account on re-invite (only reconciles the role)', async () => {
-      const db = await makeTestDb();
-      const u = await inviteUser(db, 'done@nimbloo.ai', 'Member');
-      await setPassword(db, 'done@nimbloo.ai', 'sup3rsecret', u.inviteToken!);
-      const [before] = await db.select().from(appUser).where(eq(appUser.email, 'done@nimbloo.ai'));
-
-      const re = await inviteUser(db, 'done@nimbloo.ai', 'Admin');
-      expect(re.alreadyRegistered).toBe(true);
-      expect(re.inviteToken).toBeNull(); // sem token inútil
-      expect(re.role).toBe('Admin'); // role reconciliada
-
-      const [after] = await db.select().from(appUser).where(eq(appUser.email, 'done@nimbloo.ai'));
-      expect(after.passwordHash).toBe(before.passwordHash); // senha intacta
-      expect(after.inviteToken).toBeNull(); // continua sem token (não reaberto)
-      expect(after.role).toBe('Admin');
-   });
-});
-
-describe('setPassword', () => {
-   it('rejects an email that was not invited (403)', async () => {
-      const db = await makeTestDb();
-      await expect(
-         setPassword(db, 'ghost@nimbloo.ai', 'sup3rsecret', 'sometoken')
-      ).rejects.toMatchObject({ status: 403 });
+   it('nega quando o claim groups está ausente do ID token (fail-closed)', () => {
+      const p = profile();
+      delete p.groups;
+      expect(isAllowedKeycloakProfile(p)).toBe(false);
    });
 
-   it('sets a bcrypt hash for an invited user with the correct token', async () => {
-      const db = await makeTestDb();
-      const u = await inviteUser(db, 'inv@nimbloo.ai', 'Member');
-      await setPassword(db, 'inv@nimbloo.ai', 'sup3rsecret', u.inviteToken!);
-      const [row] = await db.select().from(appUser).where(eq(appUser.email, 'inv@nimbloo.ai'));
-      expect(row.passwordHash).toBeTruthy();
-      expect(await bcrypt.compare('sup3rsecret', row.passwordHash!)).toBe(true);
-      expect(await bcrypt.compare('wrong-password', row.passwordHash!)).toBe(false);
-      // single-use: token limpo após o resgate.
-      expect(row.inviteToken).toBeNull();
+   it('nega quando groups vem vazio', () => {
+      expect(isAllowedKeycloakProfile(profile({ groups: [] }))).toBe(false);
    });
 
-   it('rejects a wrong token (403) and leaves the account without a password', async () => {
-      const db = await makeTestDb();
-      await inviteUser(db, 'wrong@nimbloo.ai', 'Member');
-      await expect(
-         setPassword(db, 'wrong@nimbloo.ai', 'sup3rsecret', 'not-the-real-token')
-      ).rejects.toMatchObject({ status: 403 });
-      const [row] = await db.select().from(appUser).where(eq(appUser.email, 'wrong@nimbloo.ai'));
-      expect(row.passwordHash).toBeNull();
+   it('nega quando o domínio do e-mail não é @nimbloo.ai', () => {
+      expect(isAllowedKeycloakProfile(profile({ email: 'ana.silva@gmail.com' }))).toBe(false);
    });
 
-   it('rejects an SSO user with no invite token (403) — closes the takeover', async () => {
-      const db = await makeTestDb();
-      // provisionado via SSO (getOrCreateUser) → inviteToken null.
-      await getOrCreateUser(db, 'sso@nimbloo.ai');
-      await expect(
-         setPassword(db, 'sso@nimbloo.ai', 'sup3rsecret', 'any-token')
-      ).rejects.toMatchObject({ status: 403 });
+   it('nega quando o e-mail não foi verificado pelo Keycloak', () => {
+      expect(isAllowedKeycloakProfile(profile({ email_verified: false }))).toBe(false);
    });
 
-   it('is single-use: the token stops working after the first successful set (409)', async () => {
-      const db = await makeTestDb();
-      const u = await inviteUser(db, 'dup@nimbloo.ai', 'Member');
-      await setPassword(db, 'dup@nimbloo.ai', 'firstpass1', u.inviteToken!);
-      // mesmo token, agora com senha já setada → 403 genérico (não reutilizável;
-      // resposta uniforme anti-enumeração — ver setPassword).
-      await expect(
-         setPassword(db, 'dup@nimbloo.ai', 'secondpass1', u.inviteToken!)
-      ).rejects.toMatchObject({ status: 403 });
-      const [row] = await db.select().from(appUser).where(eq(appUser.email, 'dup@nimbloo.ai'));
-      expect(await bcrypt.compare('firstpass1', row.passwordHash!)).toBe(true);
+   it('nega profile nulo/indefinido ou sem e-mail', () => {
+      expect(isAllowedKeycloakProfile(null)).toBe(false);
+      expect(isAllowedKeycloakProfile(undefined)).toBe(false);
+      expect(isAllowedKeycloakProfile(profile({ email: undefined }))).toBe(false);
    });
 
-   it('throws ApiError instances (mapped to ProblemDetail)', async () => {
-      const db = await makeTestDb();
-      await expect(setPassword(db, 'nobody@nimbloo.ai', 'sup3rsecret', 't')).rejects.toBeInstanceOf(
-         ApiError
-      );
+   it('exporta o domínio e o grupo esperados (documentação viva do gate)', () => {
+      expect(ALLOWED_EMAIL_DOMAIN).toBe('@nimbloo.ai');
+      expect(REQUIRED_GROUP).toBe('app-circle');
    });
 });
