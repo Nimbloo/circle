@@ -3,7 +3,7 @@
 import bcrypt from 'bcryptjs';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { appUser, team as teamT, teamMember } from '@/db/schema';
+import { appUser, team as teamT, teamMember, issueLabel } from '@/db/schema';
 import { getOrCreateUser } from '@/lib/api/users';
 import { createIssue } from '@/lib/api/issues';
 import { updateCycleSettings } from '@/lib/api/cycles';
@@ -45,8 +45,15 @@ async function main() {
 
    const statuses = ['to-do', 'in-progress', 'done', 'backlog', 'in-progress', 'to-do'];
    const prios = ['urgent', 'high', 'medium', 'low', 'no-priority'];
+   // Estimate + labels para as rows do board terem metadata como o Linear.
+   const estimates = [1, 2, 3, 5, 8];
+   const labelIds = [
+      'feature', 'bug', 'refactor', 'ui', 'performance',
+      'testing', 'documentation', 'design', 'security',
+   ];
+   let li = 0;
    for (let i = 0; i < TITLES.length; i++) {
-      await createIssue(
+      const issue = await createIssue(
          db,
          {
             teamId: 'ENG',
@@ -54,9 +61,18 @@ async function main() {
             statusId: statuses[i % statuses.length],
             priorityId: prios[i % prios.length],
             assigneeId: i % 3 === 0 ? me.id : null,
+            estimate: estimates[i % estimates.length],
          },
          ME
       );
+      const n = 1 + (li % 2);
+      for (let k = 0; k < n; k++) {
+         await db
+            .insert(issueLabel)
+            .values({ issueId: issue.id, labelId: labelIds[(li + k) % labelIds.length] })
+            .onConflictDoNothing();
+      }
+      li += n;
    }
 
    // Habilita cycles → auto-gera o schedule (current + upcoming) com chart inline.
