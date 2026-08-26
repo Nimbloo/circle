@@ -348,6 +348,24 @@ export const issuePrLink = pgTable('issue_pr_link', {
    status: varchar('status', { length: 16 }).notNull(), // open|merged|draft
 });
 
+/** Resources de uma issue (estilo Linear): "Add link" / "Add document" — um label +
+ *  URL externa. Mesmo modelo do `projectResource`. `kind` distingue link vs document
+ *  (só afeta o ícone/rotulagem no UI). */
+export const issueResource = pgTable(
+   'issue_resource',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      issueId: varchar('issue_id', { length: 36 })
+         .notNull()
+         .references(() => issue.id),
+      kind: varchar('kind', { length: 16 }).notNull().default('link'), // link|document
+      label: varchar('label', { length: 196 }).notNull(),
+      url: varchar('url', { length: 1024 }).notNull(),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_issue_resource_issue').on(t.issueId)]
+);
+
 /** Followers de uma issue: recebem notificação in-app da atividade (comentário,
  *  mudança de status/priority/assignee/cycle/project) mesmo sem serem o responsável.
  *  Auto-preenchida (criador/assignee/autor de comentário/@mencionado) + toggle manual. */
@@ -365,6 +383,24 @@ export const issueSubscriber = pgTable(
    (t) => [
       primaryKey({ columns: [t.issueId, t.userId] }),
       index('idx_issue_subscriber_issue').on(t.issueId),
+   ]
+);
+
+/** Issues favoritadas por usuário (estrela) — aparecem em destaque. Toggle manual. */
+export const issueFavorite = pgTable(
+   'issue_favorite',
+   {
+      issueId: varchar('issue_id', { length: 36 })
+         .notNull()
+         .references(() => issue.id),
+      userId: varchar('user_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [
+      primaryKey({ columns: [t.issueId, t.userId] }),
+      index('idx_issue_favorite_user').on(t.userId),
    ]
 );
 
@@ -396,6 +432,43 @@ export const commentReaction = pgTable(
          .references(() => appUser.id),
    },
    (t) => [primaryKey({ columns: [t.commentId, t.emoji, t.userId] })]
+);
+
+/** Anexos de uma issue ("Attach images, files, or videos", estilo Linear).
+ *  Self-contained (mesmo padrão do avatar): os bytes vivem no banco em base64 e são
+ *  servidos por `GET /api/v1/issues/{id}/attachments/{aid}`. O detail carrega só o
+ *  METADADO (nunca o blob) — os bytes só saem pelo endpoint de servir. */
+export const attachment = pgTable(
+   'attachment',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      issueId: varchar('issue_id', { length: 36 })
+         .notNull()
+         .references(() => issue.id),
+      uploaderId: varchar('uploader_id', { length: 36 }).references(() => appUser.id),
+      name: varchar('name', { length: 512 }).notNull(),
+      contentType: varchar('content_type', { length: 128 }).notNull(),
+      size: integer('size').notNull(),
+      data: text('data').notNull(), // base64 (payload, sem o prefixo data-URL)
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_attachment_issue').on(t.issueId)]
+);
+
+/** Reactions a nível de ISSUE (o "Add reaction" abaixo da descrição, estilo Linear).
+ *  Mesmo modelo do `commentReaction`, mas escopado à issue. */
+export const issueReaction = pgTable(
+   'issue_reaction',
+   {
+      issueId: varchar('issue_id', { length: 36 })
+         .notNull()
+         .references(() => issue.id),
+      emoji: varchar('emoji', { length: 32 }).notNull(),
+      userId: varchar('user_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+   },
+   (t) => [primaryKey({ columns: [t.issueId, t.emoji, t.userId] })]
 );
 
 export const activityEvent = pgTable(
@@ -448,6 +521,8 @@ export const notification = pgTable(
       type: varchar('type', { length: 16 }).notNull(),
       content: varchar('content', { length: 1024 }),
       read: boolean('read').notNull().default(false),
+      /** Notificação adiada: fica oculta do inbox até esse instante (null = não adiada). */
+      snoozedUntil: timestamp('snoozed_until'),
       createdAt: timestamp('created_at').notNull().defaultNow(),
    },
    (t) => [index('idx_notification_recipient').on(t.recipientId)]
