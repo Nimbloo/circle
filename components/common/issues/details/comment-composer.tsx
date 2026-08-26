@@ -6,8 +6,22 @@ import { api } from '@/lib/client';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { usePreferencesStore } from '@/store/preferences-store';
-import { Bold, Code, Italic, Link2, Strikethrough } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { useCustomEmojis } from '@/hooks/use-custom-emojis';
+import {
+   Bold,
+   Code,
+   FileCode,
+   Italic,
+   Link2,
+   List,
+   ListChecks,
+   ListOrdered,
+   Paperclip,
+   Quote,
+   SmilePlus,
+   Strikethrough,
+} from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 /** Slug do usuário: o real (do backend) quando disponível, senão o prefixo do e-mail. */
@@ -52,7 +66,22 @@ export function CommentComposer({ issueId, onPosted }: { issueId: string; onPost
    const [submitting, setSubmitting] = useState(false);
    const [mention, setMention] = useState<{ query: string; start: number } | null>(null);
    const [active, setActive] = useState(0);
+   const [picking, setPicking] = useState(false);
+   const [uploading, setUploading] = useState(false);
    const ref = useRef<HTMLTextAreaElement>(null);
+   const fileRef = useRef<HTMLInputElement>(null);
+   const emojiRef = useRef<HTMLDivElement>(null);
+   const customEmojis = useCustomEmojis();
+
+   // Fecha o emoji picker ao clicar fora.
+   useEffect(() => {
+      if (!picking) return;
+      const onDown = (e: MouseEvent) => {
+         if (emojiRef.current && !emojiRef.current.contains(e.target as Node)) setPicking(false);
+      };
+      document.addEventListener('mousedown', onDown);
+      return () => document.removeEventListener('mousedown', onDown);
+   }, [picking]);
 
    const suggestions = useMemo(() => {
       if (!mention) return [];
@@ -102,6 +131,86 @@ export function CommentComposer({ issueId, onPosted }: { issueId: string; onPost
          const s = start + before.length;
          el.setSelectionRange(s, s + selected.length);
       });
+   };
+
+   /** Prefixa a linha atual com markdown de bloco (quote, lista, checklist). */
+   const applyLinePrefix = (prefix: string) => {
+      const el = ref.current;
+      const caret = el?.selectionStart ?? draft.length;
+      const lineStart = draft.lastIndexOf('\n', caret - 1) + 1;
+      const next = draft.slice(0, lineStart) + prefix + draft.slice(lineStart);
+      setDraft(next);
+      requestAnimationFrame(() => {
+         if (el) {
+            el.focus();
+            const pos = caret + prefix.length;
+            el.setSelectionRange(pos, pos);
+         }
+      });
+   };
+
+   /** Bloco de código (envolve a seleção com ``` em linhas próprias). */
+   const applyCodeBlock = () => {
+      const el = ref.current;
+      const start = el?.selectionStart ?? draft.length;
+      const end = el?.selectionEnd ?? start;
+      const selected = draft.slice(start, end) || 'code';
+      const next = draft.slice(0, start) + '```\n' + selected + '\n```' + draft.slice(end);
+      setDraft(next);
+      requestAnimationFrame(() => el?.focus());
+   };
+
+   /** Insere texto na posição do caret (emoji, link de anexo). */
+   const insertAtCaret = (text: string) => {
+      const el = ref.current;
+      const start = el?.selectionStart ?? draft.length;
+      const end = el?.selectionEnd ?? start;
+      const next = draft.slice(0, start) + text + draft.slice(end);
+      setDraft(next);
+      requestAnimationFrame(() => {
+         if (el) {
+            el.focus();
+            const pos = start + text.length;
+            el.setSelectionRange(pos, pos);
+         }
+      });
+   };
+
+   const readAsDataUrl = (file: File): Promise<string> =>
+      new Promise((resolve, reject) => {
+         const fr = new FileReader();
+         fr.onload = () => resolve(String(fr.result));
+         fr.onerror = () => reject(fr.error);
+         fr.readAsDataURL(file);
+      });
+
+   // Anexa um arquivo à issue e insere um link markdown no comentário (imagem = ![],
+   // demais = []). Reusa o endpoint de anexos da issue (backend real).
+   const onFilePicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file || uploading) return;
+      if (file.size > 5 * 1024 * 1024) {
+         toast.error('Arquivo excede 5MB');
+         return;
+      }
+      setUploading(true);
+      try {
+         const dataUrl = await readAsDataUrl(file);
+         const att = await api.issues.addAttachment(issueId, {
+            name: file.name,
+            contentType: file.type || 'application/octet-stream',
+            dataUrl,
+         });
+         const md = file.type.startsWith('image/')
+            ? `![${att.name}](${att.url})`
+            : `[${att.name}](${att.url})`;
+         insertAtCaret(md);
+      } catch {
+         toast.error('Falha ao anexar o arquivo');
+      } finally {
+         setUploading(false);
+      }
    };
 
    const submit = async () => {
@@ -241,6 +350,120 @@ export function CommentComposer({ issueId, onPosted }: { issueId: string; onPost
                >
                   <Link2 className="size-3.5" />
                </button>
+
+               <span className="mx-0.5 h-4 w-px bg-border" aria-hidden />
+
+               <button
+                  type="button"
+                  title="Quote"
+                  aria-label="Quote"
+                  onClick={() => applyLinePrefix('> ')}
+                  className="inline-flex items-center justify-center size-6 rounded hover:bg-accent/60 hover:text-foreground"
+               >
+                  <Quote className="size-3.5" />
+               </button>
+               <button
+                  type="button"
+                  title="Code block"
+                  aria-label="Code block"
+                  onClick={applyCodeBlock}
+                  className="inline-flex items-center justify-center size-6 rounded hover:bg-accent/60 hover:text-foreground"
+               >
+                  <FileCode className="size-3.5" />
+               </button>
+               <button
+                  type="button"
+                  title="Bulleted list"
+                  aria-label="Bulleted list"
+                  onClick={() => applyLinePrefix('- ')}
+                  className="inline-flex items-center justify-center size-6 rounded hover:bg-accent/60 hover:text-foreground"
+               >
+                  <List className="size-3.5" />
+               </button>
+               <button
+                  type="button"
+                  title="Numbered list"
+                  aria-label="Numbered list"
+                  onClick={() => applyLinePrefix('1. ')}
+                  className="inline-flex items-center justify-center size-6 rounded hover:bg-accent/60 hover:text-foreground"
+               >
+                  <ListOrdered className="size-3.5" />
+               </button>
+               <button
+                  type="button"
+                  title="Checklist"
+                  aria-label="Checklist"
+                  onClick={() => applyLinePrefix('- [ ] ')}
+                  className="inline-flex items-center justify-center size-6 rounded hover:bg-accent/60 hover:text-foreground"
+               >
+                  <ListChecks className="size-3.5" />
+               </button>
+
+               <span className="mx-0.5 h-4 w-px bg-border" aria-hidden />
+
+               {/* Emoji picker (insere o caractere no texto) */}
+               <div className="relative" ref={emojiRef}>
+                  <button
+                     type="button"
+                     title="Emoji"
+                     aria-label="Emoji"
+                     onClick={() => setPicking((v) => !v)}
+                     className="inline-flex items-center justify-center size-6 rounded hover:bg-accent/60 hover:text-foreground"
+                  >
+                     <SmilePlus className="size-3.5" />
+                  </button>
+                  {picking && (
+                     <div className="absolute bottom-full left-0 mb-1 flex items-center flex-wrap gap-1 rounded-lg border bg-popover px-2 py-1.5 shadow-lg z-30 w-52">
+                        {['👍', '❤️', '🎉', '🚀', '👀', '🎯', '🙂', '🔥', '✅', '🙏'].map((em) => (
+                           <button
+                              key={em}
+                              type="button"
+                              onClick={() => {
+                                 insertAtCaret(em);
+                                 setPicking(false);
+                              }}
+                              className="text-base transition-transform hover:scale-125"
+                           >
+                              {em}
+                           </button>
+                        ))}
+                        {customEmojis.map((ce) => (
+                           <button
+                              key={ce.id}
+                              type="button"
+                              title={`:${ce.shortcode}:`}
+                              onClick={() => {
+                                 insertAtCaret(`:${ce.shortcode}:`);
+                                 setPicking(false);
+                              }}
+                              className="transition-transform hover:scale-125"
+                           >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={ce.url} alt={ce.shortcode} className="size-4 object-contain" />
+                           </button>
+                        ))}
+                     </div>
+                  )}
+               </div>
+
+               {/* Anexar arquivo (upload → link markdown no comentário) */}
+               <button
+                  type="button"
+                  title="Attach file"
+                  aria-label="Attach file"
+                  disabled={uploading}
+                  onClick={() => fileRef.current?.click()}
+                  className="inline-flex items-center justify-center size-6 rounded hover:bg-accent/60 hover:text-foreground disabled:opacity-50"
+               >
+                  <Paperclip className="size-3.5" />
+               </button>
+               <input
+                  ref={fileRef}
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => void onFilePicked(e)}
+                  accept="image/*,application/pdf,text/plain,.doc,.docx,.xls,.xlsx,.zip"
+               />
             </div>
             <Button size="xs" onClick={() => void submit()} disabled={!draft.trim() || submitting}>
                {submitting ? 'Posting…' : 'Comment'}

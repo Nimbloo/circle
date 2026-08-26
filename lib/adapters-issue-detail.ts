@@ -35,14 +35,121 @@ function relativeTime(iso: string): string {
    return `${Math.floor(days / 7)}w`;
 }
 
-/** Texto plano -> ContentBlock[]: cada bloco separado por linha em branco vira um parágrafo. */
+/**
+ * Markdown (block-level) -> ContentBlock[]. Suporta heading (#/##), code fence (```),
+ * bullet/numbered list, checklist (- [ ]/- [x]), quote (>), divider (---) e parágrafo.
+ * A formatação INLINE (bold/italic/code/link) é resolvida no render (InlineText).
+ */
 export function textToBlocks(text: string | null | undefined): ContentBlock[] {
    if (!text || !text.trim()) return [];
-   return text
-      .split(/\n{2,}/)
-      .map((p) => p.trim())
-      .filter(Boolean)
-      .map((p) => ({ type: 'paragraph', text: p }) as ContentBlock);
+   const lines = text.replace(/\r\n/g, '\n').split('\n');
+   const blocks: ContentBlock[] = [];
+   let para: string[] = [];
+   const flushPara = () => {
+      if (para.length) {
+         blocks.push({ type: 'paragraph', text: para.join('\n') });
+         para = [];
+      }
+   };
+
+   for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      // Code fence ```lang ... ```
+      const fence = trimmed.match(/^```(\w*)$/);
+      if (fence) {
+         flushPara();
+         const lang = fence[1] || 'text';
+         const code: string[] = [];
+         i++;
+         while (i < lines.length && !/^```\s*$/.test(lines[i].trim())) code.push(lines[i++]);
+         blocks.push({ type: 'code', language: lang, code: code.join('\n') });
+         continue;
+      }
+
+      if (trimmed === '') {
+         flushPara();
+         continue;
+      }
+
+      // Divider
+      if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+         flushPara();
+         blocks.push({ type: 'divider' });
+         continue;
+      }
+
+      // Heading
+      const h = trimmed.match(/^(#{1,2})\s+(.*)$/);
+      if (h) {
+         flushPara();
+         blocks.push({ type: 'heading', text: h[2], level: h[1].length as 1 | 2 });
+         continue;
+      }
+
+      // Quote (agrupa linhas consecutivas)
+      if (/^>\s?/.test(trimmed)) {
+         flushPara();
+         const q: string[] = [];
+         while (i < lines.length && /^>\s?/.test(lines[i].trim())) {
+            q.push(lines[i].trim().replace(/^>\s?/, ''));
+            i++;
+         }
+         i--;
+         blocks.push({ type: 'quote', text: q.join('\n') });
+         continue;
+      }
+
+      // Checklist - [ ] / - [x]
+      if (/^[-*]\s+\[[ xX]\]\s+/.test(trimmed)) {
+         flushPara();
+         const items: { text: string; checked: boolean }[] = [];
+         while (i < lines.length && /^[-*]\s+\[[ xX]\]\s+/.test(lines[i].trim())) {
+            const m = lines[i].trim().match(/^[-*]\s+\[([ xX])\]\s+(.*)$/);
+            if (m) items.push({ text: m[2], checked: m[1].toLowerCase() === 'x' });
+            i++;
+         }
+         i--;
+         blocks.push({ type: 'checklist', items });
+         continue;
+      }
+
+      // Bullet list
+      if (/^[-*]\s+/.test(trimmed)) {
+         flushPara();
+         const items: string[] = [];
+         while (
+            i < lines.length &&
+            /^[-*]\s+/.test(lines[i].trim()) &&
+            !/^[-*]\s+\[[ xX]\]\s+/.test(lines[i].trim())
+         ) {
+            items.push(lines[i].trim().replace(/^[-*]\s+/, ''));
+            i++;
+         }
+         i--;
+         blocks.push({ type: 'bullet-list', items });
+         continue;
+      }
+
+      // Numbered list
+      if (/^\d+\.\s+/.test(trimmed)) {
+         flushPara();
+         const items: string[] = [];
+         while (i < lines.length && /^\d+\.\s+/.test(lines[i].trim())) {
+            items.push(lines[i].trim().replace(/^\d+\.\s+/, ''));
+            i++;
+         }
+         i--;
+         blocks.push({ type: 'numbered-list', items });
+         continue;
+      }
+
+      // Parágrafo (acumula linhas consecutivas)
+      para.push(trimmed);
+   }
+   flushPara();
+   return blocks;
 }
 
 function adaptActivity(dtos: ActivityDto[]): ActivityItem[] {
