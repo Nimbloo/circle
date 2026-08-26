@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { api } from '@/lib/client';
 import { FileText, Link as LinkIcon, Plus, X } from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -29,9 +30,11 @@ export function ResourcesSection({
    resources: Resource[];
    onChanged: () => void;
 }) {
+   const { orgId } = useParams<{ orgId: string }>();
+   const router = useRouter();
    const [open, setOpen] = useState(false);
-   // 'menu' = escolha inicial (Add link / Add document); depois vira o kind escolhido.
-   const [mode, setMode] = useState<'menu' | 'link' | 'document'>('menu');
+   // 'menu' = escolha inicial (Add link / Add document); 'link' = form de URL.
+   const [mode, setMode] = useState<'menu' | 'link'>('menu');
    const [label, setLabel] = useState('');
    const [url, setUrl] = useState('');
    const [busy, setBusy] = useState(false);
@@ -42,17 +45,43 @@ export function ResourcesSection({
       setUrl('');
    };
 
+   // Add link: form com URL externa.
    const submit = async () => {
-      if (mode === 'menu' || !label.trim() || !url.trim() || busy) return;
+      if (!label.trim() || !url.trim() || busy) return;
       setBusy(true);
       try {
-         await api.issues.addResource(issueId, { kind: mode, label: label.trim(), url: url.trim() });
+         await api.issues.addResource(issueId, { kind: 'link', label: label.trim(), url: url.trim() });
          setOpen(false);
          reset();
          onChanged();
       } catch {
-         toast.error('Falha ao adicionar resource (verifique a URL)');
+         toast.error('Falha ao adicionar link (verifique a URL)');
       } finally {
+         setBusy(false);
+      }
+   };
+
+   // Add document: cria o documento, linka na issue como resource e REDIRECIONA
+   // para o editor (estilo Linear — o document é uma entidade própria).
+   const createDocument = async () => {
+      if (busy) return;
+      setBusy(true);
+      try {
+         const doc = await api.documents.create();
+         const href = `/${orgId ?? 'nimbloo'}/document/${doc.id}`;
+         await api.issues.addResource(issueId, {
+            kind: 'document',
+            label: doc.title,
+            url: href,
+         });
+         setOpen(false);
+         reset();
+         // Navega para o editor do documento. NÃO chamamos onChanged aqui (refetch do
+         // detail dispara re-render que cancelava o router.push) — o resource já está
+         // linkado e aparece quando o usuário voltar.
+         router.push(href);
+      } catch {
+         toast.error('Falha ao criar o documento');
          setBusy(false);
       }
    };
@@ -95,26 +124,23 @@ export function ResourcesSection({
                         </button>
                         <button
                            type="button"
-                           onClick={() => setMode('document')}
-                           className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent/60 text-left"
+                           onClick={() => void createDocument()}
+                           disabled={busy}
+                           className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent/60 text-left disabled:opacity-50"
                         >
                            <FileText className="size-4 text-muted-foreground" /> Add document
                         </button>
                      </div>
                   ) : (
-                     // Passo 2: form do tipo escolhido
+                     // Passo 2: form de link (document é criado direto, sem form)
                      <div className="p-1.5">
                         <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                           {mode === 'document' ? (
-                              <FileText className="size-3.5" />
-                           ) : (
-                              <LinkIcon className="size-3.5" />
-                           )}
-                           {mode === 'document' ? 'Add document' : 'Add link'}
+                           <LinkIcon className="size-3.5" />
+                           Add link
                         </div>
                         <Input
                            autoFocus
-                           placeholder={mode === 'document' ? 'Document name' : 'Title'}
+                           placeholder="Title"
                            value={label}
                            onChange={(e) => setLabel(e.target.value)}
                            className="mb-2 h-8"

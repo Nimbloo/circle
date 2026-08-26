@@ -9,10 +9,18 @@ export const dynamic = 'force-dynamic';
 
 type Params = { params: Promise<{ id: string }> };
 
+// `url` aceita URL absoluta (http/https) OU caminho interno relativo (ex.: um
+// document da própria app: /[orgId]/document/[id]).
 const AddSchema = z.object({
    kind: z.enum(['link', 'document']).default('link'),
    label: z.string().min(1).max(196),
-   url: z.string().url().max(1024),
+   url: z
+      .string()
+      .min(1)
+      .max(1024)
+      .refine((u) => /^https?:\/\//.test(u) || u.startsWith('/'), {
+         message: 'URL inválida (use http(s):// ou um caminho interno)',
+      }),
 });
 
 /** Adiciona um resource (Add link / Add document) à issue. */

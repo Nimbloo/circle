@@ -434,6 +434,18 @@ export const commentReaction = pgTable(
    (t) => [primaryKey({ columns: [t.commentId, t.emoji, t.userId] })]
 );
 
+/** Documentos (estilo Linear): entidade própria com título + conteúdo, editável numa
+ *  página dedicada. Criar um "document" numa issue cria a linha aqui e um issue_resource
+ *  (kind='document') apontando para /[orgId]/document/[id]. */
+export const document = pgTable('document', {
+   id: varchar('id', { length: 36 }).primaryKey(),
+   title: varchar('title', { length: 512 }).notNull().default('Untitled document'),
+   content: text('content').notNull().default(''),
+   createdById: varchar('created_by_id', { length: 36 }).references(() => appUser.id),
+   createdAt: timestamp('created_at').notNull().defaultNow(),
+   updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
 /** Anexos de uma issue ("Attach images, files, or videos", estilo Linear).
  *  Self-contained (mesmo padrão do avatar): os bytes vivem no banco em base64 e são
  *  servidos por `GET /api/v1/issues/{id}/attachments/{aid}`. O detail carrega só o

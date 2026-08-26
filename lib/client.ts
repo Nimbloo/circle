@@ -53,6 +53,7 @@ import type {
    ActivityItem,
 } from '@/lib/api/issue-detail';
 import type { AttachmentDto } from '@/lib/api/attachments';
+import type { DocPageDto } from '@/lib/api/doc-pages';
 import type { ProjectProgress } from '@/lib/api/aggregations';
 import type { MeDto } from '@/lib/api/users';
 
@@ -336,6 +337,13 @@ export const api = {
          post<{ ok: boolean }>(`/comments/${id}/reactions`, { emoji }),
       removeReaction: (id: string, emoji: string) =>
          del<{ ok: boolean }>(`/comments/${id}/reactions?emoji=${encodeURIComponent(emoji)}`),
+   },
+
+   documents: {
+      create: (title?: string) => post<DocPageDto>('/documents', title ? { title } : {}),
+      get: (id: string) => get<DocPageDto>(`/documents/${id}`),
+      update: (id: string, body: { title?: string; content?: string }) =>
+         patch<DocPageDto>(`/documents/${id}`, body),
    },
 
    initiatives: {
