@@ -14,6 +14,7 @@ import Notifications from './notifications';
 const ISSUE_VIEW_TABS = [
    { label: 'Active', segment: 'active' },
    { label: 'Backlog', segment: 'backlog' },
+   { label: 'All Pending', segment: 'pending' },
    { label: 'All issues', segment: 'all' },
 ];
 
