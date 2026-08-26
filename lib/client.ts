@@ -46,7 +46,13 @@ import type { ViewDto, CreateViewInput, UpdateViewInput } from '@/lib/api/views'
 import type { NotificationDto } from '@/lib/api/notifications';
 import type { ReviewDto } from '@/lib/api/reviews';
 import type { FolderDto } from '@/lib/api/documents';
-import type { IssueDetailDto, CommentDto, ActivityItem } from '@/lib/api/issue-detail';
+import type {
+   IssueDetailDto,
+   IssueResourceDto,
+   CommentDto,
+   ActivityItem,
+} from '@/lib/api/issue-detail';
+import type { AttachmentDto } from '@/lib/api/attachments';
 import type { ProjectProgress } from '@/lib/api/aggregations';
 import type { MeDto } from '@/lib/api/users';
 
@@ -185,6 +191,8 @@ export const api = {
       detail: (id: string) => get<IssueDetailDto>(`/issues/${id}/detail`),
       subscribe: (id: string) => post<{ subscribed: boolean }>(`/issues/${id}/subscription`, {}),
       unsubscribe: (id: string) => del<{ subscribed: boolean }>(`/issues/${id}/subscription`),
+      /** Alterna o favorito da issue. Retorna o novo estado. */
+      toggleFavorite: (id: string) => post<{ favorited: boolean }>(`/issues/${id}/favorite`, {}),
       updateDetail: (id: string, body: { description: string | null }) =>
          patch<IssueDetailDto>(`/issues/${id}/detail`, body),
       addRelation: (id: string, relatedId: string, kind: string) =>
@@ -197,6 +205,18 @@ export const api = {
       comments: (id: string) => get<CommentDto[]>(`/issues/${id}/comments`),
       addComment: (id: string, body: string) =>
          post<CommentDto>(`/issues/${id}/comments`, { body }),
+      addResource: (id: string, input: { kind: 'link' | 'document'; label: string; url: string }) =>
+         post<IssueResourceDto>(`/issues/${id}/resources`, input),
+      removeResource: (id: string, rid: string) =>
+         del<{ deleted: boolean }>(`/issues/${id}/resources/${rid}`),
+      addReaction: (id: string, emoji: string) =>
+         post<{ ok: boolean }>(`/issues/${id}/reactions`, { emoji }),
+      removeReaction: (id: string, emoji: string) =>
+         del<{ ok: boolean }>(`/issues/${id}/reactions?emoji=${encodeURIComponent(emoji)}`),
+      addAttachment: (id: string, input: { name: string; contentType: string; dataUrl: string }) =>
+         post<AttachmentDto>(`/issues/${id}/attachments`, input),
+      removeAttachment: (id: string, aid: string) =>
+         del<{ deleted: boolean }>(`/issues/${id}/attachments/${aid}`),
    },
 
    teams: {
@@ -341,6 +361,9 @@ export const api = {
       setRead: (id: string, read: boolean) =>
          patch<{ id: string; read: boolean }>(`/notifications/${id}`, { read }),
       readAll: () => post<{ marked: number }>('/notifications/read-all'),
+      remove: (id: string) => del<{ deleted: boolean }>(`/notifications/${id}`),
+      snooze: (id: string, until: string | null) =>
+         post<{ snoozedUntil: string | null }>(`/notifications/${id}/snooze`, { until }),
    },
 
    reviews: {

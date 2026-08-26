@@ -13,10 +13,12 @@ export async function GET(req: Request) {
       const me = await getOrCreateUser(db, email);
       const sp = new URL(req.url).searchParams;
       const readParam = sp.get('read');
+      const from = multi(sp, 'from') ?? [];
       return ok(
          await listInbox(db, me.id, {
             read: readParam === null ? undefined : readParam === 'true',
             type: multi(sp, 'type'),
+            actorIds: from.length ? from : undefined,
          })
       );
    });

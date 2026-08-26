@@ -84,5 +84,9 @@ export function adaptIssueDetail(dto: IssueDetailDto, activity: ActivityDto[]): 
       milestone: dto.milestone ?? undefined,
       subscriberIds: dto.subscriberIds,
       subscribed: dto.subscribed,
+      favorited: dto.favorited,
+      resources: dto.resources,
+      reactions: dto.reactions,
+      attachments: dto.attachments,
    };
 }

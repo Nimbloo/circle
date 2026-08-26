@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, count, desc, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNull, lte, or } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { notification, issue as issueT, appUser } from '@/db/schema';
 import { publish } from './events';
@@ -55,6 +55,8 @@ export interface ListInboxOptions {
    read?: boolean;
    type?: string[];
    actorId?: string;
+   /** Filtro "From": múltiplos atores (user ids). */
+   actorIds?: string[];
    limit?: number;
 }
 
@@ -71,7 +73,15 @@ export async function listInbox(
    const conds = [eq(notification.recipientId, recipientId)];
    if (opts.read !== undefined) conds.push(eq(notification.read, opts.read));
    if (opts.actorId) conds.push(eq(notification.actorId, opts.actorId));
+   if (opts.actorIds?.length) conds.push(inArray(notification.actorId, opts.actorIds));
    if (opts.type?.length) conds.push(inArray(notification.type, opts.type));
+   // Notificação adiada (snooze) fica OCULTA até `snoozedUntil`; reaparece quando o
+   // instante passa. `or(isNull, lte(now))` cobre "nunca adiada" + "prazo vencido".
+   const snoozeCond = or(
+      isNull(notification.snoozedUntil),
+      lte(notification.snoozedUntil, new Date())
+   );
+   if (snoozeCond) conds.push(snoozeCond);
    const rows = await db
       .select()
       .from(notification)
@@ -85,8 +95,46 @@ export async function unreadCount(db: Db, recipientId: string): Promise<number> 
    const rows = await db
       .select({ n: count() })
       .from(notification)
-      .where(and(eq(notification.recipientId, recipientId), eq(notification.read, false)));
+      .where(
+         and(
+            eq(notification.recipientId, recipientId),
+            eq(notification.read, false),
+            // Notificação adiada não conta como não-lida enquanto o snooze vigora.
+            or(isNull(notification.snoozedUntil), lte(notification.snoozedUntil, new Date()))
+         )
+      );
    return rows[0]?.n ?? 0;
+}
+
+/** Remove uma notificação, escopada ao destinatário (anti-IDOR). */
+export async function deleteNotification(
+   db: Db,
+   id: string,
+   recipientId: string
+): Promise<boolean> {
+   const res = await db
+      .delete(notification)
+      .where(and(eq(notification.id, id), eq(notification.recipientId, recipientId)))
+      .returning({ id: notification.id });
+   if (res.length > 0) publish({ entity: 'notification', action: 'deleted', id });
+   return res.length > 0;
+}
+
+/** Adia (ou desfaz, com `until=null`) uma notificação até o instante dado. Escopado
+ * ao destinatário. Adiar não altera o estado lido/não-lido — só a visibilidade. */
+export async function snoozeNotification(
+   db: Db,
+   id: string,
+   until: Date | null,
+   recipientId: string
+): Promise<boolean> {
+   const res = await db
+      .update(notification)
+      .set({ snoozedUntil: until })
+      .where(and(eq(notification.id, id), eq(notification.recipientId, recipientId)))
+      .returning({ id: notification.id });
+   if (res.length > 0) publish({ entity: 'notification', action: 'updated', id });
+   return res.length > 0;
 }
 
 /** Marca uma notificação como lida/não-lida, escopada ao destinatário (anti-IDOR). */

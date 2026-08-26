@@ -6,14 +6,18 @@ import {
    issueContent,
    issueRelation,
    issuePrLink,
+   issueResource,
    comment as commentT,
    commentReaction,
+   issueReaction,
    activityEvent,
    appUser,
 } from '@/db/schema';
 import { getOrCreateUser } from './users';
 import { dispatchNotification } from './notify';
 import { listSubscriberIds, subscribeUsers, notifySubscribers } from './subscriptions';
+import { isFavorite } from './favorites';
+import { listAttachments, type AttachmentDto } from './attachments';
 import { ApiError } from './errors';
 import { publish } from './events';
 import type { UserRef } from './issues';
@@ -70,6 +74,21 @@ export interface IssueDetailDto {
    subscriberIds: string[];
    /** true se o usuário atual segue a issue (só quando `meId` é conhecido). */
    subscribed: boolean;
+   /** true se o usuário atual favoritou a issue (só quando `meId` é conhecido). */
+   favorited: boolean;
+   /** Resources externos (Add link / Add document). */
+   resources: IssueResourceDto[];
+   /** Reactions a nível de issue (o "Add reaction" abaixo da descrição). */
+   reactions: ReactionDto[];
+   /** Anexos (metadados; os bytes saem pelo endpoint de servir). */
+   attachments: AttachmentDto[];
+}
+
+export interface IssueResourceDto {
+   id: string;
+   kind: string; // link|document
+   label: string;
+   url: string;
 }
 
 async function loadUsers(db: Db, ids: string[]) {
@@ -119,13 +138,22 @@ export async function getIssueDetail(
    // Lê relações nas DUAS direções (issueId=X e relatedId=X) para simetria: parent
    // backlink (reverso de 'sub'), "blocking" (reverso de 'blocked_by') e related
    // simétrico. Antes só lia a direção forward → a contraparte aparecia vazia.
-   const [content, forward, reverse, prs, subscriberIds] = await Promise.all([
-      db.select().from(issueContent).where(eq(issueContent.issueId, issueId)).limit(1),
-      db.select().from(issueRelation).where(eq(issueRelation.issueId, issueId)),
-      db.select().from(issueRelation).where(eq(issueRelation.relatedId, issueId)),
-      db.select().from(issuePrLink).where(eq(issuePrLink.issueId, issueId)),
-      listSubscriberIds(db, issueId),
-   ]);
+   const [content, forward, reverse, prs, subscriberIds, favorited, resourceRows, reactions, attachments] =
+      await Promise.all([
+         db.select().from(issueContent).where(eq(issueContent.issueId, issueId)).limit(1),
+         db.select().from(issueRelation).where(eq(issueRelation.issueId, issueId)),
+         db.select().from(issueRelation).where(eq(issueRelation.relatedId, issueId)),
+         db.select().from(issuePrLink).where(eq(issuePrLink.issueId, issueId)),
+         listSubscriberIds(db, issueId),
+         meId ? isFavorite(db, issueId, meId) : Promise.resolve(false),
+         db
+            .select()
+            .from(issueResource)
+            .where(eq(issueResource.issueId, issueId))
+            .orderBy(asc(issueResource.createdAt)),
+         reactionsForIssue(db, issueId, meId),
+         listAttachments(db, issueId),
+      ]);
    const dedup = (ids: string[]) => [...new Set(ids)];
    return {
       identifier: iss.identifier,
@@ -142,7 +170,43 @@ export async function getIssueDetail(
       prLinks: prs.map((p) => ({ id: p.id, title: p.title, status: p.status })),
       subscriberIds,
       subscribed: meId ? subscriberIds.includes(meId) : false,
+      favorited,
+      resources: resourceRows.map((r) => ({
+         id: r.id,
+         kind: r.kind,
+         label: r.label,
+         url: r.url,
+      })),
+      reactions,
+      attachments,
    };
+}
+
+/** Adiciona um resource (link/document) à issue. */
+export async function addIssueResource(
+   db: Db,
+   issueId: string,
+   input: { kind: string; label: string; url: string }
+): Promise<IssueResourceDto> {
+   const found = await db.select({ id: issueT.id }).from(issueT).where(eq(issueT.id, issueId)).limit(1);
+   if (found.length === 0) throw new ApiError(404, `Issue '${issueId}' não encontrada`);
+   if (!input.label?.trim()) throw new ApiError(400, 'label é obrigatório');
+   if (!input.url?.trim()) throw new ApiError(400, 'url é obrigatório');
+   const kind = input.kind === 'document' ? 'document' : 'link';
+   const id = randomUUID();
+   await db
+      .insert(issueResource)
+      .values({ id, issueId, kind, label: input.label.trim(), url: input.url.trim() });
+   return { id, kind, label: input.label.trim(), url: input.url.trim() };
+}
+
+/** Remove um resource da issue. */
+export async function removeIssueResource(db: Db, resourceId: string): Promise<boolean> {
+   const res = await db
+      .delete(issueResource)
+      .where(eq(issueResource.id, resourceId))
+      .returning({ id: issueResource.id });
+   return res.length > 0;
 }
 
 /** Upsert da descrição (texto raw) da issue em `issue_content`. Antes só era gravada
@@ -452,4 +516,54 @@ export async function removeReaction(
          )
       );
    publish({ entity: 'comment', action: 'updated', id: commentId, actorEmail });
+}
+
+/** Agrega as reactions de uma issue em ReactionDto[] (count + reactedByMe). */
+export async function reactionsForIssue(
+   db: Db,
+   issueId: string,
+   meUserId?: string
+): Promise<ReactionDto[]> {
+   const rows = await db.select().from(issueReaction).where(eq(issueReaction.issueId, issueId));
+   const byEmoji = new Map<string, { count: number; reactedByMe: boolean }>();
+   for (const r of rows) {
+      const cur = byEmoji.get(r.emoji) ?? { count: 0, reactedByMe: false };
+      cur.count += 1;
+      if (meUserId && r.userId === meUserId) cur.reactedByMe = true;
+      byEmoji.set(r.emoji, cur);
+   }
+   return [...byEmoji.entries()].map(([emoji, v]) => ({ emoji, ...v }));
+}
+
+export async function addIssueReaction(
+   db: Db,
+   issueId: string,
+   emoji: string,
+   actorEmail: string
+): Promise<void> {
+   const user = await getOrCreateUser(db, actorEmail);
+   await db
+      .insert(issueReaction)
+      .values({ issueId, emoji, userId: user.id })
+      .onConflictDoNothing();
+   publish({ entity: 'issue', action: 'updated', id: issueId, actorEmail });
+}
+
+export async function removeIssueReaction(
+   db: Db,
+   issueId: string,
+   emoji: string,
+   actorEmail: string
+): Promise<void> {
+   const user = await getOrCreateUser(db, actorEmail);
+   await db
+      .delete(issueReaction)
+      .where(
+         and(
+            eq(issueReaction.issueId, issueId),
+            eq(issueReaction.emoji, emoji),
+            eq(issueReaction.userId, user.id)
+         )
+      );
+   publish({ entity: 'issue', action: 'updated', id: issueId, actorEmail });
 }

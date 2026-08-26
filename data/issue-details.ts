@@ -68,6 +68,14 @@ export interface IssueDetail {
    subscriberIds?: string[];
    /** true se o usuário atual segue a issue. */
    subscribed?: boolean;
+   /** true se o usuário atual favoritou a issue. */
+   favorited?: boolean;
+   /** Resources externos (Add link / Add document). */
+   resources?: { id: string; kind: string; label: string; url: string }[];
+   /** Reactions a nível de issue (Add reaction abaixo da descrição). */
+   reactions?: { emoji: string; count: number; reactedByMe: boolean }[];
+   /** Anexos (metadados; bytes servidos pelo endpoint). */
+   attachments?: { id: string; name: string; contentType: string; size: number; url: string }[];
 }
 
 /* -------------------------------------------------------------------------- */

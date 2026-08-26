@@ -9,6 +9,7 @@ import {
    issueRelation,
    issuePrLink,
    issueSubscriber,
+   issueFavorite,
    comment,
    commentReaction,
    notification,
@@ -641,6 +642,7 @@ export async function deleteIssue(db: Db, id: string): Promise<boolean> {
 
       await tx.delete(issuePrLink).where(eq(issuePrLink.issueId, id));
       await tx.delete(issueSubscriber).where(eq(issueSubscriber.issueId, id));
+      await tx.delete(issueFavorite).where(eq(issueFavorite.issueId, id));
       await tx.delete(notification).where(eq(notification.issueId, id));
       await tx.delete(activityEvent).where(eq(activityEvent.issueId, id));
       await tx.delete(issueLabel).where(eq(issueLabel.issueId, id));
