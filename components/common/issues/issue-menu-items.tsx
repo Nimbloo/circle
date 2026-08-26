@@ -95,6 +95,7 @@ export function IssueMenuItems({ issueId, primitives: P, onRequestDelete }: Issu
       updateIssueProject,
       updateIssue,
       getIssueById,
+      allIssues,
    } = useIssuesStore(
       useShallow((s) => ({
          updateIssueStatus: s.updateIssueStatus,
@@ -105,11 +106,16 @@ export function IssueMenuItems({ issueId, primitives: P, onRequestDelete }: Issu
          updateIssueProject: s.updateIssueProject,
          updateIssue: s.updateIssue,
          getIssueById: s.getIssueById,
+         allIssues: s.issues,
       }))
    );
 
    const issue = issueId ? getIssueById(issueId) : undefined;
    const teamCycles = issue?.teamId ? getCyclesByTeam(issue.teamId) : [];
+   // Candidatos a "parent" (Convert to sub-issue): issues do mesmo time, exceto a própria.
+   const parentCandidates = issue
+      ? allIssues.filter((c) => c.teamId === issue.teamId && c.id !== issue.id).slice(0, 8)
+      : [];
 
    const handleStatusChange = (statusId: string) => {
       if (!issueId) return;
@@ -233,6 +239,16 @@ export function IssueMenuItems({ issueId, primitives: P, onRequestDelete }: Issu
       } catch {
          toast.error('Falha ao criar a issue relacionada');
       }
+   };
+
+   // Convert to sub-issue: torna ESTA issue filha de `parent` (addRelation kind=sub na
+   // direção parent → esta).
+   const handleConvertToSub = (parentId: string, parentIdentifier: string) => {
+      if (!issueId) return;
+      api.issues
+         .addRelation(parentId, issueId, 'sub')
+         .then(() => toast.success(`Agora é sub-issue de ${parentIdentifier}`))
+         .catch(() => toast.error('Falha ao converter em sub-issue'));
    };
 
    // Move to team: reatribui o identifier a partir do time destino (ENG-11 → OUTRO-N).
@@ -441,6 +457,23 @@ export function IssueMenuItems({ issueId, primitives: P, onRequestDelete }: Issu
                            <span className="truncate">{t.name}</span>
                         </P.Item>
                      ))}
+               </P.SubContent>
+            </P.Sub>
+         )}
+         {parentCandidates.length > 0 && (
+            <P.Sub>
+               <P.SubTrigger>
+                  <IterationCcw className="mr-2 size-4" /> Convert to sub-issue of…
+               </P.SubTrigger>
+               <P.SubContent className="w-64">
+                  {parentCandidates.map((p) => (
+                     <P.Item key={p.id} onClick={() => handleConvertToSub(p.id, p.identifier)}>
+                        <span className="text-muted-foreground shrink-0 text-xs">
+                           {p.identifier}
+                        </span>
+                        <span className="truncate">{p.title}</span>
+                     </P.Item>
+                  ))}
                </P.SubContent>
             </P.Sub>
          )}
