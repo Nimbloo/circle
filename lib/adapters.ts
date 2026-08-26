@@ -95,6 +95,7 @@ export function adaptIssue(dto: IssueDto): Issue {
       priority: adaptPriority(dto.priority),
       labels: dto.labels,
       createdAt: dto.createdAt,
+      updatedAt: dto.updatedAt,
       cycleId: dto.cycleId,
       project: dto.project ? adaptProject(dto.project) : undefined,
       rank: dto.rank,

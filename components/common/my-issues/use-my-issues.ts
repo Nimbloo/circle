@@ -38,10 +38,12 @@ export function scopeMyIssues(
          return issues.filter((issue) => isSubscribed(issue, meId));
       case 'activity':
       default:
-         // "Activity" = everything I touch, most recent first.
+         // "Activity" = issues em que estou envolvido, ordenadas pela alteração mais
+         // recente (updatedAt real; fallback createdAt) — sinal de atividade, distinto
+         // do "Subscribed" (mesmo conjunto, ordem default do board).
          return issues
             .filter((issue) => isSubscribed(issue, meId))
             .slice()
-            .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+            .sort((a, b) => (b.updatedAt ?? b.createdAt).localeCompare(a.updatedAt ?? a.createdAt));
    }
 }

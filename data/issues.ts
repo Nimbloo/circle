@@ -15,6 +15,8 @@ export interface Issue {
    priority: Priority;
    labels: LabelInterface[];
    createdAt: string;
+   /** Última alteração (vem do backend; usado em "My issues" > Activity, ordem por recência). */
+   updatedAt?: string;
    /** Cycle the issue belongs to. Empty string = no cycle (backlog stock). */
    cycleId: string;
    project?: Project;

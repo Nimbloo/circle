@@ -18,47 +18,27 @@ import {
    AlertDialogHeader,
    AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { api } from '@/lib/client';
 import { Team } from '@/data/teams';
-import { useWorkspaceStore } from '@/store/workspace-store';
-import { Box, Copy, IterationCcw, Link2, ListTodo, Trash2 } from 'lucide-react';
-import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { toast } from 'sonner';
+import { TeamMenuItems, useTeamDelete } from './team-menu-items';
 
 /**
  * Context menu de botão direito de um team (padrão Linear): atalhos para as views
- * do time (Issues/Projects/Cycles), Copy link e Delete. A navegação usa o router;
- * o Delete persiste via `api.teams.remove` (o backend rejeita com 409 se o time
- * ainda tiver issues/projects/cycles) + re-hidrata o workspace.
+ * do time (Issues/Projects/Cycles/Members), Copy link e Delete. Os itens vêm do
+ * componente compartilhado `TeamMenuItems` — os mesmos usados no ⋯ do sidebar e do
+ * header do time. O Delete persiste via `api.teams.remove` (o backend rejeita com
+ * 409 se o time ainda tiver issues/projects/cycles) + re-hidrata o workspace.
  */
 export function TeamContextMenu({ team, children }: { team: Team; children: React.ReactNode }) {
-   const { orgId } = useParams<{ orgId: string }>();
-   const router = useRouter();
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
    const [confirmOpen, setConfirmOpen] = useState(false);
    const [busy, setBusy] = useState(false);
-
-   const go = (segment: string) => router.push(`/${orgId}/team/${team.id}/${segment}`);
-
-   const copyLink = () => {
-      const url = `${window.location.origin}/${orgId}/team/${team.id}/overview`;
-      void navigator.clipboard.writeText(url).then(() => toast.success('Link copiado'));
-   };
+   const doDelete = useTeamDelete(team, () => setConfirmOpen(false));
 
    const remove = async () => {
       if (busy) return;
       setBusy(true);
-      try {
-         await api.teams.remove(team.id);
-         await hydrate();
-         toast.success('Team deleted');
-         setConfirmOpen(false);
-      } catch {
-         toast.error('Não foi possível excluir o time (ainda tem issues/projects/cycles?)');
-      } finally {
-         setBusy(false);
-      }
+      await doDelete();
+      setBusy(false);
    };
 
    return (
@@ -66,31 +46,15 @@ export function TeamContextMenu({ team, children }: { team: Team; children: Reac
          <ContextMenu>
             <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
             <ContextMenuContent className="w-52">
-               <ContextMenuItem onSelect={() => go('all')}>
-                  <ListTodo className="size-4" />
-                  Issues
-               </ContextMenuItem>
-               <ContextMenuItem onSelect={() => go('projects')}>
-                  <Box className="size-4" />
-                  Projects
-               </ContextMenuItem>
-               <ContextMenuItem onSelect={() => go('cycles')}>
-                  <IterationCcw className="size-4" />
-                  Cycles
-               </ContextMenuItem>
-               <ContextMenuSeparator />
-               <ContextMenuItem onSelect={copyLink}>
-                  <Link2 className="size-4" />
-                  Copy link
-                  <ContextMenuShortcut>
-                     <Copy className="size-3.5" />
-                  </ContextMenuShortcut>
-               </ContextMenuItem>
-               <ContextMenuSeparator />
-               <ContextMenuItem variant="destructive" onSelect={() => setConfirmOpen(true)}>
-                  <Trash2 className="size-4" />
-                  Delete team
-               </ContextMenuItem>
+               <TeamMenuItems
+                  team={team}
+                  primitives={{
+                     Item: ContextMenuItem,
+                     Separator: ContextMenuSeparator,
+                     Shortcut: ContextMenuShortcut,
+                  }}
+                  onRequestDelete={() => setConfirmOpen(true)}
+               />
             </ContextMenuContent>
          </ContextMenu>
 
