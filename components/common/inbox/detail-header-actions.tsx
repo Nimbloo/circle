@@ -35,12 +35,20 @@ function IconButton({
 }
 
 /**
- * Controles do header do detalhe do inbox (estilo Linear, à direita):
- * sino (subscribe), copiar link / ID / branch name, estrela (favorite) e o ⋯
- * "Issue options" (mesmo menu do right-click nas properties). Estado do sino e
- * da estrela vem do `detail` (subscribed/favorited), otimista com rollback.
+ * Controles do header do detalhe do inbox (estilo Linear). `variant`:
+ * - 'title'     → estrela (favorite) + ⋯ (issue options), ao lado do título
+ * - 'subscribe' → sino (subscribe), no canto direito
+ * Estado do sino e da estrela vem do `detail` (subscribed/favorited), otimista.
  */
-export function DetailHeaderActions({ issue, detail }: { issue: Issue; detail: IssueDetail }) {
+export function DetailHeaderActions({
+   issue,
+   detail,
+   variant = 'title',
+}: {
+   issue: Issue;
+   detail: IssueDetail;
+   variant?: 'title' | 'subscribe';
+}) {
    const [subscribed, setSubscribed] = useState(detail.subscribed ?? false);
    const [favorited, setFavorited] = useState(detail.favorited ?? false);
    useEffect(() => setSubscribed(detail.subscribed ?? false), [detail.subscribed]);
@@ -73,11 +81,21 @@ export function DetailHeaderActions({ issue, detail }: { issue: Issue; detail: I
       }
    };
 
+   if (variant === 'subscribe') {
+      return (
+         <IconButton
+            label={subscribed ? 'Unsubscribe' : 'Subscribe'}
+            onClick={toggleSubscribe}
+            active={subscribed}
+         >
+            <Bell className={`size-4 ${subscribed ? 'fill-current' : ''}`} />
+         </IconButton>
+      );
+   }
+
+   // variant 'title': estrela + ⋯, coladas ao título (estilo Linear).
    return (
       <div className="flex items-center gap-0.5">
-         {/* Estilo Linear: só favorite + ⋯ (issue options) e, no canto, o sino
-             (subscribe). Copy link/ID/branch NÃO ficam aqui — vivem no menu ⋯ e no
-             right-click das properties. */}
          <IconButton
             label={favorited ? 'Remove from favorites' : 'Add to favorites'}
             onClick={toggleFavorite}
@@ -86,13 +104,6 @@ export function DetailHeaderActions({ issue, detail }: { issue: Issue; detail: I
             <Star className={`size-4 ${favorited ? 'fill-current text-amber-400' : ''}`} />
          </IconButton>
          <IssueOptionsDropdown issueId={issue.id} />
-         <IconButton
-            label={subscribed ? 'Unsubscribe' : 'Subscribe'}
-            onClick={toggleSubscribe}
-            active={subscribed}
-         >
-            <Bell className={`size-4 ${subscribed ? 'fill-current' : ''}`} />
-         </IconButton>
       </div>
    );
 }

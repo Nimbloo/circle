@@ -123,6 +123,12 @@ export default function IssuePreview({
                   {displayIssue.identifier}
                </span>
                <span className="text-[13px] truncate">{displayIssue.title}</span>
+               {/* Estrela (favorite) + ⋯ (issue options) ao lado do título — estilo Linear */}
+               {issue && detail && (
+                  <div className="shrink-0">
+                     <DetailHeaderActions issue={issue} detail={detail} variant="title" />
+                  </div>
+               )}
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
@@ -154,8 +160,10 @@ export default function IssuePreview({
                   </Link>
                </Button>
 
-               {/* Controles estilo Linear: favorite · ⋯ Issue options · sino (subscribe) */}
-               {issue && detail && <DetailHeaderActions issue={issue} detail={detail} />}
+               {/* Sino (subscribe) — canto direito */}
+               {issue && detail && (
+                  <DetailHeaderActions issue={issue} detail={detail} variant="subscribe" />
+               )}
                {/* Ações de notificação (canto): 💤 Snooze · 🗑 Delete */}
                <NotificationHeaderActions notification={notification} />
             </div>

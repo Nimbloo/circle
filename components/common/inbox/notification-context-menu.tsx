@@ -1,6 +1,17 @@
 'use client';
 
 import {
+   AlertDialog,
+   AlertDialogAction,
+   AlertDialogCancel,
+   AlertDialogContent,
+   AlertDialogDescription,
+   AlertDialogFooter,
+   AlertDialogHeader,
+   AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { buttonVariants } from '@/components/ui/button';
+import {
    ContextMenuContent,
    ContextMenuItem,
    ContextMenuSeparator,
@@ -9,6 +20,7 @@ import {
    ContextMenuSubContent,
    ContextMenuSubTrigger,
 } from '@/components/ui/context-menu';
+import { useState } from 'react';
 import type { InboxItem } from '@/data/inbox';
 import { api } from '@/lib/client';
 import { branchName } from '@/components/common/issues/issue-menu-items';
@@ -68,6 +80,7 @@ export function NotificationContextMenu({
    const getIssueById = useIssuesStore((s) => s.getIssueById);
    const { markAsRead, markAsUnread, deleteNotification, snoozeNotification } =
       useNotificationsStore();
+   const [confirmOpen, setConfirmOpen] = useState(false);
 
    const issue = issueId ? getIssueById(issueId) : undefined;
 
@@ -90,6 +103,7 @@ export function NotificationContextMenu({
    };
 
    return (
+      <>
       <ContextMenuContent className="w-60">
          {notification.read ? (
             <ContextMenuItem onClick={() => markAsUnread(notification.id)}>
@@ -103,7 +117,12 @@ export function NotificationContextMenu({
             </ContextMenuItem>
          )}
 
-         <ContextMenuItem onClick={() => deleteNotification(notification.id)}>
+         <ContextMenuItem
+            onSelect={(e) => {
+               e.preventDefault();
+               setConfirmOpen(true);
+            }}
+         >
             <Trash2 className="size-4" /> Delete notification
             <ContextMenuShortcut>⌫</ContextMenuShortcut>
          </ContextMenuItem>
@@ -167,5 +186,26 @@ export function NotificationContextMenu({
             </ContextMenuSubContent>
          </ContextMenuSub>
       </ContextMenuContent>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+         <AlertDialogContent>
+            <AlertDialogHeader>
+               <AlertDialogTitle>Delete notification?</AlertDialogTitle>
+               <AlertDialogDescription>
+                  Esta notificação será removida do seu inbox. A issue não é afetada.
+               </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+               <AlertDialogCancel>Cancel</AlertDialogCancel>
+               <AlertDialogAction
+                  className={buttonVariants({ variant: 'destructive' })}
+                  onClick={() => deleteNotification(notification.id)}
+               >
+                  Delete
+               </AlertDialogAction>
+            </AlertDialogFooter>
+         </AlertDialogContent>
+      </AlertDialog>
+      </>
    );
 }

@@ -1,6 +1,16 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
+import {
+   AlertDialog,
+   AlertDialogAction,
+   AlertDialogCancel,
+   AlertDialogContent,
+   AlertDialogDescription,
+   AlertDialogFooter,
+   AlertDialogHeader,
+   AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
    DropdownMenu,
    DropdownMenuContent,
@@ -10,6 +20,7 @@ import {
 import type { InboxItem } from '@/data/inbox';
 import { useNotificationsStore } from '@/store/notifications-store';
 import { Clock, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { snoozePresets } from './notification-context-menu';
 
 /**
@@ -20,6 +31,7 @@ import { snoozePresets } from './notification-context-menu';
 export function NotificationHeaderActions({ notification }: { notification: InboxItem }) {
    const snoozeNotification = useNotificationsStore((s) => s.snoozeNotification);
    const deleteNotification = useNotificationsStore((s) => s.deleteNotification);
+   const [confirmOpen, setConfirmOpen] = useState(false);
 
    return (
       <>
@@ -53,10 +65,30 @@ export function NotificationHeaderActions({ notification }: { notification: Inbo
             className="size-7 text-muted-foreground"
             aria-label="Delete notification"
             title="Delete notification"
-            onClick={() => deleteNotification(notification.id)}
+            onClick={() => setConfirmOpen(true)}
          >
             <Trash2 className="size-4" />
          </Button>
+
+         <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <AlertDialogContent>
+               <AlertDialogHeader>
+                  <AlertDialogTitle>Delete notification?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                     Esta notificação será removida do seu inbox. A issue não é afetada.
+                  </AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                     className={buttonVariants({ variant: 'destructive' })}
+                     onClick={() => deleteNotification(notification.id)}
+                  >
+                     Delete
+                  </AlertDialogAction>
+               </AlertDialogFooter>
+            </AlertDialogContent>
+         </AlertDialog>
       </>
    );
 }
