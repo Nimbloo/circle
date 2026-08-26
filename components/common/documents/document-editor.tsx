@@ -1,7 +1,7 @@
 'use client';
 
 import { api } from '@/lib/client';
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ArrowLeft, FileText } from 'lucide-react';
@@ -12,7 +12,6 @@ import { ArrowLeft, FileText } from 'lucide-react';
  * redireciona depois de criar e linkar o documento na issue.
  */
 export function DocumentEditor({ documentId }: { documentId: string }) {
-   const { orgId } = useParams<{ orgId: string }>();
    const router = useRouter();
    const [title, setTitle] = useState('');
    const [content, setContent] = useState('');
