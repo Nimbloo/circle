@@ -18,7 +18,7 @@ import {
    useSidebarPrefsStore,
 } from '@/store/sidebar-prefs-store';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 const ITEM_KEYS: Record<string, SidebarItemKey> = {
@@ -30,6 +30,7 @@ const ITEM_KEYS: Record<string, SidebarItemKey> = {
 
 export function NavInbox() {
    const { orgId } = useParams<{ orgId: string }>();
+   const pathname = usePathname();
    const { visibility, badgeStyle, order } = useSidebarPrefsStore();
    const { getUnreadCount } = useNotificationsStore();
    const [mounted, setMounted] = useState(false);
@@ -73,10 +74,12 @@ export function NavInbox() {
    return (
       <SidebarGroup className="group-data-[collapsible=icon]:hidden">
          <SidebarMenu>
-            {items.map((item) => (
+            {items.map((item) => {
+               const href = `/${orgId}${item.url}`;
+               return (
                <SidebarMenuItem key={item.name}>
-                  <SidebarMenuButton asChild>
-                     <Link href={`/${orgId}${item.url}`}>
+                  <SidebarMenuButton asChild isActive={pathname === href}>
+                     <Link href={href}>
                         <item.icon />
                         <span>{item.name}</span>
                      </Link>
@@ -95,7 +98,8 @@ export function NavInbox() {
                      </SidebarMenuBadge>
                   )}
                </SidebarMenuItem>
-            ))}
+               );
+            })}
          </SidebarMenu>
       </SidebarGroup>
    );

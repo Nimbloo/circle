@@ -6,6 +6,9 @@ import { cn } from '@/lib/utils';
 import { motion } from 'motion/react';
 import { renderStatusIcon } from '@/lib/status-utils';
 import { getNotificationIcon } from '@/lib/notification-utils';
+import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
+import { NotificationContextMenu } from './notification-context-menu';
+import { useIssuesStore } from '@/store/issues-store';
 
 interface IssueLineProps {
    notification: InboxItem;
@@ -24,7 +27,14 @@ export default function IssueLine({
    showId = true,
    showStatusIcon = true,
 }: IssueLineProps) {
+   // `notification.id` é o id da NOTIFICAÇÃO; o context menu precisa do UUID da ISSUE —
+   // resolvido pelo identifier no store (a issue da inbox está hidratada no board).
+   const issueId = useIssuesStore(
+      (s) => s.issues.find((i) => i.identifier === notification.identifier)?.id
+   );
    return (
+      <ContextMenu>
+      <ContextMenuTrigger asChild>
       <motion.div
          {...(layoutId && { layoutId: `notification-line-${notification.id}` })}
          onClick={onClick}
@@ -32,12 +42,12 @@ export default function IssueLine({
       >
          <div
             className={cn(
-               'w-full flex items-center gap-3 px-3 py-2.5 hover:bg-sidebar/80 dark:hover:bg-sidebar/50 transition-colors cursor-pointer rounded-lg',
+               'w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-sidebar/80 dark:hover:bg-sidebar/50 transition-colors cursor-pointer rounded-lg',
                isSelected && 'bg-accent/80 dark:bg-accent/50'
             )}
          >
             <div className="relative flex-shrink-0">
-               <Avatar className="size-8">
+               <Avatar className="size-7">
                   <AvatarImage
                      src={notification.user.avatarUrl || undefined}
                      alt={notification.user.name}
@@ -50,8 +60,8 @@ export default function IssueLine({
                   </AvatarFallback>
                </Avatar>
 
-               <div className="absolute -bottom-1 -right-1 size-5 rounded-full bg-accent border-2 border-background flex items-center justify-center">
-                  {getNotificationIcon(notification.type, 'size-3')}
+               <div className="absolute -bottom-0.5 -right-0.5 size-4 rounded-full bg-accent border border-background flex items-center justify-center">
+                  {getNotificationIcon(notification.type, 'size-2.5')}
                </div>
             </div>
 
@@ -63,7 +73,7 @@ export default function IssueLine({
                   {showId && (
                      <span
                         className={cn(
-                           'text-sm font-medium text-muted-foreground shrink-0',
+                           'text-[13px] font-medium text-sidebar-muted-foreground shrink-0',
                            notification.read && 'opacity-50'
                         )}
                      >
@@ -73,7 +83,7 @@ export default function IssueLine({
 
                   <h4
                      className={cn(
-                        'text-sm font-medium text-foreground line-clamp-1 flex-grow',
+                        'text-[13px] font-medium text-foreground line-clamp-1 flex-grow',
                         notification.read && 'opacity-50'
                      )}
                   >
@@ -91,15 +101,18 @@ export default function IssueLine({
                      notification.read && 'opacity-50'
                   )}
                >
-                  <p className="text-sm text-muted-foreground line-clamp-1">
+                  <p className="text-xs text-sidebar-muted-foreground line-clamp-1">
                      {notification.content}
                   </p>
-                  <span className="text-xs text-muted-foreground shrink-0">
+                  <span className="text-xs text-sidebar-muted-foreground shrink-0">
                      {notification.timestamp}
                   </span>
                </div>
             </div>
          </div>
       </motion.div>
+      </ContextMenuTrigger>
+      <NotificationContextMenu notification={notification} issueId={issueId} />
+      </ContextMenu>
    );
 }

@@ -6,7 +6,7 @@ import { api } from '@/lib/client';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { usePreferencesStore } from '@/store/preferences-store';
-import { Plus } from 'lucide-react';
+import { Bold, Code, Italic, Link2, Strikethrough } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -85,6 +85,22 @@ export function CommentComposer({ issueId, onPosted }: { issueId: string; onPost
             el.focus();
             el.setSelectionRange(pos, pos);
          }
+      });
+   };
+
+   /** Envolve a seleção do textarea com markdown (bold/italic/strike/code/link). */
+   const applyWrap = (before: string, after: string, placeholder: string) => {
+      const el = ref.current;
+      if (!el) return;
+      const start = el.selectionStart ?? draft.length;
+      const end = el.selectionEnd ?? start;
+      const selected = draft.slice(start, end) || placeholder;
+      const next = draft.slice(0, start) + before + selected + after + draft.slice(end);
+      setDraft(next);
+      requestAnimationFrame(() => {
+         el.focus();
+         const s = start + before.length;
+         el.setSelectionRange(s, s + selected.length);
       });
    };
 
@@ -175,10 +191,57 @@ export function CommentComposer({ issueId, onPosted }: { issueId: string; onPost
             placeholder="Leave a comment... (@ to mention)"
             rows={2}
             disabled={submitting}
-            className="w-full resize-none bg-transparent outline-none text-sm placeholder:text-muted-foreground disabled:opacity-60"
+            className="w-full resize-none bg-transparent outline-none text-[15px] placeholder:text-muted-foreground disabled:opacity-60"
          />
          <div className="flex items-center justify-between">
-            <Plus className="size-4 text-muted-foreground" />
+            {/* Toolbar de formatação (markdown inline): bold/italic/strike/code/link */}
+            <div className="flex items-center gap-0.5 text-muted-foreground">
+               <button
+                  type="button"
+                  title="Bold (⌘B)"
+                  aria-label="Bold"
+                  onClick={() => applyWrap('**', '**', 'bold')}
+                  className="inline-flex items-center justify-center size-6 rounded hover:bg-accent/60 hover:text-foreground"
+               >
+                  <Bold className="size-3.5" />
+               </button>
+               <button
+                  type="button"
+                  title="Italic (⌘I)"
+                  aria-label="Italic"
+                  onClick={() => applyWrap('*', '*', 'italic')}
+                  className="inline-flex items-center justify-center size-6 rounded hover:bg-accent/60 hover:text-foreground"
+               >
+                  <Italic className="size-3.5" />
+               </button>
+               <button
+                  type="button"
+                  title="Strikethrough"
+                  aria-label="Strikethrough"
+                  onClick={() => applyWrap('~~', '~~', 'strikethrough')}
+                  className="inline-flex items-center justify-center size-6 rounded hover:bg-accent/60 hover:text-foreground"
+               >
+                  <Strikethrough className="size-3.5" />
+               </button>
+               <button
+                  type="button"
+                  title="Inline code"
+                  aria-label="Inline code"
+                  onClick={() => applyWrap('`', '`', 'code')}
+                  className="inline-flex items-center justify-center size-6 rounded hover:bg-accent/60 hover:text-foreground"
+               >
+                  <Code className="size-3.5" />
+               </button>
+               <button
+                  type="button"
+                  title="Link"
+                  aria-label="Link"
+                  onClick={() => applyWrap('[', '](url)', 'text')}
+                  className="inline-flex items-center justify-center size-6 rounded hover:bg-accent/60 hover:text-foreground"
+               >
+                  <Link2 className="size-3.5" />
+               </button>
+            </div>
             <Button size="xs" onClick={() => void submit()} disabled={!draft.trim() || submitting}>
                {submitting ? 'Posting…' : 'Comment'}
             </Button>

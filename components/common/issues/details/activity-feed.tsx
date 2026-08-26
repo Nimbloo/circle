@@ -169,7 +169,7 @@ function CommentCard({
                   onChange={(e) => setDraft(e.target.value)}
                   rows={2}
                   disabled={busy}
-                  className="w-full resize-none rounded-md border bg-transparent p-2 text-sm outline-none focus:ring-1 focus:ring-accent disabled:opacity-60"
+                  className="w-full resize-none rounded-md border bg-transparent p-2 text-[15px] outline-none focus:ring-1 focus:ring-accent disabled:opacity-60"
                />
                <div className="flex items-center justify-end gap-2">
                   <Button
@@ -186,7 +186,7 @@ function CommentCard({
                </div>
             </div>
          ) : (
-            <div className="text-sm [&_p]:my-1.5">
+            <div className="text-[15px] leading-relaxed [&_p]:my-1.5">
                <ContentBlocks blocks={item.body} />
             </div>
          )}
@@ -280,7 +280,7 @@ export function ActivityFeed({
    return (
       <div className="mt-10">
          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-base font-semibold">Activity</h2>
+            <h2 className="text-[15px] font-semibold">Activity</h2>
          </div>
 
          <div className="flex flex-col">

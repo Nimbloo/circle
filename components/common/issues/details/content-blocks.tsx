@@ -9,14 +9,19 @@ import { useParams } from 'next/navigation';
 import { Fragment } from 'react';
 
 /**
- * Lightweight inline formatting: `code` spans and **bold** runs.
+ * Inline formatting (markdown leve): `code`, **bold**, *italic*, ~~strike~~ e
+ * [links](url). A ordem do split importa — `**` antes de `*`, para o negrito não
+ * ser consumido como itálico.
  */
 export function InlineText({ text }: { text: string }) {
-   const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
+   const parts = text.split(
+      /(`[^`]+`|\*\*[^*]+\*\*|~~[^~]+~~|\[[^\]]+\]\([^)]+\)|\*[^*]+\*)/g
+   );
 
    return (
       <>
          {parts.map((part, index) => {
+            if (!part) return null;
             if (part.startsWith('`') && part.endsWith('`')) {
                return (
                   <code
@@ -32,6 +37,34 @@ export function InlineText({ text }: { text: string }) {
                   <strong key={index} className="font-semibold">
                      {part.slice(2, -2)}
                   </strong>
+               );
+            }
+            if (part.startsWith('~~') && part.endsWith('~~')) {
+               return (
+                  <s key={index} className="opacity-80">
+                     {part.slice(2, -2)}
+                  </s>
+               );
+            }
+            const link = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+            if (link) {
+               return (
+                  <a
+                     key={index}
+                     href={link[2]}
+                     target="_blank"
+                     rel="noreferrer noopener"
+                     className="text-primary underline underline-offset-2 hover:opacity-80"
+                  >
+                     {link[1]}
+                  </a>
+               );
+            }
+            if (part.startsWith('*') && part.endsWith('*')) {
+               return (
+                  <em key={index} className="italic">
+                     {part.slice(1, -1)}
+                  </em>
                );
             }
             return <Fragment key={index}>{part}</Fragment>;

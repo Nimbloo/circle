@@ -16,19 +16,37 @@ export interface InboxNotification extends InboxItem {
    sortAt: string;
 }
 
+/** Filtros do inbox aplicados NO BACKEND (query params do `listInbox`). */
+export interface InboxFilters {
+   types: NotificationType[];
+   actorIds: string[];
+   read?: boolean;
+}
+
 interface NotificationsState {
    // Data
    notifications: InboxNotification[];
    selectedNotification: InboxNotification | undefined;
+   inboxFilters: InboxFilters;
+   /** DTOs crus do último fetch (para re-mapear quando o board de issues chega). */
+   rawDtos: NotificationDto[];
 
    // Hydration
    hydrate: () => Promise<void>;
+   /** Re-mapeia a lista a partir dos DTOs já baixados usando o board ATUAL de issues.
+    * Corrige a corrida em que as notificações hidratam antes do board (issues ausentes
+    * eram descartadas e nunca reapareciam). */
+   remap: () => void;
+   /** Atualiza os filtros e re-hidrata a lista a partir do backend. */
+   setInboxFilters: (patch: Partial<InboxFilters>) => void;
 
    // Actions
    setSelectedNotification: (notification: InboxNotification | undefined) => void;
    markAsRead: (id: string) => void;
    markAllAsRead: () => void;
    markAsUnread: (id: string) => void;
+   deleteNotification: (id: string) => void;
+   snoozeNotification: (id: string, until: Date | null) => void;
 
    // Filters
    getUnreadNotifications: () => InboxNotification[];
@@ -84,18 +102,42 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
    // Initial state — vazio; populado via hydrate() a partir da API.
    notifications: [],
    selectedNotification: undefined,
+   inboxFilters: { types: [], actorIds: [] },
+   rawDtos: [],
 
    hydrate: async () => {
       try {
-         const dtos = await api.inbox.list();
+         const f = get().inboxFilters;
+         const sp = new URLSearchParams();
+         f.types.forEach((t) => sp.append('type', t));
+         f.actorIds.forEach((a) => sp.append('from', a));
+         if (f.read !== undefined) sp.set('read', String(f.read));
+         const qs = sp.toString();
+         const dtos = await api.inbox.list(qs ? `?${qs}` : '');
          const issueById = new Map(useIssuesStore.getState().issues.map((i) => [i.id, i]));
          const items = dtos
             .map((dto) => adaptNotification(dto, issueById))
             .filter((item): item is InboxNotification => item !== null);
-         set({ notifications: items });
+         set({ notifications: items, rawDtos: dtos });
       } catch {
          // Degradação graciosa — mantém o estado atual se a API falhar.
       }
+   },
+
+   remap: () => {
+      const dtos = get().rawDtos;
+      if (dtos.length === 0) return;
+      const issueById = new Map(useIssuesStore.getState().issues.map((i) => [i.id, i]));
+      const items = dtos
+         .map((dto) => adaptNotification(dto, issueById))
+         .filter((item): item is InboxNotification => item !== null);
+      // Só aplica se mudou a contagem (board chegou e destravou itens) — evita re-render inútil.
+      if (items.length !== get().notifications.length) set({ notifications: items });
+   },
+
+   setInboxFilters: (patch) => {
+      set((state) => ({ inboxFilters: { ...state.inboxFilters, ...patch } }));
+      void get().hydrate();
    },
 
    // Actions
@@ -163,6 +205,42 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       });
    },
 
+   deleteNotification: (id: string) => {
+      const snapshot = {
+         notifications: get().notifications,
+         selectedNotification: get().selectedNotification,
+      };
+      set((state) => ({
+         notifications: state.notifications.filter((n) => n.id !== id),
+         selectedNotification:
+            state.selectedNotification?.id === id ? undefined : state.selectedNotification,
+      }));
+      void api.inbox.remove(id).catch(() => {
+         set(snapshot);
+         toast.error('Falha ao excluir a notificação');
+      });
+   },
+
+   snoozeNotification: (id: string, until: Date | null) => {
+      const snapshot = {
+         notifications: get().notifications,
+         selectedNotification: get().selectedNotification,
+      };
+      // Adiar remove da lista visível (reaparece quando o prazo passa, via refetch/SSE);
+      // desfazer (until=null) só reverte o servidor — o item já não está oculto localmente.
+      if (until) {
+         set((state) => ({
+            notifications: state.notifications.filter((n) => n.id !== id),
+            selectedNotification:
+               state.selectedNotification?.id === id ? undefined : state.selectedNotification,
+         }));
+      }
+      void api.inbox.snooze(id, until ? until.toISOString() : null).catch(() => {
+         set(snapshot);
+         toast.error('Falha ao adiar a notificação');
+      });
+   },
+
    // Filters
    getUnreadNotifications: () => {
       return get().notifications.filter((notification) => !notification.read);
@@ -189,3 +267,9 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       return get().notifications.filter((notification) => !notification.read).length;
    },
 }));
+
+// Quando o board de issues muda (ex.: termina de hidratar DEPOIS das notificações),
+// re-mapeia o inbox pra destravar notificações cujas issues ainda não existiam.
+useIssuesStore.subscribe((state, prev) => {
+   if (state.issues !== prev.issues) useNotificationsStore.getState().remap();
+});

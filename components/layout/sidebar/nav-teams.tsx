@@ -13,6 +13,7 @@ import {
    Settings,
 } from 'lucide-react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
@@ -38,6 +39,7 @@ import { RiDonutChartFill } from '@remixicon/react';
 export function NavTeams() {
    const teams = useWorkspaceStore((s) => s.teams);
    const joinedTeams = teams.filter((t) => t.joined);
+   const pathname = usePathname();
    return (
       <CollapsibleSidebarGroup label="Your teams" sectionKey="teams">
          <SidebarMenu>
@@ -51,10 +53,10 @@ export function NavTeams() {
                   <SidebarMenuItem>
                      <CollapsibleTrigger asChild>
                         <SidebarMenuButton tooltip={item.name}>
-                           <div className="inline-flex size-6 bg-muted/50 items-center justify-center rounded shrink-0">
-                              <div className="text-sm">{item.icon}</div>
+                           <div className="inline-flex size-5 bg-muted/50 items-center justify-center rounded shrink-0 text-xs">
+                              {item.icon}
                            </div>
-                           <span className="text-sm">{item.name}</span>
+                           <span className="truncate">{item.name}</span>
                            <span className="w-3 shrink-0">
                               <ChevronRight className="w-full transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                            </span>
@@ -100,7 +102,10 @@ export function NavTeams() {
                      <CollapsibleContent>
                         <SidebarMenuSub>
                            <SidebarMenuSubItem>
-                              <SidebarMenuSubButton asChild>
+                              <SidebarMenuSubButton
+                                 asChild
+                                 isActive={pathname === `/nimbloo/team/${item.id}/overview`}
+                              >
                                  <Link href={`/nimbloo/team/${item.id}/overview`}>
                                     <Home size={14} />
                                     <span>Home</span>
@@ -108,7 +113,10 @@ export function NavTeams() {
                               </SidebarMenuSubButton>
                            </SidebarMenuSubItem>
                            <SidebarMenuSubItem>
-                              <SidebarMenuSubButton asChild>
+                              <SidebarMenuSubButton
+                                 asChild
+                                 isActive={pathname === `/nimbloo/team/${item.id}/all`}
+                              >
                                  <Link href={`/nimbloo/team/${item.id}/all`}>
                                     <CopyMinus size={14} />
                                     <span>Issues</span>
@@ -116,7 +124,10 @@ export function NavTeams() {
                               </SidebarMenuSubButton>
                            </SidebarMenuSubItem>
                            <SidebarMenuSubItem>
-                              <SidebarMenuSubButton asChild>
+                              <SidebarMenuSubButton
+                                 asChild
+                                 isActive={pathname === `/nimbloo/team/${item.id}/cycles`}
+                              >
                                  <Link href={`/nimbloo/team/${item.id}/cycles`}>
                                     <RiDonutChartFill size={14} />
                                     <span>Cycles</span>
@@ -124,14 +135,24 @@ export function NavTeams() {
                               </SidebarMenuSubButton>
                               <SidebarMenuSub className="mr-0 pr-0">
                                  <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild>
+                                    <SidebarMenuSubButton
+                                       asChild
+                                       isActive={
+                                          pathname === `/nimbloo/team/${item.id}/cycle/active`
+                                       }
+                                    >
                                        <Link href={`/nimbloo/team/${item.id}/cycle/active`}>
                                           <span>Current</span>
                                        </Link>
                                     </SidebarMenuSubButton>
                                  </SidebarMenuSubItem>
                                  <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild>
+                                    <SidebarMenuSubButton
+                                       asChild
+                                       isActive={
+                                          pathname === `/nimbloo/team/${item.id}/cycle/upcoming`
+                                       }
+                                    >
                                        <Link href={`/nimbloo/team/${item.id}/cycle/upcoming`}>
                                           <span>Upcoming</span>
                                        </Link>
@@ -140,7 +161,10 @@ export function NavTeams() {
                               </SidebarMenuSub>
                            </SidebarMenuSubItem>
                            <SidebarMenuSubItem>
-                              <SidebarMenuSubButton asChild>
+                              <SidebarMenuSubButton
+                                 asChild
+                                 isActive={pathname === `/nimbloo/team/${item.id}/projects`}
+                              >
                                  <Link href={`/nimbloo/team/${item.id}/projects`}>
                                     <Box size={14} />
                                     <span>Projects</span>
@@ -148,7 +172,10 @@ export function NavTeams() {
                               </SidebarMenuSubButton>
                            </SidebarMenuSubItem>
                            <SidebarMenuSubItem>
-                              <SidebarMenuSubButton asChild>
+                              <SidebarMenuSubButton
+                                 asChild
+                                 isActive={pathname === `/nimbloo/team/${item.id}/views`}
+                              >
                                  <Link href={`/nimbloo/team/${item.id}/views`}>
                                     <Layers size={14} />
                                     <span>Views</span>

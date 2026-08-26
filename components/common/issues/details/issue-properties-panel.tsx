@@ -11,23 +11,29 @@ import {
    CommandList,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useIssuesStore } from '@/store/issues-store';
+import { useStatuses, usePriorities } from '@/store/catalog-store';
+import { renderStatusIcon } from '@/lib/status-utils';
 import { IssueDetail } from '@/data/issue-details';
 import { Issue } from '@/data/issues';
 import { LabelInterface } from '@/data/labels';
-import { Ban, Bell, BellOff, CheckIcon, GitPullRequestArrow } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
-import { api } from '@/lib/client';
+import { Ban, CheckIcon, Folder, Gauge, GitPullRequestArrow, UserCircle } from 'lucide-react';
+import { useState } from 'react';
 import { LabelBadge } from '../label-badge';
-import { PrioritySelector } from '../priority-selector';
-import { StatusSelector } from '../status-selector';
-import { AssigneeSelector } from '@/components/layout/sidebar/create-new-issue/assignee-selector';
 import { LabelSelector } from '@/components/layout/sidebar/create-new-issue/label-selector';
-import { EstimateSelector } from '@/components/layout/sidebar/create-new-issue/estimate-selector';
+import { ESTIMATE_SCALE } from '@/components/layout/sidebar/create-new-issue/estimate-selector';
 import { IssueRefRow } from './content-blocks';
 import { RelationEditor } from './relation-editor';
+
+/**
+ * Estilo Linear das rows de property (inbox detail): row full-width compacta,
+ * ícone 16 + label, hover sutil, placeholder muted / valor branco, click abre
+ * o picker. Mesma altura/tipografia medidas no Linear (h-7, 13px).
+ */
+const PROP_ROW =
+   'w-full h-7 justify-start gap-2 px-1.5 -mx-1.5 rounded-md text-[13px] font-medium hover:bg-accent/60 data-[state=open]:bg-accent/60';
 
 /** Selector de ciclo do time da issue (reusa updateIssue({cycleId}) do store). */
 function CycleSelector({ issue }: { issue: Issue }) {
@@ -48,9 +54,11 @@ function CycleSelector({ issue }: { issue: Issue }) {
    return (
       <Popover open={open} onOpenChange={setOpen}>
          <PopoverTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-7 gap-2 px-1.5 -ml-1.5 justify-start">
+            <Button variant="ghost" size="sm" className={PROP_ROW}>
                <CyclePlayIcon className="size-4" />
-               <span className="text-sm">{current ? current.name : 'No cycle'}</span>
+               <span className={current ? '' : 'text-muted-foreground'}>
+                  {current ? current.name : 'Add to cycle'}
+               </span>
             </Button>
          </PopoverTrigger>
          <PopoverContent className="border-input w-64 p-0" align="start">
@@ -85,6 +93,258 @@ function CycleSelector({ issue }: { issue: Issue }) {
    );
 }
 
+/** Status: row Linear (ícone do status + nome), click abre picker searchable. */
+function StatusRow({ issue }: { issue: Issue }) {
+   const [open, setOpen] = useState(false);
+   const statuses = useStatuses();
+   const update = useIssuesStore((s) => s.updateIssueStatus);
+   return (
+      <Popover open={open} onOpenChange={setOpen}>
+         <PopoverTrigger asChild>
+            <Button variant="ghost" size="sm" className={PROP_ROW}>
+               {renderStatusIcon(issue.status.id)}
+               <span>{issue.status.name}</span>
+            </Button>
+         </PopoverTrigger>
+         <PopoverContent className="border-input w-56 p-0" align="start">
+            <Command>
+               <CommandInput placeholder="Set status..." />
+               <CommandList>
+                  <CommandEmpty>No status found.</CommandEmpty>
+                  <CommandGroup>
+                     {statuses.map((s) => (
+                        <CommandItem
+                           key={s.id}
+                           value={s.name}
+                           onSelect={() => {
+                              update(issue.id, s);
+                              setOpen(false);
+                           }}
+                        >
+                           <s.icon />
+                           <span>{s.name}</span>
+                           {issue.status.id === s.id && (
+                              <CheckIcon size={16} className="ml-auto" />
+                           )}
+                        </CommandItem>
+                     ))}
+                  </CommandGroup>
+               </CommandList>
+            </Command>
+         </PopoverContent>
+      </Popover>
+   );
+}
+
+/** Priority: row Linear com placeholder "Set priority" quando ausente. */
+function PriorityRow({ issue }: { issue: Issue }) {
+   const [open, setOpen] = useState(false);
+   const priorities = usePriorities();
+   const update = useIssuesStore((s) => s.updateIssuePriority);
+   const isNone = issue.priority.id === 'no-priority' || /no.?priority/i.test(issue.priority.name);
+   return (
+      <Popover open={open} onOpenChange={setOpen}>
+         <PopoverTrigger asChild>
+            <Button variant="ghost" size="sm" className={PROP_ROW}>
+               <issue.priority.icon className="size-4 text-muted-foreground" />
+               <span className={isNone ? 'text-muted-foreground' : ''}>
+                  {isNone ? 'Set priority' : issue.priority.name}
+               </span>
+            </Button>
+         </PopoverTrigger>
+         <PopoverContent className="border-input w-56 p-0" align="start">
+            <Command>
+               <CommandInput placeholder="Set priority..." />
+               <CommandList>
+                  <CommandEmpty>No priority found.</CommandEmpty>
+                  <CommandGroup>
+                     {priorities.map((p) => (
+                        <CommandItem
+                           key={p.id}
+                           value={p.name}
+                           onSelect={() => {
+                              update(issue.id, p);
+                              setOpen(false);
+                           }}
+                        >
+                           <p.icon className="size-4" />
+                           <span>{p.name}</span>
+                           {issue.priority.id === p.id && (
+                              <CheckIcon size={16} className="ml-auto" />
+                           )}
+                        </CommandItem>
+                     ))}
+                  </CommandGroup>
+               </CommandList>
+            </Command>
+         </PopoverContent>
+      </Popover>
+   );
+}
+
+/** Assignee: row Linear com avatar/placeholder "Assign". */
+function AssigneeRow({ issue }: { issue: Issue }) {
+   const [open, setOpen] = useState(false);
+   const users = useWorkspaceStore((s) => s.users);
+   const update = useIssuesStore((s) => s.updateIssueAssignee);
+   const a = issue.assignee;
+   const pick = (u: (typeof users)[number] | null) => {
+      update(issue.id, u);
+      setOpen(false);
+   };
+   return (
+      <Popover open={open} onOpenChange={setOpen}>
+         <PopoverTrigger asChild>
+            <Button variant="ghost" size="sm" className={PROP_ROW}>
+               {a ? (
+                  <Avatar className="size-4">
+                     <AvatarImage src={a.avatarUrl || undefined} alt={a.name} />
+                     <AvatarFallback className="text-[9px]">{a.name[0]}</AvatarFallback>
+                  </Avatar>
+               ) : (
+                  <UserCircle className="size-4 text-muted-foreground" />
+               )}
+               <span className={a ? '' : 'text-muted-foreground'}>{a ? a.name : 'Assign'}</span>
+            </Button>
+         </PopoverTrigger>
+         <PopoverContent className="border-input w-56 p-0" align="start">
+            <Command>
+               <CommandInput placeholder="Assign to..." />
+               <CommandList>
+                  <CommandEmpty>No members found.</CommandEmpty>
+                  {/* Distinção estilo Linear: quem JÁ está assigned no topo; abaixo, os
+                      membros do Circle que PODEM ser atribuídos (sem convite externo). */}
+                  {a && (
+                     <CommandGroup heading="Assigned">
+                        <CommandItem value={`assigned ${a.name}`} onSelect={() => pick(a)}>
+                           <Avatar className="size-4">
+                              <AvatarImage src={a.avatarUrl || undefined} alt={a.name} />
+                              <AvatarFallback className="text-[9px]">{a.name[0]}</AvatarFallback>
+                           </Avatar>
+                           <span>{a.name}</span>
+                           <CheckIcon size={16} className="ml-auto" />
+                        </CommandItem>
+                     </CommandGroup>
+                  )}
+                  <CommandGroup heading="Members">
+                     <CommandItem value="unassigned" onSelect={() => pick(null)}>
+                        <UserCircle className="size-4" />
+                        <span>Unassigned</span>
+                        {!a && <CheckIcon size={16} className="ml-auto" />}
+                     </CommandItem>
+                     {users
+                        .filter((u) => u.id !== a?.id)
+                        .map((u) => (
+                           <CommandItem key={u.id} value={u.name} onSelect={() => pick(u)}>
+                              <Avatar className="size-4">
+                                 <AvatarImage src={u.avatarUrl || undefined} alt={u.name} />
+                                 <AvatarFallback className="text-[9px]">
+                                    {u.name[0]}
+                                 </AvatarFallback>
+                              </Avatar>
+                              <span>{u.name}</span>
+                           </CommandItem>
+                        ))}
+                  </CommandGroup>
+               </CommandList>
+            </Command>
+         </PopoverContent>
+      </Popover>
+   );
+}
+
+/** Project: row Linear com placeholder "Add to project". */
+function ProjectRow({ issue }: { issue: Issue }) {
+   const [open, setOpen] = useState(false);
+   const projects = useWorkspaceStore((s) => s.projects);
+   const update = useIssuesStore((s) => s.updateIssueProject);
+   const p = issue.project;
+   const pick = (proj: (typeof projects)[number] | undefined) => {
+      update(issue.id, proj);
+      setOpen(false);
+   };
+   const Icon = p?.icon ?? Folder;
+   return (
+      <Popover open={open} onOpenChange={setOpen}>
+         <PopoverTrigger asChild>
+            <Button variant="ghost" size="sm" className={PROP_ROW}>
+               <Icon className="size-4 text-muted-foreground" />
+               <span className={p ? '' : 'text-muted-foreground'}>
+                  {p ? p.name : 'Add to project'}
+               </span>
+            </Button>
+         </PopoverTrigger>
+         <PopoverContent className="border-input w-64 p-0" align="start">
+            <Command>
+               <CommandInput placeholder="Add to project..." />
+               <CommandList>
+                  <CommandEmpty>No projects found.</CommandEmpty>
+                  <CommandGroup>
+                     <CommandItem value="no-project" onSelect={() => pick(undefined)}>
+                        <Folder className="size-4" />
+                        <span>No project</span>
+                        {!p && <CheckIcon size={16} className="ml-auto" />}
+                     </CommandItem>
+                     {projects.map((proj) => (
+                        <CommandItem key={proj.id} value={proj.name} onSelect={() => pick(proj)}>
+                           <proj.icon className="size-4" />
+                           <span className="truncate">{proj.name}</span>
+                           {p?.id === proj.id && <CheckIcon size={16} className="ml-auto" />}
+                        </CommandItem>
+                     ))}
+                  </CommandGroup>
+               </CommandList>
+            </Command>
+         </PopoverContent>
+      </Popover>
+   );
+}
+
+/** Estimate: row Linear com placeholder "Add estimate". */
+function EstimateRow({ issue }: { issue: Issue }) {
+   const [open, setOpen] = useState(false);
+   const update = useIssuesStore((s) => s.updateIssue);
+   const e = issue.estimate;
+   const pick = (val: number | undefined) => {
+      update(issue.id, { estimate: val });
+      setOpen(false);
+   };
+   return (
+      <Popover open={open} onOpenChange={setOpen}>
+         <PopoverTrigger asChild>
+            <Button variant="ghost" size="sm" className={PROP_ROW}>
+               <Gauge className="size-4 text-muted-foreground" />
+               <span className={e === undefined ? 'text-muted-foreground' : ''}>
+                  {e === undefined ? 'Add estimate' : `${e} ${e === 1 ? 'point' : 'points'}`}
+               </span>
+            </Button>
+         </PopoverTrigger>
+         <PopoverContent className="border-input w-56 p-0" align="start">
+            <Command>
+               <CommandList>
+                  <CommandGroup>
+                     <CommandItem value="none" onSelect={() => pick(undefined)}>
+                        <Gauge className="size-4 text-muted-foreground" />
+                        <span>No estimate</span>
+                        {e === undefined && <CheckIcon size={16} className="ml-auto" />}
+                     </CommandItem>
+                     {ESTIMATE_SCALE.map((pts) => (
+                        <CommandItem key={pts} value={String(pts)} onSelect={() => pick(pts)}>
+                           <Gauge className="size-4 text-muted-foreground" />
+                           <span>
+                              {pts} {pts === 1 ? 'point' : 'points'}
+                           </span>
+                           {e === pts && <CheckIcon size={16} className="ml-auto" />}
+                        </CommandItem>
+                     ))}
+                  </CommandGroup>
+               </CommandList>
+            </Command>
+         </PopoverContent>
+      </Popover>
+   );
+}
+
 interface IssuePropertiesPanelProps {
    issue: Issue;
    detail: IssueDetail;
@@ -92,81 +352,10 @@ interface IssuePropertiesPanelProps {
    onChanged?: () => void;
 }
 
-/**
- * Toggle "seguir" a issue: followers recebem notificação da atividade (comentário,
- * status, assignee...) mesmo sem serem o responsável. Otimista + rollback; ressincroniza
- * quando o detail é refetchado. Mostra a contagem de followers.
- */
-function SubscribeButton({
-   issueId,
-   subscribed: initial,
-   count: initialCount,
-}: {
-   issueId: string;
-   subscribed: boolean;
-   count: number;
-}) {
-   const [subscribed, setSubscribed] = useState(initial);
-   const [count, setCount] = useState(initialCount);
-   const [busy, setBusy] = useState(false);
-   // busyRef (não state) para o effect de resync ler o valor ATUAL sem re-disparar:
-   // um refetch do detail que chega DURANTE o toggle não pode clobar o valor otimista.
-   const busyRef = useRef(false);
-
-   // Ressincroniza com o servidor quando o detail é refetchado (ex.: auto-subscribe por
-   // virar responsável, ou atividade de outro usuário) — exceto durante um toggle em voo.
-   useEffect(() => {
-      if (!busyRef.current) setSubscribed(initial);
-   }, [initial]);
-   useEffect(() => {
-      if (!busyRef.current) setCount(initialCount);
-   }, [initialCount]);
-
-   const toggle = async () => {
-      if (busy) return;
-      setBusy(true);
-      busyRef.current = true;
-      const next = !subscribed;
-      setSubscribed(next);
-      setCount((c) => Math.max(0, c + (next ? 1 : -1)));
-      try {
-         const res = next
-            ? await api.issues.subscribe(issueId)
-            : await api.issues.unsubscribe(issueId);
-         setSubscribed(res.subscribed); // estado autoritativo do servidor (não descarta a resposta)
-      } catch {
-         setSubscribed(!next);
-         setCount((c) => Math.max(0, c + (next ? -1 : 1)));
-         toast.error('Falha ao atualizar a inscrição');
-      } finally {
-         setBusy(false);
-         busyRef.current = false;
-      }
-   };
-
-   return (
-      <Button
-         variant="ghost"
-         size="sm"
-         className="h-7 gap-2 px-1.5 -ml-1.5 justify-start w-full"
-         onClick={() => void toggle()}
-         disabled={busy}
-      >
-         {subscribed ? (
-            <Bell className="size-4 text-foreground" />
-         ) : (
-            <BellOff className="size-4 text-muted-foreground" />
-         )}
-         <span className="text-sm">{subscribed ? 'Subscribed' : 'Subscribe'}</span>
-         {count > 0 && <span className="ml-auto text-xs text-muted-foreground">{count}</span>}
-      </Button>
-   );
-}
-
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
    return (
       <div>
-         <h3 className="text-xs font-medium text-muted-foreground mb-2">{title}</h3>
+         <h3 className="text-[13px] font-medium text-muted-foreground mb-2">{title}</h3>
          {children}
       </div>
    );
@@ -177,8 +366,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
  * assignee), cycle, labels, project + milestone, relations and linked PRs.
  */
 export function IssuePropertiesPanel({ issue, detail, onChanged }: IssuePropertiesPanelProps) {
-   const updateIssue = useIssuesStore((s) => s.updateIssue);
-   const updateIssueAssignee = useIssuesStore((s) => s.updateIssueAssignee);
    const addIssueLabel = useIssuesStore((s) => s.addIssueLabel);
    const removeIssueLabel = useIssuesStore((s) => s.removeIssueLabel);
 
@@ -194,37 +381,14 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
 
    return (
       <div className="flex flex-col gap-7">
-         <SubscribeButton
-            issueId={issue.id}
-            subscribed={detail.subscribed ?? false}
-            count={detail.subscriberIds?.length ?? 0}
-         />
-
          <Section title="Properties">
-            <div className="flex flex-col gap-1.5">
-               <div className="flex items-center gap-1.5 -ml-1.5">
-                  <StatusSelector status={issue.status} issueId={issue.id} />
-                  <span className="text-sm">{issue.status.name}</span>
-               </div>
-               <div className="flex items-center gap-1.5 -ml-1.5">
-                  <PrioritySelector priority={issue.priority} issueId={issue.id} />
-                  <span className="text-sm">{issue.priority.name}</span>
-               </div>
-               <div className="flex items-center gap-1.5 -ml-0.5 mt-0.5">
-                  <AssigneeSelector
-                     assignee={issue.assignee}
-                     onChange={(assignee) => updateIssueAssignee(issue.id, assignee)}
-                  />
-               </div>
-               <div className="mt-0.5">
-                  <CycleSelector issue={issue} />
-               </div>
-               <div className="flex items-center gap-1.5 -ml-1.5 mt-0.5">
-                  <EstimateSelector
-                     estimate={issue.estimate}
-                     onChange={(estimate) => updateIssue(issue.id, { estimate })}
-                  />
-               </div>
+            <div className="flex flex-col gap-0.5">
+               <StatusRow issue={issue} />
+               <PriorityRow issue={issue} />
+               <AssigneeRow issue={issue} />
+               <CycleSelector issue={issue} />
+               <ProjectRow issue={issue} />
+               <EstimateRow issue={issue} />
             </div>
          </Section>
 
@@ -234,21 +398,6 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
                <LabelSelector selectedLabels={issue.labels} onChange={onLabelsChange} />
             </div>
          </Section>
-
-         {issue.project && (
-            <Section title="Project">
-               <div className="flex items-center gap-2 text-sm">
-                  <issue.project.icon className="size-4 text-muted-foreground shrink-0" />
-                  <span className="truncate">{issue.project.name}</span>
-               </div>
-               {detail.milestone && (
-                  <div className="flex items-center gap-2 text-sm mt-1.5 pl-6 text-muted-foreground">
-                     <span className="size-2 rotate-45 border border-amber-400 shrink-0" />
-                     <span className="truncate">{detail.milestone}</span>
-                  </div>
-               )}
-            </Section>
-         )}
 
          {onChanged ? (
             <Section title="Blocked by">
