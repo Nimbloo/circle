@@ -119,7 +119,10 @@ export default function IssuePreview({
          <div className="flex items-center justify-between px-4 h-10 border-b border-border shrink-0">
             <div className="flex items-center gap-2 min-w-0">
                <displayIssue.status.icon />
-               <span className="text-[13px] font-medium truncate">{displayIssue.identifier}</span>
+               <span className="text-[13px] font-medium shrink-0 text-muted-foreground">
+                  {displayIssue.identifier}
+               </span>
+               <span className="text-[13px] truncate">{displayIssue.title}</span>
             </div>
 
             <div className="flex items-center gap-2 shrink-0">

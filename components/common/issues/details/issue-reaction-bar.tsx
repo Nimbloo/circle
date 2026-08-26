@@ -13,24 +13,48 @@ interface Reaction {
    reactedByMe: boolean;
 }
 
+/** Aplica o toggle de uma reaction sobre a lista atual (concatena/incrementa ou
+ *  remove/decrementa) — a mesma transformação usada de forma otimista e no revert. */
+function applyToggle(list: Reaction[], emoji: string): Reaction[] {
+   const existing = list.find((r) => r.emoji === emoji);
+   if (existing?.reactedByMe) {
+      const count = existing.count - 1;
+      return count <= 0
+         ? list.filter((r) => r.emoji !== emoji)
+         : list.map((r) => (r.emoji === emoji ? { ...r, count, reactedByMe: false } : r));
+   }
+   if (existing) {
+      return list.map((r) =>
+         r.emoji === emoji ? { ...r, count: r.count + 1, reactedByMe: true } : r
+      );
+   }
+   return [...list, { emoji, count: 1, reactedByMe: true }];
+}
+
 /**
  * Barra de reactions a nível de ISSUE (o "Add reaction" abaixo da descrição, estilo
- * Linear). Mesma UX/experiência das reactions de comentário (pills + picker com emojis
- * base + custom emojis). Backend real (`issue_reaction`); `onChanged` refaz o detail.
+ * Linear). OTIMISTA: o clique atualiza o estado local na hora (concatena/toggle) e o
+ * backend (`issue_reaction`) é chamado em segundo plano — sem refetch pesado do detail
+ * (que deixava a reação lenta e causava corrida de "replace"). `reactions` (prop) é a
+ * verdade do servidor e ressincroniza via live-sync.
  */
 export function IssueReactionBar({
    issueId,
    reactions,
-   onChanged,
 }: {
    issueId: string;
    reactions: Reaction[];
-   onChanged: () => void;
+   /** Mantido por compat; a barra é otimista e não força refetch. */
+   onChanged?: () => void;
 }) {
-   const [busy, setBusy] = useState(false);
+   const [local, setLocal] = useState<Reaction[]>(reactions);
    const [picking, setPicking] = useState(false);
    const customEmojis = useCustomEmojis();
    const rootRef = useRef<HTMLDivElement>(null);
+
+   // Ressincroniza com o servidor quando o detail é refetchado (ex.: reação de outro
+   // usuário via SSE). O clique local já reflete otimista antes disso.
+   useEffect(() => setLocal(reactions), [reactions]);
 
    // Fecha o picker ao clicar fora (o Linear também fecha).
    useEffect(() => {
@@ -42,33 +66,27 @@ export function IssueReactionBar({
       return () => document.removeEventListener('mousedown', onDown);
    }, [picking]);
 
-   const didReact = (emoji: string) =>
-      reactions.find((r) => r.emoji === emoji)?.reactedByMe ?? false;
-
-   const react = async (emoji: string) => {
-      if (busy) return;
-      const reacted = didReact(emoji);
-      setBusy(true);
-      try {
-         if (reacted) await api.issues.removeReaction(issueId, emoji);
-         else await api.issues.addReaction(issueId, emoji);
-         setPicking(false);
-         onChanged();
-      } catch {
-         toast.error(reacted ? 'Could not remove the reaction' : 'Could not add the reaction');
-      } finally {
-         setBusy(false);
-      }
+   const react = (emoji: string) => {
+      const wasReacted = local.find((r) => r.emoji === emoji)?.reactedByMe ?? false;
+      const prev = local;
+      setLocal((cur) => applyToggle(cur, emoji)); // otimista, instantâneo
+      setPicking(false);
+      const call = wasReacted
+         ? api.issues.removeReaction(issueId, emoji)
+         : api.issues.addReaction(issueId, emoji);
+      void call.catch(() => {
+         setLocal(prev); // revert
+         toast.error(wasReacted ? 'Could not remove the reaction' : 'Could not add the reaction');
+      });
    };
 
    return (
       <div ref={rootRef} className="flex items-center flex-wrap gap-1.5">
-         {reactions.map((reaction) => (
+         {local.map((reaction) => (
             <button
                key={reaction.emoji}
                type="button"
                onClick={() => void react(reaction.emoji)}
-               disabled={busy}
                aria-pressed={reaction.reactedByMe}
                className={cn(
                   'inline-flex items-center gap-1 text-xs border rounded-full px-2 py-0.5 disabled:opacity-40',
@@ -92,7 +110,6 @@ export function IssueReactionBar({
          <button
             type="button"
             onClick={() => setPicking((v) => !v)}
-            disabled={busy}
             aria-label="Add reaction"
             className="inline-flex items-center justify-center size-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 disabled:opacity-40"
          >
@@ -105,7 +122,6 @@ export function IssueReactionBar({
                      key={emoji}
                      type="button"
                      onClick={() => void react(emoji)}
-                     disabled={busy}
                      className="text-sm transition-transform hover:scale-125 disabled:opacity-40"
                   >
                      {emoji}
@@ -116,7 +132,6 @@ export function IssueReactionBar({
                      key={e.id}
                      type="button"
                      onClick={() => void react(`:${e.shortcode}:`)}
-                     disabled={busy}
                      title={`:${e.shortcode}:`}
                      className="transition-transform hover:scale-125 disabled:opacity-40"
                   >
