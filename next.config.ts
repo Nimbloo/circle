@@ -8,13 +8,16 @@ const CDN = (process.env.CIRCLE_CDN_URL || 'https://d23ibma5syugvj.cloudfront.ne
    /\/$/,
    ''
 );
+// Em DEV o Fast Refresh do Next (react-refresh) usa `eval` e o HMR usa websocket —
+// libera 'unsafe-eval' + ws: SOMENTE em desenvolvimento. Prod segue estrito.
+const isDev = process.env.NODE_ENV === 'development';
 const CSP = [
    "default-src 'self'",
-   "script-src 'self' 'unsafe-inline'",
+   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
    "style-src 'self' 'unsafe-inline'",
    `img-src 'self' data: blob: ${CDN}`,
    "font-src 'self' data:",
-   "connect-src 'self'",
+   `connect-src 'self'${isDev ? ' ws: http://localhost:*' : ''}`,
    "frame-ancestors 'none'",
    "base-uri 'self'",
    "form-action 'self'",
