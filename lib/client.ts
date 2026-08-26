@@ -211,6 +211,8 @@ export const api = {
       removeResource: (id: string, rid: string) =>
          del<{ deleted: boolean }>(`/issues/${id}/resources/${rid}`),
       remind: (id: string, at: string) => post<{ at: string }>(`/issues/${id}/remind`, { at }),
+      moveTeam: (id: string, teamId: string) =>
+         post<IssueDto>(`/issues/${id}/move-team`, { teamId }),
       addReaction: (id: string, emoji: string) =>
          post<{ ok: boolean }>(`/issues/${id}/reactions`, { emoji }),
       removeReaction: (id: string, emoji: string) =>

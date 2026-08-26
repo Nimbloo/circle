@@ -618,6 +618,39 @@ export async function bulkAddLabel(db: Db, ids: string[], labelId: string): Prom
    publish({ entity: 'issue', action: 'updated' });
 }
 
+/**
+ * Move uma issue para outro time: reatribui o identifier a partir do contador do time
+ * destino (ENG-11 → OUTRO-N) e limpa o cycle (o cycle pertence ao time antigo). O UUID
+ * (id) não muda, então comentários/relations/notificações continuam válidos.
+ */
+export async function moveIssueToTeam(
+   db: Db,
+   issueId: string,
+   targetTeamId: string
+): Promise<IssueDto | null> {
+   const rows = await db.select().from(issue).where(eq(issue.id, issueId)).limit(1);
+   if (rows.length === 0) return null;
+   if (rows[0].teamId === targetTeamId) return getIssue(db, issueId);
+
+   const teamRows = await db.select().from(teamT).where(eq(teamT.id, targetTeamId)).limit(1);
+   if (teamRows.length === 0) throw new ApiError(400, `Team '${targetTeamId}' não existe`);
+
+   await db.transaction(async (tx) => {
+      const seqRes = await tx
+         .update(teamT)
+         .set({ issueSeq: sql`${teamT.issueSeq} + 1` })
+         .where(eq(teamT.id, targetTeamId))
+         .returning({ seq: teamT.issueSeq });
+      const identifier = `${targetTeamId}-${seqRes[0].seq}`;
+      await tx
+         .update(issue)
+         .set({ teamId: targetTeamId, identifier, cycleId: null, updatedAt: new Date() })
+         .where(eq(issue.id, issueId));
+   });
+   publish({ entity: 'issue', action: 'updated', id: issueId });
+   return getIssue(db, issueId);
+}
+
 export async function deleteIssue(db: Db, id: string): Promise<boolean> {
    const existing = await db.select({ id: issue.id }).from(issue).where(eq(issue.id, id)).limit(1);
    if (existing.length === 0) return false;

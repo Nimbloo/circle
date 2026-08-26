@@ -75,6 +75,7 @@ interface IssueMenuItemsProps {
 export function IssueMenuItems({ issueId, primitives: P, onRequestDelete }: IssueMenuItemsProps) {
    const users = useWorkspaceStore((s) => s.users);
    const projects = useWorkspaceStore((s) => s.projects);
+   const teams = useWorkspaceStore((s) => s.teams);
    const getCyclesByTeam = useWorkspaceStore((s) => s.getCyclesByTeam);
    const me = useWorkspaceStore((s) => s.me);
    const status = useStatuses();
@@ -232,6 +233,15 @@ export function IssueMenuItems({ issueId, primitives: P, onRequestDelete }: Issu
       } catch {
          toast.error('Falha ao criar a issue relacionada');
       }
+   };
+
+   // Move to team: reatribui o identifier a partir do time destino (ENG-11 → OUTRO-N).
+   const handleMoveTeam = (targetTeamId: string, teamName: string) => {
+      if (!issueId) return;
+      api.issues
+         .moveTeam(issueId, targetTeamId)
+         .then(() => toast.success(`Movida para ${teamName}`))
+         .catch(() => toast.error('Falha ao mover de time'));
    };
 
    // Remind: cria um lembrete (notificação adiada até o instante escolhido — reusa o
@@ -417,6 +427,23 @@ export function IssueMenuItems({ issueId, primitives: P, onRequestDelete }: Issu
          <P.Item onClick={() => void handleCreateRelated()}>
             <GitPullRequestArrow className="size-4" /> Create related issue
          </P.Item>
+         {teams.length > 1 && (
+            <P.Sub>
+               <P.SubTrigger>
+                  <User className="mr-2 size-4" /> Move to team
+               </P.SubTrigger>
+               <P.SubContent className="w-52">
+                  {teams
+                     .filter((t) => t.id !== issue?.teamId)
+                     .map((t) => (
+                        <P.Item key={t.id} onClick={() => handleMoveTeam(t.id, t.name)}>
+                           <span>{t.icon ?? '📁'}</span>
+                           <span className="truncate">{t.name}</span>
+                        </P.Item>
+                     ))}
+               </P.SubContent>
+            </P.Sub>
+         )}
          <P.Sub>
             <P.SubTrigger>
                <Clock className="mr-2 size-4" /> Remind me
