@@ -62,6 +62,8 @@
    --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
    --sidebar-border: oklch(0.92 0.004 286.32);
    --sidebar-ring: oklch(0.871 0.006 286.286);
+   /* Cinza dos itens INATIVOS da sidebar — medido do Linear (light: mid-gray no fundo claro). */
+   --sidebar-muted-foreground: lch(45 1 272);
    --background: oklch(0.975 0.001 286.375);
    --foreground: oklch(0.141 0.005 285.823);
    --container: #fff;
@@ -82,7 +84,9 @@
    --secondary: oklch(0.268 0.006 286);
    --secondary-foreground: oklch(0.985 0 0);
    --muted: oklch(0.248 0.006 286); /* preenchimento sutil (badges, chips) */
-   --muted-foreground: oklch(0.715 0.015 286.067);
+   /* Cinza muted canônico do Linear (#8a8f98) — alinhado por medição do app (era
+      oklch(0.715), mais claro). Mesmo valor usado no tema classic-dark. */
+   --muted-foreground: #8a8f98;
    --accent: oklch(0.278 0.007 286); /* HOVER/ativo — lê sobre o card 0.205 */
    --accent-foreground: oklch(0.985 0 0);
    --destructive: oklch(0.396 0.141 25.723);
@@ -103,6 +107,8 @@
    --sidebar-accent-foreground: oklch(0.985 0 0);
    --sidebar-border: oklch(0.259 0.006 286);
    --sidebar-ring: oklch(0.442 0.017 285.786);
+   /* Cinza EXATO dos itens inativos da sidebar do Linear (medido: computed color). */
+   --sidebar-muted-foreground: lch(60.621 1.2 272);
    --container: oklch(0.205 0.006 285.9); /* = card: superfície elevada branca-equivalente */
 }
 
@@ -143,6 +149,7 @@
    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
    --color-sidebar-border: var(--sidebar-border);
    --color-sidebar-ring: var(--sidebar-ring);
+   --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
    --color-container: var(--container);
 }
 
@@ -263,4 +270,31 @@ html[data-pointer-cursors='true'] label[for] {
 html[data-underline-links='true'] .prose a[href],
 html[data-underline-links='true'] a[href]:not([role='button']):not(.no-underline) {
    text-decoration: underline;
+}
+
+/* Scrollbars finas e sutis (estilo Linear): thumb arredondado com padding, track
+   transparente, só aparece com conteúdo scrollável. Aplicado global pra consistência. */
+* {
+   scrollbar-width: thin;
+   scrollbar-color: color-mix(in oklch, var(--border) 90%, transparent) transparent;
+}
+*::-webkit-scrollbar {
+   width: 10px;
+   height: 10px;
+}
+*::-webkit-scrollbar-track {
+   background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+   background-color: color-mix(in oklch, var(--border) 90%, transparent);
+   border-radius: 9999px;
+   border: 3px solid transparent;
+   background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+   background-color: var(--muted-foreground);
+   background-clip: padding-box;
+}
+*::-webkit-scrollbar-corner {
+   background: transparent;
 }
