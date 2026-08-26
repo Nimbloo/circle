@@ -1,7 +1,7 @@
 'use client';
 
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
    CircleCheck,
    User,
@@ -19,6 +19,8 @@ import {
    Bell,
    BellOff,
    Star,
+   GitPullRequestArrow,
+   Clock,
 } from 'lucide-react';
 import { api } from '@/lib/client';
 import { useIssuesStore } from '@/store/issues-store';
@@ -79,6 +81,7 @@ export function IssueMenuItems({ issueId, primitives: P, onRequestDelete }: Issu
    const priorities = usePriorities();
    const labels = useLabels();
    const { orgId } = useParams<{ orgId: string }>();
+   const router = useRouter();
    const statusCompleted = status.find((s) => s.category === 'completed');
    const statusCanceled = status.find((s) => s.category === 'canceled');
 
@@ -211,6 +214,50 @@ export function IssueMenuItems({ issueId, primitives: P, onRequestDelete }: Issu
          .unsubscribe(issueId)
          .then(() => toast.success('Você não segue mais esta issue'))
          .catch(() => toast.error('Falha ao deixar de seguir'));
+   };
+
+   // Create related: cria uma issue nova no mesmo time, vincula como related e navega.
+   const handleCreateRelated = async () => {
+      if (!issue?.teamId) return;
+      try {
+         const created = await api.issues.create({
+            teamId: issue.teamId,
+            title: 'New related issue',
+            statusId: issue.status.id,
+            priorityId: issue.priority.id,
+         });
+         await api.issues.addRelation(issue.id, created.id, 'related');
+         toast.success('Issue relacionada criada');
+         router.push(`/${orgId ?? 'nimbloo'}/issue/${created.identifier}`);
+      } catch {
+         toast.error('Falha ao criar a issue relacionada');
+      }
+   };
+
+   // Remind: cria um lembrete (notificação adiada até o instante escolhido — reusa o
+   // snoozedUntil: aparece no inbox quando a hora chega).
+   const remindAt = (at: Date, label: string) => {
+      if (!issueId) return;
+      api.issues
+         .remind(issueId, at.toISOString())
+         .then(() => toast.success(`Lembrete: ${label}`))
+         .catch(() => toast.error('Falha ao criar o lembrete'));
+   };
+   const remindPresets = () => {
+      const base = new Date();
+      const at = (h: number, addDays = 0) => {
+         const d = new Date(base);
+         d.setDate(d.getDate() + addDays);
+         d.setHours(h, 0, 0, 0);
+         return d;
+      };
+      const inHours = (n: number) => new Date(base.getTime() + n * 3600_000);
+      return [
+         { label: 'In 1 hour', at: inHours(1) },
+         { label: 'In 3 hours', at: inHours(3) },
+         { label: 'Tomorrow', at: at(9, 1) },
+         { label: 'Next week', at: at(9, 7) },
+      ];
    };
 
    return (
@@ -364,6 +411,24 @@ export function IssueMenuItems({ issueId, primitives: P, onRequestDelete }: Issu
          <P.Item onClick={copyTitle}>
             <Type className="size-4" /> Copy title
          </P.Item>
+
+         <P.Separator />
+
+         <P.Item onClick={() => void handleCreateRelated()}>
+            <GitPullRequestArrow className="size-4" /> Create related issue
+         </P.Item>
+         <P.Sub>
+            <P.SubTrigger>
+               <Clock className="mr-2 size-4" /> Remind me
+            </P.SubTrigger>
+            <P.SubContent className="w-44">
+               {remindPresets().map((p) => (
+                  <P.Item key={p.label} onClick={() => remindAt(p.at, p.label)}>
+                     {p.label}
+                  </P.Item>
+               ))}
+            </P.SubContent>
+         </P.Sub>
 
          <P.Separator />
 

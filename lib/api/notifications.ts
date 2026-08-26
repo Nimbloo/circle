@@ -167,6 +167,8 @@ export interface CreateNotificationInput {
    issueId?: string | null;
    actorId?: string | null;
    content?: string | null;
+   /** Oculta a notificação até esse instante (usado por lembretes/reminders). */
+   snoozedUntil?: Date | null;
 }
 
 export async function createNotification(db: Db, input: CreateNotificationInput): Promise<string> {
@@ -179,6 +181,7 @@ export async function createNotification(db: Db, input: CreateNotificationInput)
       actorId: input.actorId ?? null,
       content: input.content ?? null,
       read: false,
+      snoozedUntil: input.snoozedUntil ?? null,
       createdAt: new Date(),
    });
    publish({ entity: 'notification', action: 'created', id });

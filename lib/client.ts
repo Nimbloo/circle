@@ -210,6 +210,7 @@ export const api = {
          post<IssueResourceDto>(`/issues/${id}/resources`, input),
       removeResource: (id: string, rid: string) =>
          del<{ deleted: boolean }>(`/issues/${id}/resources/${rid}`),
+      remind: (id: string, at: string) => post<{ at: string }>(`/issues/${id}/remind`, { at }),
       addReaction: (id: string, emoji: string) =>
          post<{ ok: boolean }>(`/issues/${id}/reactions`, { emoji }),
       removeReaction: (id: string, emoji: string) =>
