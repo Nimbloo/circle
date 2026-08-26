@@ -7,7 +7,7 @@ import { useProjectsFilterStore } from '@/store/projects-filter-store';
 import { useProjectsDisplayStore } from '@/store/projects-display-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { BarChart3 } from 'lucide-react';
+import { BarChart3, Box } from 'lucide-react';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
 import { useMemo } from 'react';
 import { Filter } from '@/components/layout/headers/projects/filter';
@@ -139,9 +139,25 @@ export default function Projects({ teamId }: { teamId?: string }) {
 
          <div className="flex-1 min-h-0 w-full flex overflow-hidden">
             <div className="flex-1 min-w-0 h-full overflow-hidden">
-               {viewType === 'timeline' && <ProjectsTimeline groups={groups} />}
-               {viewType === 'board' && <ProjectsBoard groups={groups} />}
-               {viewType === 'list' && <ProjectsList groups={groups} />}
+               {displayed.length === 0 ? (
+                  <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+                     <div className="flex size-14 items-center justify-center rounded-2xl bg-muted/50 text-muted-foreground">
+                        <Box className="size-7" />
+                     </div>
+                     <h3 className="text-base font-semibold">Projects</h3>
+                     <p className="max-w-sm text-sm text-muted-foreground">
+                        Projects são unidades maiores de trabalho com um resultado claro —
+                        uma feature a entregar. Podem ser compartilhados entre times e
+                        reúnem issues e documentos.
+                     </p>
+                  </div>
+               ) : (
+                  <>
+                     {viewType === 'timeline' && <ProjectsTimeline groups={groups} />}
+                     {viewType === 'board' && <ProjectsBoard groups={groups} />}
+                     {viewType === 'list' && <ProjectsList groups={groups} />}
+                  </>
+               )}
             </div>
 
             {openPanel === 'insights' && (

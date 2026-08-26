@@ -67,6 +67,17 @@ export default function CycleIssues({ cycleView }: CycleIssuesProps) {
 
    return (
       <div className="w-full h-full flex flex-col overflow-hidden">
+         {/* Breadcrumb + contagem (estilo Linear: "Cycles › Cycle X" + "N issues") */}
+         {cycle && (
+            <div className="flex items-center gap-2 px-6 h-9 border-b border-border/60 text-[13px] shrink-0">
+               <span className="text-muted-foreground">Cycles</span>
+               <span className="text-muted-foreground">›</span>
+               <span className="font-medium">{cycle.name}</span>
+               <span className="ml-2 text-muted-foreground">
+                  {cycleIssues.length} {cycleIssues.length === 1 ? 'issue' : 'issues'}
+               </span>
+            </div>
+         )}
          <IssueFilterBar />
          <div className="flex-1 min-h-0 w-full flex overflow-hidden">
             <div className="flex-1 min-w-0 h-full overflow-hidden">
