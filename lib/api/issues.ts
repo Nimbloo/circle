@@ -62,6 +62,9 @@ export interface IssueDto {
    rank: string;
    dueDate: string | null;
    estimate: number | null;
+   /** Rollup de sub-issues (paridade Linear): total de filhas e quantas concluídas. */
+   subIssueCount: number;
+   subIssueDoneCount: number;
    createdAt: string;
    updatedAt: string;
 }
@@ -193,7 +196,7 @@ async function assemble(
    ];
    const projectIds = [...new Set(rows.map((r) => r.projectId).filter(Boolean) as string[])];
 
-   const [users, projects, labelLinks] = await Promise.all([
+   const [users, projects, labelLinks, subRels] = await Promise.all([
       userIds.length
          ? db.select().from(appUser).where(inArray(appUser.id, userIds))
          : Promise.resolve([]),
@@ -204,6 +207,10 @@ async function assemble(
               .where(inArray(projectT.id, projectIds))
          : Promise.resolve([]),
       db.select().from(issueLabel).where(inArray(issueLabel.issueId, issueIds)),
+      db
+         .select({ parentId: issueRelation.issueId, childId: issueRelation.relatedId })
+         .from(issueRelation)
+         .where(and(inArray(issueRelation.issueId, issueIds), eq(issueRelation.kind, 'sub'))),
    ]);
    const userMap = new Map(users.map((u) => [u.id, u]));
    const projectMap = new Map(projects.map((p) => [p.id, p]));
@@ -214,6 +221,26 @@ async function assemble(
       const arr = labelsByIssue.get(link.issueId) ?? [];
       arr.push(lbl);
       labelsByIssue.set(link.issueId, arr);
+   }
+
+   // Rollup de sub-issues: as filhas podem não estar nesta página, então busca o
+   // status delas direto. done = status na categoria 'completed'.
+   const childIds = [...new Set(subRels.map((r) => r.childId))];
+   const childCategory = new Map<string, string>();
+   if (childIds.length) {
+      const children = await db
+         .select({ id: issue.id, statusId: issue.statusId })
+         .from(issue)
+         .where(inArray(issue.id, childIds));
+      for (const c of children)
+         childCategory.set(c.id, cat.statuses.get(c.statusId)?.category ?? '');
+   }
+   const rollup = new Map<string, { count: number; done: number }>();
+   for (const rel of subRels) {
+      const agg = rollup.get(rel.parentId) ?? { count: 0, done: 0 };
+      agg.count += 1;
+      if (childCategory.get(rel.childId) === 'completed') agg.done += 1;
+      rollup.set(rel.parentId, agg);
    }
 
    return rows.map((r) => ({
@@ -238,6 +265,8 @@ async function assemble(
       rank: r.rank,
       dueDate: r.dueDate,
       estimate: r.estimate,
+      subIssueCount: rollup.get(r.id)?.count ?? 0,
+      subIssueDoneCount: rollup.get(r.id)?.done ?? 0,
       createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
       updatedAt: r.updatedAt instanceof Date ? r.updatedAt.toISOString() : String(r.updatedAt),
    }));

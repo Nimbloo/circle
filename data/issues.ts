@@ -19,6 +19,9 @@ export interface Issue {
    cycleId: string;
    project?: Project;
    subissues?: string[];
+   /** Rollup de sub-issues (paridade Linear): total e concluídas. 0/0 = sem filhas. */
+   subIssueCount?: number;
+   subIssueDoneCount?: number;
    rank: string;
    dueDate?: string;
    /** Pontos de estimativa (undefined = sem estimativa). */

@@ -15,6 +15,7 @@ import { LabelBadge } from './label-badge';
 import { PrioritySelector } from './priority-selector';
 import { ProjectBadge } from './project-badge';
 import { StatusSelector } from './status-selector';
+import { SubIssueProgress } from './sub-issue-progress';
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { IssueContextMenu } from './issue-context-menu';
 
@@ -192,12 +193,17 @@ export function IssueGrid({ issue, orderedIssues, layout = true }: IssueGridProp
                      <ProjectBadge project={issue.project} />
                   )}
                </div>
-               {/* Row 4: created */}
-               {displayProperties.created && (
-                  <span className="text-xs text-muted-foreground">
-                     Created {format(new Date(issue.createdAt), 'MMM d')}
-                  </span>
-               )}
+               {/* Row 4: created (esq) + rollup de sub-issues (dir) */}
+               <div className="flex items-center justify-between gap-2">
+                  {displayProperties.created ? (
+                     <span className="text-xs text-muted-foreground">
+                        Created {format(new Date(issue.createdAt), 'MMM d')}
+                     </span>
+                  ) : (
+                     <span />
+                  )}
+                  <SubIssueProgress count={issue.subIssueCount} done={issue.subIssueDoneCount} />
+               </div>
             </motion.div>
          </ContextMenuTrigger>
          <IssueContextMenu issueId={issue.id} />

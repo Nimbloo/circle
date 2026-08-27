@@ -100,6 +100,8 @@ export function adaptIssue(dto: IssueDto): Issue {
       rank: dto.rank,
       dueDate: dto.dueDate ?? undefined,
       estimate: dto.estimate ?? undefined,
+      subIssueCount: dto.subIssueCount,
+      subIssueDoneCount: dto.subIssueDoneCount,
       createdById: dto.createdBy?.id ?? undefined,
    };
 }

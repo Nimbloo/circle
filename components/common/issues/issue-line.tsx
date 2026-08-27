@@ -14,6 +14,7 @@ import { LabelBadge } from './label-badge';
 import { PrioritySelector } from './priority-selector';
 import { ProjectBadge } from './project-badge';
 import { StatusSelector } from './status-selector';
+import { SubIssueProgress } from './sub-issue-progress';
 import { motion } from 'motion/react';
 import { memo } from 'react';
 
@@ -83,6 +84,7 @@ function IssueLineComponent({ issue, layoutId = false }: { issue: Issue; layoutI
                         <ProjectBadge project={issue.project} />
                      )}
                   </div>
+                  <SubIssueProgress count={issue.subIssueCount} done={issue.subIssueDoneCount} />
                   {displayProperties.estimate && issue.estimate !== undefined && (
                      <span className="text-xs text-muted-foreground border border-border rounded-md px-1.5 py-0.5 shrink-0 hidden sm:inline-block tabular-nums">
                         {issue.estimate}
