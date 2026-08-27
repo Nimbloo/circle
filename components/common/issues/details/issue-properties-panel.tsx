@@ -18,6 +18,9 @@ import { Issue } from '@/data/issues';
 import { LabelInterface } from '@/data/labels';
 import { Ban, CheckIcon, GitPullRequestArrow } from 'lucide-react';
 import { useState } from 'react';
+import { api } from '@/lib/client';
+import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import { LabelBadge } from '../label-badge';
 import { PrioritySelector } from '../priority-selector';
 import { StatusSelector } from '../status-selector';
@@ -109,6 +112,18 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
    const addIssueLabel = useIssuesStore((s) => s.addIssueLabel);
    const removeIssueLabel = useIssuesStore((s) => s.removeIssueLabel);
 
+   const [editingMs, setEditingMs] = useState(false);
+   const [msDraft, setMsDraft] = useState('');
+   const saveMilestone = async () => {
+      setEditingMs(false);
+      try {
+         await api.issues.updateDetail(issue.id, { milestone: msDraft.trim() || null });
+         await onChanged?.();
+      } catch {
+         toast.error('Could not update the milestone');
+      }
+   };
+
    // Diff entre a seleção do LabelSelector e as labels atuais → add/remove no store.
    const onLabelsChange = (next: LabelInterface[]) => {
       next
@@ -162,10 +177,41 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
                   <issue.project.icon className="size-4 text-muted-foreground shrink-0" />
                   <span className="truncate">{issue.project.name}</span>
                </div>
-               {detail.milestone && (
-                  <div className="flex items-center gap-2 text-sm mt-1.5 pl-6 text-muted-foreground">
+               {(detail.milestone || onChanged) && (
+                  <div className="flex items-center gap-2 text-sm mt-1.5 pl-6">
                      <span className="size-2 rotate-45 border border-amber-400 shrink-0" />
-                     <span className="truncate">{detail.milestone}</span>
+                     {editingMs ? (
+                        <input
+                           value={msDraft}
+                           onChange={(e) => setMsDraft(e.target.value)}
+                           autoFocus
+                           placeholder="Milestone"
+                           onBlur={() => void saveMilestone()}
+                           onKeyDown={(e) => {
+                              if (e.key === 'Enter') void saveMilestone();
+                              if (e.key === 'Escape') setEditingMs(false);
+                           }}
+                           className="flex-1 bg-transparent text-sm outline-none border rounded px-1.5 h-6"
+                        />
+                     ) : (
+                        <button
+                           type="button"
+                           disabled={!onChanged}
+                           onClick={() => {
+                              setMsDraft(detail.milestone ?? '');
+                              setEditingMs(true);
+                           }}
+                           className={cn(
+                              'truncate text-left',
+                              detail.milestone
+                                 ? 'text-muted-foreground'
+                                 : 'text-muted-foreground/60',
+                              onChanged && 'hover:text-foreground transition-colors'
+                           )}
+                        >
+                           {detail.milestone || 'Add milestone'}
+                        </button>
+                     )}
                   </div>
                )}
             </Section>

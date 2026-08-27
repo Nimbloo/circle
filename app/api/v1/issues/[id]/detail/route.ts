@@ -19,14 +19,15 @@ export async function GET(_req: Request, { params }: Params) {
 
 const PatchSchema = z.object({
    description: z.string().max(20000).nullish(),
+   milestone: z.string().max(196).nullish(),
 });
 
 export async function PATCH(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
       await requireEmail(req);
-      const { description } = PatchSchema.parse(await req.json());
-      const dto = await updateIssueContent(db, id, description ?? null);
+      const patch = PatchSchema.parse(await req.json());
+      const dto = await updateIssueContent(db, id, patch);
       return dto ? ok(dto) : notFound(`Issue '${id}' não encontrada`);
    });
 }

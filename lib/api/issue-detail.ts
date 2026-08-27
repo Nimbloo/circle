@@ -125,7 +125,7 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
 export async function updateIssueContent(
    db: Db,
    issueId: string,
-   description: string | null
+   patch: { description?: string | null; milestone?: string | null }
 ): Promise<IssueDetailDto | null> {
    const exists = await db
       .select({ id: issueT.id })
@@ -133,10 +133,18 @@ export async function updateIssueContent(
       .where(eq(issueT.id, issueId))
       .limit(1);
    if (exists.length === 0) return null;
+   // Upsert parcial: só os campos presentes no patch são alterados numa linha existente.
+   const set: Partial<typeof issueContent.$inferInsert> = {};
+   if (patch.description !== undefined) set.description = patch.description;
+   if (patch.milestone !== undefined) set.milestone = patch.milestone;
    await db
       .insert(issueContent)
-      .values({ issueId, description })
-      .onConflictDoUpdate({ target: issueContent.issueId, set: { description } });
+      .values({
+         issueId,
+         description: patch.description ?? null,
+         milestone: patch.milestone ?? null,
+      })
+      .onConflictDoUpdate({ target: issueContent.issueId, set });
    publish({ entity: 'issue', action: 'updated', id: issueId });
    return getIssueDetail(db, issueId);
 }
