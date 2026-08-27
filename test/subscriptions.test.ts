@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
-import { createIssue, updateIssue, listSubscribedIssueIds } from '@/lib/api/issues';
+import {
+   createIssue,
+   updateIssue,
+   listSubscribedIssueIds,
+   subscribeToIssue,
+   unsubscribeFromIssue,
+} from '@/lib/api/issues';
 import { addComment, listMyActivity } from '@/lib/api/issue-detail';
 import { getMe } from '@/lib/api/users';
 
@@ -100,5 +106,25 @@ describe('issue subscriptions (auto-subscribe)', () => {
       await updateIssue(db, i.id, { title: 'Y' }, CREATOR);
       const me = await getMe(db, CREATOR);
       expect(me.subscribedIssueIds.filter((id) => id === i.id).length).toBe(1);
+   });
+
+   it('toggle manual: subscribe/unsubscribe reflete no getMe (#25)', async () => {
+      const db = await setup();
+      const eveId = await seedUser(db, { name: 'Eve', email: 'eve@nimbloo.ai' });
+      const i = await createIssue(
+         db,
+         { teamId: 'CORE', title: 'X', statusId: 'to-do', priorityId: 'low' },
+         CREATOR
+      );
+      expect(await listSubscribedIssueIds(db, eveId)).not.toContain(i.id);
+
+      await subscribeToIssue(db, i.id, eveId);
+      expect((await getMe(db, 'eve@nimbloo.ai')).subscribedIssueIds).toContain(i.id);
+
+      await subscribeToIssue(db, i.id, eveId); // idempotente
+      expect((await listSubscribedIssueIds(db, eveId)).filter((id) => id === i.id)).toHaveLength(1);
+
+      await unsubscribeFromIssue(db, i.id, eveId);
+      expect(await listSubscribedIssueIds(db, eveId)).not.toContain(i.id);
    });
 });

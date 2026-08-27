@@ -203,6 +203,10 @@ export const api = {
          del<IssueDetailDto>(
             `/issues/${id}/relations?relatedId=${encodeURIComponent(relatedId)}&kind=${kind}`
          ),
+      subscribe: (id: string) =>
+         post<{ id: string; subscribed: boolean }>(`/issues/${id}/subscription`, {}),
+      unsubscribe: (id: string) =>
+         del<{ id: string; subscribed: boolean }>(`/issues/${id}/subscription`),
       activity: (id: string) => get<ActivityItem[]>(`/issues/${id}/activity`),
       comments: (id: string) => get<CommentDto[]>(`/issues/${id}/comments`),
       addComment: (id: string, body: string, parentId?: string | null) =>

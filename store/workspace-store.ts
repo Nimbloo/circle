@@ -18,6 +18,8 @@ import type { MeDto } from '@/lib/api/users';
 import type { ProjectDto } from '@/lib/api/projects';
 import type { InitiativeDto } from '@/lib/api/initiatives';
 import { useCatalogStore } from '@/store/catalog-store';
+import { api } from '@/lib/client';
+import { toast } from 'sonner';
 
 interface WorkspaceState {
    loaded: boolean;
@@ -38,6 +40,10 @@ interface WorkspaceState {
    applyInitiative: (dto: InitiativeDto) => void;
    removeProjectLocal: (id: string) => void;
    removeInitiativeLocal: (id: string) => void;
+
+   /** Segue/deixa de seguir uma issue (otimista + rollback). Reflete em me.subscribedIssueIds. */
+   toggleSubscription: (issueId: string) => void;
+   isSubscribed: (issueId: string) => boolean;
 
    // Helpers (mesmos nomes dos mocks)
    getProjectById: (id: string) => Project | undefined;
@@ -113,6 +119,25 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
    removeProjectLocal: (id) => set((s) => ({ projects: s.projects.filter((p) => p.id !== id) })),
    removeInitiativeLocal: (id) =>
       set((s) => ({ initiatives: s.initiatives.filter((i) => i.id !== id) })),
+
+   isSubscribed: (issueId) => get().me?.subscribedIssueIds.includes(issueId) ?? false,
+
+   toggleSubscription: (issueId) => {
+      const me = get().me;
+      if (!me) return;
+      const currently = me.subscribedIssueIds.includes(issueId);
+      const nextIds = currently
+         ? me.subscribedIssueIds.filter((id) => id !== issueId)
+         : [...me.subscribedIssueIds, issueId];
+      set({ me: { ...me, subscribedIssueIds: nextIds } });
+      const call = currently ? api.issues.unsubscribe(issueId) : api.issues.subscribe(issueId);
+      void call.catch(() => {
+         // Rollback: restaura a lista anterior deste usuário.
+         const cur = get().me;
+         if (cur) set({ me: { ...cur, subscribedIssueIds: me.subscribedIssueIds } });
+         toast.error(currently ? 'Falha ao deixar de seguir' : 'Falha ao seguir');
+      });
+   },
 
    getProjectById: (id) => get().projects.find((p) => p.id === id),
    getProjectsByTeam: (teamId) => get().projects.filter((p) => p.teamId === teamId),

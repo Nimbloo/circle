@@ -16,7 +16,7 @@ import { useIssuesStore } from '@/store/issues-store';
 import { IssueDetail } from '@/data/issue-details';
 import { Issue } from '@/data/issues';
 import { LabelInterface } from '@/data/labels';
-import { Ban, CheckIcon, GitPullRequestArrow } from 'lucide-react';
+import { Ban, Bell, BellOff, CheckIcon, GitPullRequestArrow } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '@/lib/client';
 import { cn } from '@/lib/utils';
@@ -111,6 +111,10 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
    const updateIssueAssignee = useIssuesStore((s) => s.updateIssueAssignee);
    const addIssueLabel = useIssuesStore((s) => s.addIssueLabel);
    const removeIssueLabel = useIssuesStore((s) => s.removeIssueLabel);
+   const subscribed = useWorkspaceStore(
+      (s) => s.me?.subscribedIssueIds.includes(issue.id) ?? false
+   );
+   const toggleSubscription = useWorkspaceStore((s) => s.toggleSubscription);
 
    const [editingMs, setEditingMs] = useState(false);
    const [msDraft, setMsDraft] = useState('');
@@ -136,6 +140,19 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
 
    return (
       <div className="flex flex-col gap-7">
+         <button
+            type="button"
+            onClick={() => toggleSubscription(issue.id)}
+            aria-pressed={subscribed}
+            className={cn(
+               'flex items-center gap-2 h-8 px-2 -mx-2 rounded-md text-sm transition-colors hover:bg-accent/50',
+               subscribed ? 'text-foreground' : 'text-muted-foreground'
+            )}
+         >
+            {subscribed ? <Bell className="size-4" /> : <BellOff className="size-4" />}
+            {subscribed ? 'Subscribed' : 'Subscribe'}
+         </button>
+
          <Section title="Properties">
             <div className="flex flex-col gap-1.5">
                <div className="flex items-center gap-1.5 -ml-1.5">
