@@ -2,7 +2,7 @@ import { Priority, priorities } from './priorities';
 import { Health, health, Project, projects } from './projects';
 import { User, users } from './users';
 
-export type InitiativeStatus = 'active' | 'planned' | 'completed';
+export type InitiativeStatus = 'proposed' | 'planned' | 'active' | 'completed' | 'canceled';
 
 export interface Initiative {
    id: string;
@@ -20,10 +20,13 @@ export interface Initiative {
    createdAt: string;
 }
 
+// Ordem/estados do Linear: Proposed → Planned → Active → Completed → Canceled.
 export const INITIATIVE_STATUS_META: Record<InitiativeStatus, { label: string; color: string }> = {
-   active: { label: 'Active', color: '#f2c94c' },
+   proposed: { label: 'Proposed', color: '#a1a1aa' },
    planned: { label: 'Planned', color: '#95a2b3' },
+   active: { label: 'Active', color: '#f2c94c' },
    completed: { label: 'Completed', color: '#5e6ad2' },
+   canceled: { label: 'Canceled', color: '#6b7280' },
 };
 
 const noUpdate = health[0];

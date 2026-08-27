@@ -10,7 +10,8 @@ export function InitiativeStatusIcon({
    status: InitiativeStatus;
    size?: number;
 }) {
-   if (status === 'planned') {
+   if (status === 'planned' || status === 'proposed') {
+      // proposed = anel tracejado mais claro; planned = tracejado cinza.
       return (
          <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden>
             <circle
@@ -18,9 +19,22 @@ export function InitiativeStatusIcon({
                cy="8"
                r="5.5"
                fill="none"
-               stroke="#95a2b3"
+               stroke={status === 'proposed' ? '#a1a1aa' : '#95a2b3'}
                strokeWidth="1.6"
                strokeDasharray="2.4 2"
+            />
+         </svg>
+      );
+   }
+   if (status === 'canceled') {
+      return (
+         <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden>
+            <circle cx="8" cy="8" r="7" fill="#6b7280" />
+            <path
+               d="M5.4 5.4 L10.6 10.6 M10.6 5.4 L5.4 10.6"
+               stroke="white"
+               strokeWidth="1.5"
+               strokeLinecap="round"
             />
          </svg>
       );
