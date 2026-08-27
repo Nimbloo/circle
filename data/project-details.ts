@@ -44,6 +44,7 @@ export interface ProjectActivityEvent {
 }
 
 export interface ProjectResource {
+   id: string;
    label: string;
    url: string;
 }
@@ -99,7 +100,7 @@ const detailsById: Record<string, Omit<ProjectDetail, 'projectId'>> = {
             text: 'Success = zero visual diffs on the 40 reference apps, and a single a11y audit that covers every overlay.',
          },
       ],
-      resources: [{ label: 'PRD — Core primitives rewrite', url: '#' }],
+      resources: [{ id: 'r1', label: 'PRD — Core primitives rewrite', url: '#' }],
       milestones: [
          { id: 'm1', name: 'Behavior layer extracted', targetDate: '2026-08-14', completed: true },
          { id: 'm2', name: 'Dialog + Menu migrated', targetDate: '2026-09-04', completed: false },
@@ -188,8 +189,8 @@ const detailsById: Record<string, Omit<ProjectDetail, 'projectId'>> = {
          },
       ],
       resources: [
-         { label: 'Spec — Token pipeline v2', url: '#' },
-         { label: 'APCA validation sheet', url: '#' },
+         { id: 'r2', label: 'Spec — Token pipeline v2', url: '#' },
+         { id: 'r3', label: 'APCA validation sheet', url: '#' },
       ],
       milestones: [
          { id: 'm1', name: 'Generator + validator', targetDate: '2026-08-21', completed: true },
@@ -240,7 +241,7 @@ const detailsById: Record<string, Omit<ProjectDetail, 'projectId'>> = {
             ],
          },
       ],
-      resources: [{ label: 'PRD — Data grid GA', url: '#' }],
+      resources: [{ id: 'r4', label: 'PRD — Data grid GA', url: '#' }],
       milestones: [
          { id: 'm1', name: 'Virtualized body', targetDate: '2026-08-28', completed: true },
          { id: 'm2', name: 'Column pinning', targetDate: '2026-09-18', completed: false },

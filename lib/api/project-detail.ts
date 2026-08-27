@@ -327,6 +327,27 @@ export async function addResource(
    return { id, label: input.label.trim(), url: input.url.trim() };
 }
 
+/** Edita o label de um resource (Linear: hover → ⋮ → edit). */
+export async function updateResource(
+   db: Db,
+   resourceId: string,
+   input: { label: string }
+): Promise<boolean> {
+   if (!input.label?.trim()) throw new ApiError(400, 'label é obrigatório');
+   const rows = await db
+      .select({ projectId: projectResource.projectId })
+      .from(projectResource)
+      .where(eq(projectResource.id, resourceId))
+      .limit(1);
+   if (rows.length === 0) return false;
+   await db
+      .update(projectResource)
+      .set({ label: input.label.trim() })
+      .where(eq(projectResource.id, resourceId));
+   publish({ entity: 'project', action: 'updated', id: rows[0].projectId });
+   return true;
+}
+
 export async function deleteResource(db: Db, resourceId: string): Promise<boolean> {
    const rows = await db
       .select({ projectId: projectResource.projectId })

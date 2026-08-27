@@ -9,12 +9,13 @@ import type { ProjectDetail } from '@/data/project-details';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
-import { ArrowRight, ChevronDown, FileText, PenLine, Plus } from 'lucide-react';
+import { ArrowRight, ChevronDown, PenLine } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { DocumentOutline, getOutlineItems } from './document-outline';
+import { ProjectResources } from './project-resources';
 import { ProjectSidePanel } from './project-side-panel';
 
 interface ProjectOverviewProps {
@@ -68,20 +69,6 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
       } catch {
          await reload();
          toast.error('Could not update the summary');
-      }
-   };
-
-   const handleAddResource = async () => {
-      const label = window.prompt('Resource label');
-      if (!label?.trim()) return;
-      const url = window.prompt('Resource URL', 'https://');
-      if (!url?.trim()) return;
-      try {
-         await api.projects.addResource(projectId, { label: label.trim(), url: url.trim() });
-         await reload();
-         toast.success('Resource added');
-      } catch {
-         toast.error('Could not add the resource');
       }
    };
 
@@ -213,29 +200,11 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                         </div>
                      </div>
 
-                     <div className="flex items-center gap-3">
-                        <span className="w-24 text-muted-foreground shrink-0">Resources</span>
-                        <div className="flex items-center gap-2 flex-wrap">
-                           {detail.resources.map((resource) => (
-                              <a
-                                 key={resource.label}
-                                 href={resource.url}
-                                 className="inline-flex items-center gap-1.5 text-xs border rounded-md px-2 py-1 hover:bg-accent/50 transition-colors"
-                              >
-                                 <FileText className="size-3.5 text-muted-foreground" />
-                                 {resource.label}
-                              </a>
-                           ))}
-                           <button
-                              type="button"
-                              onClick={handleAddResource}
-                              aria-label="Add resource"
-                              className="text-muted-foreground hover:text-foreground transition-colors"
-                           >
-                              <Plus className="size-3.5" />
-                           </button>
-                        </div>
-                     </div>
+                     <ProjectResources
+                        projectId={projectId}
+                        resources={detail.resources}
+                        onChanged={reload}
+                     />
                   </div>
 
                   {/* Update CTA */}

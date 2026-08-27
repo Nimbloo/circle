@@ -296,6 +296,8 @@ export const api = {
       resources: (id: string) => get<ProjectResourceDto[]>(`/projects/${id}/resources`),
       addResource: (id: string, body: AddResourceInput) =>
          post<ProjectResourceDto>(`/projects/${id}/resources`, body),
+      updateResource: (id: string, rid: string, body: { label: string }) =>
+         patch<{ id: string }>(`/projects/${id}/resources/${rid}`, body),
       removeResource: (id: string, rid: string) =>
          del<{ deleted: boolean }>(`/projects/${id}/resources/${rid}`),
    },
