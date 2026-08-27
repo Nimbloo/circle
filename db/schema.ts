@@ -102,6 +102,8 @@ export const team = pgTable('team', {
    cycleUpcomingCount: integer('cycle_upcoming_count').notNull().default(2),
    /** Auto-add: issues iniciadas entram no ciclo corrente automaticamente. */
    cycleAutoAdd: boolean('cycle_auto_add').notNull().default(true),
+   /** Progresso medido por pontos de estimate (soma) em vez de contagem de issues. */
+   estimatesEnabled: boolean('estimates_enabled').notNull().default(false),
 });
 
 export const teamMember = pgTable(

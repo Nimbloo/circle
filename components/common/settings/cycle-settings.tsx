@@ -132,6 +132,16 @@ export default function CycleSettings({ teamId }: { teamId: string }) {
                         />
                      }
                   />
+                  <SettingsRow
+                     title="Measure progress by estimate"
+                     description="Cycle and project progress count estimate points instead of issue count (issues without an estimate count as 1)"
+                     trailing={
+                        <Switch
+                           checked={s.estimatesEnabled}
+                           onCheckedChange={(v) => void update({ estimatesEnabled: v })}
+                        />
+                     }
+                  />
                </SettingsCard>
             </SettingsSection>
          )}

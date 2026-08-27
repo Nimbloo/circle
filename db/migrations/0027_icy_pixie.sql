@@ -1,0 +1,1 @@
+ALTER TABLE "team" ADD COLUMN "estimates_enabled" boolean DEFAULT false NOT NULL;

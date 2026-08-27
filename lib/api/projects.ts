@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { eq, inArray, notInArray, count, and } from 'drizzle-orm';
+import { eq, inArray, notInArray, count, and, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    project as projectT,
+   team as teamT,
    projectLabel,
    projectUpdate,
    projectActivity,
@@ -83,32 +84,53 @@ async function assemble(db: Db, rows: ProjectRow[], maps: Maps): Promise<Project
       .filter((s) => s.category === 'completed')
       .map((s) => s.id);
 
-   const [leads, labelLinks, issueCounts, completedCounts] = await Promise.all([
-      leadIds.length
-         ? db.select().from(appUser).where(inArray(appUser.id, leadIds))
-         : Promise.resolve([]),
-      db.select().from(projectLabel).where(inArray(projectLabel.projectId, ids)),
-      db
-         .select({ projectId: issueT.projectId, n: count() })
-         .from(issueT)
-         .where(inArray(issueT.projectId, ids))
-         .groupBy(issueT.projectId),
-      completedStatusIds.length
-         ? db
-              .select({ projectId: issueT.projectId, n: count() })
-              .from(issueT)
-              .where(
-                 and(
-                    inArray(issueT.projectId, ids),
-                    inArray(issueT.statusId, completedStatusIds)
+   const teamIds = [...new Set(rows.map((r) => r.teamId))];
+   const pts = sql<number>`coalesce(sum(coalesce(${issueT.estimate}, 1)), 0)`;
+   const [leads, labelLinks, issueCounts, completedCounts, estimateSums, completedEstimateSums, teams] =
+      await Promise.all([
+         leadIds.length
+            ? db.select().from(appUser).where(inArray(appUser.id, leadIds))
+            : Promise.resolve([]),
+         db.select().from(projectLabel).where(inArray(projectLabel.projectId, ids)),
+         db
+            .select({ projectId: issueT.projectId, n: count() })
+            .from(issueT)
+            .where(inArray(issueT.projectId, ids))
+            .groupBy(issueT.projectId),
+         completedStatusIds.length
+            ? db
+                 .select({ projectId: issueT.projectId, n: count() })
+                 .from(issueT)
+                 .where(
+                    and(inArray(issueT.projectId, ids), inArray(issueT.statusId, completedStatusIds))
                  )
-              )
-              .groupBy(issueT.projectId)
-         : Promise.resolve([]),
-   ]);
+                 .groupBy(issueT.projectId)
+            : Promise.resolve([]),
+         db
+            .select({ projectId: issueT.projectId, n: pts })
+            .from(issueT)
+            .where(inArray(issueT.projectId, ids))
+            .groupBy(issueT.projectId),
+         completedStatusIds.length
+            ? db
+                 .select({ projectId: issueT.projectId, n: pts })
+                 .from(issueT)
+                 .where(
+                    and(inArray(issueT.projectId, ids), inArray(issueT.statusId, completedStatusIds))
+                 )
+                 .groupBy(issueT.projectId)
+            : Promise.resolve([]),
+         db
+            .select({ id: teamT.id, estimatesEnabled: teamT.estimatesEnabled })
+            .from(teamT)
+            .where(inArray(teamT.id, teamIds)),
+      ]);
    const leadMap = new Map(leads.map((u) => [u.id, u]));
    const countMap = new Map(issueCounts.map((r) => [r.projectId, Number(r.n)]));
    const completedMap = new Map(completedCounts.map((r) => [r.projectId, Number(r.n)]));
+   const ptsMap = new Map(estimateSums.map((r) => [r.projectId, Number(r.n)]));
+   const completedPtsMap = new Map(completedEstimateSums.map((r) => [r.projectId, Number(r.n)]));
+   const estimateTeams = new Set(teams.filter((t) => t.estimatesEnabled).map((t) => t.id));
    const labelsByProject = new Map<string, LabelRow[]>();
    for (const link of labelLinks) {
       const lbl = maps.labels.get(link.labelId);
@@ -124,8 +146,11 @@ async function assemble(db: Db, rows: ProjectRow[], maps: Maps): Promise<Project
       // % de conclusão REAL derivado das issues (done/total). Sem issues, cai no
       // campo estático do projeto. Calculado no servidor → o cliente não re-escaneia
       // todas as issues por linha (era O(P·N) por mutação de issue).
-      const total = countMap.get(r.id) ?? 0;
-      const done = completedMap.get(r.id) ?? 0;
+      // Progresso por pontos (soma de estimate; sem estimate = 1) quando o time tem
+      // estimates ligados; senão por contagem de issues.
+      const byEstimate = estimateTeams.has(r.teamId);
+      const total = byEstimate ? (ptsMap.get(r.id) ?? 0) : (countMap.get(r.id) ?? 0);
+      const done = byEstimate ? (completedPtsMap.get(r.id) ?? 0) : (completedMap.get(r.id) ?? 0);
       const pct = total > 0 ? Math.round((done / total) * 100) : r.percentComplete;
       return {
          id: r.id,

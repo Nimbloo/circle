@@ -82,12 +82,16 @@ function computeVelocity(rows: CycleRow[], aggs: Map<string, Agg>, today: string
 }
 
 /** Conta scope/started/completed por ciclo, a partir das issues reais. */
-async function aggregatesByCycle(db: Db, cycleIds: string[]): Promise<Map<string, Agg>> {
+async function aggregatesByCycle(
+   db: Db,
+   cycleIds: string[],
+   estimateCycleIds: Set<string>
+): Promise<Map<string, Agg>> {
    const result = new Map<string, Agg>();
    if (cycleIds.length === 0) return result;
    const [issues, statuses] = await Promise.all([
       db
-         .select({ cycleId: issueT.cycleId, statusId: issueT.statusId })
+         .select({ cycleId: issueT.cycleId, statusId: issueT.statusId, estimate: issueT.estimate })
          .from(issueT)
          .where(inArray(issueT.cycleId, cycleIds)),
       db.select().from(statusT),
@@ -98,10 +102,13 @@ async function aggregatesByCycle(db: Db, cycleIds: string[]): Promise<Map<string
       if (!i.cycleId) continue;
       const agg = result.get(i.cycleId);
       if (!agg) continue;
-      agg.scope += 1;
+      // Progresso por estimate (soma; issue sem estimate = 1, como no Linear) quando o
+      // time tem estimates ligados; senão por contagem de issues.
+      const unit = estimateCycleIds.has(i.cycleId) ? (i.estimate ?? 1) : 1;
+      agg.scope += unit;
       const cat = catById.get(i.statusId);
-      if (cat === 'started') agg.started += 1;
-      else if (cat === 'completed') agg.completed += 1;
+      if (cat === 'started') agg.started += unit;
+      else if (cat === 'completed') agg.completed += unit;
    }
    return result;
 }
@@ -168,9 +175,20 @@ function toDto(row: CycleRow, liveAgg: Agg, velocity: number, today: string): Cy
 /** Monta os DTOs de um conjunto de ciclos DO MESMO time (compartilham velocity). */
 async function toDtos(db: Db, rows: CycleRow[], today: string): Promise<CycleDto[]> {
    if (rows.length === 0) return [];
+   // Times com estimates ligados → seus cycles medem progresso por pontos.
+   const teamIds = [...new Set(rows.map((r) => r.teamId))];
+   const teams = await db
+      .select({ id: teamT.id, estimatesEnabled: teamT.estimatesEnabled })
+      .from(teamT)
+      .where(inArray(teamT.id, teamIds));
+   const estimateTeams = new Set(teams.filter((t) => t.estimatesEnabled).map((t) => t.id));
+   const estimateCycleIds = new Set(
+      rows.filter((r) => estimateTeams.has(r.teamId)).map((r) => r.id)
+   );
    const aggs = await aggregatesByCycle(
       db,
-      rows.map((r) => r.id)
+      rows.map((r) => r.id),
+      estimateCycleIds
    );
    // Velocity é por-time; agrupa e computa uma vez por time.
    const byTeam = new Map<string, CycleRow[]>();
@@ -214,6 +232,7 @@ export async function getCycle(db: Db, id: string): Promise<CycleDto | null> {
 // ── Settings de ciclo do time (Linear: automáticos e repetitivos) ────────
 export interface CycleSettingsDto {
    enabled: boolean;
+   estimatesEnabled: boolean;
    durationWeeks: number;
    startDay: number;
    cooldownWeeks: number;
@@ -224,6 +243,7 @@ export interface CycleSettingsDto {
 function teamToSettingsDto(t: typeof teamT.$inferSelect): CycleSettingsDto {
    return {
       enabled: t.cyclesEnabled,
+      estimatesEnabled: t.estimatesEnabled,
       durationWeeks: t.cycleDurationWeeks,
       startDay: t.cycleStartDay,
       cooldownWeeks: t.cycleCooldownWeeks,
@@ -244,6 +264,7 @@ export interface UpdateCycleSettingsInput {
    cooldownWeeks?: number;
    upcomingCount?: number;
    autoAdd?: boolean;
+   estimatesEnabled?: boolean;
 }
 
 /** Atualiza as settings de ciclo do time e (re)gera o schedule se estiver habilitado. */
@@ -265,6 +286,7 @@ export async function updateCycleSettings(
    if (patch.upcomingCount !== undefined)
       set.cycleUpcomingCount = Math.min(15, Math.max(1, patch.upcomingCount));
    if (patch.autoAdd !== undefined) set.cycleAutoAdd = patch.autoAdd;
+   if (patch.estimatesEnabled !== undefined) set.estimatesEnabled = patch.estimatesEnabled;
 
    if (Object.keys(set).length > 0)
       await db.update(teamT).set(set).where(eq(teamT.id, teamId));
@@ -334,9 +356,11 @@ export async function ensureCycles(db: Db, teamId: string, today = todayISO()): 
       (c) => deriveStatus(c.startDate, c.endDate, today) === 'completed' && c.snapshotScope == null
    );
    if (justClosed.length) {
+      const closedIds = justClosed.map((c) => c.id);
       const aggs = await aggregatesByCycle(
          db,
-         justClosed.map((c) => c.id)
+         closedIds,
+         team.estimatesEnabled ? new Set(closedIds) : new Set()
       );
       for (const c of justClosed) {
          const a = aggs.get(c.id) ?? { scope: 0, started: 0, completed: 0 };

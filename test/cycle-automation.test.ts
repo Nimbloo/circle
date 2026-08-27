@@ -142,6 +142,35 @@ describe('cycle automation (db)', () => {
       expect(closed.successRate).toBe(50);
    });
 
+   it('progresso por estimate: scope/completed somam pontos (sem estimate = 1) quando ligado', async () => {
+      const db = await setup();
+      await updateCycleSettings(db, 'CORE', {
+         enabled: true,
+         estimatesEnabled: true,
+         durationWeeks: 2,
+         startDay: 1,
+      });
+      const current = (await listCyclesByTeam(db, 'CORE')).find((c) => c.status === 'current')!;
+      await createIssue(
+         db,
+         { teamId: 'CORE', title: 'A', statusId: 'done', priorityId: 'low', cycleId: current.id, estimate: 5 },
+         'ana@nimbloo.ai'
+      );
+      await createIssue(
+         db,
+         { teamId: 'CORE', title: 'B', statusId: 'to-do', priorityId: 'low', cycleId: current.id, estimate: 3 },
+         'ana@nimbloo.ai'
+      );
+      await createIssue(
+         db,
+         { teamId: 'CORE', title: 'C', statusId: 'to-do', priorityId: 'low', cycleId: current.id }, // sem estimate = 1
+         'ana@nimbloo.ai'
+      );
+      const cyc = (await listCyclesByTeam(db, 'CORE')).find((c) => c.id === current.id)!;
+      expect(cyc.scope).toBe(9); // 5 + 3 + 1
+      expect(cyc.completed).toBe(5); // só a A (done), pelos pontos
+   });
+
    it('auto-add: issue sem ciclo entra no corrente quando autoAdd on; respeita off e ciclo explícito', async () => {
       const db = await setup();
       await updateCycleSettings(db, 'CORE', {

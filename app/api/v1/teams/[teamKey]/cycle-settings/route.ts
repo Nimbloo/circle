@@ -26,6 +26,7 @@ const PatchSchema = z.object({
    cooldownWeeks: z.number().int().min(0).max(4).optional(),
    upcomingCount: z.number().int().min(1).max(15).optional(),
    autoAdd: z.boolean().optional(),
+   estimatesEnabled: z.boolean().optional(),
 });
 
 export async function PATCH(req: Request, { params }: Params) {

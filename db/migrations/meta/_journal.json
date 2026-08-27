@@ -190,6 +190,13 @@
       "when": 1787840147339,
       "tag": "0026_perfect_silhouette",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1787840839827,
+      "tag": "0027_icy_pixie",
+      "breakpoints": true
     }
   ]
 }
