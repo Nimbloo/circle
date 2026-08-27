@@ -39,7 +39,7 @@ import type {
 import type { ViewDto, CreateViewInput, UpdateViewInput } from '@/lib/api/views';
 import type { NotificationDto } from '@/lib/api/notifications';
 import type { ReviewDto } from '@/lib/api/reviews';
-import type { FolderDto } from '@/lib/api/documents';
+import type { FolderDto, DocumentDto } from '@/lib/api/documents';
 import type {
    IssueDetailDto,
    CommentDto,
@@ -221,6 +221,12 @@ export const api = {
          get<IssueDto[]>(`/teams/${key}/issues${issueQuery(opts)}`),
       cycles: (key: string) => get<CycleDto[]>(`/teams/${key}/cycles`),
       documents: (key: string) => get<FolderDto[]>(`/teams/${key}/documents`),
+      createFolder: (key: string, input: { name: string; icon?: string | null; id?: string }) =>
+         post<FolderDto>(`/teams/${key}/documents`, { kind: 'folder', ...input }),
+      createDocument: (
+         key: string,
+         input: { folderId: string; name: string; icon?: string | null; pinned?: boolean }
+      ) => post<DocumentDto>(`/teams/${key}/documents`, { kind: 'document', ...input }),
       /** Templates de issue do time (CRUD; escrita exige admin). */
       templates: (key: string) => get<TemplateDto[]>(`/teams/${key}/templates`),
       createTemplate: (key: string, input: Omit<CreateTemplateInput, 'teamId'>) =>
@@ -238,6 +244,13 @@ export const api = {
          patch<ProjectTemplateDto>(`/teams/${key}/project-templates/${id}`, body),
       deleteProjectTemplate: (key: string, id: string) =>
          del<{ deleted: boolean }>(`/teams/${key}/project-templates/${id}`),
+   },
+
+   /** Documentos (update/delete por id; escrita exige criador ou admin). */
+   documents: {
+      update: (id: string, body: { name?: string; icon?: string | null; pinned?: boolean }) =>
+         patch<{ id: string }>(`/documents/${id}`, body),
+      remove: (id: string) => del<{ deleted: boolean }>(`/documents/${id}`),
    },
 
    integrations: {
