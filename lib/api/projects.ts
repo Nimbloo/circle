@@ -9,7 +9,6 @@ import {
    projectMilestone,
    projectResource,
    projectDetail,
-   initiativeProject,
    issue as issueT,
    status as statusT,
    priority as priorityT,
@@ -262,14 +261,6 @@ export async function createProject(db: Db, input: CreateProjectInput): Promise<
             .values(input.labelIds.map((labelId) => ({ projectId: id, labelId })))
             .onConflictDoNothing();
       }
-      // Mantém a tabela de vínculo em sincronia com project.initiativeId.
-      if (input.initiativeId) {
-         await tx.delete(initiativeProject).where(eq(initiativeProject.projectId, id));
-         await tx
-            .insert(initiativeProject)
-            .values({ initiativeId: input.initiativeId, projectId: id })
-            .onConflictDoNothing();
-      }
    });
    publish({ entity: 'project', action: 'created', id });
    return (await getProject(db, id))!;
@@ -331,16 +322,6 @@ export async function updateProject(
       set.healthUpdatedAt = new Date();
    await db.transaction(async (tx) => {
       await tx.update(projectT).set(set).where(eq(projectT.id, id));
-      // Reconciliação initiative↔project: substitui o vínculo antigo pelo novo.
-      if (patch.initiativeId !== undefined) {
-         await tx.delete(initiativeProject).where(eq(initiativeProject.projectId, id));
-         if (patch.initiativeId !== null) {
-            await tx
-               .insert(initiativeProject)
-               .values({ initiativeId: patch.initiativeId, projectId: id })
-               .onConflictDoNothing();
-         }
-      }
 
       // Feed de atividade (Linear loga toda mudança). Uma linha por update, resumindo
       // os campos alterados. Sem actor conhecido, não loga.
@@ -380,7 +361,6 @@ export async function deleteProject(db: Db, id: string): Promise<boolean> {
       await tx.delete(projectMilestone).where(eq(projectMilestone.projectId, id));
       await tx.delete(projectResource).where(eq(projectResource.projectId, id));
       await tx.delete(projectDetail).where(eq(projectDetail.projectId, id));
-      await tx.delete(initiativeProject).where(eq(initiativeProject.projectId, id));
       await tx.delete(projectT).where(eq(projectT.id, id));
    });
    publish({ entity: 'project', action: 'deleted', id });

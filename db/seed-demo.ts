@@ -9,7 +9,6 @@ import {
    team,
    teamMember,
    initiative,
-   initiativeProject,
    project,
    projectLabel,
    issue,
@@ -151,17 +150,8 @@ export async function seedDemo(db: Db): Promise<void> {
          .values(dedupPairs(projLabelRows, (r) => `${r.projectId}:${r.labelId}`))
          .onConflictDoNothing();
 
-   // 7) Initiative projects (só refs existentes)
-   const initProjRows = initiatives.flatMap((i) =>
-      (i.projectIds ?? [])
-         .filter((pid) => projectIds.has(pid))
-         .map((pid) => ({ initiativeId: i.id, projectId: pid }))
-   );
-   if (initProjRows.length)
-      await db
-         .insert(initiativeProject)
-         .values(dedupPairs(initProjRows, (r) => `${r.initiativeId}:${r.projectId}`))
-         .onConflictDoNothing();
+   // 7) Initiative↔project: o vínculo é o back-ref project.initiativeId (setado ao
+   // inserir o projeto acima); a join table initiative_project foi removida.
 
    // 8) Cycles — sem seed de ciclos mock (o mock sempre foi vazio); issues nascem sem
    // ciclo. Ciclos reais são criados via API/UI.

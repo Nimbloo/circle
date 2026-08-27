@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    initiative as initT,
-   initiativeProject,
    project as projectT,
    priority as priorityT,
    health as healthT,
@@ -53,41 +52,29 @@ async function loadMaps(db: Db): Promise<Maps> {
 
 /** Para um conjunto de initiatives: seus projectIds e quantos estão completos. */
 async function projectsByInitiative(db: Db, initIds: string[]) {
-   const links = initIds.length
+   // Fonte única: project.initiativeId (a join table initiative_project foi removida).
+   const projects = initIds.length
       ? await db
-           .select()
-           .from(initiativeProject)
-           .where(inArray(initiativeProject.initiativeId, initIds))
+           .select({
+              id: projectT.id,
+              initiativeId: projectT.initiativeId,
+              statusId: projectT.statusId,
+              percentComplete: projectT.percentComplete,
+           })
+           .from(projectT)
+           .where(inArray(projectT.initiativeId, initIds))
       : [];
-   const projectIds = [...new Set(links.map((l) => l.projectId))];
-   const [projects, statuses] = await Promise.all([
-      projectIds.length
-         ? db
-              .select({
-                 id: projectT.id,
-                 statusId: projectT.statusId,
-                 percentComplete: projectT.percentComplete,
-              })
-              .from(projectT)
-              .where(inArray(projectT.id, projectIds))
-         : Promise.resolve([]),
-      db.select().from(statusT),
-   ]);
+   const statuses = await db.select().from(statusT);
    const catById = new Map(statuses.map((s) => [s.id, s.category]));
-   const isCompleted = new Map(
-      projects.map((p) => [
-         p.id,
-         catById.get(p.statusId) === 'completed' || p.percentComplete >= 100,
-      ])
-   );
 
    const byInit = new Map<string, { ids: string[]; completed: number }>();
    for (const id of initIds) byInit.set(id, { ids: [], completed: 0 });
-   for (const link of links) {
-      const e = byInit.get(link.initiativeId);
+   for (const p of projects) {
+      if (!p.initiativeId) continue;
+      const e = byInit.get(p.initiativeId);
       if (!e) continue;
-      e.ids.push(link.projectId);
-      if (isCompleted.get(link.projectId)) e.completed += 1;
+      e.ids.push(p.id);
+      if (catById.get(p.statusId) === 'completed' || p.percentComplete >= 100) e.completed += 1;
    }
    return byInit;
 }
@@ -204,11 +191,7 @@ export async function createInitiative(
          createdAt: new Date(),
       });
       if (input.projectIds?.length) {
-         await tx
-            .insert(initiativeProject)
-            .values(input.projectIds.map((projectId) => ({ initiativeId: id, projectId })))
-            .onConflictDoNothing();
-         // Mantém project.initiativeId em sincronia com a tabela de vínculo.
+         // Fonte única: só o back-ref no projeto (a join table foi removida).
          await tx
             .update(projectT)
             .set({ initiativeId: id })
@@ -253,27 +236,11 @@ export async function updateInitiative(
    }
    await db.transaction(async (tx) => {
       if (Object.keys(set).length) await tx.update(initT).set(set).where(eq(initT.id, id));
-      // Reconciliação initiative↔project: substitui o conjunto de vínculos e
-      // mantém project.initiativeId dos dois lados sempre consistente.
+      // Reconciliação initiative↔project na fonte única (project.initiativeId):
+      // solta todos os projetos que apontavam para esta initiative e re-vincula o novo conjunto.
       if (patch.projectIds !== undefined) {
-         const old = await tx
-            .select({ projectId: initiativeProject.projectId })
-            .from(initiativeProject)
-            .where(eq(initiativeProject.initiativeId, id));
-         const oldIds = old.map((l) => l.projectId);
-         await tx.delete(initiativeProject).where(eq(initiativeProject.initiativeId, id));
-         // Limpa a back-reference dos projetos que apontavam para esta initiative.
-         if (oldIds.length) {
-            await tx
-               .update(projectT)
-               .set({ initiativeId: null })
-               .where(and(inArray(projectT.id, oldIds), eq(projectT.initiativeId, id)));
-         }
+         await tx.update(projectT).set({ initiativeId: null }).where(eq(projectT.initiativeId, id));
          if (patch.projectIds.length) {
-            await tx
-               .insert(initiativeProject)
-               .values(patch.projectIds.map((projectId) => ({ initiativeId: id, projectId })))
-               .onConflictDoNothing();
             await tx
                .update(projectT)
                .set({ initiativeId: id })
@@ -289,8 +256,7 @@ export async function deleteInitiative(db: Db, id: string): Promise<boolean> {
    const existing = await db.select({ id: initT.id }).from(initT).where(eq(initT.id, id)).limit(1);
    if (existing.length === 0) return false;
    await db.transaction(async (tx) => {
-      await tx.delete(initiativeProject).where(eq(initiativeProject.initiativeId, id));
-      // project.initiativeId é RESTRICT e nullable: desvincula os projetos antes de deletar.
+      // project.initiativeId é nullable: desvincula os projetos antes de deletar.
       await tx.update(projectT).set({ initiativeId: null }).where(eq(projectT.initiativeId, id));
       await tx.delete(initT).where(eq(initT.id, id));
    });

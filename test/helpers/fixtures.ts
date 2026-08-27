@@ -7,7 +7,6 @@ import {
    project,
    cycle,
    initiative,
-   initiativeProject,
    savedView,
    issue,
 } from '@/db/schema';
@@ -131,7 +130,6 @@ export async function seedWorkspaceFixture(db: Db): Promise<WorkspaceFixture> {
          updatedAt: now,
       })
       .onConflictDoNothing();
-   await db.insert(initiativeProject).values({ initiativeId, projectId }).onConflictDoNothing();
 
    const cycleId = 'C-1';
    await db

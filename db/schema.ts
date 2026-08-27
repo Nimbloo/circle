@@ -212,19 +212,6 @@ export const projectLabel = pgTable(
    (t) => [primaryKey({ columns: [t.projectId, t.labelId] })]
 );
 
-export const initiativeProject = pgTable(
-   'initiative_project',
-   {
-      initiativeId: varchar('initiative_id', { length: 36 })
-         .notNull()
-         .references(() => initiative.id),
-      projectId: varchar('project_id', { length: 36 })
-         .notNull()
-         .references(() => project.id),
-   },
-   (t) => [primaryKey({ columns: [t.initiativeId, t.projectId] })]
-);
-
 // ─────────────────────────────────────────────────────────────
 // Cycles / Issues
 // ─────────────────────────────────────────────────────────────

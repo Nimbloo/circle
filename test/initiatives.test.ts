@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { makeTestDb } from './helpers/db';
 import { seedTeam } from './helpers/fixtures';
-import { initiativeProject } from '@/db/schema';
 import { createProject, getProject, updateProject } from '@/lib/api/projects';
 import {
    createInitiative,
@@ -147,10 +146,6 @@ describe('initiatives', () => {
          ...baseProj,
          initiativeId: init.id,
       });
-      await db
-         .insert(initiativeProject)
-         .values({ initiativeId: init.id, projectId: p.id })
-         .onConflictDoNothing();
 
       expect(await deleteInitiative(db, init.id)).toBe(true);
       expect(await getInitiative(db, init.id)).toBeNull();
