@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { ProjectProgressChart } from './project-progress-chart';
 import { ArrowRight, Calendar, Check, Compass, Plus, Tag, UserPlus } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 interface ProjectPropertiesPanelProps {
@@ -134,17 +134,29 @@ export function ProjectPropertiesPanel({
    // Edição de milestones só quando o pai passa projectId + onChanged (overview/activity).
    const canEditMilestones = Boolean(projectId && onChanged);
 
-   const handleAddMilestone = async () => {
-      if (!projectId) return;
-      const name = window.prompt('Milestone name');
-      if (!name?.trim()) return;
-      const targetDate = window.prompt('Target date (YYYY-MM-DD, optional)')?.trim() || undefined;
+   // Form inline de milestone (substitui os window.prompt nativos).
+   const [msOpen, setMsOpen] = useState(false);
+   const [msName, setMsName] = useState('');
+   const [msDate, setMsDate] = useState('');
+   const [msBusy, setMsBusy] = useState(false);
+
+   const submitMilestone = async () => {
+      if (!projectId || !msName.trim() || msBusy) return;
+      setMsBusy(true);
       try {
-         await api.projects.addMilestone(projectId, { name: name.trim(), targetDate });
+         await api.projects.addMilestone(projectId, {
+            name: msName.trim(),
+            targetDate: msDate || undefined,
+         });
          await onChanged?.();
+         setMsName('');
+         setMsDate('');
+         setMsOpen(false);
          toast.success('Milestone added');
       } catch {
          toast.error('Could not add the milestone');
+      } finally {
+         setMsBusy(false);
       }
    };
 
@@ -355,13 +367,47 @@ export function ProjectPropertiesPanel({
                {canEditMilestones && (
                   <button
                      type="button"
-                     onClick={handleAddMilestone}
+                     onClick={() => setMsOpen((v) => !v)}
                      className="text-muted-foreground hover:text-foreground transition-colors"
+                     aria-label="Add milestone"
                   >
                      <Plus className="size-3.5" />
                   </button>
                )}
             </div>
+            {msOpen && canEditMilestones && (
+               <div className="flex flex-col gap-2 mb-3 rounded-md border border-border/60 p-2">
+                  <input
+                     autoFocus
+                     value={msName}
+                     onChange={(e) => setMsName(e.target.value)}
+                     onKeyDown={(e) => {
+                        if (e.key === 'Enter') void submitMilestone();
+                        if (e.key === 'Escape') setMsOpen(false);
+                     }}
+                     placeholder="Milestone name"
+                     disabled={msBusy}
+                     className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                  />
+                  <div className="flex items-center gap-2">
+                     <input
+                        type="date"
+                        value={msDate}
+                        onChange={(e) => setMsDate(e.target.value)}
+                        disabled={msBusy}
+                        className="flex-1 bg-transparent text-xs text-muted-foreground outline-none"
+                     />
+                     <button
+                        type="button"
+                        onClick={() => void submitMilestone()}
+                        disabled={msBusy || !msName.trim()}
+                        className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground disabled:opacity-50"
+                     >
+                        Add
+                     </button>
+                  </div>
+               </div>
+            )}
             {detail.milestones.length === 0 ? (
                <p className="text-xs text-muted-foreground">
                   Add milestones to organize work within your project and break it into more

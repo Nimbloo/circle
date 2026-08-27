@@ -71,17 +71,26 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
       }
    };
 
-   const handleAddResource = async () => {
-      const label = window.prompt('Resource label');
-      if (!label?.trim()) return;
-      const url = window.prompt('Resource URL', 'https://');
-      if (!url?.trim()) return;
+   // Form inline de resource (substitui os window.prompt nativos).
+   const [resOpen, setResOpen] = useState(false);
+   const [resLabel, setResLabel] = useState('');
+   const [resUrl, setResUrl] = useState('https://');
+   const [resBusy, setResBusy] = useState(false);
+
+   const submitResource = async () => {
+      if (!resLabel.trim() || !resUrl.trim() || resBusy) return;
+      setResBusy(true);
       try {
-         await api.projects.addResource(projectId, { label: label.trim(), url: url.trim() });
+         await api.projects.addResource(projectId, { label: resLabel.trim(), url: resUrl.trim() });
          await reload();
+         setResLabel('');
+         setResUrl('https://');
+         setResOpen(false);
          toast.success('Resource added');
       } catch {
          toast.error('Could not add the resource');
+      } finally {
+         setResBusy(false);
       }
    };
 
@@ -227,13 +236,47 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                            ))}
                            <button
                               type="button"
-                              onClick={handleAddResource}
+                              onClick={() => setResOpen((v) => !v)}
                               aria-label="Add resource"
                               className="text-muted-foreground hover:text-foreground transition-colors"
                            >
                               <Plus className="size-3.5" />
                            </button>
                         </div>
+                        {resOpen && (
+                           <div className="mt-2 flex flex-col gap-2 rounded-md border border-border/60 p-2 max-w-md">
+                              <input
+                                 autoFocus
+                                 value={resLabel}
+                                 onChange={(e) => setResLabel(e.target.value)}
+                                 onKeyDown={(e) => e.key === 'Escape' && setResOpen(false)}
+                                 placeholder="Resource label"
+                                 disabled={resBusy}
+                                 className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                              />
+                              <div className="flex items-center gap-2">
+                                 <input
+                                    value={resUrl}
+                                    onChange={(e) => setResUrl(e.target.value)}
+                                    onKeyDown={(e) => {
+                                       if (e.key === 'Enter') void submitResource();
+                                       if (e.key === 'Escape') setResOpen(false);
+                                    }}
+                                    placeholder="https://"
+                                    disabled={resBusy}
+                                    className="flex-1 bg-transparent text-xs text-muted-foreground outline-none"
+                                 />
+                                 <button
+                                    type="button"
+                                    onClick={() => void submitResource()}
+                                    disabled={resBusy || !resLabel.trim() || !resUrl.trim()}
+                                    className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground disabled:opacity-50"
+                                 >
+                                    Add
+                                 </button>
+                              </div>
+                           </div>
+                        )}
                      </div>
                   </div>
 
