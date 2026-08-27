@@ -3,15 +3,19 @@ import { and, asc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    initiative as initT,
+   initiativeUpdate,
    project as projectT,
    priority as priorityT,
    health as healthT,
    status as statusT,
    appUser,
 } from '@/db/schema';
+import { desc } from 'drizzle-orm';
 import { ApiError } from './errors';
 import { publish } from './events';
+import { getOrCreateUser } from './users';
 import type { UserRef } from './issues';
+import type { ContentBlock } from '@/data/issue-details';
 
 type InitiativeRow = typeof initT.$inferSelect;
 type PriorityRow = typeof priorityT.$inferSelect;
@@ -268,4 +272,102 @@ export async function deleteInitiative(db: Db, id: string): Promise<boolean> {
    });
    publish({ entity: 'initiative', action: 'deleted', id });
    return true;
+}
+
+/* ── Initiative updates (check-ins) — health derivada do último update ──── */
+
+export type InitiativeUpdateHealth = 'on-track' | 'at-risk' | 'off-track';
+export const INITIATIVE_UPDATE_HEALTHS: readonly InitiativeUpdateHealth[] = [
+   'on-track',
+   'at-risk',
+   'off-track',
+];
+
+export interface InitiativeUpdateDto {
+   id: string;
+   author: UserRef | null;
+   health: InitiativeUpdateHealth;
+   blocks: ContentBlock[];
+   createdAt: string;
+}
+
+function safeBlocks(raw: string): ContentBlock[] {
+   try {
+      const v = JSON.parse(raw);
+      return Array.isArray(v) ? v : [];
+   } catch {
+      return [];
+   }
+}
+
+export async function listInitiativeUpdates(
+   db: Db,
+   initiativeId: string
+): Promise<InitiativeUpdateDto[]> {
+   const rows = await db
+      .select()
+      .from(initiativeUpdate)
+      .where(eq(initiativeUpdate.initiativeId, initiativeId))
+      .orderBy(desc(initiativeUpdate.createdAt));
+   const authorIds = [...new Set(rows.map((r) => r.authorId))];
+   const users = authorIds.length
+      ? await db.select().from(appUser).where(inArray(appUser.id, authorIds))
+      : [];
+   const byId = new Map(users.map((u) => [u.id, u]));
+   return rows.map((r) => {
+      const u = byId.get(r.authorId);
+      return {
+         id: r.id,
+         author: u
+            ? { id: u.id, name: u.name, email: u.email, slug: u.slug, avatarUrl: u.avatarUrl }
+            : null,
+         health: (r.health as InitiativeUpdateHealth) ?? 'on-track',
+         blocks: safeBlocks(r.blocks),
+         createdAt: r.createdAt.toISOString(),
+      };
+   });
+}
+
+export interface PostInitiativeUpdateInput {
+   health: InitiativeUpdateHealth;
+   blocks: ContentBlock[];
+}
+
+export async function postInitiativeUpdate(
+   db: Db,
+   initiativeId: string,
+   actorEmail: string,
+   input: PostInitiativeUpdateInput
+): Promise<InitiativeUpdateDto> {
+   const rows = await db.select().from(initT).where(eq(initT.id, initiativeId)).limit(1);
+   if (rows.length === 0) throw new ApiError(404, `Initiative '${initiativeId}' não encontrada`);
+   if (!INITIATIVE_UPDATE_HEALTHS.includes(input.health))
+      throw new ApiError(400, 'health inválido');
+   const author = await getOrCreateUser(db, actorEmail);
+   const id = randomUUID();
+   const now = new Date();
+   await db.insert(initiativeUpdate).values({
+      id,
+      initiativeId,
+      authorId: author.id,
+      health: input.health,
+      blocks: JSON.stringify(input.blocks ?? []),
+      createdAt: now,
+   });
+   // Health da initiative = health do último update (paridade Linear: derivada, não manual).
+   await db.update(initT).set({ healthId: input.health }).where(eq(initT.id, initiativeId));
+   publish({ entity: 'initiative', action: 'updated', id: initiativeId });
+   return {
+      id,
+      author: {
+         id: author.id,
+         name: author.name,
+         email: author.email,
+         slug: author.slug,
+         avatarUrl: author.avatarUrl,
+      },
+      health: input.health,
+      blocks: input.blocks ?? [],
+      createdAt: now.toISOString(),
+   };
 }

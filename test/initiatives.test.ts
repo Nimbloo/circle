@@ -8,7 +8,10 @@ import {
    getInitiative,
    updateInitiative,
    deleteInitiative,
+   postInitiativeUpdate,
+   listInitiativeUpdates,
 } from '@/lib/api/initiatives';
+import { seedUser } from './helpers/fixtures';
 
 async function setup() {
    const db = await makeTestDb();
@@ -19,6 +22,26 @@ async function setup() {
 const baseProj = { priorityId: 'high', healthId: 'on-track', teamId: 'CORE' as const };
 
 describe('initiatives', () => {
+   it('um initiative update (check-in) dita o health corrente + aparece no feed', async () => {
+      const db = await setup();
+      await seedUser(db, { name: 'Ana', email: 'ana@nimbloo.ai' });
+      const init = await createInitiative(db, {
+         slug: 'plat',
+         name: 'Plat',
+         priorityId: 'high',
+         healthId: 'on-track',
+      });
+      expect(init.health.id).toBe('on-track');
+
+      await postInitiativeUpdate(db, init.id, 'ana@nimbloo.ai', { health: 'off-track', blocks: [] });
+      expect((await getInitiative(db, init.id))?.health.id).toBe('off-track');
+
+      const feed = await listInitiativeUpdates(db, init.id);
+      expect(feed).toHaveLength(1);
+      expect(feed[0].health).toBe('off-track');
+      expect(feed[0].author?.email).toBe('ana@nimbloo.ai');
+   });
+
    it('creates an initiative with nested priority/health and project counts', async () => {
       const db = await setup();
       const p1 = await createProject(db, { name: 'P1', statusId: 'done', ...baseProj }); // completed

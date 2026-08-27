@@ -10,7 +10,13 @@ import { CalendarRange, ChevronDown, UserRound } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
+import { api } from '@/lib/client';
+import { cn } from '@/lib/utils';
+import { ContentBlocks } from '@/components/common/issues/details/content-blocks';
+import { textToBlocks } from '@/lib/adapters-issue-detail';
+import type { InitiativeUpdateDto } from '@/lib/api/initiatives';
 import { InitiativeProgressPanel } from './initiative-progress-panel';
 import { InitiativeStatusIcon } from './initiative-status-icon';
 import { InitiativeActions } from './initiative-actions';
@@ -254,11 +260,116 @@ function Overview({ initiative }: { initiative: Initiative }) {
 
 /* ------------------------------- activity tab ----------------------------- */
 
-function Activity() {
+const UPDATE_HEALTH_META: Record<string, { label: string; color: string }> = {
+   'on-track': { label: 'On track', color: '#4cb782' },
+   'at-risk': { label: 'At risk', color: '#f2c94c' },
+   'off-track': { label: 'Off track', color: '#eb5757' },
+};
+
+function Activity({ initiativeId }: { initiativeId: string }) {
+   const [updates, setUpdates] = useState<InitiativeUpdateDto[]>([]);
+   const [health, setHealth] = useState<'on-track' | 'at-risk' | 'off-track'>('on-track');
+   const [text, setText] = useState('');
+   const [posting, setPosting] = useState(false);
+   const reloadInitiative = useWorkspaceStore((s) => s.hydrate);
+
+   const reload = useCallback(async () => {
+      try {
+         setUpdates(await api.initiatives.updates(initiativeId));
+      } catch {
+         /* noop */
+      }
+   }, [initiativeId]);
+
+   useEffect(() => {
+      void reload();
+   }, [reload]);
+
+   const post = async () => {
+      if (!text.trim() || posting) return;
+      setPosting(true);
+      try {
+         await api.initiatives.postUpdate(initiativeId, { health, blocks: textToBlocks(text) });
+         setText('');
+         await reload();
+         // O health da initiative é derivado do último update → re-hidrata o header/list.
+         await reloadInitiative();
+      } catch {
+         toast.error('Could not post the update');
+      } finally {
+         setPosting(false);
+      }
+   };
+
    return (
-      <div className="max-w-2xl mx-auto px-8 py-10 flex flex-col gap-4 w-full">
+      <div className="max-w-2xl mx-auto px-8 py-10 flex flex-col gap-6 w-full">
          <h2 className="text-lg font-medium">Activity</h2>
-         <p className="text-sm text-muted-foreground">No activity recorded yet.</p>
+
+         <div className="rounded-lg border border-border/60 bg-container p-3 flex flex-col gap-3">
+            <div className="flex items-center gap-1.5">
+               {(['on-track', 'at-risk', 'off-track'] as const).map((h) => (
+                  <button
+                     key={h}
+                     type="button"
+                     onClick={() => setHealth(h)}
+                     className={cn(
+                        'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs',
+                        health === h ? 'border-border bg-accent' : 'border-transparent text-muted-foreground'
+                     )}
+                  >
+                     <span
+                        className="size-2 rounded-full"
+                        style={{ backgroundColor: UPDATE_HEALTH_META[h].color }}
+                     />
+                     {UPDATE_HEALTH_META[h].label}
+                  </button>
+               ))}
+            </div>
+            <textarea
+               value={text}
+               onChange={(e) => setText(e.target.value)}
+               placeholder="Share an update on this initiative…"
+               rows={3}
+               className="w-full resize-none bg-transparent text-[15px] outline-none placeholder:text-muted-foreground"
+            />
+            <div className="flex justify-end">
+               <button
+                  type="button"
+                  onClick={() => void post()}
+                  disabled={!text.trim() || posting}
+                  className="rounded bg-primary px-3 py-1 text-xs text-primary-foreground disabled:opacity-50"
+               >
+                  {posting ? 'Posting…' : 'Post update'}
+               </button>
+            </div>
+         </div>
+
+         {updates.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No updates yet.</p>
+         ) : (
+            <div className="flex flex-col gap-5">
+               {updates.map((u) => (
+                  <div key={u.id} className="flex flex-col gap-2">
+                     <div className="flex items-center gap-2 text-sm">
+                        <span className="font-medium">{u.author?.name ?? 'Someone'}</span>
+                        <span
+                           className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs text-muted-foreground"
+                        >
+                           <span
+                              className="size-2 rounded-full"
+                              style={{ backgroundColor: UPDATE_HEALTH_META[u.health]?.color }}
+                           />
+                           {UPDATE_HEALTH_META[u.health]?.label ?? u.health}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                           {new Date(u.createdAt).toLocaleDateString()}
+                        </span>
+                     </div>
+                     <ContentBlocks blocks={u.blocks} />
+                  </div>
+               ))}
+            </div>
+         )}
       </div>
    );
 }
@@ -292,7 +403,7 @@ export default function InitiativeDetails({ initiativeId }: { initiativeId: stri
       );
    }
 
-   if (tab === 'activity') return <Activity />;
+   if (tab === 'activity') return <Activity initiativeId={initiativeId} />;
    if (tab === 'projects') return <ProjectsTimeline groups={timelineGroups} />;
    return <Overview initiative={initiative} />;
 }

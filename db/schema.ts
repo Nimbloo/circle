@@ -166,6 +166,25 @@ export const initiative = pgTable('initiative', {
    createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
+/** Updates (check-ins) de uma initiative — health + corpo. Postar um update define o
+ * health corrente da initiative (paridade Linear: health é derivada do último update). */
+export const initiativeUpdate = pgTable(
+   'initiative_update',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      initiativeId: varchar('initiative_id', { length: 36 })
+         .notNull()
+         .references(() => initiative.id),
+      authorId: varchar('author_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      health: varchar('health', { length: 16 }).notNull(), // on-track|at-risk|off-track
+      blocks: text('blocks').notNull(),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_initiative_update_initiative').on(t.initiativeId)]
+);
+
 export const project = pgTable(
    'project',
    {

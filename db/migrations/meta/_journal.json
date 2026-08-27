@@ -183,6 +183,13 @@
       "when": 1787838599632,
       "tag": "0025_quiet_victor_mancha",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1787840147339,
+      "tag": "0026_perfect_silhouette",
+      "breakpoints": true
     }
   ]
 }

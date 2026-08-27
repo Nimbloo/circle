@@ -41,6 +41,8 @@ import type {
    InitiativeDto,
    CreateInitiativeInput,
    UpdateInitiativeInput,
+   InitiativeUpdateDto,
+   PostInitiativeUpdateInput,
 } from '@/lib/api/initiatives';
 import type { ViewDto, CreateViewInput, UpdateViewInput } from '@/lib/api/views';
 import type { NotificationDto } from '@/lib/api/notifications';
@@ -358,6 +360,9 @@ export const api = {
       update: (id: string, body: UpdateInitiativeInput) =>
          patch<InitiativeDto>(`/initiatives/${id}`, body),
       remove: (id: string) => del<{ deleted: boolean }>(`/initiatives/${id}`),
+      updates: (id: string) => get<InitiativeUpdateDto[]>(`/initiatives/${id}/updates`),
+      postUpdate: (id: string, body: PostInitiativeUpdateInput) =>
+         post<InitiativeUpdateDto>(`/initiatives/${id}/updates`, body),
    },
 
    views: {
