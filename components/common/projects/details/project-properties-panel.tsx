@@ -19,6 +19,7 @@ import {
    ChevronDown,
    ChevronUp,
    Compass,
+   Pencil,
    Plus,
    Tag,
    UserPlus,
@@ -168,6 +169,24 @@ export function ProjectPropertiesPanel({
          toast.error('Could not add the milestone');
       } finally {
          setMsBusy(false);
+      }
+   };
+
+   const [editingMs, setEditingMs] = useState<string | null>(null);
+   const [editMsName, setEditMsName] = useState('');
+
+   const submitRename = async (milestoneId: string) => {
+      if (!projectId || !editMsName.trim()) {
+         setEditingMs(null);
+         return;
+      }
+      try {
+         await api.projects.updateMilestone(projectId, milestoneId, { name: editMsName.trim() });
+         await onChanged?.();
+      } catch {
+         toast.error('Could not rename the milestone');
+      } finally {
+         setEditingMs(null);
       }
    };
 
@@ -471,19 +490,44 @@ export function ProjectPropertiesPanel({
                            >
                               {milestone.completed && <Check className="size-2.5 text-white" />}
                            </button>
-                           <span
-                              className={
-                                 milestone.completed
-                                    ? 'truncate line-through text-muted-foreground'
-                                    : 'truncate'
-                              }
-                           >
-                              {milestone.name}
-                           </span>
+                           {editingMs === milestone.id ? (
+                              <input
+                                 autoFocus
+                                 value={editMsName}
+                                 onChange={(e) => setEditMsName(e.target.value)}
+                                 onBlur={() => void submitRename(milestone.id)}
+                                 onKeyDown={(e) => {
+                                    if (e.key === 'Enter') void submitRename(milestone.id);
+                                    if (e.key === 'Escape') setEditingMs(null);
+                                 }}
+                                 className="min-w-0 flex-1 bg-transparent outline-none border-b border-border"
+                              />
+                           ) : (
+                              <span
+                                 className={
+                                    milestone.completed
+                                       ? 'truncate line-through text-muted-foreground'
+                                       : 'truncate'
+                                 }
+                              >
+                                 {milestone.name}
+                              </span>
+                           )}
                         </span>
                         <span className="flex items-center gap-1 shrink-0">
                            {canEditMilestones && (
                               <span className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground">
+                                 <button
+                                    type="button"
+                                    aria-label="Rename milestone"
+                                    onClick={() => {
+                                       setEditMsName(milestone.name);
+                                       setEditingMs(milestone.id);
+                                    }}
+                                    className="hover:text-foreground"
+                                 >
+                                    <Pencil className="size-3" />
+                                 </button>
                                  <button
                                     type="button"
                                     aria-label="Move up"
