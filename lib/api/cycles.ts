@@ -128,19 +128,21 @@ export async function rolloverCyclesForTeam(db: Db, teamId: string): Promise<voi
       .limit(1);
 
    const statuses = await db.select().from(statusT);
-   const doneIds = statuses
-      .filter((s) => s.category === 'completed' || s.category === 'canceled')
-      .map((s) => s.id);
+   // Paridade Linear: só issues "em aberto" (unstarted/started) rolam pro próximo ciclo.
+   // Backlog, triage, completed e canceled NÃO são carregadas (a doc do Linear exclui
+   // explicitamente backlog+triage, além de completed/canceled).
+   const noCarry = new Set(['backlog', 'triage', 'completed', 'canceled']);
+   const excludeIds = statuses.filter((s) => noCarry.has(s.category)).map((s) => s.id);
 
    if (next) {
-      // carrega as incompletas do current pro próximo cycle
+      // carrega as issues em aberto do current pro próximo cycle
       await db
          .update(issueT)
          .set({ cycleId: next.id, updatedAt: new Date() })
          .where(
             and(
                eq(issueT.cycleId, current.id),
-               doneIds.length ? notInArray(issueT.statusId, doneIds) : sql`true`
+               excludeIds.length ? notInArray(issueT.statusId, excludeIds) : sql`true`
             )
          );
    }

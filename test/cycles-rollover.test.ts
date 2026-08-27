@@ -48,7 +48,7 @@ describe('cycles auto-rollover (#24)', () => {
             id: 'i1',
             identifier: 'CORE-1',
             teamId: 'CORE',
-            title: 'incompleta',
+            title: 'em aberto (started)',
             statusId: 'in-progress',
             priorityId: 'low',
             rank: 'a',
@@ -64,6 +64,26 @@ describe('cycles auto-rollover (#24)', () => {
             rank: 'b',
             cycleId: 'c1',
          },
+         {
+            id: 'i3',
+            identifier: 'CORE-3',
+            teamId: 'CORE',
+            title: 'backlog (não rola — paridade Linear)',
+            statusId: 'backlog',
+            priorityId: 'low',
+            rank: 'c',
+            cycleId: 'c1',
+         },
+         {
+            id: 'i4',
+            identifier: 'CORE-4',
+            teamId: 'CORE',
+            title: 'todo (unstarted, rola)',
+            statusId: 'to-do',
+            priorityId: 'low',
+            rank: 'd',
+            cycleId: 'c1',
+         },
       ]);
 
       await rolloverCyclesForTeam(db, 'CORE');
@@ -73,10 +93,13 @@ describe('cycles auto-rollover (#24)', () => {
       expect(c1.status).toBe('completed');
       expect(c2.status).toBe('current'); // promovido (startDate <= hoje)
 
-      const [i1] = await db.select().from(issue).where(eq(issue.id, 'i1'));
-      const [i2] = await db.select().from(issue).where(eq(issue.id, 'i2'));
-      expect(i1.cycleId).toBe('c2'); // incompleta migrou pro próximo
-      expect(i2.cycleId).toBe('c1'); // concluída ficou no cycle fechado
+      const byId = Object.fromEntries(
+         (await db.select().from(issue)).map((i) => [i.id, i.cycleId])
+      );
+      expect(byId['i1']).toBe('c2'); // started migrou pro próximo
+      expect(byId['i4']).toBe('c2'); // unstarted (todo) migrou
+      expect(byId['i2']).toBe('c1'); // concluída ficou no cycle fechado
+      expect(byId['i3']).toBe('c1'); // backlog NÃO rola (Linear exclui)
    });
 
    it('não faz nada se o current ainda está em andamento', async () => {

@@ -6,7 +6,7 @@ import { listProjects, type ProjectDto } from './projects';
 import { listMembers, type MemberDto } from './members';
 import { listInitiatives, type InitiativeDto } from './initiatives';
 import { listViews, type ViewDto } from './views';
-import { listCyclesForTeams, type CycleDto } from './cycles';
+import { listCyclesForTeams, rolloverCyclesForTeam, type CycleDto } from './cycles';
 import { getMe, type MeDto } from './users';
 
 export interface TeamFull extends TeamDto {
@@ -77,9 +77,15 @@ export async function bootstrapWorkspace(db: Db, email: string): Promise<Workspa
       projects: projectsByTeam.get(t.id) ?? [],
    }));
 
+   // Auto-rollover lazy (#24): o app não tem scheduler, então o bootstrap fecha os
+   // cycles vencidos e migra as issues em aberto ANTES de listar. Idempotente; roda
+   // por time em paralelo. (Sem isto o rollover ficava morto — nenhum outro caminho
+   // da UI o dispara.)
+   const teamIds = teams.map((t) => t.id);
+   await Promise.all(teamIds.map((id) => rolloverCyclesForTeam(db, id)));
+
    // cycles de todos os times — 2 queries no total (era N+1: 1 chamada por time,
    // cada uma re-escaneando a tabela status).
-   const teamIds = teams.map((t) => t.id);
    const cycles: CycleDto[] = await listCyclesForTeams(db, teamIds);
 
    return {
