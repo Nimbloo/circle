@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { eq, inArray, count, and } from 'drizzle-orm';
+import { eq, inArray, notInArray, count, and } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    project as projectT,
@@ -174,23 +174,26 @@ const CLOSED_CATEGORIES = new Set(['completed', 'canceled']);
 
 export async function listProjects(db: Db, opts: ListProjectsOptions = {}): Promise<ProjectDto[]> {
    const maps = await loadMaps(db);
-   const rows = await db.select().from(projectT);
-   let dtos = await assemble(db, rows, maps);
-
+   // Filtros empurrados pro SQL (colunas diretas + categoria closed via catálogo),
+   // em vez de carregar todos os projetos e filtrar em JS.
+   const conds = [];
+   if (opts.health?.length) conds.push(inArray(projectT.healthId, opts.health));
+   if (opts.priority?.length) conds.push(inArray(projectT.priorityId, opts.priority));
+   if (opts.team) conds.push(eq(projectT.teamId, opts.team));
+   if (opts.initiative) conds.push(eq(projectT.initiativeId, opts.initiative));
    if (opts.tab === 'active' || opts.includeClosed === false) {
-      dtos = dtos.filter((d) => !CLOSED_CATEGORIES.has(d.status.category));
+      const closedIds = [...maps.statuses.values()]
+         .filter((s) => CLOSED_CATEGORIES.has(s.category))
+         .map((s) => s.id);
+      if (closedIds.length) conds.push(notInArray(projectT.statusId, closedIds));
    }
-   if (opts.health?.length) {
-      const set = new Set(opts.health);
-      dtos = dtos.filter((d) => set.has(d.health.id));
-   }
-   if (opts.priority?.length) {
-      const set = new Set(opts.priority);
-      dtos = dtos.filter((d) => set.has(d.priority.id));
-   }
-   if (opts.team) dtos = dtos.filter((d) => d.teamId === opts.team);
-   if (opts.initiative) dtos = dtos.filter((d) => d.initiativeId === opts.initiative);
+   const rows = await db
+      .select()
+      .from(projectT)
+      .where(conds.length ? and(...conds) : undefined);
+   const dtos = await assemble(db, rows, maps);
 
+   // Ordenação em JS: 'status' usa status.position (catálogo já montado no dto).
    const dir = opts.dir === 'desc' ? -1 : 1;
    const by = opts.sort ?? 'title';
    dtos.sort((a, b) => {

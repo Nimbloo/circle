@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    initiative as initT,
@@ -135,13 +135,19 @@ export async function listInitiatives(
    opts: ListInitiativesOptions = {}
 ): Promise<InitiativeDto[]> {
    const maps = await loadMaps(db);
-   const rows = await db.select().from(initT);
-   let dtos = await assemble(db, rows, maps);
-   if (opts.status?.length) dtos = dtos.filter((d) => opts.status!.includes(d.status));
-   if (opts.priority?.length) dtos = dtos.filter((d) => opts.priority!.includes(d.priority.id));
-   if (opts.health?.length) dtos = dtos.filter((d) => opts.health!.includes(d.health.id));
-   if (opts.owner?.length) dtos = dtos.filter((d) => d.owner && opts.owner!.includes(d.owner.id));
-   return dtos.sort((a, b) => a.name.localeCompare(b.name));
+   // Filtros empurrados pro SQL (colunas diretas da initiative) + ordenação no banco,
+   // em vez de carregar tudo e filtrar/ordenar em JS.
+   const conds = [];
+   if (opts.status?.length) conds.push(inArray(initT.status, opts.status));
+   if (opts.priority?.length) conds.push(inArray(initT.priorityId, opts.priority));
+   if (opts.health?.length) conds.push(inArray(initT.healthId, opts.health));
+   if (opts.owner?.length) conds.push(inArray(initT.ownerId, opts.owner));
+   const rows = await db
+      .select()
+      .from(initT)
+      .where(conds.length ? and(...conds) : undefined)
+      .orderBy(asc(initT.name));
+   return assemble(db, rows, maps);
 }
 
 export async function getInitiative(db: Db, id: string): Promise<InitiativeDto | null> {
