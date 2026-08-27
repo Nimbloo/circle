@@ -304,13 +304,12 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
 
    /* ------------------------------- Board ------------------------------- */
    if (isViewTypeGrid) {
-      // With filters on, columns fully emptied by them move to "Hidden columns".
-      const boardGroups = hasActiveFilters
-         ? groups.filter((entry) => entry.issues.length > 0)
-         : groups.filter((entry) => showEmptyGroups || entry.issues.length > 0);
-      const hiddenGroups = hasActiveFilters
-         ? groups.filter((entry) => entry.issues.length === 0)
-         : [];
+      // Padrão Linear: TODA coluna vazia (por filtro OU naturalmente sem issues)
+      // colapsa em "Hidden columns" — a menos que "Show empty groups" esteja ligado.
+      const boardGroups = groups.filter((entry) => showEmptyGroups || entry.issues.length > 0);
+      const hiddenGroups = showEmptyGroups
+         ? []
+         : groups.filter((entry) => entry.issues.length === 0);
 
       return (
          <DndProvider backend={HTML5Backend}>
