@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { makeTestDb } from './helpers/db';
+import { seedTeam } from './helpers/fixtures';
+import { issue, issuePrLink } from '@/db/schema';
 import { syncFromGitHub, listReviews, getReview } from '@/lib/api/reviews';
 
 const FAKE_PRS = [
@@ -104,6 +107,37 @@ describe('reviews (GitHub ingestion)', () => {
       expect(second.items).toHaveLength(10);
       const firstIds = new Set(first.items.map((r) => r.id));
       expect(second.items.every((r) => !firstIds.has(r.id))).toBe(true); // sem overlap
+   });
+
+   it('auto-linka PR↔issue (issue_pr_link) quando o título resolve um identifier real', async () => {
+      const db = await makeTestDb();
+      await seedTeam(db, 'LNUI');
+      await db.insert(issue).values({
+         id: 'iss-701',
+         identifier: 'LNUI-701', // casa com o título do PR 42
+         teamId: 'LNUI',
+         title: 'Combobox perde foco',
+         statusId: 'to-do',
+         priorityId: 'low',
+         rank: 'a',
+      });
+
+      await syncFromGitHub(db, { repos: ['x/y'], token: 'fake', fetchImpl: fakeFetch });
+      const links = await db.select().from(issuePrLink).where(eq(issuePrLink.issueId, 'iss-701'));
+      expect(links).toHaveLength(1);
+      expect(links[0].title).toContain('combobox');
+      expect(links[0].status).toBe('open');
+
+      // re-sync não duplica (id md5 determinístico)
+      await syncFromGitHub(db, { repos: ['x/y'], token: 'fake', fetchImpl: fakeFetch });
+      const after = await db.select().from(issuePrLink).where(eq(issuePrLink.issueId, 'iss-701'));
+      expect(after).toHaveLength(1);
+   });
+
+   it('não cria link quando o identifier não corresponde a issue nenhuma', async () => {
+      const db = await makeTestDb();
+      await syncFromGitHub(db, { repos: ['x/y'], token: 'fake', fetchImpl: fakeFetch });
+      expect(await db.select().from(issuePrLink)).toHaveLength(0);
    });
 
    it('gets a review by id and filters by status', async () => {

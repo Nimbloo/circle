@@ -1,7 +1,13 @@
-import { count, desc, eq } from 'drizzle-orm';
+import { createHash } from 'node:crypto';
+import { count, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '@/db';
-import { review } from '@/db/schema';
+import { review, issue as issueT, issuePrLink } from '@/db/schema';
 import { ApiError } from './errors';
+
+/** Status do review (open|merged|closed) → status do link de PR na issue (open|merged|draft). */
+function prLinkStatus(reviewStatus: string): string {
+   return reviewStatus === 'merged' ? 'merged' : 'open';
+}
 
 type ReviewRow = typeof review.$inferSelect;
 
@@ -240,6 +246,10 @@ async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike)
    }
 
    let count = 0;
+   // Auto-link PR↔issue (paridade Linear): PRs cujo título referencia um identifier
+   // (ex.: CORE-123) viram linha em issue_pr_link, populando o painel "PR links" da
+   // issue. Coletado no loop e resolvido em batch no fim (1 query por identifier set).
+   const linkByIdentifier = new Map<string, { title: string; status: string }>();
    for (const pr of prs) {
       const resolvesId = parseResolves(pr.title);
       const detail = detailByNumber.get(pr.number);
@@ -288,12 +298,48 @@ async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike)
       try {
          await db.insert(review).values(row).onConflictDoUpdate({ target: review.id, set });
          count += 1;
+         if (resolvesId) linkByIdentifier.set(resolvesId, { title: row.title, status: row.status });
       } catch (e) {
          // Um PR com dado ruim NÃO aborta o sync do repo — loga e segue.
          console.warn(`[circle] review upsert falhou (${row.id}):`, (e as Error).message);
       }
    }
+
+   // Resolve os identifiers → issues reais (batch) e faz upsert dos links (id md5
+   // determinístico = idempotente no re-sync). Identifier sem issue correspondente é ignorado.
+   await linkPrsToIssues(db, repo, linkByIdentifier);
    return count;
+}
+
+/** Upsert idempotente de issue_pr_link para os identifiers que casam com issues reais. */
+async function linkPrsToIssues(
+   db: Db,
+   repo: string,
+   linkByIdentifier: Map<string, { title: string; status: string }>
+): Promise<void> {
+   if (linkByIdentifier.size === 0) return;
+   const identifiers = [...linkByIdentifier.keys()];
+   const issues = await db
+      .select({ id: issueT.id, identifier: issueT.identifier })
+      .from(issueT)
+      .where(inArray(issueT.identifier, identifiers));
+   for (const iss of issues) {
+      const link = linkByIdentifier.get(iss.identifier);
+      if (!link) continue;
+      // id estável por (issue, repo, PR-título-normalizado) → re-sync atualiza, não duplica.
+      const id = createHash('md5').update(`${iss.id}|${repo}|${link.title}`).digest('hex');
+      try {
+         await db
+            .insert(issuePrLink)
+            .values({ id, issueId: iss.id, title: link.title, status: prLinkStatus(link.status) })
+            .onConflictDoUpdate({
+               target: issuePrLink.id,
+               set: { title: link.title, status: prLinkStatus(link.status) },
+            });
+      } catch (e) {
+         console.warn(`[circle] pr-link upsert falhou (${iss.identifier}):`, (e as Error).message);
+      }
+   }
 }
 
 /** Trunca uma string ao limite da coluna (null passa direto). Evita varchar overflow. */
