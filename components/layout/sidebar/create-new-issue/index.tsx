@@ -18,6 +18,7 @@ import { AssigneeSelector } from './assignee-selector';
 import { ProjectSelector } from './project-selector';
 import { LabelSelector } from './label-selector';
 import { EstimateSelector } from './estimate-selector';
+import { DueDateSelector } from './due-date-selector';
 import { TemplateSelector } from './template-selector';
 import { LexoRank } from '@/lib/utils';
 import { DialogTitle } from '@radix-ui/react-dialog';
@@ -182,6 +183,12 @@ export function CreateNewIssue() {
                      estimate={addIssueForm.estimate}
                      onChange={(newEstimate) =>
                         setAddIssueForm({ ...addIssueForm, estimate: newEstimate })
+                     }
+                  />
+                  <DueDateSelector
+                     dueDate={addIssueForm.dueDate}
+                     onChange={(newDueDate) =>
+                        setAddIssueForm({ ...addIssueForm, dueDate: newDueDate })
                      }
                   />
                </div>
