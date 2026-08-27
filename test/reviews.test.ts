@@ -128,6 +128,10 @@ describe('reviews (GitHub ingestion)', () => {
       expect(links[0].title).toContain('combobox');
       expect(links[0].status).toBe('open');
 
+      // resolvesTitle passa a ser o título da ISSUE (era o do PR, enganoso)
+      const rv = await getReview(db, 'x/y#42');
+      expect(rv?.resolves?.title).toBe('Combobox perde foco');
+
       // re-sync não duplica (id md5 determinístico)
       await syncFromGitHub(db, { repos: ['x/y'], token: 'fake', fetchImpl: fakeFetch });
       const after = await db.select().from(issuePrLink).where(eq(issuePrLink.issueId, 'iss-701'));

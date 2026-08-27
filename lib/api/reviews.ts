@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { count, desc, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { review, issue as issueT, issuePrLink } from '@/db/schema';
 import { ApiError } from './errors';
@@ -320,7 +320,7 @@ async function linkPrsToIssues(
    if (linkByIdentifier.size === 0) return;
    const identifiers = [...linkByIdentifier.keys()];
    const issues = await db
-      .select({ id: issueT.id, identifier: issueT.identifier })
+      .select({ id: issueT.id, identifier: issueT.identifier, title: issueT.title })
       .from(issueT)
       .where(inArray(issueT.identifier, identifiers));
    for (const iss of issues) {
@@ -336,6 +336,12 @@ async function linkPrsToIssues(
                target: issuePrLink.id,
                set: { title: link.title, status: prLinkStatus(link.status) },
             });
+         // resolvesTitle correto: o título da ISSUE do Circle (era o título do PR, enganoso
+         // — exibido como "Ticket" no overview). Corrige os reviews deste repo que a resolvem.
+         await db
+            .update(review)
+            .set({ resolvesTitle: iss.title })
+            .where(and(eq(review.repo, repo), eq(review.resolvesIdentifier, iss.identifier)));
       } catch (e) {
          console.warn(`[circle] pr-link upsert falhou (${iss.identifier}):`, (e as Error).message);
       }
