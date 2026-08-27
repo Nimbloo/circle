@@ -20,6 +20,10 @@ interface NotificationsState {
    // Data
    notifications: InboxNotification[];
    selectedNotification: InboxNotification | undefined;
+   // Contagem autoritativa de não-lidas (servidor) — a lista hidratada é capada
+   // (DEFAULT_INBOX_LIMIT) e descarta itens sem issue conhecida, então contar
+   // localmente subconta. Mantida em sincronia por deltas otimistas nas ações.
+   unreadCount: number;
 
    // Hydration
    hydrate: () => Promise<void>;
@@ -84,15 +88,19 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
    // Initial state — vazio; populado via hydrate() a partir da API.
    notifications: [],
    selectedNotification: undefined,
+   unreadCount: 0,
 
    hydrate: async () => {
       try {
-         const dtos = await api.inbox.list();
+         const [dtos, countRes] = await Promise.all([
+            api.inbox.list(),
+            api.inbox.unreadCount().catch(() => ({ count: 0 })),
+         ]);
          const issueById = new Map(useIssuesStore.getState().issues.map((i) => [i.id, i]));
          const items = dtos
             .map((dto) => adaptNotification(dto, issueById))
             .filter((item): item is InboxNotification => item !== null);
-         set({ notifications: items });
+         set({ notifications: items, unreadCount: countRes.count });
       } catch {
          // Degradação graciosa — mantém o estado atual se a API falhar.
       }
@@ -107,7 +115,9 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       const snapshot = {
          notifications: get().notifications,
          selectedNotification: get().selectedNotification,
+         unreadCount: get().unreadCount,
       };
+      const wasUnread = get().notifications.some((n) => n.id === id && !n.read);
       set((state) => ({
          notifications: state.notifications.map((notification) =>
             notification.id === id ? { ...notification, read: true } : notification
@@ -116,6 +126,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
             state.selectedNotification?.id === id
                ? { ...state.selectedNotification, read: true }
                : state.selectedNotification,
+         unreadCount: wasUnread ? Math.max(0, state.unreadCount - 1) : state.unreadCount,
       }));
       void api.inbox.setRead(id, true).catch(() => {
          set(snapshot);
@@ -127,6 +138,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       const snapshot = {
          notifications: get().notifications,
          selectedNotification: get().selectedNotification,
+         unreadCount: get().unreadCount,
       };
       set((state) => ({
          notifications: state.notifications.map((notification) => ({
@@ -136,6 +148,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
          selectedNotification: state.selectedNotification
             ? { ...state.selectedNotification, read: true }
             : undefined,
+         unreadCount: 0,
       }));
       void api.inbox.readAll().catch(() => {
          set(snapshot);
@@ -147,7 +160,9 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       const snapshot = {
          notifications: get().notifications,
          selectedNotification: get().selectedNotification,
+         unreadCount: get().unreadCount,
       };
+      const wasRead = get().notifications.some((n) => n.id === id && n.read);
       set((state) => ({
          notifications: state.notifications.map((notification) =>
             notification.id === id ? { ...notification, read: false } : notification
@@ -156,6 +171,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
             state.selectedNotification?.id === id
                ? { ...state.selectedNotification, read: false }
                : state.selectedNotification,
+         unreadCount: wasRead ? state.unreadCount + 1 : state.unreadCount,
       }));
       void api.inbox.setRead(id, false).catch(() => {
          set(snapshot);
@@ -186,6 +202,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
    },
 
    getUnreadCount: () => {
-      return get().notifications.filter((notification) => !notification.read).length;
+      // Contagem autoritativa do servidor (não a da lista hidratada, que é capada).
+      return get().unreadCount;
    },
 }));
