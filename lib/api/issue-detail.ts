@@ -9,6 +9,7 @@ import {
    comment as commentT,
    commentReaction,
    activityEvent,
+   issueSubscription,
    appUser,
 } from '@/db/schema';
 import { getOrCreateUser } from './users';
@@ -263,6 +264,12 @@ export async function addComment(
       ? await db.select().from(appUser).where(inArray(appUser.slug, slugs))
       : [];
    const mentionedIds = new Set(mentioned.filter((u) => u.id !== author.id).map((u) => u.id));
+
+   // auto-subscribe (Linear-style): quem comenta e quem é mencionado passa a seguir a issue
+   await db
+      .insert(issueSubscription)
+      .values([author.id, ...mentionedIds].map((userId) => ({ issueId, userId })))
+      .onConflictDoNothing();
 
    const notifications: Promise<void>[] = [...mentionedIds].map((recipientId) =>
       dispatchNotification(db, {

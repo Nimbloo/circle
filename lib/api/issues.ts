@@ -5,6 +5,7 @@ import {
    issue,
    issueLabel,
    issueContent,
+   issueSubscription,
    activityEvent,
    issueRelation,
    issuePrLink,
@@ -409,6 +410,14 @@ export async function createIssue(
          text: 'created the issue',
          createdAt: now,
       });
+
+      // auto-subscribe (Linear-style): criador + assignee inicial
+      const subscribers = new Set<string>([actor.id]);
+      if (input.assigneeId) subscribers.add(input.assigneeId);
+      await tx
+         .insert(issueSubscription)
+         .values([...subscribers].map((userId) => ({ issueId: id, userId })))
+         .onConflictDoNothing();
    });
 
    publish({ entity: 'issue', action: 'created', id, actorEmail });
@@ -483,6 +492,11 @@ export async function updateIssue(
       );
    }
 
+   // auto-subscribe do novo responsável (Linear-style; inclui auto-atribuição)
+   if (patch.assigneeId !== undefined && patch.assigneeId && patch.assigneeId !== prev.assigneeId) {
+      await subscribeToIssue(db, id, patch.assigneeId);
+   }
+
    // Notifica o novo responsável (in-app + Slack/Email best-effort)
    if (
       patch.assigneeId !== undefined &&
@@ -531,11 +545,33 @@ export async function deleteIssue(db: Db, id: string): Promise<boolean> {
       await tx.delete(notification).where(eq(notification.issueId, id));
       await tx.delete(activityEvent).where(eq(activityEvent.issueId, id));
       await tx.delete(issueLabel).where(eq(issueLabel.issueId, id));
+      await tx.delete(issueSubscription).where(eq(issueSubscription.issueId, id));
       await tx.delete(issueContent).where(eq(issueContent.issueId, id));
       await tx.delete(issue).where(eq(issue.id, id));
    });
    publish({ entity: 'issue', action: 'deleted', id });
    return true;
+}
+
+/** Assina uma issue (idempotente) — usado no auto-subscribe e no toggle manual. */
+export async function subscribeToIssue(db: Db, id: string, userId: string): Promise<void> {
+   await db.insert(issueSubscription).values({ issueId: id, userId }).onConflictDoNothing();
+}
+
+/** Cancela a assinatura de uma issue. */
+export async function unsubscribeFromIssue(db: Db, id: string, userId: string): Promise<void> {
+   await db
+      .delete(issueSubscription)
+      .where(and(eq(issueSubscription.issueId, id), eq(issueSubscription.userId, userId)));
+}
+
+/** Ids das issues assinadas pelo usuário (alimenta a aba Subscribed do My issues). */
+export async function listSubscribedIssueIds(db: Db, userId: string): Promise<string[]> {
+   const rows = await db
+      .select({ issueId: issueSubscription.issueId })
+      .from(issueSubscription)
+      .where(eq(issueSubscription.userId, userId));
+   return rows.map((r) => r.issueId);
 }
 
 /** Reordena via lexorank entre dois vizinhos (drag-and-drop). */

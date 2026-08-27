@@ -2,7 +2,7 @@ import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import type { Db } from '@/db';
-import { appUser, teamMember } from '@/db/schema';
+import { appUser, teamMember, issueSubscription } from '@/db/schema';
 import { isAdmin } from './auth';
 import { ApiError } from './errors';
 
@@ -38,6 +38,7 @@ export interface MeDto {
    role: string;
    admin: boolean;
    teamIds: string[];
+   subscribedIssueIds: string[];
 }
 
 /** Usuário corrente (do e-mail da sessão) + times + flag admin. */
@@ -47,6 +48,10 @@ export async function getMe(db: Db, email: string): Promise<MeDto> {
       .select({ teamId: teamMember.teamId })
       .from(teamMember)
       .where(eq(teamMember.userId, user.id));
+   const subscriptions = await db
+      .select({ issueId: issueSubscription.issueId })
+      .from(issueSubscription)
+      .where(eq(issueSubscription.userId, user.id));
    return {
       id: user.id,
       slug: user.slug,
@@ -56,6 +61,7 @@ export async function getMe(db: Db, email: string): Promise<MeDto> {
       role: user.role,
       admin: await isAdmin(user.email, db),
       teamIds: teams.map((t) => t.teamId),
+      subscribedIssueIds: subscriptions.map((s) => s.issueId),
    };
 }
 

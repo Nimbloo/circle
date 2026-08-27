@@ -32,12 +32,17 @@ export default function MyIssues() {
    const hydrate = useIssuesStore((s) => s.hydrate);
    const { openPanel } = useRightPanelStore();
    const meId = useWorkspaceStore((s) => s.me?.id);
+   const subscribedIssueIds = useWorkspaceStore((s) => s.me?.subscribedIssueIds);
    const displayOrderedStatus = useDisplayOrderedStatuses();
 
    const isSearching = isSearchOpen && searchQuery.trim() !== '';
    const isViewTypeGrid = viewType === 'grid';
 
-   const scopedIssues = useMemo(() => scopeMyIssues(issues, tab, meId), [issues, tab, meId]);
+   const subscribedIds = useMemo(() => new Set(subscribedIssueIds ?? []), [subscribedIssueIds]);
+   const scopedIssues = useMemo(
+      () => scopeMyIssues(issues, tab, meId, subscribedIds),
+      [issues, tab, meId, subscribedIds]
+   );
 
    const displayedIssues = useMemo(
       () => applyIssueFilters(scopedIssues, filters),

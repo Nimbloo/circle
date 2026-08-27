@@ -19,14 +19,17 @@ export function useMyIssuesTab() {
 }
 
 const isCreatedByMe = (issue: Issue, meId: string): boolean => issue.createdById === meId;
-const isSubscribed = (issue: Issue, meId: string): boolean =>
-   issue.assignee?.id === meId || isCreatedByMe(issue, meId);
 
-/** Issues shown by each My issues tab. `meId` = usuário corrente (SSO). */
+/**
+ * Issues shown by each My issues tab. `meId` = usuário corrente (SSO);
+ * `subscribedIds` = assinaturas REAIS (issue_subscription), não mais uma heurística.
+ * A aba "Activity" tem feed próprio (activity-feed), não passa por aqui.
+ */
 export function scopeMyIssues(
    issues: Issue[],
    tab: MyIssuesTab,
-   meId: string | undefined
+   meId: string | undefined,
+   subscribedIds: ReadonlySet<string>
 ): Issue[] {
    if (!meId) return [];
    switch (tab) {
@@ -35,13 +38,8 @@ export function scopeMyIssues(
       case 'created':
          return issues.filter((issue) => isCreatedByMe(issue, meId));
       case 'subscribed':
-         return issues.filter((issue) => isSubscribed(issue, meId));
       case 'activity':
       default:
-         // "Activity" = everything I touch, most recent first.
-         return issues
-            .filter((issue) => isSubscribed(issue, meId))
-            .slice()
-            .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+         return issues.filter((issue) => subscribedIds.has(issue.id));
    }
 }

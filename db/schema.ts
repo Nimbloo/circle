@@ -328,6 +328,26 @@ export const issuePrLink = pgTable('issue_pr_link', {
    status: varchar('status', { length: 16 }).notNull(), // open|merged|draft
 });
 
+// Assinatura de issue (Linear-style): quem recebe atualizações e vê a issue na
+// aba "Subscribed"/"Activity" do My issues. Auto-assinada em create/assign/comment/
+// mention; PK composta (uma linha por issue+user).
+export const issueSubscription = pgTable(
+   'issue_subscription',
+   {
+      issueId: varchar('issue_id', { length: 36 })
+         .notNull()
+         .references(() => issue.id),
+      userId: varchar('user_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [
+      primaryKey({ columns: [t.issueId, t.userId] }),
+      index('idx_issue_subscription_user').on(t.userId),
+   ]
+);
+
 export const comment = pgTable(
    'comment',
    {
