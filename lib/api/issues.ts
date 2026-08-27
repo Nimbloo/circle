@@ -161,7 +161,21 @@ function buildWhere(
    if (opts.createdByMe && meId) conds.push(eq(issue.createdById, meId));
    if (opts.q) {
       const like = `%${opts.q}%`;
-      conds.push(or(ilike(issue.title, like), ilike(issue.identifier, like)) as SQL);
+      // casa título, identifier E o corpo (issue_content.description) — a busca
+      // client-side só alcança título/identifier; a descrição só via servidor.
+      conds.push(
+         or(
+            ilike(issue.title, like),
+            ilike(issue.identifier, like),
+            inArray(
+               issue.id,
+               db
+                  .select({ id: issueContent.issueId })
+                  .from(issueContent)
+                  .where(ilike(issueContent.description, like))
+            )
+         ) as SQL
+      );
    }
    return conds.length ? and(...conds) : undefined;
 }

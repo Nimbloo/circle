@@ -15,6 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useLabels, usePriorities, useStatuses } from '@/store/catalog-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
 import { useIssuesStore } from '@/store/issues-store';
+import { api } from '@/lib/client';
 import { useShallow } from 'zustand/react/shallow';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import {
@@ -111,24 +112,56 @@ export function CommandPalette() {
 
    const orgId = pathname.split('/')[1] || 'nimbloo';
 
+   // Busca server-side (best-effort, debounced): o servidor casa também a DESCRIÇÃO
+   // da issue (corpo), que a busca client-side não alcança. Guarda os ids casados;
+   // resolvidos contra o store (que tem todas as issues) para render consistente.
+   const [serverIssueIds, setServerIssueIds] = useState<Set<string>>(new Set());
+   useEffect(() => {
+      const q = query.trim();
+      if (q.length < 2) {
+         setServerIssueIds(new Set());
+         return;
+      }
+      let active = true;
+      const t = setTimeout(() => {
+         api.issues
+            .list({ q })
+            .then((dtos) => {
+               if (active) setServerIssueIds(new Set(dtos.map((d) => d.id)));
+            })
+            .catch(() => {
+               // best-effort: mantém só a busca client-side se o servidor falhar
+            });
+      }, 250);
+      return () => {
+         active = false;
+         clearTimeout(t);
+      };
+   }, [query]);
+
    // Busca de entidades no ⌘K (padrão Linear): quando o usuário digita, além dos
    // comandos estáticos, mostra issues/projects/members que casam com o texto e
    // navega direto. Antes o ⌘K só filtrava a lista fixa de comandos.
    const searchResults = useMemo(() => {
       const q = query.trim().toLowerCase();
       if (!q) return { issues: [], projects: [], members: [] };
+      const clientIssues = issues.filter(
+         (i) => i.title.toLowerCase().includes(q) || i.identifier.toLowerCase().includes(q)
+      );
+      // Adiciona matches por descrição (server) que o client não pegou.
+      const serverExtra = serverIssueIds.size
+         ? issues.filter(
+              (i) => serverIssueIds.has(i.id) && !clientIssues.some((c) => c.id === i.id)
+           )
+         : [];
       return {
-         issues: issues
-            .filter(
-               (i) => i.title.toLowerCase().includes(q) || i.identifier.toLowerCase().includes(q)
-            )
-            .slice(0, 6),
+         issues: [...clientIssues, ...serverExtra].slice(0, 6),
          projects: allProjects.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 4),
          members: users
             .filter((u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q))
             .slice(0, 4),
       };
-   }, [query, issues, allProjects, users]);
+   }, [query, issues, allProjects, users, serverIssueIds]);
    const hasSearchResults =
       searchResults.issues.length + searchResults.projects.length + searchResults.members.length >
       0;

@@ -112,6 +112,28 @@ describe('issues', () => {
       expect(found[0].title).toBe('Login bug');
    });
 
+   it('busca por q casa também a descrição (corpo), não só título/identifier', async () => {
+      const db = await setup();
+      await createIssue(
+         db,
+         {
+            teamId: 'CORE',
+            title: 'Alpha',
+            statusId: 'to-do',
+            priorityId: 'low',
+            description: 'este corpo contém a palavra xyzzy escondida',
+         },
+         ME
+      );
+      await createIssue(
+         db,
+         { teamId: 'CORE', title: 'Beta', statusId: 'to-do', priorityId: 'low' },
+         ME
+      );
+      const found = await listIssues(db, { q: 'xyzzy' });
+      expect(found.map((i) => i.title)).toEqual(['Alpha']);
+   });
+
    it('filters by label', async () => {
       const db = await setup();
       await createIssue(
