@@ -51,12 +51,16 @@ export function DisplayOptions() {
    const {
       grouping,
       ordering,
+      orderCompletedByRecency,
       completedIssues,
+      showSubIssues,
       showEmptyGroups,
       displayProperties,
       setGrouping,
       setOrdering,
+      setOrderCompletedByRecency,
       setCompletedIssues,
+      setShowSubIssues,
       setShowEmptyGroups,
       toggleDisplayProperty,
       resetDisplaySettings,
@@ -159,6 +163,20 @@ export function DisplayOptions() {
                      </SelectContent>
                   </Select>
                </div>
+
+               <div className="flex items-center justify-between">
+                  <Label
+                     htmlFor="order-completed-recency"
+                     className="text-xs text-muted-foreground font-normal"
+                  >
+                     Order completed by recency
+                  </Label>
+                  <Switch
+                     id="order-completed-recency"
+                     checked={orderCompletedByRecency}
+                     onCheckedChange={setOrderCompletedByRecency}
+                  />
+               </div>
             </div>
 
             <div className="border-t px-3 py-3 flex flex-col gap-2.5">
@@ -180,6 +198,20 @@ export function DisplayOptions() {
                         </SelectItem>
                      </SelectContent>
                   </Select>
+               </div>
+
+               <div className="flex items-center justify-between">
+                  <Label
+                     htmlFor="show-sub-issues"
+                     className="text-xs text-muted-foreground font-normal"
+                  >
+                     Show sub-issues
+                  </Label>
+                  <Switch
+                     id="show-sub-issues"
+                     checked={showSubIssues}
+                     onCheckedChange={setShowSubIssues}
+                  />
                </div>
             </div>
 

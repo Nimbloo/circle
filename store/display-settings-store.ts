@@ -46,13 +46,17 @@ const DEFAULT_DISPLAY_PROPERTIES: Record<DisplayPropertyKey, boolean> = {
 interface DisplaySettingsState {
    grouping: GroupingKey;
    ordering: OrderingKey;
+   orderCompletedByRecency: boolean;
    completedIssues: CompletedIssuesFilter;
+   showSubIssues: boolean;
    showEmptyGroups: boolean;
    displayProperties: Record<DisplayPropertyKey, boolean>;
 
    setGrouping: (grouping: GroupingKey) => void;
    setOrdering: (ordering: OrderingKey) => void;
+   setOrderCompletedByRecency: (value: boolean) => void;
    setCompletedIssues: (value: CompletedIssuesFilter) => void;
+   setShowSubIssues: (value: boolean) => void;
    setShowEmptyGroups: (value: boolean) => void;
    toggleDisplayProperty: (key: DisplayPropertyKey) => void;
    resetDisplaySettings: () => void;
@@ -61,7 +65,9 @@ interface DisplaySettingsState {
 const DEFAULTS = {
    grouping: 'status' as GroupingKey,
    ordering: 'priority' as OrderingKey,
+   orderCompletedByRecency: false,
    completedIssues: 'all' as CompletedIssuesFilter,
+   showSubIssues: true,
    showEmptyGroups: false,
    displayProperties: DEFAULT_DISPLAY_PROPERTIES,
 };
@@ -78,7 +84,9 @@ export const useDisplaySettingsStore = create<DisplaySettingsState>()(
 
          setGrouping: (grouping) => set({ grouping }),
          setOrdering: (ordering) => set({ ordering }),
+         setOrderCompletedByRecency: (orderCompletedByRecency) => set({ orderCompletedByRecency }),
          setCompletedIssues: (completedIssues) => set({ completedIssues }),
+         setShowSubIssues: (showSubIssues) => set({ showSubIssues }),
          setShowEmptyGroups: (showEmptyGroups) => set({ showEmptyGroups }),
          toggleDisplayProperty: (key) =>
             set((state) => ({

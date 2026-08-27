@@ -75,18 +75,28 @@ interface GroupEntry {
    total: number;
 }
 
-const sortIssues = (issues: Issue[], ordering: string): Issue[] => {
-   switch (ordering) {
-      case 'created':
-         return [...issues].sort(
-            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-         );
-      case 'title':
-         return [...issues].sort((a, b) => a.title.localeCompare(b.title));
-      case 'priority':
-      default:
-         return sortIssuesByPriority(issues);
-   }
+const sortIssues = (issues: Issue[], ordering: string, completedByRecency = false): Issue[] => {
+   const base = ((): Issue[] => {
+      switch (ordering) {
+         case 'created':
+            return [...issues].sort(
+               (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+         case 'title':
+            return [...issues].sort((a, b) => a.title.localeCompare(b.title));
+         case 'priority':
+         default:
+            return sortIssuesByPriority(issues);
+      }
+   })();
+   if (!completedByRecency) return base;
+   // Linear "Order completed by recency": completed vão pro fim, por recência
+   // (createdAt desc como proxy — o circle não expõe completedAt).
+   const active = base.filter((i) => i.status.category !== 'completed');
+   const done = base
+      .filter((i) => i.status.category === 'completed')
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+   return [...active, ...done];
 };
 
 const groupByKey = (issues: Issue[], keyOf: (issue: Issue) => string): Map<string, Issue[]> => {
@@ -176,7 +186,8 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
    error,
    onRetry,
 }) => {
-   const { grouping, ordering, completedIssues, showEmptyGroups } = useDisplaySettingsStore();
+   const { grouping, ordering, orderCompletedByRecency, completedIssues, showEmptyGroups } =
+      useDisplaySettingsStore();
    const { filters } = useFilterStore();
    const priorities = usePriorities();
    const hasActiveFilters = filters.length > 0;
@@ -295,9 +306,18 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
 
       return buildGroups().map((entry) => ({
          ...entry,
-         issues: sortIssues(entry.issues, ordering),
+         issues: sortIssues(entry.issues, ordering, orderCompletedByRecency),
       }));
-   }, [issues, totalIssues, statuses, priorities, grouping, ordering, completedIssues]);
+   }, [
+      issues,
+      totalIssues,
+      statuses,
+      priorities,
+      grouping,
+      ordering,
+      orderCompletedByRecency,
+      completedIssues,
+   ]);
 
    const hiddenCount = Math.max(0, totalIssues.length - issues.length);
    const showFooter = hasActiveFilters && hiddenCount > 0;
