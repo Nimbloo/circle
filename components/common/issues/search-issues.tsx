@@ -1,26 +1,49 @@
 'use client';
 
-import { useIssuesStore } from '@/store/issues-store';
+import type { Issue } from '@/data/issues';
+import { api } from '@/lib/client';
+import { adaptIssues } from '@/lib/adapters';
 import { useSearchStore } from '@/store/search-store';
 import { useEffect, useState } from 'react';
 import { IssueLine } from './issue-line';
 
+/**
+ * Busca dedicada — usa a busca SERVER-SIDE (api.issues.list({ q })), que casa
+ * título, identifier, descrição E comentários. Antes filtrava só o store local
+ * (título/identifier), então descrição/comentário nunca eram alcançados aqui.
+ */
 export function SearchIssues() {
-   const [searchResults, setSearchResults] = useState<
-      ReturnType<typeof useIssuesStore.getState>['issues']
-   >([]);
-   const searchIssues = useIssuesStore((s) => s.searchIssues);
+   const [searchResults, setSearchResults] = useState<Issue[]>([]);
+   const [loading, setLoading] = useState(false);
    const { searchQuery, isSearchOpen } = useSearchStore();
 
    useEffect(() => {
-      if (searchQuery.trim() === '') {
+      const q = searchQuery.trim();
+      if (q === '') {
          setSearchResults([]);
          return;
       }
-
-      const results = searchIssues(searchQuery);
-      setSearchResults(results);
-   }, [searchQuery, searchIssues]);
+      let active = true;
+      setLoading(true);
+      // Debounce: evita uma request por tecla digitada.
+      const t = setTimeout(() => {
+         api.issues
+            .list({ q })
+            .then((dtos) => {
+               if (active) setSearchResults(adaptIssues(dtos));
+            })
+            .catch(() => {
+               if (active) setSearchResults([]);
+            })
+            .finally(() => {
+               if (active) setLoading(false);
+            });
+      }, 250);
+      return () => {
+         active = false;
+         clearTimeout(t);
+      };
+   }, [searchQuery]);
 
    if (!isSearchOpen) {
       return null;
@@ -43,7 +66,7 @@ export function SearchIssues() {
                   </div>
                ) : (
                   <div className="text-center py-8 text-muted-foreground">
-                     No results found for &quot;{searchQuery}&quot;
+                     {loading ? 'Searching…' : `No results found for "${searchQuery}"`}
                   </div>
                )}
             </div>

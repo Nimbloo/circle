@@ -9,17 +9,23 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { CommentComposer } from './comment-composer';
 import {
    Ban,
+   CalendarClock,
    CircleDot,
+   Folder,
    GitPullRequestArrow,
+   Gauge,
    Link2,
+   ListTree,
    Pencil,
    PenLine,
    RefreshCcw,
    Reply,
+   SignpostBig,
    SmilePlus,
    Tag,
    Trash2,
    Unlock,
+   UserRound,
 } from 'lucide-react';
 import { ReactNode, useState } from 'react';
 import { useCustomEmojis, customEmojiUrl } from '@/hooks/use-custom-emojis';
@@ -35,6 +41,13 @@ const EVENT_ICONS: Record<string, ReactNode> = {
    blocked: <Ban className="size-3.5" />,
    unblocked: <Unlock className="size-3.5" />,
    related: <Link2 className="size-3.5" />,
+   sub: <ListTree className="size-3.5" />,
+   assignee: <UserRound className="size-3.5" />,
+   title: <Pencil className="size-3.5" />,
+   project: <Folder className="size-3.5" />,
+   estimate: <Gauge className="size-3.5" />,
+   dueDate: <CalendarClock className="size-3.5" />,
+   milestone: <SignpostBig className="size-3.5" />,
    pr: <GitPullRequestArrow className="size-3.5" />,
 };
 
