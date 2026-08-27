@@ -18,9 +18,10 @@ export default function HeaderNav() {
    const issues = useIssuesStore((s) => s.issues);
    const teams = useWorkspaceStore((s) => s.teams);
 
-   const team = teams[0];
    const index = issues.findIndex((candidate) => candidate.identifier === issueId);
    const issue = index >= 0 ? issues[index] : undefined;
+   // time real da issue (fallback p/ o 1º só enquanto o workspace ainda hidrata)
+   const team = teams.find((t) => t.id === issue?.teamId) ?? teams[0];
    const cycle = useWorkspaceStore((s) =>
       issue?.cycleId ? s.getCycleById(issue.cycleId) : undefined
    );
