@@ -9,7 +9,7 @@ import type { ProjectDetail } from '@/data/project-details';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
-import { ArrowRight, FileText, PenLine, Plus } from 'lucide-react';
+import { ArrowRight, FileText, PenLine, Plus, X } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -76,6 +76,15 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    const [resLabel, setResLabel] = useState('');
    const [resUrl, setResUrl] = useState('https://');
    const [resBusy, setResBusy] = useState(false);
+
+   const handleDeleteResource = async (resourceId: string) => {
+      try {
+         await api.projects.removeResource(projectId, resourceId);
+         await reload();
+      } catch {
+         toast.error('Could not delete the resource');
+      }
+   };
 
    const submitResource = async () => {
       if (!resLabel.trim() || !resUrl.trim() || resBusy) return;
@@ -225,14 +234,28 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                         <span className="w-24 text-muted-foreground shrink-0">Resources</span>
                         <div className="flex items-center gap-2 flex-wrap">
                            {detail.resources.map((resource) => (
-                              <a
-                                 key={resource.label}
-                                 href={resource.url}
-                                 className="inline-flex items-center gap-1.5 text-xs border rounded-md px-2 py-1 hover:bg-accent/50 transition-colors"
+                              <span
+                                 key={resource.id ?? resource.label}
+                                 className="group inline-flex items-center gap-1 text-xs border rounded-md pl-2 pr-1 py-1 hover:bg-accent/50 transition-colors"
                               >
-                                 <FileText className="size-3.5 text-muted-foreground" />
-                                 {resource.label}
-                              </a>
+                                 <a
+                                    href={resource.url}
+                                    className="inline-flex items-center gap-1.5"
+                                 >
+                                    <FileText className="size-3.5 text-muted-foreground" />
+                                    {resource.label}
+                                 </a>
+                                 {resource.id && (
+                                    <button
+                                       type="button"
+                                       aria-label="Delete resource"
+                                       onClick={() => void handleDeleteResource(resource.id!)}
+                                       className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                                    >
+                                       <X className="size-3" />
+                                    </button>
+                                 )}
+                              </span>
                            ))}
                            <button
                               type="button"

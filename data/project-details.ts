@@ -44,6 +44,8 @@ export interface ProjectActivityEvent {
 }
 
 export interface ProjectResource {
+   /** Id do backend (ausente só nos mocks); habilita o delete. */
+   id?: string;
    label: string;
    url: string;
 }
