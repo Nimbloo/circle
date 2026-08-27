@@ -11,7 +11,13 @@ import {
    updateProject,
    deleteProject,
 } from '@/lib/api/projects';
-import { postProjectUpdate } from '@/lib/api/project-detail';
+import {
+   postProjectUpdate,
+   addMilestone,
+   listMilestones,
+   reorderMilestones,
+   deleteMilestone,
+} from '@/lib/api/project-detail';
 
 async function setup() {
    const db = await makeTestDb();
@@ -141,6 +147,32 @@ describe('projects', () => {
       await expect(
          createProject(db, { name: 'X', statusId: 'nope', ...base })
       ).rejects.toMatchObject({ status: 400 });
+   });
+
+   it('milestones: add mantém ordem, reorder reposiciona, delete remove', async () => {
+      const { db } = await setup();
+      const p = await createProject(db, { name: 'P', statusId: 'in-progress', ...base });
+      const a = await addMilestone(db, p.id, { name: 'Alpha' });
+      const b = await addMilestone(db, p.id, { name: 'Beta' });
+      const c = await addMilestone(db, p.id, { name: 'Gamma' });
+      // ordem de inserção (position 0,1,2)
+      expect((await listMilestones(db, p.id)).map((m) => m.name)).toEqual([
+         'Alpha',
+         'Beta',
+         'Gamma',
+      ]);
+
+      // reorder: Gamma, Alpha, Beta
+      await reorderMilestones(db, p.id, [c.id, a.id, b.id]);
+      expect((await listMilestones(db, p.id)).map((m) => m.name)).toEqual([
+         'Gamma',
+         'Alpha',
+         'Beta',
+      ]);
+
+      // delete do meio
+      expect(await deleteMilestone(db, a.id)).toBe(true);
+      expect((await listMilestones(db, p.id)).map((m) => m.name)).toEqual(['Gamma', 'Beta']);
    });
 
    it('um project update (check-in) dita o health corrente do projeto', async () => {

@@ -12,7 +12,18 @@ import { api } from '@/lib/client';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { ProjectProgressChart } from './project-progress-chart';
-import { ArrowRight, Calendar, Check, Compass, Plus, Tag, UserPlus } from 'lucide-react';
+import {
+   ArrowRight,
+   Calendar,
+   Check,
+   ChevronDown,
+   ChevronUp,
+   Compass,
+   Plus,
+   Tag,
+   UserPlus,
+   X,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -157,6 +168,30 @@ export function ProjectPropertiesPanel({
          toast.error('Could not add the milestone');
       } finally {
          setMsBusy(false);
+      }
+   };
+
+   const handleDeleteMilestone = async (milestoneId: string) => {
+      if (!projectId) return;
+      try {
+         await api.projects.removeMilestone(projectId, milestoneId);
+         await onChanged?.();
+      } catch {
+         toast.error('Could not delete the milestone');
+      }
+   };
+
+   const handleMoveMilestone = async (index: number, dir: -1 | 1) => {
+      if (!projectId) return;
+      const ids = detail.milestones.map((m) => m.id);
+      const target = index + dir;
+      if (target < 0 || target >= ids.length) return;
+      [ids[index], ids[target]] = [ids[target], ids[index]];
+      try {
+         await api.projects.reorderMilestones(projectId, ids);
+         await onChanged?.();
+      } catch {
+         toast.error('Could not reorder milestones');
       }
    };
 
@@ -415,10 +450,10 @@ export function ProjectPropertiesPanel({
                </p>
             ) : (
                <div className="flex flex-col gap-1.5">
-                  {detail.milestones.map((milestone) => (
+                  {detail.milestones.map((milestone, index) => (
                      <div
                         key={milestone.id}
-                        className="flex items-center justify-between gap-2 text-sm"
+                        className="group flex items-center justify-between gap-2 text-sm"
                      >
                         <span className="flex items-center gap-2 min-w-0">
                            <button
@@ -446,8 +481,40 @@ export function ProjectPropertiesPanel({
                               {milestone.name}
                            </span>
                         </span>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                           {formatDay(milestone.targetDate)}
+                        <span className="flex items-center gap-1 shrink-0">
+                           {canEditMilestones && (
+                              <span className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground">
+                                 <button
+                                    type="button"
+                                    aria-label="Move up"
+                                    disabled={index === 0}
+                                    onClick={() => void handleMoveMilestone(index, -1)}
+                                    className="hover:text-foreground disabled:opacity-30"
+                                 >
+                                    <ChevronUp className="size-3.5" />
+                                 </button>
+                                 <button
+                                    type="button"
+                                    aria-label="Move down"
+                                    disabled={index === detail.milestones.length - 1}
+                                    onClick={() => void handleMoveMilestone(index, 1)}
+                                    className="hover:text-foreground disabled:opacity-30"
+                                 >
+                                    <ChevronDown className="size-3.5" />
+                                 </button>
+                                 <button
+                                    type="button"
+                                    aria-label="Delete milestone"
+                                    onClick={() => void handleDeleteMilestone(milestone.id)}
+                                    className="hover:text-destructive"
+                                 >
+                                    <X className="size-3.5" />
+                                 </button>
+                              </span>
+                           )}
+                           <span className="text-xs text-muted-foreground whitespace-nowrap">
+                              {formatDay(milestone.targetDate)}
+                           </span>
                         </span>
                      </div>
                   ))}

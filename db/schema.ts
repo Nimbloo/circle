@@ -570,6 +570,7 @@ export const projectMilestone = pgTable(
       name: varchar('name', { length: 196 }).notNull(),
       targetDate: date('target_date'),
       completed: boolean('completed').notNull().default(false),
+      position: integer('position').notNull().default(0),
    },
    (t) => [index('idx_project_milestone_project').on(t.projectId)]
 );

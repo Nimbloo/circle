@@ -306,6 +306,8 @@ export const api = {
          patch<ProjectMilestoneDto>(`/projects/${id}/milestones/${mid}`, body),
       removeMilestone: (id: string, mid: string) =>
          del<{ deleted: boolean }>(`/projects/${id}/milestones/${mid}`),
+      reorderMilestones: (id: string, orderedIds: string[]) =>
+         post<{ ok: boolean }>(`/projects/${id}/milestones/reorder`, { orderedIds }),
       updates: (id: string) => get<ProjectUpdateDto[]>(`/projects/${id}/updates`),
       postUpdate: (id: string, body: PostUpdateInput) =>
          post<ProjectUpdateDto>(`/projects/${id}/updates`, body),

@@ -116,7 +116,7 @@ export async function listMilestones(db: Db, projectId: string): Promise<Project
       .select()
       .from(projectMilestone)
       .where(eq(projectMilestone.projectId, projectId))
-      .orderBy(asc(projectMilestone.targetDate), asc(projectMilestone.name));
+      .orderBy(asc(projectMilestone.position), asc(projectMilestone.targetDate), asc(projectMilestone.name));
    return rows.map((m) => ({
       id: m.id,
       name: m.name,
@@ -250,6 +250,11 @@ export async function addMilestone(
 ): Promise<ProjectMilestoneDto> {
    await assertProject(db, projectId);
    if (!input.name?.trim()) throw new ApiError(400, 'name é obrigatório');
+   const existing = await db
+      .select({ position: projectMilestone.position })
+      .from(projectMilestone)
+      .where(eq(projectMilestone.projectId, projectId));
+   const position = existing.reduce((max, m) => Math.max(max, m.position), -1) + 1;
    const id = randomUUID();
    await db.insert(projectMilestone).values({
       id,
@@ -257,6 +262,7 @@ export async function addMilestone(
       name: input.name.trim(),
       targetDate: input.targetDate ?? null,
       completed: false,
+      position,
    });
    publish({ entity: 'project', action: 'updated', id: projectId });
    return { id, name: input.name.trim(), targetDate: input.targetDate ?? null, completed: false };
@@ -303,6 +309,34 @@ export async function deleteMilestone(db: Db, milestoneId: string): Promise<bool
    if (rows.length === 0) return false;
    await db.delete(projectMilestone).where(eq(projectMilestone.id, milestoneId));
    publish({ entity: 'project', action: 'updated', id: rows[0].projectId });
+   return true;
+}
+
+/** Reordena os milestones do projeto: grava position = índice na ordem dada.
+ * Só reposiciona os ids que pertencem ao projeto (ignora ids alheios). */
+export async function reorderMilestones(
+   db: Db,
+   projectId: string,
+   orderedIds: string[]
+): Promise<boolean> {
+   await assertProject(db, projectId);
+   const own = await db
+      .select({ id: projectMilestone.id })
+      .from(projectMilestone)
+      .where(eq(projectMilestone.projectId, projectId));
+   const ownIds = new Set(own.map((m) => m.id));
+   await db.transaction(async (tx) => {
+      let pos = 0;
+      for (const id of orderedIds) {
+         if (!ownIds.has(id)) continue;
+         await tx
+            .update(projectMilestone)
+            .set({ position: pos })
+            .where(eq(projectMilestone.id, id));
+         pos += 1;
+      }
+   });
+   publish({ entity: 'project', action: 'updated', id: projectId });
    return true;
 }
 
