@@ -384,6 +384,13 @@ export async function postProjectUpdate(
       blocks: JSON.stringify(input.blocks ?? []),
       createdAt: now,
    });
+   // Paridade Linear: o health do projeto vem do ÚLTIMO update. Os valores do update
+   // (on-track/at-risk/off-track) são exatamente ids do catálogo health, então propaga
+   // direto — antes o update era registrado mas o health do projeto não mudava.
+   await db
+      .update(projectT)
+      .set({ healthId: input.health, healthUpdatedAt: now })
+      .where(eq(projectT.id, projectId));
    const users = await loadUsers(db, [authorId]);
    publish({ entity: 'project', action: 'updated', id: projectId });
    return {
