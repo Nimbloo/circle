@@ -42,12 +42,12 @@ const nextConfig: NextConfig = {
    async headers() {
       return [{ source: '/:path*', headers: SECURITY_HEADERS }];
    },
-   // pg/bcryptjs usam APIs de Node. Com o middleware criando um runtime Edge, o webpack
+   // pg/prom-client usam APIs de Node. Com o middleware criando um runtime Edge, o webpack
    // tentava bundlar o `pg` (via instrumentation → @/db) pro Edge e quebrava em
    // `Can't resolve 'fs'/'path'/'stream'`. Externaliza + no bundle EDGE resolve os
    // node-builtins pra `false` (o código node-only nunca EXECUTA no Edge: o middleware
    // usa só a sessão JWT, e o `register()` da instrumentation é gated em NEXT_RUNTIME).
-   serverExternalPackages: ['pg', 'bcryptjs', 'prom-client'],
+   serverExternalPackages: ['pg', 'prom-client'],
    webpack: (config, { nextRuntime, webpack }) => {
       // Tudo que NÃO é o runtime Node (edge + qualquer compilação de instrumentation
       // fora do node) não deve tentar resolver pg/node-builtins.
