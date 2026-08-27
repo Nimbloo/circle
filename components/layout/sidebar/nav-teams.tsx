@@ -7,6 +7,7 @@ import {
    ChevronRight,
    CopyMinus,
    Home,
+   IterationCcw,
    Layers,
    Link as LinkIcon,
    MoreHorizontal,
@@ -34,7 +35,6 @@ import {
    SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { RiDonutChartFill } from '@remixicon/react';
 
 export function NavTeams() {
    const teams = useWorkspaceStore((s) => s.teams);
@@ -120,7 +120,7 @@ export function NavTeams() {
                            <SidebarMenuSubItem>
                               <SidebarMenuSubButton asChild>
                                  <Link href={`/nimbloo/team/${item.id}/cycles`}>
-                                    <RiDonutChartFill size={14} />
+                                    <IterationCcw size={14} />
                                     <span>Cycles</span>
                                  </Link>
                               </SidebarMenuSubButton>

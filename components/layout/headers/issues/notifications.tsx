@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useState } from 'react';
-import { RiSlackLine } from '@remixicon/react';
+import { Slack } from 'lucide-react';
 
 export default function Notifications() {
    const [notifications, setNotifications] = useState({
@@ -83,7 +83,7 @@ export default function Notifications() {
             </div>
 
             <div className="border-t py-2 px-4 flex items-center gap-2">
-               <RiSlackLine className="size-4" />
+               <Slack className="size-4" />
                <span className="text-xs font-medium">Slack notifications</span>
             </div>
          </PopoverContent>

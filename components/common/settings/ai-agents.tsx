@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { usePreferencesStore } from '@/store/preferences-store';
-import { RiSlackFill } from '@remixicon/react';
+import { Slack } from 'lucide-react';
 import { Bot, MessageCircleQuestion, Radar, RefreshCcw, Sparkles, Terminal } from 'lucide-react';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
 
@@ -102,7 +102,7 @@ export default function AiAgents() {
          >
             <SettingsCard>
                <SettingsRow
-                  icon={<RiSlackFill className="size-4" />}
+                  icon={<Slack className="size-4" />}
                   title="Slack"
                   description="Settings and additional guidance for creating issues from Slack messages"
                   muted

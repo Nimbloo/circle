@@ -27,6 +27,7 @@ import { StatusSelector } from '../status-selector';
 import { AssigneeSelector } from '@/components/layout/sidebar/create-new-issue/assignee-selector';
 import { LabelSelector } from '@/components/layout/sidebar/create-new-issue/label-selector';
 import { EstimateSelector } from '@/components/layout/sidebar/create-new-issue/estimate-selector';
+import { DueDateSelector } from '@/components/layout/sidebar/create-new-issue/due-date-selector';
 import { IssueRefRow } from './content-blocks';
 import { RelationEditor } from './relation-editor';
 
@@ -176,6 +177,12 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
                   <EstimateSelector
                      estimate={issue.estimate}
                      onChange={(estimate) => updateIssue(issue.id, { estimate })}
+                  />
+               </div>
+               <div className="flex items-center gap-1.5 -ml-1.5 mt-0.5">
+                  <DueDateSelector
+                     dueDate={issue.dueDate}
+                     onChange={(dueDate) => updateIssue(issue.id, { dueDate })}
                   />
                </div>
             </div>
