@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, count, desc, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, gt, inArray, isNull, lte, or } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { notification, issue as issueT, appUser } from '@/db/schema';
 import { publish } from './events';
@@ -12,6 +12,7 @@ export interface NotificationDto {
    type: string;
    content: string | null;
    read: boolean;
+   snoozedUntil: string | null;
    createdAt: string;
    actor: UserRef | null;
    issue: { id: string; identifier: string; title: string } | null;
@@ -42,6 +43,12 @@ async function assemble(db: Db, rows: NotifRow[]): Promise<NotificationDto[]> {
          type: r.type,
          content: r.content,
          read: r.read,
+         snoozedUntil:
+            r.snoozedUntil instanceof Date
+               ? r.snoozedUntil.toISOString()
+               : r.snoozedUntil
+                 ? String(r.snoozedUntil)
+                 : null,
          createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
          actor: a
             ? { id: a.id, slug: a.slug, name: a.name, email: a.email, avatarUrl: a.avatarUrl }
@@ -56,6 +63,18 @@ export interface ListInboxOptions {
    type?: string[];
    actorId?: string;
    limit?: number;
+   /** true = só as adiadas ainda vigentes (aba Snoozed); default/false = exclui as adiadas vigentes. */
+   snoozed?: boolean;
+}
+
+/** Condição "adiada ainda vigente" (snoozedUntil > agora). */
+function activeSnooze(now: Date) {
+   return gt(notification.snoozedUntil, now);
+}
+
+/** Condição "NÃO adiada agora" (nunca adiada OU o adiamento já venceu). */
+function notSnoozed(now: Date) {
+   return or(isNull(notification.snoozedUntil), lte(notification.snoozedUntil, now))!;
 }
 
 /** Teto default do inbox: as N notificações mais recentes. A tabela cresce sem teto
@@ -68,10 +87,13 @@ export async function listInbox(
    recipientId: string,
    opts: ListInboxOptions = {}
 ): Promise<NotificationDto[]> {
+   const now = new Date();
    const conds = [eq(notification.recipientId, recipientId)];
    if (opts.read !== undefined) conds.push(eq(notification.read, opts.read));
    if (opts.actorId) conds.push(eq(notification.actorId, opts.actorId));
    if (opts.type?.length) conds.push(inArray(notification.type, opts.type));
+   // Snooze: por padrão o inbox esconde as adiadas vigentes; a aba Snoozed pede só elas.
+   conds.push(opts.snoozed ? activeSnooze(now) : notSnoozed(now));
    const rows = await db
       .select()
       .from(notification)
@@ -82,11 +104,37 @@ export async function listInbox(
 }
 
 export async function unreadCount(db: Db, recipientId: string): Promise<number> {
+   // Não conta as adiadas vigentes (paridade Linear: snooze zera o badge até vencer).
    const rows = await db
       .select({ n: count() })
       .from(notification)
-      .where(and(eq(notification.recipientId, recipientId), eq(notification.read, false)));
+      .where(
+         and(
+            eq(notification.recipientId, recipientId),
+            eq(notification.read, false),
+            notSnoozed(new Date())
+         )
+      );
    return rows[0]?.n ?? 0;
+}
+
+/**
+ * Adia (ou reativa) uma notificação até `until` (Date) — ou desfaz o snooze com null.
+ * Escopada ao destinatário (anti-IDOR). Retorna false se não existir/pertencer a outro.
+ */
+export async function setSnooze(
+   db: Db,
+   id: string,
+   until: Date | null,
+   recipientId: string
+): Promise<boolean> {
+   const res = await db
+      .update(notification)
+      .set({ snoozedUntil: until })
+      .where(and(eq(notification.id, id), eq(notification.recipientId, recipientId)))
+      .returning({ id: notification.id });
+   if (res.length > 0) publish({ entity: 'notification', action: 'updated', id });
+   return res.length > 0;
 }
 
 /** Marca uma notificação como lida/não-lida, escopada ao destinatário (anti-IDOR). */

@@ -428,6 +428,9 @@ export const notification = pgTable(
       type: varchar('type', { length: 16 }).notNull(),
       content: varchar('content', { length: 1024 }),
       read: boolean('read').notNull().default(false),
+      /** Adiado até este instante (paridade Linear "snooze"): enquanto > now, some do
+       * inbox e não conta como não-lida; NULL = nunca adiada. */
+      snoozedUntil: timestamp('snoozed_until'),
       createdAt: timestamp('created_at').notNull().defaultNow(),
    },
    (t) => [index('idx_notification_recipient').on(t.recipientId)]

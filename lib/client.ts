@@ -360,6 +360,9 @@ export const api = {
       unreadCount: () => get<{ count: number }>('/inbox/unread-count'),
       setRead: (id: string, read: boolean) =>
          patch<{ id: string; read: boolean }>(`/notifications/${id}`, { read }),
+      /** Adia até `until` (ISO) ou desfaz com null. */
+      snooze: (id: string, snoozedUntil: string | null) =>
+         patch<{ id: string }>(`/notifications/${id}`, { snoozedUntil }),
       readAll: () => post<{ marked: number }>('/notifications/read-all'),
    },
 

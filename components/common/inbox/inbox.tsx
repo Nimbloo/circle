@@ -29,6 +29,7 @@ export default function Inbox() {
       markAsRead,
       markAsUnread,
       markAllAsRead,
+      snooze,
       getUnreadNotifications,
    } = useNotificationsStore();
 
@@ -173,6 +174,7 @@ export default function Inbox() {
                         // Padrão Linear: abrir a notificação já a marca como lida.
                         if (!notification.read) markAsRead(notification.id);
                      }}
+                     onSnooze={(hours) => snooze(notification.id, hours)}
                      showId={showId}
                      showStatusIcon={showStatusIcon}
                   />
@@ -193,7 +195,11 @@ export default function Inbox() {
                Inbox
             </button>
             <div className="flex-1 min-h-0">
-               <NotificationPreview notification={selectedNotification} onMarkAsRead={markAsRead} onMarkAsUnread={markAsUnread} />
+               <NotificationPreview
+                  notification={selectedNotification}
+                  onMarkAsRead={markAsRead}
+                  onMarkAsUnread={markAsUnread}
+               />
             </div>
          </div>
       ) : (
@@ -212,7 +218,11 @@ export default function Inbox() {
          </ResizablePanel>
          <ResizableHandle withHandle />
          <ResizablePanel defaultSize={350} maxSize={500}>
-            <NotificationPreview notification={selectedNotification} onMarkAsRead={markAsRead} onMarkAsUnread={markAsUnread} />
+            <NotificationPreview
+               notification={selectedNotification}
+               onMarkAsRead={markAsRead}
+               onMarkAsUnread={markAsUnread}
+            />
          </ResizablePanel>
       </ResizablePanelGroup>
    );

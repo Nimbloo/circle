@@ -33,6 +33,8 @@ interface NotificationsState {
    markAsRead: (id: string) => void;
    markAllAsRead: () => void;
    markAsUnread: (id: string) => void;
+   /** Adia a notificação por `hours` horas (some do inbox até vencer). */
+   snooze: (id: string, hours: number) => void;
 
    // Filters
    getUnreadNotifications: () => InboxNotification[];
@@ -177,6 +179,30 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
          set(snapshot);
          toast.error('Falha ao marcar como não lida');
       });
+   },
+
+   snooze: (id: string, hours: number) => {
+      const snapshot = {
+         notifications: get().notifications,
+         selectedNotification: get().selectedNotification,
+         unreadCount: get().unreadCount,
+      };
+      const wasUnread = get().notifications.some((n) => n.id === id && !n.read);
+      // Otimista: a adiada some do inbox default (o backend a filtra até vencer).
+      set((state) => ({
+         notifications: state.notifications.filter((n) => n.id !== id),
+         selectedNotification:
+            state.selectedNotification?.id === id ? undefined : state.selectedNotification,
+         unreadCount: wasUnread ? Math.max(0, state.unreadCount - 1) : state.unreadCount,
+      }));
+      const until = new Date(Date.now() + hours * 3600_000).toISOString();
+      void api.inbox
+         .snooze(id, until)
+         .then(() => toast.success(`Adiada por ${hours}h`))
+         .catch(() => {
+            set(snapshot);
+            toast.error('Falha ao adiar');
+         });
    },
 
    // Filters
