@@ -6,11 +6,22 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Initiative, INITIATIVE_STATUS_META } from '@/data/initiatives';
 import { Project } from '@/data/projects';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { CalendarRange, ChevronDown, Plus, Tag, UserRound } from 'lucide-react';
+import { api } from '@/lib/client';
+import {
+   Command,
+   CommandEmpty,
+   CommandGroup,
+   CommandInput,
+   CommandItem,
+   CommandList,
+} from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { CalendarRange, ChevronDown, Plus, Tag, UserRound, X } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { InitiativeProgressPanel } from './initiative-progress-panel';
 import { InitiativeStatusIcon } from './initiative-status-icon';
 import { InitiativeActions } from './initiative-actions';
@@ -52,17 +63,68 @@ const GROUP_ORDER: { key: string; label: string; match: (project: Project) => bo
 function ProjectsSection({ initiative }: { initiative: Initiative }) {
    const { orgId } = useParams<{ orgId: string }>();
    const getInitiativeProjects = useWorkspaceStore((s) => s.getInitiativeProjects);
+   const allProjects = useWorkspaceStore((s) => s.projects);
+   const hydrate = useWorkspaceStore((s) => s.hydrate);
    const projects = getInitiativeProjects(initiative.id);
    const groups = GROUP_ORDER.map((group) => ({
       ...group,
       projects: projects.filter(group.match),
    })).filter((group) => group.projects.length > 0);
 
+   const [pickerOpen, setPickerOpen] = useState(false);
+   const linkedIds = new Set(initiative.projectIds);
+   const available = allProjects.filter((p) => !linkedIds.has(p.id));
+
+   const setProjects = async (projectIds: string[]) => {
+      try {
+         await api.initiatives.update(initiative.id, { projectIds });
+         await hydrate();
+      } catch {
+         toast.error('Could not update the projects');
+      }
+   };
+   const addProject = (id: string) => {
+      setPickerOpen(false);
+      void setProjects([...initiative.projectIds, id]);
+   };
+   const removeProject = (id: string) =>
+      void setProjects(initiative.projectIds.filter((x) => x !== id));
+
    return (
       <section className="flex flex-col gap-2">
          <div className="flex items-center justify-between">
             <h2 className="text-lg font-medium">Projects</h2>
-            <Plus className="size-4 text-muted-foreground" />
+            <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+               <PopoverTrigger asChild>
+                  <button
+                     type="button"
+                     className="text-muted-foreground hover:text-foreground transition-colors"
+                     aria-label="Add project"
+                  >
+                     <Plus className="size-4" />
+                  </button>
+               </PopoverTrigger>
+               <PopoverContent align="end" className="w-64 p-0">
+                  <Command>
+                     <CommandInput placeholder="Add project…" />
+                     <CommandList>
+                        <CommandEmpty>No projects.</CommandEmpty>
+                        <CommandGroup>
+                           {available.map((p) => (
+                              <CommandItem
+                                 key={p.id}
+                                 value={p.name}
+                                 onSelect={() => addProject(p.id)}
+                              >
+                                 <p.icon className="size-4 text-muted-foreground" />
+                                 <span className="truncate">{p.name}</span>
+                              </CommandItem>
+                           ))}
+                        </CommandGroup>
+                     </CommandList>
+                  </Command>
+               </PopoverContent>
+            </Popover>
          </div>
          <div className="flex items-center gap-2 py-1.5 text-xs text-muted-foreground border-b">
             <span className="flex-1">Name</span>
@@ -83,7 +145,7 @@ function ProjectsSection({ initiative }: { initiative: Initiative }) {
                   <Link
                      key={project.id}
                      href={`/${orgId}/project/${project.id}/overview`}
-                     className="flex items-center gap-2 py-2 text-sm hover:bg-sidebar/50 rounded-md px-1 -mx-1 transition-colors"
+                     className="group/row flex items-center gap-2 py-2 text-sm hover:bg-sidebar/50 rounded-md px-1 -mx-1 transition-colors"
                   >
                      <project.icon className="size-4 text-muted-foreground shrink-0" />
                      <span className="flex-1 truncate font-medium">{project.name}</span>
@@ -119,6 +181,19 @@ function ProjectsSection({ initiative }: { initiative: Initiative }) {
                      </span>
                      <span className="w-16 shrink-0 text-xs text-muted-foreground">
                         {project.percentComplete}%
+                     </span>
+                     <span
+                        role="button"
+                        tabIndex={0}
+                        aria-label="Remove from initiative"
+                        onClick={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                           removeProject(project.id);
+                        }}
+                        className="opacity-0 group-hover/row:opacity-100 text-muted-foreground hover:text-red-500 transition-opacity shrink-0 cursor-pointer"
+                     >
+                        <X className="size-3.5" />
                      </span>
                   </Link>
                ))}
