@@ -283,7 +283,7 @@ function InitiativesDisplayOptions() {
 /* ---------------------------------- rows ---------------------------------- */
 
 const ACTIVE_DOT_COLORS: Record<string, string> = {
-   'no-update': '#95a2b3',
+   'no-update': '#8f9299',
    'on-track': '#4cb782',
    'at-risk': '#f2c94c',
    'off-track': '#eb5757',
@@ -304,7 +304,7 @@ function ActiveProjectDots({ initiative }: { initiative: Initiative }) {
             <span key={healthId} className="inline-flex items-center gap-1 text-xs">
                <span
                   className="size-2 rounded-full"
-                  style={{ backgroundColor: ACTIVE_DOT_COLORS[healthId] ?? '#95a2b3' }}
+                  style={{ backgroundColor: ACTIVE_DOT_COLORS[healthId] ?? '#8f9299' }}
                />
                {count}
             </span>

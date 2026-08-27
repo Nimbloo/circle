@@ -21,7 +21,7 @@ const UpdateSchema = z.object({
    name: z.string().min(1).optional(),
    description: z.string().nullish(),
    icon: z.string().nullish(),
-   status: z.string().optional(),
+   status: z.enum(['active', 'planned', 'completed']).optional(),
    priorityId: z.string().optional(),
    healthId: z.string().optional(),
    ownerId: z.string().nullish(),

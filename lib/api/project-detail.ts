@@ -363,6 +363,13 @@ export async function postProjectUpdate(
       blocks: JSON.stringify(input.blocks ?? []),
       createdAt: now,
    });
+   // Um check-in dita a saúde do projeto (paridade Linear): o health do update vira
+   // o health corrente do projeto + carimba healthUpdatedAt. Ids batem com o catálogo
+   // (on-track/at-risk/off-track).
+   await db
+      .update(projectT)
+      .set({ healthId: input.health, healthUpdatedAt: now })
+      .where(eq(projectT.id, projectId));
    const users = await loadUsers(db, [authorId]);
    publish({ entity: 'project', action: 'updated', id: projectId });
    return {

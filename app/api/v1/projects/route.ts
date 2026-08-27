@@ -10,10 +10,12 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request) {
    return handle(async () => {
       const sp = new URL(req.url).searchParams;
-      const [sort, dir] = (sp.get('sort') ?? 'title-asc').split('-') as [
-         ProjectSort,
-         'asc' | 'desc',
-      ];
+      // Split no ÚLTIMO hífen: senão 'start-date-asc' virava sort='start'/dir='date'
+      // (os sorts hifenizados start-date/target-date ficavam inacessíveis via API).
+      const rawSort = sp.get('sort') ?? 'title-asc';
+      const dash = rawSort.lastIndexOf('-');
+      const sort = rawSort.slice(0, dash) as ProjectSort;
+      const dir = rawSort.slice(dash + 1) as 'asc' | 'desc';
       return ok(
          await listProjects(db, {
             tab: (sp.get('tab') as 'all' | 'active') ?? undefined,

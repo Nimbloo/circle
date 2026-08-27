@@ -108,10 +108,15 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
    );
 
    const updatesByMonth = useMemo(() => {
-      const groups = new Map<string, ProjectUpdate[]>();
+      // Chave por yyyy-MM (year-aware) pra não colapsar o mesmo mês de anos diferentes;
+      // o heading exibe "MMMM yyyy".
+      const groups = new Map<string, { label: string; items: ProjectUpdate[] }>();
       for (const update of updates) {
-         const month = format(parseISO(update.date), 'MMMM');
-         groups.set(month, [...(groups.get(month) ?? []), update]);
+         const d = parseISO(update.date);
+         const key = format(d, 'yyyy-MM');
+         const group = groups.get(key) ?? { label: format(d, 'MMMM yyyy'), items: [] };
+         group.items.push(update);
+         groups.set(key, group);
       }
       return [...groups.entries()];
    }, [updates]);
@@ -199,11 +204,11 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
                      No updates yet — post the first one to keep the team in the loop.
                   </p>
                ) : (
-                  updatesByMonth.map(([month, monthUpdates]) => (
-                     <div key={month} className="mt-8">
-                        <h3 className="text-lg font-semibold mb-3">{month}</h3>
+                  updatesByMonth.map(([key, group]) => (
+                     <div key={key} className="mt-8">
+                        <h3 className="text-lg font-semibold mb-3">{group.label}</h3>
                         <div className="flex flex-col gap-3">
-                           {monthUpdates.map((update) => (
+                           {group.items.map((update) => (
                               <UpdateCard key={update.id} update={update} />
                            ))}
                         </div>

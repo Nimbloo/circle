@@ -26,7 +26,7 @@ const CreateSchema = z.object({
    name: z.string().min(1),
    priorityId: z.string().min(1),
    healthId: z.string().min(1),
-   status: z.string().optional(),
+   status: z.enum(['active', 'planned', 'completed']).optional(),
    description: z.string().nullish(),
    icon: z.string().nullish(),
    ownerId: z.string().nullish(),

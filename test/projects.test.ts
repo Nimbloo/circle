@@ -11,6 +11,7 @@ import {
    updateProject,
    deleteProject,
 } from '@/lib/api/projects';
+import { postProjectUpdate } from '@/lib/api/project-detail';
 
 async function setup() {
    const db = await makeTestDb();
@@ -140,5 +141,17 @@ describe('projects', () => {
       await expect(
          createProject(db, { name: 'X', statusId: 'nope', ...base })
       ).rejects.toMatchObject({ status: 400 });
+   });
+
+   it('um project update (check-in) dita o health corrente do projeto', async () => {
+      const { db, lead } = await setup();
+      const p = await createProject(db, { name: 'P', statusId: 'in-progress', ...base });
+      expect(p.health.id).toBe('on-track');
+
+      await postProjectUpdate(db, p.id, lead, { health: 'at-risk', blocks: [] });
+      expect((await getProject(db, p.id))?.health.id).toBe('at-risk');
+
+      await postProjectUpdate(db, p.id, lead, { health: 'off-track', blocks: [] });
+      expect((await getProject(db, p.id))?.health.id).toBe('off-track');
    });
 });
