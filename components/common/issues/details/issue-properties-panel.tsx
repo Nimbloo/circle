@@ -290,6 +290,29 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
             )
          )}
 
+         {onChanged ? (
+            <Section title="Duplicate of">
+               <RelationEditor
+                  issueId={issue.id}
+                  kind="duplicate"
+                  relatedIds={detail.duplicateIds ?? []}
+                  addLabel="Mark as duplicate of"
+                  onChanged={onChanged}
+               />
+            </Section>
+         ) : (
+            detail.duplicateIds &&
+            detail.duplicateIds.length > 0 && (
+               <Section title="Duplicate of">
+                  <div className="flex flex-col">
+                     {detail.duplicateIds.map((identifier) => (
+                        <IssueRefRow key={identifier} identifier={identifier} />
+                     ))}
+                  </div>
+               </Section>
+            )
+         )}
+
          {detail.prLinks && detail.prLinks.length > 0 && (
             <Section title="Diffs">
                <div className="flex flex-col gap-1">

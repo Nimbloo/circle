@@ -17,7 +17,7 @@ import { useParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-export type RelationKind = 'sub' | 'related' | 'blocked_by';
+export type RelationKind = 'sub' | 'related' | 'blocked_by' | 'duplicate';
 
 interface RelationEditorProps {
    issueId: string;

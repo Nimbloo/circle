@@ -110,6 +110,20 @@ describe('issue detail / comments / activity', () => {
       await expect(addRelation(db, issue.id, 'nope', 'related')).rejects.toThrow();
    });
 
+   it('relação duplicate popula duplicateIds (paridade Linear)', async () => {
+      const { db, issue } = await anIssue();
+      const canonical = await createIssue(
+         db,
+         { teamId: 'CORE', title: 'Canônica', statusId: 'to-do', priorityId: 'low' },
+         ME
+      );
+      const dto = await addRelation(db, issue.id, canonical.id, 'duplicate', ME);
+      expect(dto?.duplicateIds).toEqual([canonical.id]);
+      expect(dto?.relatedIds).toEqual([]);
+      const removed = await removeRelation(db, issue.id, canonical.id, 'duplicate', ME);
+      expect(removed?.duplicateIds).toEqual([]);
+   });
+
    it('add/remove de relação gera activity_event (com actorEmail)', async () => {
       const { db, issue } = await anIssue();
       const other = await createIssue(

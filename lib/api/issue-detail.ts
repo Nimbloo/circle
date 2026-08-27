@@ -63,6 +63,7 @@ export interface IssueDetailDto {
    subIssueIds: string[];
    relatedIds: string[];
    blockedByIds: string[];
+   duplicateIds: string[];
    prLinks: { id: string; title: string; status: string }[];
 }
 
@@ -118,6 +119,7 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
       subIssueIds: relations.filter((r) => r.kind === 'sub').map((r) => r.relatedId),
       relatedIds: relations.filter((r) => r.kind === 'related').map((r) => r.relatedId),
       blockedByIds: relations.filter((r) => r.kind === 'blocked_by').map((r) => r.relatedId),
+      duplicateIds: relations.filter((r) => r.kind === 'duplicate').map((r) => r.relatedId),
       prLinks: prs.map((p) => ({ id: p.id, title: p.title, status: p.status })),
    };
 }
@@ -151,8 +153,13 @@ export async function updateIssueContent(
    return getIssueDetail(db, issueId);
 }
 
-export type RelationKind = 'sub' | 'related' | 'blocked_by';
-export const RELATION_KINDS: readonly RelationKind[] = ['sub', 'related', 'blocked_by'];
+export type RelationKind = 'sub' | 'related' | 'blocked_by' | 'duplicate';
+export const RELATION_KINDS: readonly RelationKind[] = [
+   'sub',
+   'related',
+   'blocked_by',
+   'duplicate',
+];
 
 /** Evento de atividade (event, text) para add/remove de cada tipo de relação. O feed
  * já tem ícones para related/blocked/unblocked; sub cai no ícone default. */
@@ -165,6 +172,10 @@ function relationEvent(kind: RelationKind, added: boolean): { event: string; tex
       return added
          ? { event: 'sub', text: 'adicionou uma sub-issue' }
          : { event: 'sub', text: 'removeu uma sub-issue' };
+   if (kind === 'duplicate')
+      return added
+         ? { event: 'duplicate', text: 'marcou como duplicada' }
+         : { event: 'duplicate', text: 'removeu a marca de duplicada' };
    return added
       ? { event: 'related', text: 'vinculou uma issue relacionada' }
       : { event: 'related', text: 'removeu uma issue relacionada' };
