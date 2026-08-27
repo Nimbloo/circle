@@ -17,13 +17,16 @@ export async function GET(req: Request, { params }: Params) {
    });
 }
 
-const CommentSchema = z.object({ body: z.string().min(1).max(10000) });
+const CommentSchema = z.object({
+   body: z.string().min(1).max(10000),
+   parentId: z.string().min(1).nullable().optional(),
+});
 
 export async function POST(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
       const email = await requireEmail(req);
-      const { body } = CommentSchema.parse(await req.json());
-      return ok(await addComment(db, id, body, email));
+      const { body, parentId } = CommentSchema.parse(await req.json());
+      return ok(await addComment(db, id, body, email, parentId ?? null));
    });
 }

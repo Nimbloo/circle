@@ -155,6 +155,7 @@ function adaptActivity(dtos: ActivityDto[]): ActivityItem[] {
             actor,
             timeAgo,
             body: textToBlocks(a.body),
+            parentId: a.parentId ?? null,
             reactions: a.reactions,
          };
       }

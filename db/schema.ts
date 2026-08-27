@@ -359,9 +359,11 @@ export const comment = pgTable(
          .notNull()
          .references(() => appUser.id),
       body: text('body').notNull(), // ContentBlock[] (json)
+      /** Comentário-pai (threading, paridade Linear). NULL = comentário raiz. */
+      parentId: varchar('parent_id', { length: 36 }),
       createdAt: timestamp('created_at').notNull().defaultNow(),
    },
-   (t) => [index('idx_comment_issue').on(t.issueId)]
+   (t) => [index('idx_comment_issue').on(t.issueId), index('idx_comment_parent').on(t.parentId)]
 );
 
 export const commentReaction = pgTable(

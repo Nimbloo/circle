@@ -39,6 +39,7 @@ export interface CommentDto {
    id: string;
    author: UserRef | null;
    body: string;
+   parentId: string | null;
    createdAt: string;
    reactions: ReactionDto[];
 }
@@ -51,6 +52,7 @@ export interface ActivityItem {
    event?: string;
    text?: string;
    body?: string;
+   parentId?: string | null;
    reactions?: ReactionDto[];
 }
 
@@ -241,6 +243,7 @@ export async function listComments(
       id: c.id,
       author: userRef(users.get(c.authorId)),
       body: c.body,
+      parentId: c.parentId ?? null,
       createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : String(c.createdAt),
       reactions: reactions.get(c.id) ?? [],
    }));
@@ -250,7 +253,8 @@ export async function addComment(
    db: Db,
    issueId: string,
    body: string,
-   actorEmail: string
+   actorEmail: string,
+   parentId?: string | null
 ): Promise<CommentDto> {
    const [iss] = await db
       .select({ assigneeId: issueT.assigneeId })
@@ -259,10 +263,32 @@ export async function addComment(
       .limit(1);
    if (!iss) throw new ApiError(404, `Issue '${issueId}' não encontrada`);
 
+   // Threading: valida que o pai existe E é da MESMA issue (sem cross-issue thread).
+   // Só um nível de aninhamento — responder a uma resposta ancora no mesmo pai raiz.
+   let rootParentId: string | null = null;
+   let parentAuthorId: string | null = null;
+   if (parentId) {
+      const [parent] = await db
+         .select({
+            id: commentT.id,
+            issueId: commentT.issueId,
+            parentId: commentT.parentId,
+            authorId: commentT.authorId,
+         })
+         .from(commentT)
+         .where(eq(commentT.id, parentId))
+         .limit(1);
+      if (!parent || parent.issueId !== issueId) throw new ApiError(400, 'Comentário-pai inválido');
+      rootParentId = parent.parentId ?? parent.id;
+      parentAuthorId = parent.authorId;
+   }
+
    const author = await getOrCreateUser(db, actorEmail);
    const id = randomUUID();
    const now = new Date();
-   await db.insert(commentT).values({ id, issueId, authorId: author.id, body, createdAt: now });
+   await db
+      .insert(commentT)
+      .values({ id, issueId, authorId: author.id, body, parentId: rootParentId, createdAt: now });
 
    // @mentions: resolve os slugs (prefixo do e-mail) citados no corpo e notifica.
    const slugs = [
@@ -301,13 +327,38 @@ export async function addComment(
          })
       );
    }
+   // Resposta: notifica o autor do comentário-pai (se não for o próprio autor,
+   // nem o assignee/mencionado já notificados acima).
+   if (
+      parentAuthorId &&
+      parentAuthorId !== author.id &&
+      parentAuthorId !== iss.assigneeId &&
+      !mentionedIds.has(parentAuthorId)
+   ) {
+      notifications.push(
+         dispatchNotification(db, {
+            type: 'comment',
+            issueId,
+            recipientId: parentAuthorId,
+            actorId: author.id,
+            content: `${author.name} respondeu ao seu comentário`,
+         })
+      );
+   }
    // Fire-and-forget: as notificações (Slack/SES) não bloqueiam a resposta do comentário.
    void Promise.all(notifications).catch((e) =>
       console.error('[circle] notificações de comentário falharam:', e)
    );
 
    publish({ entity: 'comment', action: 'created', id, actorEmail });
-   return { id, author: userRef(author), body, createdAt: now.toISOString(), reactions: [] };
+   return {
+      id,
+      author: userRef(author),
+      body,
+      parentId: rootParentId,
+      createdAt: now.toISOString(),
+      reactions: [],
+   };
 }
 
 /**
@@ -335,6 +386,7 @@ export async function updateComment(
       id: c.id,
       author: userRef(users.get(c.authorId)),
       body,
+      parentId: c.parentId ?? null,
       createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : String(c.createdAt),
       reactions: reactions.get(c.id) ?? [],
    };
@@ -354,8 +406,15 @@ export async function deleteComment(
    const c = rows[0];
    const actor = await getOrCreateUser(db, actorEmail);
    if (c.authorId !== actor.id) throw new ApiError(403, 'Só o autor pode excluir o comentário');
-   await db.delete(commentReaction).where(eq(commentReaction.commentId, commentId));
-   await db.delete(commentT).where(eq(commentT.id, commentId));
+   // Threading: excluir um comentário-raiz leva junto suas respostas (e as reactions
+   // de todas). Como só há 1 nível, basta pegar os filhos diretos deste id.
+   const replies = await db
+      .select({ id: commentT.id })
+      .from(commentT)
+      .where(eq(commentT.parentId, commentId));
+   const ids = [commentId, ...replies.map((r) => r.id)];
+   await db.delete(commentReaction).where(inArray(commentReaction.commentId, ids));
+   await db.delete(commentT).where(inArray(commentT.id, ids));
    publish({ entity: 'comment', action: 'deleted', id: commentId, actorEmail });
    return true;
 }
@@ -386,6 +445,7 @@ export async function listActivity(
       actor: c.author,
       createdAt: c.createdAt,
       body: c.body,
+      parentId: c.parentId,
       reactions: c.reactions,
    }));
    return [...eventItems, ...commentItems].sort((a, b) => a.createdAt.localeCompare(b.createdAt));

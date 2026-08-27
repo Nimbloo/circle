@@ -205,8 +205,8 @@ export const api = {
          ),
       activity: (id: string) => get<ActivityItem[]>(`/issues/${id}/activity`),
       comments: (id: string) => get<CommentDto[]>(`/issues/${id}/comments`),
-      addComment: (id: string, body: string) =>
-         post<CommentDto>(`/issues/${id}/comments`, { body }),
+      addComment: (id: string, body: string, parentId?: string | null) =>
+         post<CommentDto>(`/issues/${id}/comments`, { body, parentId: parentId ?? null }),
       aggregate: (team?: string) =>
          get<IssueMatrix>(`/issues/aggregate${team ? `?team=${team}` : ''}`),
    },

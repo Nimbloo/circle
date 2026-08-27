@@ -15,6 +15,7 @@ import {
    Pencil,
    PenLine,
    RefreshCcw,
+   Reply,
    SmilePlus,
    Tag,
    Trash2,
@@ -63,15 +64,24 @@ function CommentCard({
    item,
    canManage,
    onChanged,
+   issueId,
+   meId,
+   replies = [],
+   isReply = false,
 }: {
    item: Extract<ActivityItem, { kind: 'comment' }>;
    canManage: boolean;
    onChanged?: () => void;
+   issueId?: string;
+   meId?: string;
+   replies?: Extract<ActivityItem, { kind: 'comment' }>[];
+   isReply?: boolean;
 }) {
    const [editing, setEditing] = useState(false);
    const [draft, setDraft] = useState('');
    const [busy, setBusy] = useState(false);
    const [picking, setPicking] = useState(false);
+   const [replying, setReplying] = useState(false);
    const customEmojis = useCustomEmojis();
 
    // `reactedByMe` é server-truth (vem do DTO), agora modelado em CommentReaction.
@@ -131,131 +141,173 @@ function CommentCard({
    };
 
    return (
-      <div className="group/comment my-2 rounded-lg border border-border/60 bg-container p-3.5">
-         <div className="flex items-center gap-2 mb-1.5">
-            <Avatar className="size-5">
-               <AvatarImage src={item.actor.avatarUrl || undefined} alt={item.actor.name} />
-               <AvatarFallback>{item.actor.name[0]}</AvatarFallback>
-            </Avatar>
-            <span className="text-sm font-medium">{item.actor.name}</span>
-            <span className="text-xs text-muted-foreground">{item.timeAgo}</span>
-            {canManage && !editing && (
-               <div className="ml-auto flex items-center gap-1 opacity-0 group-hover/comment:opacity-100">
-                  <button
-                     type="button"
-                     onClick={startEdit}
-                     aria-label="Edit comment"
-                     className="text-muted-foreground hover:text-foreground"
-                  >
-                     <Pencil className="size-3.5" />
-                  </button>
-                  <button
-                     type="button"
-                     onClick={() => void remove()}
+      <div className={cn(!isReply && 'my-2')}>
+         <div className="group/comment rounded-lg border border-border/60 bg-container p-3.5">
+            <div className="flex items-center gap-2 mb-1.5">
+               <Avatar className="size-5">
+                  <AvatarImage src={item.actor.avatarUrl || undefined} alt={item.actor.name} />
+                  <AvatarFallback>{item.actor.name[0]}</AvatarFallback>
+               </Avatar>
+               <span className="text-sm font-medium">{item.actor.name}</span>
+               <span className="text-xs text-muted-foreground">{item.timeAgo}</span>
+               {canManage && !editing && (
+                  <div className="ml-auto flex items-center gap-1 opacity-0 group-hover/comment:opacity-100">
+                     <button
+                        type="button"
+                        onClick={startEdit}
+                        aria-label="Edit comment"
+                        className="text-muted-foreground hover:text-foreground"
+                     >
+                        <Pencil className="size-3.5" />
+                     </button>
+                     <button
+                        type="button"
+                        onClick={() => void remove()}
+                        disabled={busy}
+                        aria-label="Delete comment"
+                        className="text-muted-foreground hover:text-red-500 disabled:opacity-40"
+                     >
+                        <Trash2 className="size-3.5" />
+                     </button>
+                  </div>
+               )}
+            </div>
+
+            {editing ? (
+               <div className="flex flex-col gap-2">
+                  <textarea
+                     value={draft}
+                     onChange={(e) => setDraft(e.target.value)}
+                     rows={2}
                      disabled={busy}
-                     aria-label="Delete comment"
-                     className="text-muted-foreground hover:text-red-500 disabled:opacity-40"
-                  >
-                     <Trash2 className="size-3.5" />
-                  </button>
+                     className="w-full resize-none rounded-md border bg-transparent p-2 text-sm outline-none focus:ring-1 focus:ring-accent disabled:opacity-60"
+                  />
+                  <div className="flex items-center justify-end gap-2">
+                     <Button
+                        size="xs"
+                        variant="ghost"
+                        onClick={() => setEditing(false)}
+                        disabled={busy}
+                     >
+                        Cancel
+                     </Button>
+                     <Button size="xs" onClick={() => void save()} disabled={!draft.trim() || busy}>
+                        Save
+                     </Button>
+                  </div>
+               </div>
+            ) : (
+               <div className="text-sm [&_p]:my-1.5">
+                  <ContentBlocks blocks={item.body} />
                </div>
             )}
+
+            <div className="flex items-center gap-1.5 mt-1">
+               {reactions.map((reaction) => (
+                  <button
+                     key={reaction.emoji}
+                     type="button"
+                     onClick={() => void react(reaction.emoji)}
+                     disabled={busy}
+                     aria-pressed={reaction.reactedByMe}
+                     className={cn(
+                        'inline-flex items-center gap-1 text-xs border rounded-full px-2 py-0.5 disabled:opacity-40',
+                        reaction.reactedByMe
+                           ? 'bg-primary/15 border-primary/40 hover:bg-primary/20'
+                           : 'bg-accent/60 border-border/60 hover:bg-accent'
+                     )}
+                  >
+                     {(() => {
+                        const url = customEmojiUrl(reaction.emoji);
+                        return url ? (
+                           // eslint-disable-next-line @next/next/no-img-element
+                           <img src={url} alt={reaction.emoji} className="size-4 object-contain" />
+                        ) : (
+                           <span>{reaction.emoji}</span>
+                        );
+                     })()}{' '}
+                     {reaction.count}
+                  </button>
+               ))}
+               <button
+                  type="button"
+                  onClick={() => setPicking((value) => !value)}
+                  disabled={busy}
+                  aria-label="Add reaction"
+                  className="text-muted-foreground hover:text-foreground disabled:opacity-40"
+               >
+                  <SmilePlus className="size-3.5" />
+               </button>
+               {/* Reply só nos comentários-raiz (aninhamento de 1 nível, como o Linear) */}
+               {!isReply && issueId && (
+                  <button
+                     type="button"
+                     onClick={() => setReplying((v) => !v)}
+                     aria-label="Reply"
+                     className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                     <Reply className="size-3.5" />
+                     Reply
+                  </button>
+               )}
+               {picking && (
+                  <div className="flex items-center flex-wrap gap-1 rounded-full border bg-container px-1.5 py-0.5 shadow-xs max-w-[220px]">
+                     {['👍', '❤️', '🎉'].map((emoji) => (
+                        <button
+                           key={emoji}
+                           type="button"
+                           onClick={() => void react(emoji)}
+                           disabled={busy}
+                           className="text-sm transition-transform hover:scale-125 disabled:opacity-40"
+                        >
+                           {emoji}
+                        </button>
+                     ))}
+                     {customEmojis.map((e) => (
+                        <button
+                           key={e.id}
+                           type="button"
+                           onClick={() => void react(`:${e.shortcode}:`)}
+                           disabled={busy}
+                           title={`:${e.shortcode}:`}
+                           className="transition-transform hover:scale-125 disabled:opacity-40"
+                        >
+                           {/* eslint-disable-next-line @next/next/no-img-element */}
+                           <img src={e.url} alt={e.shortcode} className="size-4 object-contain" />
+                        </button>
+                     ))}
+                  </div>
+               )}
+            </div>
          </div>
 
-         {editing ? (
-            <div className="flex flex-col gap-2">
-               <textarea
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  rows={2}
-                  disabled={busy}
-                  className="w-full resize-none rounded-md border bg-transparent p-2 text-sm outline-none focus:ring-1 focus:ring-accent disabled:opacity-60"
-               />
-               <div className="flex items-center justify-end gap-2">
-                  <Button
-                     size="xs"
-                     variant="ghost"
-                     onClick={() => setEditing(false)}
-                     disabled={busy}
-                  >
-                     Cancel
-                  </Button>
-                  <Button size="xs" onClick={() => void save()} disabled={!draft.trim() || busy}>
-                     Save
-                  </Button>
-               </div>
-            </div>
-         ) : (
-            <div className="text-sm [&_p]:my-1.5">
-               <ContentBlocks blocks={item.body} />
+         {/* Respostas aninhadas + composer de resposta (só na raiz) */}
+         {!isReply && (replies.length > 0 || replying) && (
+            <div className="ml-5 mt-1 flex flex-col gap-1 border-l border-border/50 pl-3">
+               {replies.map((reply) => (
+                  <CommentCard
+                     key={reply.id}
+                     item={reply}
+                     canManage={!!meId && reply.actor.id === meId}
+                     onChanged={onChanged}
+                     isReply
+                  />
+               ))}
+               {replying && issueId && (
+                  <CommentComposer
+                     issueId={issueId}
+                     parentId={item.id}
+                     autoFocus
+                     placeholder="Reply… (@ to mention)"
+                     onCancel={() => setReplying(false)}
+                     onPosted={() => {
+                        setReplying(false);
+                        onChanged?.();
+                     }}
+                  />
+               )}
             </div>
          )}
-
-         <div className="flex items-center gap-1.5 mt-1">
-            {reactions.map((reaction) => (
-               <button
-                  key={reaction.emoji}
-                  type="button"
-                  onClick={() => void react(reaction.emoji)}
-                  disabled={busy}
-                  aria-pressed={reaction.reactedByMe}
-                  className={cn(
-                     'inline-flex items-center gap-1 text-xs border rounded-full px-2 py-0.5 disabled:opacity-40',
-                     reaction.reactedByMe
-                        ? 'bg-primary/15 border-primary/40 hover:bg-primary/20'
-                        : 'bg-accent/60 border-border/60 hover:bg-accent'
-                  )}
-               >
-                  {(() => {
-                     const url = customEmojiUrl(reaction.emoji);
-                     return url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={url} alt={reaction.emoji} className="size-4 object-contain" />
-                     ) : (
-                        <span>{reaction.emoji}</span>
-                     );
-                  })()}{' '}
-                  {reaction.count}
-               </button>
-            ))}
-            <button
-               type="button"
-               onClick={() => setPicking((value) => !value)}
-               disabled={busy}
-               aria-label="Add reaction"
-               className="text-muted-foreground hover:text-foreground disabled:opacity-40"
-            >
-               <SmilePlus className="size-3.5" />
-            </button>
-            {picking && (
-               <div className="flex items-center flex-wrap gap-1 rounded-full border bg-container px-1.5 py-0.5 shadow-xs max-w-[220px]">
-                  {['👍', '❤️', '🎉'].map((emoji) => (
-                     <button
-                        key={emoji}
-                        type="button"
-                        onClick={() => void react(emoji)}
-                        disabled={busy}
-                        className="text-sm transition-transform hover:scale-125 disabled:opacity-40"
-                     >
-                        {emoji}
-                     </button>
-                  ))}
-                  {customEmojis.map((e) => (
-                     <button
-                        key={e.id}
-                        type="button"
-                        onClick={() => void react(`:${e.shortcode}:`)}
-                        disabled={busy}
-                        title={`:${e.shortcode}:`}
-                        className="transition-transform hover:scale-125 disabled:opacity-40"
-                     >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={e.url} alt={e.shortcode} className="size-4 object-contain" />
-                     </button>
-                  ))}
-               </div>
-            )}
-         </div>
       </div>
    );
 }
@@ -277,6 +329,19 @@ export function ActivityFeed({
    const items = activity;
    const meId = useWorkspaceStore((s) => s.me?.id);
 
+   // Threading: separa as respostas (parentId != null) dos itens de topo e as
+   // agrupa por pai. Respostas NÃO aparecem no feed cronológico de topo — vão
+   // aninhadas sob o comentário-raiz.
+   const repliesByParent = new Map<string, Extract<ActivityItem, { kind: 'comment' }>[]>();
+   for (const it of items) {
+      if (it.kind === 'comment' && it.parentId) {
+         const arr = repliesByParent.get(it.parentId) ?? [];
+         arr.push(it);
+         repliesByParent.set(it.parentId, arr);
+      }
+   }
+   const topLevel = items.filter((it) => !(it.kind === 'comment' && it.parentId));
+
    return (
       <div className="mt-10">
          <div className="flex items-center justify-between mb-2">
@@ -284,7 +349,7 @@ export function ActivityFeed({
          </div>
 
          <div className="flex flex-col">
-            {items.map((item) =>
+            {topLevel.map((item) =>
                item.kind === 'event' ? (
                   <EventRow key={item.id} item={item} />
                ) : (
@@ -293,6 +358,9 @@ export function ActivityFeed({
                      item={item}
                      canManage={!!meId && item.actor.id === meId}
                      onChanged={onCommentAdded}
+                     issueId={issueId}
+                     meId={meId}
+                     replies={repliesByParent.get(item.id) ?? []}
                   />
                )
             )}

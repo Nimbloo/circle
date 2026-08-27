@@ -44,6 +44,8 @@ export type ActivityItem =
         actor: User;
         timeAgo: string;
         body: ContentBlock[];
+        /** Comentário-pai (threading). undefined/null = raiz. */
+        parentId?: string | null;
         reactions?: CommentReaction[];
      };
 
