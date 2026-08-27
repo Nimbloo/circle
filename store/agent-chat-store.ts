@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { api } from '@/lib/client';
 
 export interface AgentMessage {
    id: string;
@@ -25,6 +26,12 @@ export interface AgentTurn {
 interface AgentChatState {
    chats: AgentChat[];
    activeChatId: string | null;
+   /** Carrega a lista de chats persistidos (mensagens vêm sob demanda via loadChat). */
+   hydrate: () => Promise<void>;
+   /** Carrega as mensagens de um chat do servidor. */
+   loadChat: (chatId: string) => Promise<void>;
+   /** Troca o id local (uid) pelo id do servidor após criar o chat na 1ª mensagem. */
+   rekeyChat: (oldId: string, newId: string, title: string) => void;
    setActiveChat: (chatId: string | null) => void;
    startNewChat: () => void;
    /**
@@ -65,6 +72,44 @@ function toHistory(messages: AgentMessage[]): AgentTurn[] {
 export const useAgentChatStore = create<AgentChatState>((set, get) => ({
    chats: [],
    activeChatId: null,
+
+   hydrate: async () => {
+      try {
+         const list = await api.agent.chats();
+         set({ chats: list.map((c) => ({ id: c.id, title: c.title, messages: [] })) });
+      } catch {
+         // degrada gracioso — mantém o estado atual
+      }
+   },
+
+   loadChat: async (chatId) => {
+      try {
+         const chat = await api.agent.getChat(chatId);
+         set((state) => ({
+            chats: state.chats.map((c) =>
+               c.id === chatId
+                  ? {
+                       ...c,
+                       title: chat.title,
+                       messages: chat.messages.map((m, i) => ({
+                          id: `${chatId}-${i}`,
+                          role: m.role,
+                          content: m.content,
+                       })),
+                    }
+                  : c
+            ),
+         }));
+      } catch {
+         // ignora — a bolha fica vazia
+      }
+   },
+
+   rekeyChat: (oldId, newId, title) =>
+      set((state) => ({
+         chats: state.chats.map((c) => (c.id === oldId ? { ...c, id: newId, title } : c)),
+         activeChatId: state.activeChatId === oldId ? newId : state.activeChatId,
+      })),
 
    setActiveChat: (chatId) => set({ activeChatId: chatId }),
 

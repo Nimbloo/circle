@@ -129,6 +129,19 @@ export const api = {
    agent: {
       chat: (messages: { role: 'user' | 'assistant'; content: string }[]) =>
          post<{ reply: string }>('/agent/chat', { messages }),
+      /** Conversas persistidas (#23). */
+      chats: () => get<{ id: string; title: string; updatedAt: string }[]>('/agent/chats'),
+      getChat: (id: string) =>
+         get<{
+            id: string;
+            title: string;
+            messages: { role: 'user' | 'assistant'; content: string }[];
+         }>(`/agent/chats/${id}`),
+      send: (chatId: string | null, content: string) =>
+         post<{ chatId: string; title: string; reply: string }>('/agent/chats', {
+            chatId,
+            content,
+         }),
    },
 
    settings: {

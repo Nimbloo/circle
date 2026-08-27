@@ -588,6 +588,35 @@ export const projectTemplate = pgTable(
    (t) => [index('idx_project_template_team').on(t.teamId)]
 );
 
+// ── Agent (chat com IA — Bedrock) — conversas persistidas ────────────────
+export const agentChat = pgTable(
+   'agent_chat',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      userId: varchar('user_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      title: varchar('title', { length: 256 }).notNull(),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+      updatedAt: timestamp('updated_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_agent_chat_user').on(t.userId)]
+);
+
+export const agentMessage = pgTable(
+   'agent_message',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      chatId: varchar('chat_id', { length: 36 })
+         .notNull()
+         .references(() => agentChat.id),
+      role: varchar('role', { length: 16 }).notNull(), // user|assistant
+      content: text('content').notNull(),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_agent_message_chat').on(t.chatId, t.createdAt)]
+);
+
 /** Emojis customizados do workspace (imagem no S3/CDN), usados em reações. */
 export const customEmoji = pgTable('custom_emoji', {
    id: varchar('id', { length: 36 }).primaryKey(),
