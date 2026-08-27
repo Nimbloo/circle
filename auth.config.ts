@@ -1,5 +1,18 @@
 import type { NextAuthConfig } from 'next-auth';
 import Google from 'next-auth/providers/google';
+import Keycloak from 'next-auth/providers/keycloak';
+
+/**
+ * Keycloak (OIDC) — SSO opcional, ligado SÓ quando as três vars estão presentes.
+ * É fetch-based (edge-safe, como o Google), então vive aqui no config edge. Adicionar
+ * o Keycloak = setar AUTH_KEYCLOAK_ISSUER/ID/SECRET; o provider e o botão de login
+ * aparecem sozinhos (o botão via getProviders). O provisionamento do app_user por
+ * e-mail no 1º login está no callback signIn de `auth.ts`.
+ */
+const keycloakEnabled =
+   !!process.env.AUTH_KEYCLOAK_ISSUER &&
+   !!process.env.AUTH_KEYCLOAK_ID &&
+   !!process.env.AUTH_KEYCLOAK_SECRET;
 
 /**
  * Config EDGE-SAFE do NextAuth — usada pelo `middleware.ts` (runtime Edge). Contém
@@ -25,5 +38,14 @@ export const authConfig: NextAuthConfig = {
          clientId: process.env.AUTH_GOOGLE_ID,
          clientSecret: process.env.AUTH_GOOGLE_SECRET,
       }),
+      ...(keycloakEnabled
+         ? [
+              Keycloak({
+                 clientId: process.env.AUTH_KEYCLOAK_ID,
+                 clientSecret: process.env.AUTH_KEYCLOAK_SECRET,
+                 issuer: process.env.AUTH_KEYCLOAK_ISSUER,
+              }),
+           ]
+         : []),
    ],
 };

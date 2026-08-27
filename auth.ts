@@ -73,6 +73,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             await getOrCreateUser(getDb(), email);
             return true;
          }
+         if (account?.provider === 'keycloak') {
+            // Keycloak é o IdP autoritativo: quem ele autentica pode entrar. Exige e-mail
+            // presente e (quando o IdP informa) verificado; provisiona o app_user por e-mail.
+            // Restrição opcional de domínio via AUTH_KEYCLOAK_ALLOWED_DOMAIN (ex.: "@nimbloo.ai").
+            const email = normalizeEmail(user?.email);
+            if (!email) return false;
+            if (profile && profile.email_verified === false) return false;
+            const allowedDomain = process.env.AUTH_KEYCLOAK_ALLOWED_DOMAIN?.trim().toLowerCase();
+            if (allowedDomain && !email.endsWith(allowedDomain)) return false;
+            const { getDb } = await import('@/db');
+            const { getOrCreateUser } = await import('@/lib/api/users');
+            await getOrCreateUser(getDb(), email);
+            return true;
+         }
          return true;
       },
       async jwt({ token, user }) {

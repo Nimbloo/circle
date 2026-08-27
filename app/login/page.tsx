@@ -2,7 +2,8 @@
 
 import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { signIn } from 'next-auth/react';
+import { signIn, getProviders } from 'next-auth/react';
+import { KeyRound } from 'lucide-react';
 
 import { CircleLogo } from '@/components/brand/circle-logo';
 import { NimblooLogo } from '@/components/brand/nimbloo-logo';
@@ -57,6 +58,20 @@ function LoginForm() {
    const [error, setError] = React.useState<string | null>(null);
    const [loading, setLoading] = React.useState(false);
    const [googleLoading, setGoogleLoading] = React.useState(false);
+   const [ssoLoading, setSsoLoading] = React.useState(false);
+   // Botão SSO (Keycloak) aparece sozinho quando o provider está configurado no servidor.
+   const [ssoAvailable, setSsoAvailable] = React.useState(false);
+   React.useEffect(() => {
+      let active = true;
+      getProviders()
+         .then((p) => {
+            if (active) setSsoAvailable(!!p?.keycloak);
+         })
+         .catch(() => {});
+      return () => {
+         active = false;
+      };
+   }, []);
 
    async function onSubmit(e: React.FormEvent) {
       e.preventDefault();
@@ -76,7 +91,7 @@ function LoginForm() {
       }
    }
 
-   const busy = loading || googleLoading;
+   const busy = loading || googleLoading || ssoLoading;
 
    return (
       <div className="bg-background flex min-h-svh items-center justify-center p-4">
@@ -94,6 +109,20 @@ function LoginForm() {
                   <CardDescription className="mt-3">Entre para continuar</CardDescription>
                </CardHeader>
                <CardContent className="flex flex-col gap-4">
+                  {ssoAvailable && (
+                     <Button
+                        type="button"
+                        className="w-full gap-2"
+                        disabled={busy}
+                        onClick={() => {
+                           setSsoLoading(true);
+                           void signIn('keycloak', { callbackUrl });
+                        }}
+                     >
+                        <KeyRound className="size-4" />
+                        {ssoLoading ? 'Redirecionando…' : 'Entrar com SSO'}
+                     </Button>
+                  )}
                   <Button
                      type="button"
                      variant="outline"
