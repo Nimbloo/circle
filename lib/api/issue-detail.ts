@@ -395,24 +395,17 @@ export interface MyActivityItemDto {
 }
 
 /**
- * Feed de atividade do "My issues > Activity": eventos + comentários recentes
- * das issues que o usuário ASSINA (issue_subscription), mais recentes primeiro.
- * É o feed REAL (lê activity_event + comment), não mais a lista de issues heurística.
+ * "My issues > Activity" (padrão Linear = issues em que EU estive ativo): eventos
+ * onde o usuário é o ATOR + comentários que ele escreveu, mais recentes primeiro.
+ * A aba renderiza essas issues como board; este método também serve de feed cru.
  */
 export async function listMyActivity(
    db: Db,
    userId: string,
    limit = 50
 ): Promise<MyActivityItemDto[]> {
-   const subs = await db
-      .select({ issueId: issueSubscription.issueId })
-      .from(issueSubscription)
-      .where(eq(issueSubscription.userId, userId));
-   const issueIds = subs.map((s) => s.issueId);
-   if (issueIds.length === 0) return [];
-
-   const [events, comments, issues] = await Promise.all([
-      db.select().from(activityEvent).where(inArray(activityEvent.issueId, issueIds)),
+   const [events, comments] = await Promise.all([
+      db.select().from(activityEvent).where(eq(activityEvent.actorId, userId)),
       db
          .select({
             id: commentT.id,
@@ -421,12 +414,16 @@ export async function listMyActivity(
             createdAt: commentT.createdAt,
          })
          .from(commentT)
-         .where(inArray(commentT.issueId, issueIds)),
-      db
-         .select({ id: issueT.id, identifier: issueT.identifier, title: issueT.title })
-         .from(issueT)
-         .where(inArray(issueT.id, issueIds)),
+         .where(eq(commentT.authorId, userId)),
    ]);
+   const issueIds = [
+      ...new Set([...events.map((e) => e.issueId), ...comments.map((c) => c.issueId)]),
+   ];
+   if (issueIds.length === 0) return [];
+   const issues = await db
+      .select({ id: issueT.id, identifier: issueT.identifier, title: issueT.title })
+      .from(issueT)
+      .where(inArray(issueT.id, issueIds));
    const issueMap = new Map(issues.map((i) => [i.id, i]));
    const actorIds = [
       ...new Set(

@@ -6,7 +6,7 @@ import { GroupedIssuesView } from '@/components/common/issues/grouped-issues-vie
 import { InsightsPanel } from '@/components/common/issues/insights-panel';
 import { IssueLine } from '@/components/common/issues/issue-line';
 import { BreakdownPanel } from './breakdown-panel';
-import { ActivityFeedTab } from './activity-feed-tab';
+import { api } from '@/lib/client';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
 import { useIssuesStore } from '@/store/issues-store';
@@ -14,7 +14,7 @@ import { useRightPanelStore } from '@/store/right-panel-store';
 import { useSearchStore } from '@/store/search-store';
 import { useViewStore } from '@/store/view-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { scopeMyIssues, useMyIssuesTab } from './use-my-issues';
 
 /**
@@ -40,9 +40,25 @@ export default function MyIssues() {
    const isViewTypeGrid = viewType === 'grid';
 
    const subscribedIds = useMemo(() => new Set(subscribedIssueIds ?? []), [subscribedIssueIds]);
+
+   // Aba "Activity" (padrão Linear = board de issues em que estive ativo): busca os
+   // ids das issues com atividade minha e usa como escopo do board.
+   const [activeIds, setActiveIds] = useState<ReadonlySet<string>>(new Set());
+   useEffect(() => {
+      if (tab !== 'activity') return;
+      let alive = true;
+      api.me
+         .activity()
+         .then((items) => alive && setActiveIds(new Set(items.map((i) => i.issueId))))
+         .catch(() => {});
+      return () => {
+         alive = false;
+      };
+   }, [tab]);
+
    const scopedIssues = useMemo(
-      () => scopeMyIssues(issues, tab, meId, subscribedIds),
-      [issues, tab, meId, subscribedIds]
+      () => scopeMyIssues(issues, tab, meId, subscribedIds, activeIds),
+      [issues, tab, meId, subscribedIds, activeIds]
    );
 
    const displayedIssues = useMemo(
@@ -59,15 +75,6 @@ export default function MyIssues() {
          (i) => i.title.toLowerCase().includes(q) || i.identifier.toLowerCase().includes(q)
       );
    }, [isSearching, searchQuery, displayedIssues]);
-
-   // A aba "Activity" é um feed de eventos (não uma lista de issues filtrável).
-   if (tab === 'activity') {
-      return (
-         <div className="w-full h-full flex flex-col overflow-hidden">
-            <ActivityFeedTab />
-         </div>
-      );
-   }
 
    if (isSearching) {
       return (

@@ -29,7 +29,8 @@ export function scopeMyIssues(
    issues: Issue[],
    tab: MyIssuesTab,
    meId: string | undefined,
-   subscribedIds: ReadonlySet<string>
+   subscribedIds: ReadonlySet<string>,
+   activeIds?: ReadonlySet<string>
 ): Issue[] {
    if (!meId) return [];
    switch (tab) {
@@ -37,8 +38,12 @@ export function scopeMyIssues(
          return issues.filter((issue) => issue.assignee?.id === meId);
       case 'created':
          return issues.filter((issue) => isCreatedByMe(issue, meId));
-      case 'subscribed':
       case 'activity':
+         // "Activity" = issues em que EU estive ativo (padrão Linear, board de issues).
+         // `activeIds` vem do /me/activity; sem ele (ex.: contador do header), aproxima
+         // pelas assinadas.
+         return issues.filter((issue) => (activeIds ?? subscribedIds).has(issue.id));
+      case 'subscribed':
       default:
          return issues.filter((issue) => subscribedIds.has(issue.id));
    }
