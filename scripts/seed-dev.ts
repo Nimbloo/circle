@@ -3,10 +3,10 @@
 import bcrypt from 'bcryptjs';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { appUser, team as teamT, teamMember, issueLabel } from '@/db/schema';
+import { appUser, team as teamT, teamMember, issueLabel, issue as issueT } from '@/db/schema';
 import { getOrCreateUser } from '@/lib/api/users';
 import { createIssue } from '@/lib/api/issues';
-import { updateCycleSettings } from '@/lib/api/cycles';
+import { updateCycleSettings, listCyclesByTeam } from '@/lib/api/cycles';
 
 const ME = 'danilosimei@gmail.com';
 
@@ -52,6 +52,7 @@ async function main() {
       'testing', 'documentation', 'design', 'security',
    ];
    let li = 0;
+   const createdIds: string[] = [];
    for (let i = 0; i < TITLES.length; i++) {
       const issue = await createIssue(
          db,
@@ -65,6 +66,7 @@ async function main() {
          },
          ME
       );
+      createdIds.push(issue.id);
       const n = 1 + (li % 2);
       for (let k = 0; k < n; k++) {
          await db
@@ -83,7 +85,23 @@ async function main() {
       upcomingCount: 2,
    });
 
-   console.log('[seed-dev] OK: user=%s (senha circle123), team=ENG, issues=%d, cycles=on', ME, TITLES.length);
+   // Materializa o schedule e atribui um subconjunto de issues ao ciclo corrente,
+   // pra scope/started/completed e o gráfico terem dado real (senão o ciclo fica vazio).
+   const cycles = await listCyclesByTeam(db, 'ENG');
+   const current = cycles.find((c) => c.status === 'current');
+   if (current) {
+      for (const issueId of createdIds.slice(0, 8)) {
+         await db.update(issueT).set({ cycleId: current.id }).where(eq(issueT.id, issueId));
+      }
+   }
+
+   console.log(
+      '[seed-dev] OK: user=%s (senha circle123), team=ENG, issues=%d, cycles=on (current=%s, %d in cycle)',
+      ME,
+      TITLES.length,
+      current?.name ?? 'none',
+      current ? 8 : 0
+   );
    process.exit(0);
 }
 

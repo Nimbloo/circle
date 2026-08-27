@@ -262,15 +262,7 @@ export function CycleDetailsPanel({ cycle, issues }: CycleDetailsPanelProps) {
                      Scope
                   </div>
                   <div className="text-sm">
-                     <span className="font-medium">{scope}</span>{' '}
-                     {cycle.scopeDelta !== 0 && (
-                        <span
-                           className={`text-xs ${cycle.scopeDelta > 0 ? 'text-red-500' : 'text-emerald-500'}`}
-                        >
-                           {cycle.scopeDelta > 0 ? '+' : ''}
-                           {cycle.scopeDelta}%
-                        </span>
-                     )}
+                     <span className="font-medium">{scope}</span>
                   </div>
                </div>
                <div className="flex flex-col gap-0.5">

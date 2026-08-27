@@ -39,7 +39,7 @@ export default function CycleIssues({ cycleView }: CycleIssuesProps) {
 
    // Escopa pelo time da rota — senão pega o ciclo current/upcoming de QUALQUER time
    // (em workspace multi-time, /team/B/cycle/active mostrava o ciclo do time A).
-   const { teamId } = useParams<{ teamId?: string }>();
+   const { teamId } = useParams<{ teamId: string }>();
    const cycle = cycleView === 'active' ? getCurrentCycle(teamId) : getUpcomingCycle(teamId);
 
    const isSearching = isSearchOpen && searchQuery.trim() !== '';

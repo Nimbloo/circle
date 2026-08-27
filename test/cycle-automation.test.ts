@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { makeTestDb } from './helpers/db';
 import { seedTeam } from './helpers/fixtures';
-import { createIssue, updateIssue, getIssue } from '@/lib/api/issues';
+import { createIssue, getIssue } from '@/lib/api/issues';
 import {
    ensureCycles,
    getCycleSettings,
@@ -140,5 +140,47 @@ describe('cycle automation (db)', () => {
       expect(closed.scope).toBe(2);
       expect(closed.completed).toBe(1);
       expect(closed.successRate).toBe(50);
+   });
+
+   it('auto-add: issue sem ciclo entra no corrente quando autoAdd on; respeita off e ciclo explícito', async () => {
+      const db = await setup();
+      await updateCycleSettings(db, 'CORE', {
+         enabled: true,
+         durationWeeks: 2,
+         startDay: 1,
+         upcomingCount: 2,
+      });
+      const current = (await listCyclesByTeam(db, 'CORE')).find((c) => c.status === 'current')!;
+
+      // autoAdd é default true → issue sem cycleId entra no ciclo corrente
+      const auto = await createIssue(
+         db,
+         { teamId: 'CORE', title: 'Auto', statusId: 'to-do', priorityId: 'low' },
+         'ana@nimbloo.ai'
+      );
+      expect(auto.cycleId).toBe(current.id);
+
+      // autoAdd off → issue sem cycleId NÃO entra
+      await updateCycleSettings(db, 'CORE', { autoAdd: false });
+      const manual = await createIssue(
+         db,
+         { teamId: 'CORE', title: 'Manual', statusId: 'to-do', priorityId: 'low' },
+         'ana@nimbloo.ai'
+      );
+      expect(manual.cycleId ?? '').toBe('');
+
+      // ciclo explícito é sempre respeitado, independente do autoAdd
+      const explicit = await createIssue(
+         db,
+         {
+            teamId: 'CORE',
+            title: 'Exp',
+            statusId: 'to-do',
+            priorityId: 'low',
+            cycleId: current.id,
+         },
+         'ana@nimbloo.ai'
+      );
+      expect(explicit.cycleId).toBe(current.id);
    });
 });

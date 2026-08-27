@@ -5,6 +5,7 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { CreateCycleButton } from '@/components/common/cycles/create-cycle-dialog';
 
 export default function HeaderNav() {
    const { orgId, teamId } = useParams<{ orgId: string; teamId: string }>();
@@ -28,6 +29,7 @@ export default function HeaderNav() {
             <ChevronRight className="size-3.5 text-muted-foreground shrink-0" />
             <span className="text-sm font-medium">Cycles</span>
          </div>
+         <CreateCycleButton defaultTeamId={team.id} />
       </div>
    );
 }

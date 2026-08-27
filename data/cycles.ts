@@ -1,6 +1,6 @@
 import { format, parseISO } from 'date-fns';
 
-export type CycleStatus = 'planned' | 'upcoming' | 'current' | 'completed';
+export type CycleStatus = 'upcoming' | 'current' | 'completed';
 
 /** One data point of a cycle burn-up chart. */
 export interface CycleBurnupPoint {
@@ -23,8 +23,6 @@ export interface Cycle {
    capacity: number;
    /** Total number of issues in the cycle. */
    scope: number;
-   /** Scope variation (in %) since the beginning of the cycle. */
-   scopeDelta: number;
    /** Number of issues started but not completed. */
    started: number;
    /** Number of completed issues. */
@@ -44,7 +42,6 @@ export function formatCycleDateRange(cycle: Cycle): string {
 }
 
 export const cycleStatusLabel: Record<CycleStatus, string> = {
-   planned: 'Planned',
    upcoming: 'Upcoming',
    current: 'Current',
    completed: 'Completed',

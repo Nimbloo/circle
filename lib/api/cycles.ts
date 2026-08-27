@@ -39,7 +39,6 @@ export interface CycleDto {
    scope: number;
    started: number;
    completed: number;
-   scopeDelta: number;
    successRate: number | null;
    /** Cooldown (semanas) que segue este ciclo. */
    cooldownWeeks: number;
@@ -159,7 +158,6 @@ function toDto(row: CycleRow, liveAgg: Agg, velocity: number, today: string): Cy
       scope: agg.scope,
       started: agg.started,
       completed: agg.completed,
-      scopeDelta: 0, // exige histórico diário (fase futura)
       successRate,
       cooldownWeeks: row.cooldownWeeks,
       velocity,
@@ -401,14 +399,13 @@ export async function endCycleEarly(db: Db, id: string): Promise<void> {
 }
 
 // ── Mutações ─────────────────────────────────────────────────────────
-export type CycleStatus = 'planned' | 'upcoming' | 'current' | 'completed';
+export type CycleStatus = 'upcoming' | 'current' | 'completed';
 
 export interface CreateCycleInput {
    teamId: string;
    name: string;
    startDate: string;
    endDate: string;
-   status?: CycleStatus;
    capacity?: number;
 }
 
@@ -435,7 +432,7 @@ export async function createCycle(db: Db, input: CreateCycleInput): Promise<Cycl
             number,
             name: input.name,
             teamId: input.teamId,
-            status: input.status ?? 'planned',
+            status: 'upcoming', // legado; o status real é derivado das datas (deriveStatus)
             startDate: input.startDate,
             endDate: input.endDate,
             capacity: input.capacity ?? 0,
@@ -453,7 +450,6 @@ export async function createCycle(db: Db, input: CreateCycleInput): Promise<Cycl
 
 export interface UpdateCycleInput {
    name?: string;
-   status?: CycleStatus;
    startDate?: string;
    endDate?: string;
    capacity?: number;
@@ -475,7 +471,6 @@ export async function updateCycle(
 
    const set: Record<string, unknown> = {};
    if (patch.name !== undefined) set.name = patch.name;
-   if (patch.status !== undefined) set.status = patch.status;
    if (patch.startDate !== undefined) set.startDate = patch.startDate;
    if (patch.endDate !== undefined) set.endDate = patch.endDate;
    if (patch.capacity !== undefined) set.capacity = patch.capacity;

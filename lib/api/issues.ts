@@ -19,8 +19,10 @@ import {
    appUser,
    project as projectT,
    team as teamT,
+   cycle as cycleT,
 } from '@/db/schema';
 import { getOrCreateUser } from './users';
+import { deriveStatus } from './cycle-schedule';
 import { rankAfter, firstRank, rankBetween } from './rank';
 import { ApiError } from './errors';
 import { dispatchNotification } from './notify';
@@ -356,6 +358,21 @@ export async function createIssue(
    const id = randomUUID();
    const now = new Date();
 
+   // Auto-add (paridade Linear): sem ciclo explícito + time com cycles habilitados e
+   // "auto-add" ligado → a issue entra automaticamente no ciclo corrente do time.
+   let resolvedCycleId = input.cycleId || null;
+   if (!resolvedCycleId && teamRows[0].cyclesEnabled && teamRows[0].cycleAutoAdd) {
+      const todayISO = now.toISOString().slice(0, 10);
+      const cyclesOfTeam = await db
+         .select({ id: cycleT.id, startDate: cycleT.startDate, endDate: cycleT.endDate })
+         .from(cycleT)
+         .where(eq(cycleT.teamId, input.teamId));
+      const current = cyclesOfTeam.find(
+         (c) => deriveStatus(c.startDate, c.endDate, todayISO) === 'current'
+      );
+      if (current) resolvedCycleId = current.id;
+   }
+
    // Atômico: incremento do contador + issue + content + labels + evento.
    await db.transaction(async (tx) => {
       // identifier: incremento atômico do contador do time
@@ -384,7 +401,7 @@ export async function createIssue(
          assigneeId: input.assigneeId ?? null,
          createdById: actor.id,
          projectId: input.projectId ?? null,
-         cycleId: input.cycleId || null,
+         cycleId: resolvedCycleId,
          rank,
          dueDate: input.dueDate ?? null,
          estimate: input.estimate ?? null,

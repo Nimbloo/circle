@@ -21,7 +21,6 @@ export async function GET(_req: Request, { params }: Params) {
 
 const UpdateSchema = z.object({
    name: z.string().min(1).optional(),
-   status: z.enum(['planned', 'upcoming', 'current', 'completed']).optional(),
    startDate: z.string().min(1).optional(),
    endDate: z.string().min(1).optional(),
    capacity: z.number().int().min(0).optional(),

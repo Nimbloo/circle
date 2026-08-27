@@ -22,7 +22,6 @@ const CreateSchema = z.object({
    name: z.string().min(1),
    startDate: z.string().min(1),
    endDate: z.string().min(1),
-   status: z.enum(['planned', 'upcoming', 'current', 'completed']).optional(),
    capacity: z.number().int().min(0).optional(),
 });
 

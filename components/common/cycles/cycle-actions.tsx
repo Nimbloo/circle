@@ -11,13 +11,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-   Select,
-   SelectContent,
-   SelectItem,
-   SelectTrigger,
-   SelectValue,
-} from '@/components/ui/select';
-import {
    DropdownMenu,
    DropdownMenuContent,
    DropdownMenuItem,
@@ -34,13 +27,11 @@ import {
    AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { api } from '@/lib/client';
-import { Cycle, CycleStatus, cycleStatusLabel } from '@/data/cycles';
+import { Cycle } from '@/data/cycles';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Pencil, Play, Square, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-
-const STATUS_IDS: CycleStatus[] = ['planned', 'upcoming', 'current', 'completed'];
 
 function EditCycleDialog({
    cycle,
@@ -54,7 +45,6 @@ function EditCycleDialog({
    const hydrate = useWorkspaceStore((s) => s.hydrate);
    const [busy, setBusy] = useState(false);
    const [name, setName] = useState(cycle.name);
-   const [status, setStatus] = useState<CycleStatus>(cycle.status);
    const [startDate, setStartDate] = useState(cycle.startDate);
    const [endDate, setEndDate] = useState(cycle.endDate);
    const [capacity, setCapacity] = useState(String(cycle.capacity));
@@ -64,7 +54,6 @@ function EditCycleDialog({
    useEffect(() => {
       if (open) {
          setName(cycle.name);
-         setStatus(cycle.status);
          setStartDate(cycle.startDate);
          setEndDate(cycle.endDate);
          setCapacity(String(cycle.capacity));
@@ -81,7 +70,6 @@ function EditCycleDialog({
       try {
          await api.cycles.update(cycle.id, {
             name: name.trim(),
-            status,
             startDate,
             endDate,
             capacity: Number(capacity) || 0,
@@ -111,32 +99,15 @@ function EditCycleDialog({
                      onChange={(e) => setName(e.target.value)}
                   />
                </div>
-               <div className="grid grid-cols-2 gap-2">
-                  <div className="flex flex-col gap-1.5">
-                     <Label>Status</Label>
-                     <Select value={status} onValueChange={(v) => setStatus(v as CycleStatus)}>
-                        <SelectTrigger>
-                           <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                           {STATUS_IDS.map((id) => (
-                              <SelectItem key={id} value={id}>
-                                 {cycleStatusLabel[id]}
-                              </SelectItem>
-                           ))}
-                        </SelectContent>
-                     </Select>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                     <Label htmlFor="edit-cycle-capacity">Capacity (%)</Label>
-                     <Input
-                        id="edit-cycle-capacity"
-                        type="number"
-                        min={0}
-                        value={capacity}
-                        onChange={(e) => setCapacity(e.target.value)}
-                     />
-                  </div>
+               <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="edit-cycle-capacity">Capacity (%)</Label>
+                  <Input
+                     id="edit-cycle-capacity"
+                     type="number"
+                     min={0}
+                     value={capacity}
+                     onChange={(e) => setCapacity(e.target.value)}
+                  />
                </div>
                <div className="grid grid-cols-2 gap-2">
                   <div className="flex flex-col gap-1.5">
@@ -191,6 +162,34 @@ export function CycleActions({ cycle }: { cycle: Cycle }) {
       }
    };
 
+   const startToday = async () => {
+      if (busy) return;
+      setBusy(true);
+      try {
+         await api.cycles.startToday(cycle.teamId);
+         await hydrate();
+         toast.success('Cycle started today');
+      } catch {
+         toast.error('Could not start the cycle');
+      } finally {
+         setBusy(false);
+      }
+   };
+
+   const endEarly = async () => {
+      if (busy) return;
+      setBusy(true);
+      try {
+         await api.cycles.endEarly(cycle.id);
+         await hydrate();
+         toast.success('Cycle ended');
+      } catch {
+         toast.error('Could not end the cycle');
+      } finally {
+         setBusy(false);
+      }
+   };
+
    return (
       <>
          <DropdownMenu>
@@ -200,6 +199,28 @@ export function CycleActions({ cycle }: { cycle: Cycle }) {
                </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+               {cycle.status === 'upcoming' && (
+                  <DropdownMenuItem
+                     onSelect={(e) => {
+                        e.preventDefault();
+                        void startToday();
+                     }}
+                  >
+                     <Play className="size-4" />
+                     Start cycle today
+                  </DropdownMenuItem>
+               )}
+               {cycle.status === 'current' && (
+                  <DropdownMenuItem
+                     onSelect={(e) => {
+                        e.preventDefault();
+                        void endEarly();
+                     }}
+                  >
+                     <Square className="size-4" />
+                     End cycle early
+                  </DropdownMenuItem>
+               )}
                <DropdownMenuItem
                   onSelect={(e) => {
                      e.preventDefault();

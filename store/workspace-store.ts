@@ -48,8 +48,8 @@ interface WorkspaceState {
    getInitiativeProjects: (id: string) => Project[];
    countCompletedProjects: (id: string) => { completed: number; total: number };
    getCyclesByTeam: (teamId: string) => Cycle[];
-   getCurrentCycle: (teamId?: string) => Cycle | undefined;
-   getUpcomingCycle: (teamId?: string) => Cycle | undefined;
+   getCurrentCycle: (teamId: string) => Cycle | undefined;
+   getUpcomingCycle: (teamId: string) => Cycle | undefined;
    getCycleById: (id: string) => Cycle | undefined;
    getViewById: (id: string) => View | undefined;
 }
@@ -134,9 +134,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
    },
    getCyclesByTeam: (teamId) => get().cycles.filter((c) => c.teamId === teamId),
    getCurrentCycle: (teamId) =>
-      get().cycles.find((c) => c.status === 'current' && (!teamId || c.teamId === teamId)),
+      get().cycles.find((c) => c.status === 'current' && c.teamId === teamId),
    getUpcomingCycle: (teamId) =>
-      get().cycles.find((c) => c.status === 'upcoming' && (!teamId || c.teamId === teamId)),
+      get().cycles.find((c) => c.status === 'upcoming' && c.teamId === teamId),
    getCycleById: (id) => get().cycles.find((c) => c.id === id),
    getViewById: (id) => get().views.find((v) => v.id === id),
 }));

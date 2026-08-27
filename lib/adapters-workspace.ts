@@ -141,7 +141,6 @@ export function adaptCycle(c: CycleDto): Cycle {
       endDate: c.endDate,
       capacity: c.capacity,
       scope: c.scope,
-      scopeDelta: c.scopeDelta,
       started: c.started,
       completed: c.completed,
       successRate: c.successRate ?? undefined,
