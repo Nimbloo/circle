@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { motion } from 'motion/react';
 import { renderStatusIcon } from '@/lib/status-utils';
 import { getNotificationIcon } from '@/lib/notification-utils';
-import { Clock } from 'lucide-react';
+import { Clock, RotateCcw } from 'lucide-react';
 import {
    DropdownMenu,
    DropdownMenuContent,
@@ -20,6 +20,7 @@ interface IssueLineProps {
    isSelected?: boolean;
    onClick?: () => void;
    onSnooze?: (hours: number) => void;
+   onUnsnooze?: () => void;
    showId?: boolean;
    showStatusIcon?: boolean;
 }
@@ -38,6 +39,7 @@ export default function IssueLine({
    isSelected = false,
    onClick,
    onSnooze,
+   onUnsnooze,
    showId = true,
    showStatusIcon = true,
 }: IssueLineProps) {
@@ -97,6 +99,20 @@ export default function IssueLine({
                      {notification.title}
                   </h4>
 
+                  {onUnsnooze && (
+                     <button
+                        type="button"
+                        aria-label="Desfazer adiamento"
+                        onClick={(e) => {
+                           e.stopPropagation();
+                           onUnsnooze();
+                        }}
+                        className="shrink-0 inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-xs text-muted-foreground opacity-0 group-hover/inbox-line:opacity-100 hover:bg-accent focus:opacity-100 transition-opacity"
+                     >
+                        <RotateCcw className="size-3.5" />
+                        Restaurar
+                     </button>
+                  )}
                   {onSnooze && (
                      <DropdownMenu>
                         <DropdownMenuTrigger asChild>

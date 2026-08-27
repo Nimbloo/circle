@@ -19,6 +19,8 @@ export interface InboxNotification extends InboxItem {
 interface NotificationsState {
    // Data
    notifications: InboxNotification[];
+   /** Notificações atualmente adiadas (aba Snoozed) — carregadas sob demanda. */
+   snoozed: InboxNotification[];
    selectedNotification: InboxNotification | undefined;
    // Contagem autoritativa de não-lidas (servidor) — a lista hidratada é capada
    // (DEFAULT_INBOX_LIMIT) e descarta itens sem issue conhecida, então contar
@@ -27,6 +29,8 @@ interface NotificationsState {
 
    // Hydration
    hydrate: () => Promise<void>;
+   /** Carrega a lista de adiadas vigentes (aba Snoozed). */
+   hydrateSnoozed: () => Promise<void>;
 
    // Actions
    setSelectedNotification: (notification: InboxNotification | undefined) => void;
@@ -35,6 +39,8 @@ interface NotificationsState {
    markAsUnread: (id: string) => void;
    /** Adia a notificação por `hours` horas (some do inbox até vencer). */
    snooze: (id: string, hours: number) => void;
+   /** Desfaz o adiamento: volta pro inbox e some da aba Snoozed. */
+   unsnooze: (id: string) => void;
 
    // Filters
    getUnreadNotifications: () => InboxNotification[];
@@ -89,6 +95,7 @@ function adaptNotification(
 export const useNotificationsStore = create<NotificationsState>((set, get) => ({
    // Initial state — vazio; populado via hydrate() a partir da API.
    notifications: [],
+   snoozed: [],
    selectedNotification: undefined,
    unreadCount: 0,
 
@@ -105,6 +112,19 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
          set({ notifications: items, unreadCount: countRes.count });
       } catch {
          // Degradação graciosa — mantém o estado atual se a API falhar.
+      }
+   },
+
+   hydrateSnoozed: async () => {
+      try {
+         const dtos = await api.inbox.list('?snoozed=true');
+         const issueById = new Map(useIssuesStore.getState().issues.map((i) => [i.id, i]));
+         const items = dtos
+            .map((dto) => adaptNotification(dto, issueById))
+            .filter((item): item is InboxNotification => item !== null);
+         set({ snoozed: items });
+      } catch {
+         // Degradação graciosa.
       }
    },
 
@@ -202,6 +222,22 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
          .catch(() => {
             set(snapshot);
             toast.error('Falha ao adiar');
+         });
+   },
+
+   unsnooze: (id: string) => {
+      const prevSnoozed = get().snoozed;
+      // Otimista: some da aba Snoozed; ao recarregar o inbox ela reaparece.
+      set({ snoozed: prevSnoozed.filter((n) => n.id !== id) });
+      void api.inbox
+         .snooze(id, null)
+         .then(() => {
+            toast.success('Adiamento desfeito');
+            void get().hydrate();
+         })
+         .catch(() => {
+            set({ snoozed: prevSnoozed });
+            toast.error('Falha ao desfazer o adiamento');
          });
    },
 

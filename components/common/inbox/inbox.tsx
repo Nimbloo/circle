@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { useNotificationsStore } from '@/store/notifications-store';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { SlidersHorizontal, CheckCheck, ArrowUpDown, InboxIcon } from 'lucide-react';
+import { SlidersHorizontal, CheckCheck, ArrowUpDown, InboxIcon, Clock } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import NotificationPreview from './issue-preview';
 import IssueLine from './issue-line';
 import { SidebarTrigger } from '@/components/ui/sidebar';
@@ -30,15 +31,24 @@ export default function Inbox() {
       markAsUnread,
       markAllAsRead,
       snooze,
+      unsnooze,
+      snoozed,
+      hydrateSnoozed,
       getUnreadNotifications,
    } = useNotificationsStore();
 
    const isMobile = useIsMobile();
+   const [tab, setTab] = useState<'inbox' | 'snoozed'>('inbox');
    const [showRead, setShowRead] = useState(true);
    const [showUnreadFirst, setShowUnreadFirst] = useState(false);
    const [ordering, setOrdering] = useState('newest');
    const [showId, setShowId] = useState(true);
    const [showStatusIcon, setShowStatusIcon] = useState(true);
+
+   // Ao entrar na aba Snoozed, carrega as adiadas.
+   useEffect(() => {
+      if (tab === 'snoozed') void hydrateSnoozed();
+   }, [tab, hydrateSnoozed]);
 
    // Filter and sort notifications based on settings
    const filteredNotifications = notifications
@@ -60,9 +70,33 @@ export default function Inbox() {
    const listPane = (
       <>
          <div className="flex items-center justify-between px-4 h-10 border-b border-border">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
                <SidebarTrigger className="inline-flex lg:hidden" />
-               <h2 className="text-lg font-semibold">Inbox</h2>
+               <button
+                  type="button"
+                  onClick={() => setTab('inbox')}
+                  className={cn(
+                     'text-lg font-semibold transition-colors',
+                     tab === 'inbox'
+                        ? 'text-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                  )}
+               >
+                  Inbox
+               </button>
+               <button
+                  type="button"
+                  onClick={() => setTab('snoozed')}
+                  className={cn(
+                     'inline-flex items-center gap-1 text-lg font-semibold transition-colors',
+                     tab === 'snoozed'
+                        ? 'text-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                  )}
+               >
+                  <Clock className="size-4" />
+                  Snoozed
+               </button>
             </div>
 
             <div className="flex items-center gap-2">
@@ -70,7 +104,7 @@ export default function Inbox() {
                   variant="ghost"
                   size="xs"
                   onClick={markAllAsRead}
-                  disabled={getUnreadNotifications().length === 0}
+                  disabled={tab !== 'inbox' || getUnreadNotifications().length === 0}
                   aria-label="Mark all as read"
                >
                   <CheckCheck className="w-4 h-4" />
@@ -150,7 +184,31 @@ export default function Inbox() {
             </div>
          </div>
          <div className="w-full flex flex-col items-center justify-start overflow-y-scroll h-[calc(100%-40px)] pb-0.25">
-            {filteredNotifications.length === 0 ? (
+            {tab === 'snoozed' ? (
+               snoozed.length === 0 ? (
+                  <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-24 text-center">
+                     <div className="flex size-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
+                        <Clock className="size-6" />
+                     </div>
+                     <div className="flex flex-col gap-1">
+                        <p className="text-sm font-medium">Nada adiado</p>
+                        <p className="max-w-xs text-sm text-muted-foreground">
+                           Notificações adiadas aparecem aqui até a hora agendada.
+                        </p>
+                     </div>
+                  </div>
+               ) : (
+                  snoozed.map((notification) => (
+                     <IssueLine
+                        key={notification.id}
+                        notification={notification}
+                        onUnsnooze={() => unsnooze(notification.id)}
+                        showId={showId}
+                        showStatusIcon={showStatusIcon}
+                     />
+                  ))
+               )
+            ) : filteredNotifications.length === 0 ? (
                <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-24 text-center">
                   <div className="flex size-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
                      <InboxIcon className="size-6" />
