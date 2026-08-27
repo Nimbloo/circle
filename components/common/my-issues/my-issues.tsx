@@ -6,6 +6,7 @@ import { GroupedIssuesView } from '@/components/common/issues/grouped-issues-vie
 import { InsightsPanel } from '@/components/common/issues/insights-panel';
 import { IssueLine } from '@/components/common/issues/issue-line';
 import { BreakdownPanel } from './breakdown-panel';
+import { ActivityFeedTab } from './activity-feed-tab';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
 import { useIssuesStore } from '@/store/issues-store';
@@ -58,6 +59,15 @@ export default function MyIssues() {
          (i) => i.title.toLowerCase().includes(q) || i.identifier.toLowerCase().includes(q)
       );
    }, [isSearching, searchQuery, displayedIssues]);
+
+   // A aba "Activity" é um feed de eventos (não uma lista de issues filtrável).
+   if (tab === 'activity') {
+      return (
+         <div className="w-full h-full flex flex-col overflow-hidden">
+            <ActivityFeedTab />
+         </div>
+      );
+   }
 
    if (isSearching) {
       return (

@@ -383,6 +383,94 @@ export async function listActivity(
    return [...eventItems, ...commentItems].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
+export interface MyActivityItemDto {
+   id: string;
+   issueId: string;
+   issueIdentifier: string;
+   issueTitle: string;
+   actor: UserRef | null;
+   event: string; // tipo do evento (status|priority|...|created) ou 'comment'
+   text: string | null;
+   createdAt: string;
+}
+
+/**
+ * Feed de atividade do "My issues > Activity": eventos + comentários recentes
+ * das issues que o usuário ASSINA (issue_subscription), mais recentes primeiro.
+ * É o feed REAL (lê activity_event + comment), não mais a lista de issues heurística.
+ */
+export async function listMyActivity(
+   db: Db,
+   userId: string,
+   limit = 50
+): Promise<MyActivityItemDto[]> {
+   const subs = await db
+      .select({ issueId: issueSubscription.issueId })
+      .from(issueSubscription)
+      .where(eq(issueSubscription.userId, userId));
+   const issueIds = subs.map((s) => s.issueId);
+   if (issueIds.length === 0) return [];
+
+   const [events, comments, issues] = await Promise.all([
+      db.select().from(activityEvent).where(inArray(activityEvent.issueId, issueIds)),
+      db
+         .select({
+            id: commentT.id,
+            issueId: commentT.issueId,
+            authorId: commentT.authorId,
+            createdAt: commentT.createdAt,
+         })
+         .from(commentT)
+         .where(inArray(commentT.issueId, issueIds)),
+      db
+         .select({ id: issueT.id, identifier: issueT.identifier, title: issueT.title })
+         .from(issueT)
+         .where(inArray(issueT.id, issueIds)),
+   ]);
+   const issueMap = new Map(issues.map((i) => [i.id, i]));
+   const actorIds = [
+      ...new Set(
+         [...events.map((e) => e.actorId), ...comments.map((c) => c.authorId)].filter(
+            Boolean
+         ) as string[]
+      ),
+   ];
+   const users = await loadUsers(db, actorIds);
+   const toIso = (d: unknown) => (d instanceof Date ? d.toISOString() : String(d));
+
+   const items: MyActivityItemDto[] = [];
+   for (const e of events) {
+      const iss = issueMap.get(e.issueId);
+      if (!iss) continue;
+      items.push({
+         id: e.id,
+         issueId: e.issueId,
+         issueIdentifier: iss.identifier,
+         issueTitle: iss.title,
+         actor: userRef(e.actorId ? users.get(e.actorId) : undefined),
+         event: e.event,
+         text: e.text ?? null,
+         createdAt: toIso(e.createdAt),
+      });
+   }
+   for (const c of comments) {
+      const iss = issueMap.get(c.issueId);
+      if (!iss) continue;
+      items.push({
+         id: c.id,
+         issueId: c.issueId,
+         issueIdentifier: iss.identifier,
+         issueTitle: iss.title,
+         actor: userRef(users.get(c.authorId)),
+         event: 'comment',
+         text: 'commented',
+         createdAt: toIso(c.createdAt),
+      });
+   }
+   items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+   return items.slice(0, limit);
+}
+
 export async function addReaction(
    db: Db,
    commentId: string,

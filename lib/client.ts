@@ -40,7 +40,12 @@ import type { ViewDto, CreateViewInput, UpdateViewInput } from '@/lib/api/views'
 import type { NotificationDto } from '@/lib/api/notifications';
 import type { ReviewDto } from '@/lib/api/reviews';
 import type { FolderDto } from '@/lib/api/documents';
-import type { IssueDetailDto, CommentDto, ActivityItem } from '@/lib/api/issue-detail';
+import type {
+   IssueDetailDto,
+   CommentDto,
+   ActivityItem,
+   MyActivityItemDto,
+} from '@/lib/api/issue-detail';
 import type { IssueMatrix, ProjectProgress } from '@/lib/api/aggregations';
 import type { MeDto } from '@/lib/api/users';
 
@@ -114,6 +119,7 @@ const me = Object.assign(() => get<MeDto>('/me'), {
    uploadAvatar: (dataUrl: string, contentType: string) =>
       post<MeDto>('/me/avatar', { dataUrl, contentType }),
    removeAvatar: () => del<MeDto>('/me/avatar'),
+   activity: () => get<MyActivityItemDto[]>('/me/activity'),
 });
 
 export const api = {
