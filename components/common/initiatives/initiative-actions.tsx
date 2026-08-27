@@ -64,6 +64,7 @@ export function EditInitiativeDialog({
    const [status, setStatus] = useState<InitiativeStatus>(initiative.status);
    const [priorityId, setPriorityId] = useState<string>(initiative.priority.id);
    const [healthId, setHealthId] = useState<string>(initiative.health.id);
+   const [target, setTarget] = useState(initiative.target ?? '');
 
    // Ressincroniza o form com a initiative atual ao (re)abrir — o useState inicial
    // só roda no mount, então sem isto reabrir após hydrate mostraria valores stale.
@@ -74,6 +75,7 @@ export function EditInitiativeDialog({
          setStatus(initiative.status);
          setPriorityId(initiative.priority.id);
          setHealthId(initiative.health.id);
+         setTarget(initiative.target ?? '');
       }
    }, [open, initiative]);
 
@@ -87,6 +89,7 @@ export function EditInitiativeDialog({
             status,
             priorityId,
             healthId,
+            target: target.trim() || null,
          });
          applyInitiative(dto);
          onOpenChange(false);
@@ -119,6 +122,15 @@ export function EditInitiativeDialog({
                      id="edit-initiative-desc"
                      value={description}
                      onChange={(e) => setDescription(e.target.value)}
+                  />
+               </div>
+               <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="edit-initiative-target">Target</Label>
+                  <Input
+                     id="edit-initiative-target"
+                     value={target}
+                     onChange={(e) => setTarget(e.target.value)}
+                     placeholder="Q3 2026, Sep 30…"
                   />
                </div>
                <div className="grid grid-cols-3 gap-2">
