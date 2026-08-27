@@ -13,7 +13,6 @@ import {
    CalendarPlus,
    ChevronRight,
    Compass,
-   Slack,
    Tag,
    X,
 } from 'lucide-react';
@@ -201,12 +200,6 @@ export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) 
                      {team?.icon} {team?.name ?? project.teamId}
                   </span>
                </PropertyRow>
-               <PropertyRow label="Slack">
-                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                     <Slack className="size-3.5" />
-                     No channel
-                  </span>
-               </PropertyRow>
                <PropertyRow label="Initiatives">
                   {project.initiative ? (
                      <span className="inline-flex items-center gap-1.5 truncate max-w-44">
@@ -228,7 +221,7 @@ export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) 
                      {project.labels.length === 0 && (
                         <span className="inline-flex items-center gap-1.5 text-muted-foreground">
                            <Tag className="size-3.5" />
-                           Add label
+                           No labels
                         </span>
                      )}
                      {project.labels.map((label) => (
@@ -256,7 +249,7 @@ export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) 
             {detail.milestones.length === 0 ? (
                <p className="text-xs text-muted-foreground">
                   Add milestones to organize work within your project and break it into more
-                  granular stages. <span className="text-foreground/70 underline">Learn more</span>
+                  granular stages.
                </p>
             ) : (
                <div className="flex flex-col gap-1.5">

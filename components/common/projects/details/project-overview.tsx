@@ -9,7 +9,7 @@ import type { ProjectDetail } from '@/data/project-details';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
-import { ArrowRight, ChevronDown, FileText, PenLine, Plus } from 'lucide-react';
+import { ArrowRight, FileText, PenLine, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -207,7 +207,6 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                                     style={{ backgroundColor: label.color }}
                                  />
                                  {label.name}
-                                 <ChevronDown className="size-3 text-muted-foreground" />
                               </span>
                            ))}
                         </div>
@@ -251,7 +250,6 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                   <div className="mt-10">
                      <div className="flex items-center gap-1 text-sm font-medium text-muted-foreground mb-2">
                         Description
-                        <ChevronDown className="size-3.5" />
                      </div>
                      <div className="text-[15px] leading-relaxed">
                         <ContentBlocks blocks={detail.description} />

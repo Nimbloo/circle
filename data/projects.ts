@@ -1,31 +1,9 @@
-import { Status, status } from './status';
-import {
-   Accessibility,
-   Bell,
-   Blocks,
-   Bomb,
-   BrickWall,
-   Cuboid,
-   FormInput,
-   Globe,
-   Grid2X2,
-   HelpCircle,
-   LayoutDashboard,
-   Loader,
-   Lock,
-   LucideIcon,
-   Play,
-   Settings,
-   Shapes,
-   Table,
-   TrafficCone,
-   Vault,
-   Wallpaper,
-} from 'lucide-react';
+import { Status } from './status';
+import { LucideIcon } from 'lucide-react';
 import { RemixiconComponentType } from '@remixicon/react';
-import { User, users } from './users';
+import { User } from './users';
 import { LabelInterface, labels } from './labels';
-import { Priority, priorities } from './priorities';
+import { Priority } from './priorities';
 export interface Project {
    id: string;
    name: string;

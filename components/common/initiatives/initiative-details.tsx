@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Initiative, INITIATIVE_STATUS_META } from '@/data/initiatives';
 import { Project } from '@/data/projects';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { CalendarRange, ChevronDown, Tag, UserRound } from 'lucide-react';
+import { CalendarRange, ChevronDown, UserRound } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
@@ -194,18 +194,6 @@ function Overview({ initiative }: { initiative: Initiative }) {
                   )}
                </div>
 
-               <div className="flex items-center gap-3 text-sm">
-                  <span className="text-muted-foreground text-xs w-24">Resources</span>
-                  <span className="text-muted-foreground">No resources</span>
-               </div>
-
-               <div className="flex flex-col gap-2">
-                  <h2 className="text-sm font-medium">Description</h2>
-                  <p className="text-sm text-muted-foreground">
-                     {initiative.description ?? 'Add description…'}
-                  </p>
-               </div>
-
                <ProjectsSection initiative={initiative} />
             </div>
          </div>
@@ -241,19 +229,14 @@ function Overview({ initiative }: { initiative: Initiative }) {
                      </span>
                   ) : (
                      <span className="text-muted-foreground inline-flex items-center gap-1.5">
-                        <UserRound className="size-4" /> Add owner
+                        <UserRound className="size-4" /> No owner
                      </span>
                   )}
                </PropertyRow>
-               <PropertyRow label="Target date">
+               <PropertyRow label="Target">
                   <span className="inline-flex items-center gap-1.5 text-muted-foreground">
                      <CalendarRange className="size-4" />
-                     {initiative.target ?? 'Add target date'}
-                  </span>
-               </PropertyRow>
-               <PropertyRow label="Labels">
-                  <span className="text-muted-foreground inline-flex items-center gap-1.5">
-                     <Tag className="size-4" /> Add label
+                     {initiative.target ?? '—'}
                   </span>
                </PropertyRow>
                <PropertyRow label="Projects">
@@ -264,11 +247,6 @@ function Overview({ initiative }: { initiative: Initiative }) {
             </div>
 
             <InitiativeProgressPanel initiative={initiative} />
-
-            <div className="flex flex-col gap-3">
-               <span className="text-sm font-medium">Activity</span>
-               <p className="text-xs text-muted-foreground">No activity recorded yet.</p>
-            </div>
          </aside>
       </div>
    );
