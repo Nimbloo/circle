@@ -4,7 +4,7 @@ import { ok } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
 import { isAdmin } from '@/lib/api/auth';
 import { ApiError } from '@/lib/api/errors';
-import { listCyclesByTeam, createCycle } from '@/lib/api/cycles';
+import { listCyclesByTeam, createCycle, rolloverCyclesForTeam } from '@/lib/api/cycles';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,6 +14,8 @@ type Params = { params: Promise<{ teamKey: string }> };
 export async function GET(_req: Request, { params }: Params) {
    return handle(async () => {
       const { teamKey } = await params;
+      // Auto-rollover lazy (#24): fecha cycles vencidos e carrega incompletas antes de listar.
+      await rolloverCyclesForTeam(db, teamKey);
       return ok(await listCyclesByTeam(db, teamKey));
    });
 }

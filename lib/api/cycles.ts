@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { cycle as cycleT, issue as issueT, status as statusT, team as teamT } from '@/db/schema';
 import { ApiError } from './errors';
@@ -103,6 +103,51 @@ function toDto(row: CycleRow, agg: Agg): CycleDto {
       successRate,
       burnup: buildBurnup(row, agg),
    };
+}
+
+/**
+ * Auto-rollover (#24): quando o cycle 'current' de um time vence (endDate < hoje),
+ * fecha ele, carrega as issues INCOMPLETAS (não completed/canceled) pro próximo
+ * 'upcoming', e promove esse próximo a 'current' se já começou. Idempotente e lazy
+ * (rodado ao listar os cycles do time; o app não tem scheduler).
+ */
+export async function rolloverCyclesForTeam(db: Db, teamId: string): Promise<void> {
+   const today = new Date().toISOString().slice(0, 10);
+   const [current] = await db
+      .select()
+      .from(cycleT)
+      .where(and(eq(cycleT.teamId, teamId), eq(cycleT.status, 'current')))
+      .limit(1);
+   if (!current || current.endDate >= today) return; // sem current ou ainda em andamento
+
+   const [next] = await db
+      .select()
+      .from(cycleT)
+      .where(and(eq(cycleT.teamId, teamId), eq(cycleT.status, 'upcoming')))
+      .orderBy(asc(cycleT.number))
+      .limit(1);
+
+   const statuses = await db.select().from(statusT);
+   const doneIds = statuses
+      .filter((s) => s.category === 'completed' || s.category === 'canceled')
+      .map((s) => s.id);
+
+   if (next) {
+      // carrega as incompletas do current pro próximo cycle
+      await db
+         .update(issueT)
+         .set({ cycleId: next.id, updatedAt: new Date() })
+         .where(
+            and(
+               eq(issueT.cycleId, current.id),
+               doneIds.length ? notInArray(issueT.statusId, doneIds) : sql`true`
+            )
+         );
+   }
+   await db.update(cycleT).set({ status: 'completed' }).where(eq(cycleT.id, current.id));
+   if (next && next.startDate <= today) {
+      await db.update(cycleT).set({ status: 'current' }).where(eq(cycleT.id, next.id));
+   }
 }
 
 export async function listCyclesByTeam(db: Db, teamId: string): Promise<CycleDto[]> {
