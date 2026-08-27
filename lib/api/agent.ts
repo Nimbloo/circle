@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto';
 import type { Db } from '@/db';
 import { issue as issueT, appUser, agentChat, agentMessage } from '@/db/schema';
 import { getOrCreateUser } from './users';
+import { getUserSettings } from './settings';
 import { ApiError } from './errors';
 import { listTeams } from './teams';
 import { listIssues, createIssue, updateIssue, type IssueListOptions } from './issues';
@@ -315,13 +316,22 @@ export async function runAgent(
       .filter((m) => m.content.trim() !== '')
       .map((m) => ({ role: m.role, content: [{ text: m.content }] }));
 
+   // Personalização do agente (settings/agent-personalization): a guidance do usuário
+   // é anexada ao system prompt. Antes era persistida mas nunca lida — inerte.
+   const settings = await getUserSettings(db, me.id);
+   const prefs = (settings.preferences ?? {}) as { agentGuidance?: unknown };
+   const guidance = typeof prefs.agentGuidance === 'string' ? prefs.agentGuidance.trim() : '';
+   const systemText = guidance
+      ? `${SYSTEM}\n\n--- Instruções personalizadas do usuário (respeite-as, sem violar as regras acima) ---\n${guidance}`
+      : SYSTEM;
+
    const toolConfig: ToolConfiguration = { tools: TOOLS };
 
    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       const res = await client().send(
          new ConverseCommand({
             modelId: MODEL_ID,
-            system: [{ text: SYSTEM }],
+            system: [{ text: systemText }],
             messages,
             toolConfig,
             inferenceConfig: { maxTokens: 1024, temperature: 0.2 },
