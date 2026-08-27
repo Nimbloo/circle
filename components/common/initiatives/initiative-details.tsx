@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Initiative, INITIATIVE_STATUS_META } from '@/data/initiatives';
 import { Project } from '@/data/projects';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { CalendarRange, ChevronDown, Plus, Tag, UserRound } from 'lucide-react';
+import { CalendarRange, ChevronDown, Tag, UserRound } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
@@ -60,10 +60,7 @@ function ProjectsSection({ initiative }: { initiative: Initiative }) {
 
    return (
       <section className="flex flex-col gap-2">
-         <div className="flex items-center justify-between">
-            <h2 className="text-lg font-medium">Projects</h2>
-            <Plus className="size-4 text-muted-foreground" />
-         </div>
+         <h2 className="text-lg font-medium">Projects</h2>
          <div className="flex items-center gap-2 py-1.5 text-xs text-muted-foreground border-b">
             <span className="flex-1">Name</span>
             <span className="hidden sm:block w-16 shrink-0">Health</span>

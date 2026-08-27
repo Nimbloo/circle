@@ -3,10 +3,11 @@
 import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { ChevronRight, MoreHorizontal, Star } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { CycleView } from '@/components/common/issues/cycle-issues';
+import { CycleActions } from '@/components/common/cycles/cycle-actions';
 
 export default function HeaderNav({ cycleView }: { cycleView: CycleView }) {
    const { orgId, teamId } = useParams<{ orgId: string; teamId: string }>();
@@ -42,8 +43,7 @@ export default function HeaderNav({ cycleView }: { cycleView: CycleView }) {
                <CyclePlayIcon className="size-3.5" />
                <span className="text-sm font-medium truncate">{cycle?.name}</span>
             </div>
-            <Star className="size-3.5 text-muted-foreground shrink-0 ml-1" />
-            <MoreHorizontal className="size-3.5 text-muted-foreground shrink-0" />
+            {cycle && <CycleActions cycle={cycle} />}
          </div>
       </div>
    );

@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { fetchReviews, syncReviews } from '@/lib/adapters-reviews';
 import { Review, ReviewList, ReviewStatus } from '@/data/reviews';
-import { ListFilter, RefreshCw, SlidersHorizontal } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ReactNode, useEffect, useState } from 'react';
@@ -204,10 +204,6 @@ export default function Reviews({
                <div className="flex items-center gap-2">
                   <SidebarTrigger />
                   <span className="text-sm font-medium">Reviews</span>
-               </div>
-               <div className="flex items-center gap-2 text-muted-foreground">
-                  <ListFilter className="size-4" />
-                  <SlidersHorizontal className="size-4" />
                </div>
             </div>
             <div className="flex items-center gap-1.5 px-4 py-2 shrink-0">

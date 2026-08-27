@@ -2,7 +2,7 @@
 
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { ChevronRight, Star } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
@@ -27,7 +27,6 @@ export default function HeaderNav() {
             </Link>
             <ChevronRight className="size-3.5 text-muted-foreground shrink-0" />
             <span className="text-sm font-medium">Cycles</span>
-            <Star className="size-3.5 text-muted-foreground shrink-0 ml-1" />
          </div>
       </div>
    );

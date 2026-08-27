@@ -3,10 +3,11 @@
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { ChevronRight, MoreHorizontal, Star } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
+import { InitiativeActions } from '@/components/common/initiatives/initiative-actions';
 
 const TABS = ['overview', 'activity', 'projects'] as const;
 
@@ -33,8 +34,7 @@ export default function Header() {
                   {initiative.icon}
                </span>
                <span className="text-sm font-medium truncate">{initiative.name}</span>
-               <Star className="size-3.5 text-muted-foreground shrink-0 ml-1" />
-               <MoreHorizontal className="size-3.5 text-muted-foreground shrink-0" />
+               <InitiativeActions initiative={initiative} />
             </div>
          </div>
          <div className="w-full flex items-center border-b py-1.5 px-6 h-10 gap-1.5">

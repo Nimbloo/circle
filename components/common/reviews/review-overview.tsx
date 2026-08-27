@@ -3,7 +3,7 @@
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { Review, ReviewFileCategory } from '@/data/reviews';
-import { ChevronDown, ChevronRight, FileCode2, GitCommitHorizontal, Plus } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileCode2, GitCommitHorizontal } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { DiffStat, InlineText, IssueCheckIcon, PrIcon } from './review-shared';
@@ -222,17 +222,18 @@ export function ReviewOverview({ review }: { review: Review }) {
                </span>
             </div>
             <div className="flex flex-col gap-2">
-               <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Resolves</span>
-                  <Plus className="size-3.5 text-muted-foreground" />
-               </div>
-               <Link
-                  href={`/${orgId}/issue/${review.resolves.identifier}`}
-                  className="flex items-center gap-1.5 text-sm hover:opacity-80 min-w-0"
-               >
-                  <IssueCheckIcon />
-                  <span className="truncate">{review.resolves.title}</span>
-               </Link>
+               <span className="text-sm font-medium">Resolves</span>
+               {review.resolves.identifier ? (
+                  <Link
+                     href={`/${orgId}/issue/${review.resolves.identifier}`}
+                     className="flex items-center gap-1.5 text-sm hover:opacity-80 min-w-0"
+                  >
+                     <IssueCheckIcon />
+                     <span className="truncate">{review.resolves.title}</span>
+                  </Link>
+               ) : (
+                  <span className="text-sm text-muted-foreground">No linked issue</span>
+               )}
             </div>
             <div className="flex flex-col gap-2">
                <span className="text-sm font-medium">Reviewers</span>
