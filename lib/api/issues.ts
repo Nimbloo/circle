@@ -164,8 +164,9 @@ function buildWhere(
    if (opts.createdByMe && meId) conds.push(eq(issue.createdById, meId));
    if (opts.q) {
       const like = `%${opts.q}%`;
-      // casa título, identifier E o corpo (issue_content.description) — a busca
-      // client-side só alcança título/identifier; a descrição só via servidor.
+      // casa título, identifier, o corpo (issue_content.description) E os comentários.
+      // A busca client-side só alcança título/identifier; descrição e comentários só
+      // via servidor (full-text simples, paridade Linear que indexa comentários).
       conds.push(
          or(
             ilike(issue.title, like),
@@ -176,6 +177,10 @@ function buildWhere(
                   .select({ id: issueContent.issueId })
                   .from(issueContent)
                   .where(ilike(issueContent.description, like))
+            ),
+            inArray(
+               issue.id,
+               db.select({ id: comment.issueId }).from(comment).where(ilike(comment.body, like))
             )
          ) as SQL
       );

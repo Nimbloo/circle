@@ -20,6 +20,7 @@ import {
    addLabel,
    removeLabel,
 } from '@/lib/api/issues';
+import { addComment } from '@/lib/api/issue-detail';
 
 const ME = 'ana.silva@nimbloo.ai';
 
@@ -131,6 +132,23 @@ describe('issues', () => {
          ME
       );
       const found = await listIssues(db, { q: 'xyzzy' });
+      expect(found.map((i) => i.title)).toEqual(['Alpha']);
+   });
+
+   it('busca por q casa também o corpo de comentários', async () => {
+      const db = await setup();
+      const target = await createIssue(
+         db,
+         { teamId: 'CORE', title: 'Alpha', statusId: 'to-do', priorityId: 'low' },
+         ME
+      );
+      await createIssue(
+         db,
+         { teamId: 'CORE', title: 'Beta', statusId: 'to-do', priorityId: 'low' },
+         ME
+      );
+      await addComment(db, target.id, 'menção ao termo plugh no comentário', ME);
+      const found = await listIssues(db, { q: 'plugh' });
       expect(found.map((i) => i.title)).toEqual(['Alpha']);
    });
 
