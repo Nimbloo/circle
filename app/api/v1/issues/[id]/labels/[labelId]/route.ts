@@ -11,8 +11,8 @@ type Params = { params: Promise<{ id: string; labelId: string }> };
 export async function DELETE(req: Request, { params }: Params) {
    return handle(async () => {
       const { id, labelId } = await params;
-      await requireEmail(req);
-      const dto = await removeLabel(db, id, labelId);
+      const email = await requireEmail(req);
+      const dto = await removeLabel(db, id, labelId, email);
       return dto ? ok(dto) : notFound(`Issue '${id}' não encontrada`);
    });
 }

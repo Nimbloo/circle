@@ -563,26 +563,70 @@ export async function reorderIssue(
    return getIssue(db, id);
 }
 
-export async function addLabel(db: Db, id: string, labelId: string): Promise<IssueDto | null> {
+export async function addLabel(
+   db: Db,
+   id: string,
+   labelId: string,
+   actorEmail: string
+): Promise<IssueDto | null> {
    // valida issue e label antes do insert (senão a FK estoura como 500)
    const issueRows = await db.select({ id: issue.id }).from(issue).where(eq(issue.id, id)).limit(1);
    if (issueRows.length === 0) throw new ApiError(404, `Issue '${id}' não encontrada`);
    const labelRows = await db
-      .select({ id: labelT.id })
+      .select({ id: labelT.id, name: labelT.name })
       .from(labelT)
       .where(eq(labelT.id, labelId))
       .limit(1);
    if (labelRows.length === 0) throw new ApiError(400, `Label '${labelId}' não existe`);
 
-   await db.insert(issueLabel).values({ issueId: id, labelId }).onConflictDoNothing();
+   const inserted = await db
+      .insert(issueLabel)
+      .values({ issueId: id, labelId })
+      .onConflictDoNothing()
+      .returning({ labelId: issueLabel.labelId });
+   // grava no histórico só quando o vínculo é novo (re-add idempotente não gera evento)
+   if (inserted.length > 0) {
+      const actor = await getOrCreateUser(db, actorEmail);
+      await db.insert(activityEvent).values({
+         id: randomUUID(),
+         issueId: id,
+         actorId: actor.id,
+         event: 'label',
+         text: `added label ${labelRows[0].name}`,
+         createdAt: new Date(),
+      });
+   }
    publish({ entity: 'issue', action: 'updated', id });
    return getIssue(db, id);
 }
 
-export async function removeLabel(db: Db, id: string, labelId: string): Promise<IssueDto | null> {
-   await db
+export async function removeLabel(
+   db: Db,
+   id: string,
+   labelId: string,
+   actorEmail: string
+): Promise<IssueDto | null> {
+   const deleted = await db
       .delete(issueLabel)
-      .where(and(eq(issueLabel.issueId, id), eq(issueLabel.labelId, labelId)));
+      .where(and(eq(issueLabel.issueId, id), eq(issueLabel.labelId, labelId)))
+      .returning({ labelId: issueLabel.labelId });
+   // grava no histórico só quando havia vínculo (delete no-op não gera evento)
+   if (deleted.length > 0) {
+      const labelRows = await db
+         .select({ name: labelT.name })
+         .from(labelT)
+         .where(eq(labelT.id, labelId))
+         .limit(1);
+      const actor = await getOrCreateUser(db, actorEmail);
+      await db.insert(activityEvent).values({
+         id: randomUUID(),
+         issueId: id,
+         actorId: actor.id,
+         event: 'label',
+         text: `removed label ${labelRows[0]?.name ?? labelId}`,
+         createdAt: new Date(),
+      });
+   }
    publish({ entity: 'issue', action: 'updated', id });
    return getIssue(db, id);
 }

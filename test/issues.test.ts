@@ -2,7 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { describe, it, expect } from 'vitest';
 import { makeTestDb } from './helpers/db';
 import { seedTeam } from './helpers/fixtures';
-import { comment, commentReaction, issueRelation, issuePrLink, notification } from '@/db/schema';
+import {
+   comment,
+   commentReaction,
+   issueRelation,
+   issuePrLink,
+   notification,
+   activityEvent,
+} from '@/db/schema';
 import {
    createIssue,
    listIssues,
@@ -207,10 +214,25 @@ describe('issues', () => {
          { teamId: 'CORE', title: 'X', statusId: 'to-do', priorityId: 'low' },
          ME
       );
-      const withLabel = await addLabel(db, i.id, 'security');
+      const withLabel = await addLabel(db, i.id, 'security', ME);
       expect(withLabel!.labels.map((l) => l.id)).toContain('security');
-      const without = await removeLabel(db, i.id, 'security');
+      const without = await removeLabel(db, i.id, 'security', ME);
       expect(without!.labels.map((l) => l.id)).not.toContain('security');
+
+      // add/remove de label são gravados no histórico (activity feed)
+      const events = (await db.select().from(activityEvent)).filter(
+         (e) => e.issueId === i.id && e.event === 'label'
+      );
+      expect(events.length).toBe(2);
+      expect(events.some((e) => e.text?.includes('added label'))).toBe(true);
+      expect(events.some((e) => e.text?.includes('removed label'))).toBe(true);
+
+      // re-remove (no-op) não gera evento duplicado
+      await removeLabel(db, i.id, 'security', ME);
+      const after = (await db.select().from(activityEvent)).filter(
+         (e) => e.issueId === i.id && e.event === 'label'
+      );
+      expect(after.length).toBe(2);
    });
 
    it('deletes an issue', async () => {
@@ -293,7 +315,7 @@ describe('issues', () => {
 
    it('rejects addLabel on unknown issue', async () => {
       const db = await setup();
-      await expect(addLabel(db, 'no-such-issue', 'bug')).rejects.toThrow(/não encontrada/);
+      await expect(addLabel(db, 'no-such-issue', 'bug', ME)).rejects.toThrow(/não encontrada/);
    });
 
    it('rejects addLabel with unknown label', async () => {
@@ -303,6 +325,6 @@ describe('issues', () => {
          { teamId: 'CORE', title: 'X', statusId: 'to-do', priorityId: 'low' },
          ME
       );
-      await expect(addLabel(db, i.id, 'no-such-label')).rejects.toThrow(/não existe/);
+      await expect(addLabel(db, i.id, 'no-such-label', ME)).rejects.toThrow(/não existe/);
    });
 });
