@@ -14,7 +14,8 @@ import { cn } from '@/lib/utils';
 import { View } from '@/data/views';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useViewsDisplayStore, ViewsOrdering } from '@/store/views-display-store';
-import { ArrowDown, SlidersHorizontal } from 'lucide-react';
+import { useViewFavoritesStore } from '@/store/view-favorites-store';
+import { ArrowDown, SlidersHorizontal, Star } from 'lucide-react';
 import { CreateViewButton } from './create-view-dialog';
 import { ViewActions } from './view-actions';
 import Link from 'next/link';
@@ -105,6 +106,8 @@ function DisplayOptions() {
 
 function ViewRow({ view, orgId }: { view: View; orgId: string }) {
    const { displayProperties } = useViewsDisplayStore();
+   const isFavorite = useViewFavoritesStore((s) => s.favoriteIds.includes(view.id));
+   const toggleFavorite = useViewFavoritesStore((s) => s.toggle);
    return (
       <div className="flex items-center gap-3 px-6 py-2.5 border-b border-border/50 hover:bg-sidebar/50 transition-colors">
          <Link
@@ -140,6 +143,21 @@ function ViewRow({ view, orgId }: { view: View; orgId: string }) {
                </span>
             )}
          </Link>
+         <button
+            type="button"
+            onClick={() => toggleFavorite(view.id)}
+            aria-label={isFavorite ? 'Unfavorite view' : 'Favorite view'}
+            className="shrink-0"
+         >
+            <Star
+               className={cn(
+                  'size-4 transition-colors',
+                  isFavorite
+                     ? 'fill-yellow-400 text-yellow-400'
+                     : 'text-muted-foreground hover:text-foreground'
+               )}
+            />
+         </button>
          <ViewActions view={view} />
       </div>
    );
@@ -157,16 +175,22 @@ export default function Views({ teamId }: { teamId?: string }) {
    const views = useWorkspaceStore((s) => s.views);
    const teams = useWorkspaceStore((s) => s.teams);
    const team = teamId ? teams.find((entry) => entry.id === teamId) : undefined;
+   const favoriteIds = useViewFavoritesStore((s) => s.favoriteIds);
 
    const list = useMemo(() => {
+      const favSet = new Set(favoriteIds);
       let source = views.filter((view) => view.type === (tab === 'issues' ? 'issue' : 'project'));
       if (teamId) source = source.filter((view) => view.teamId === teamId);
       return [...source].sort((a, b) => {
+         // Favoritas primeiro, depois a ordenação escolhida.
+         const af = favSet.has(a.id) ? 0 : 1;
+         const bf = favSet.has(b.id) ? 0 : 1;
+         if (af !== bf) return af - bf;
          if (ordering === 'created') return b.createdAt.localeCompare(a.createdAt);
          if (ordering === 'updated') return b.updatedAt.localeCompare(a.updatedAt);
          return a.name.localeCompare(b.name);
       });
-   }, [views, tab, ordering, teamId]);
+   }, [views, tab, ordering, teamId, favoriteIds]);
 
    return (
       <div className="w-full h-full overflow-y-auto">
