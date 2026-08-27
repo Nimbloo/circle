@@ -98,13 +98,14 @@ function IssueLineComponent({ issue, layoutId = false }: { issue: Issue; layoutI
                         Due {format(new Date(issue.dueDate), 'MMM dd')}
                      </span>
                   )}
-                  {displayProperties.created && (
-                     <span className="text-xs text-muted-foreground shrink-0 hidden sm:inline-block">
-                        {format(new Date(issue.createdAt), 'MMM dd')}
-                     </span>
-                  )}
+                  {/* Padrão Linear: avatar do assignee ANTES da data */}
                   {displayProperties.assignee && (
                      <AssigneeUser user={issue.assignee} issueId={issue.id} />
+                  )}
+                  {displayProperties.created && (
+                     <span className="text-xs text-muted-foreground shrink-0 hidden sm:inline-block w-12 text-right">
+                        {format(new Date(issue.createdAt), 'MMM d')}
+                     </span>
                   )}
                </div>
             </motion.div>
