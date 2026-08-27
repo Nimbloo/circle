@@ -49,7 +49,6 @@ export interface UserRef {
 export interface ProjectRef {
    id: string;
    name: string;
-   iconKey: string | null;
 }
 export interface IssueDto {
    id: string;
@@ -189,7 +188,7 @@ async function assemble(
          : Promise.resolve([]),
       projectIds.length
          ? db
-              .select({ id: projectT.id, name: projectT.name, iconKey: projectT.iconKey })
+              .select({ id: projectT.id, name: projectT.name })
               .from(projectT)
               .where(inArray(projectT.id, projectIds))
          : Promise.resolve([]),
@@ -220,7 +219,6 @@ async function assemble(
             ? {
                  id: r.projectId,
                  name: projectMap.get(r.projectId)!.name,
-                 iconKey: projectMap.get(r.projectId)!.iconKey,
               }
             : null,
       cycleId: r.cycleId ?? '',

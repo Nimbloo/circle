@@ -116,7 +116,6 @@ export async function seedWorkspaceFixture(db: Db): Promise<WorkspaceFixture> {
          id: projectId,
          name: 'Core Components',
          statusId: 'in-progress',
-         iconKey: null,
          percentComplete: 50,
          startDate: '2026-01-01',
          targetDate: '2026-06-01',

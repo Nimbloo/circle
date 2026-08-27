@@ -1,0 +1,1 @@
+ALTER TABLE "project" DROP COLUMN "icon_key";

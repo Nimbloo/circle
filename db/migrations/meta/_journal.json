@@ -169,6 +169,13 @@
       "when": 1787794493398,
       "tag": "0023_volatile_emma_frost",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1787795184243,
+      "tag": "0024_empty_squadron_sinister",
+      "breakpoints": true
     }
   ]
 }

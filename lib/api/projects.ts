@@ -33,7 +33,6 @@ export interface ProjectDto {
    status: StatusRow;
    priority: PriorityRow;
    health: HealthRow;
-   iconKey: string | null;
    percentComplete: number;
    startDate: string | null;
    targetDate: string | null;
@@ -134,7 +133,6 @@ async function assemble(db: Db, rows: ProjectRow[], maps: Maps): Promise<Project
          status: maps.statuses.get(r.statusId)!,
          priority: maps.priorities.get(r.priorityId)!,
          health: maps.healths.get(r.healthId)!,
-         iconKey: r.iconKey,
          percentComplete: pct,
          startDate: r.startDate,
          targetDate: r.targetDate,
@@ -221,7 +219,6 @@ export interface CreateProjectInput {
    healthId: string;
    teamId: string;
    leadId?: string | null;
-   iconKey?: string | null;
    percentComplete?: number;
    startDate?: string | null;
    targetDate?: string | null;
@@ -249,7 +246,6 @@ export async function createProject(db: Db, input: CreateProjectInput): Promise<
          healthId: input.healthId,
          teamId: input.teamId,
          leadId: input.leadId ?? null,
-         iconKey: input.iconKey ?? null,
          percentComplete: input.percentComplete ?? 0,
          startDate: input.startDate ?? null,
          targetDate: input.targetDate ?? null,
@@ -275,7 +271,6 @@ export interface UpdateProjectInput {
    priorityId?: string;
    healthId?: string;
    leadId?: string | null;
-   iconKey?: string | null;
    percentComplete?: number;
    startDate?: string | null;
    targetDate?: string | null;
@@ -313,7 +308,6 @@ export async function updateProject(
       'priorityId',
       'healthId',
       'leadId',
-      'iconKey',
       'percentComplete',
       'startDate',
       'targetDate',

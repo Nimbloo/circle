@@ -174,7 +174,6 @@ export const project = pgTable(
       statusId: varchar('status_id', { length: 64 })
          .notNull()
          .references(() => status.id),
-      iconKey: varchar('icon_key', { length: 64 }),
       percentComplete: integer('percent_complete').notNull().default(0),
       startDate: date('start_date'),
       targetDate: date('target_date'),

@@ -23,7 +23,6 @@ const UpdateSchema = z.object({
    priorityId: z.string().max(64).optional(),
    healthId: z.string().max(64).optional(),
    leadId: z.string().max(36).nullish(),
-   iconKey: z.string().max(64).nullish(),
    percentComplete: z.number().int().min(0).max(100).optional(),
    startDate: z.string().date().nullish(),
    targetDate: z.string().date().nullish(),

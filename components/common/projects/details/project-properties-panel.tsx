@@ -220,6 +220,9 @@ export function ProjectPropertiesPanel({
       [issues]
    );
 
+   // Selector reativo: usar getState() dentro do useMemo lia um snapshot e não
+   // re-renderizava quando os cycles hidratavam. Lê `cycles` do store e entra nas deps.
+   const cycles = useWorkspaceStore((s) => s.cycles);
    const cycleRows = useMemo(
       () =>
          buildRows(
@@ -227,13 +230,12 @@ export function ProjectPropertiesPanel({
             (issue) => (issue.cycleId === '' ? undefined : issue.cycleId),
             (key) => ({
                key: String(key),
-               label:
-                  useWorkspaceStore.getState().getCycleById(String(key))?.name ?? `Cycle ${key}`,
+               label: cycles.find((c) => c.id === String(key))?.name ?? `Cycle ${key}`,
                leading: null,
                target: { columnId: 'cycle', value: String(key) },
             })
          ),
-      [issues]
+      [issues, cycles]
    );
 
    return (

@@ -124,7 +124,6 @@ export async function seedDemo(db: Db): Promise<void> {
                id: p.id,
                name: p.name,
                statusId: p.status.id,
-               iconKey: null,
                percentComplete: p.percentComplete,
                startDate: p.startDate ?? null,
                targetDate: p.targetDate ?? null,

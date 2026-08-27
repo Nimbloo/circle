@@ -38,7 +38,6 @@ const CreateSchema = z.object({
    healthId: z.string().min(1).max(64),
    teamId: z.string().min(1).max(16),
    leadId: z.string().max(36).nullish(),
-   iconKey: z.string().max(64).nullish(),
    percentComplete: z.number().int().min(0).max(100).optional(),
    startDate: z.string().date().nullish(),
    targetDate: z.string().date().nullish(),
