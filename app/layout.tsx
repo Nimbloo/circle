@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Inter, Geist_Mono } from 'next/font/google';
 import { Toaster } from '@/components/ui/sonner';
 import './globals.css';
 
-const geistSans = Geist({
-   variable: '--font-geist-sans',
+// Inter é a fonte da UI do Linear — troca a Geist para fidelidade tipográfica.
+const inter = Inter({
+   variable: '--font-inter',
    subsets: ['latin'],
 });
 
@@ -46,7 +47,7 @@ export default function RootLayout({
             <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
          </head>
          <body
-            className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background`}
+            className={`${inter.variable} ${geistMono.variable} antialiased bg-background`}
             suppressHydrationWarning
          >
             <NuqsAdapter>
