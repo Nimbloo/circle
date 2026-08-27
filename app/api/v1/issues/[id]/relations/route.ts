@@ -18,9 +18,15 @@ const RelationSchema = z.object({
 export async function POST(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      await requireEmail(req);
+      const email = await requireEmail(req);
       const { relatedId, kind } = RelationSchema.parse(await req.json());
-      const dto = await addRelation(db, id, relatedId, kind as (typeof RELATION_KINDS)[number]);
+      const dto = await addRelation(
+         db,
+         id,
+         relatedId,
+         kind as (typeof RELATION_KINDS)[number],
+         email
+      );
       return dto ? ok(dto) : notFound(`Issue '${id}' não encontrada`);
    });
 }
@@ -29,13 +35,19 @@ export async function POST(req: Request, { params }: Params) {
 export async function DELETE(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      await requireEmail(req);
+      const email = await requireEmail(req);
       const sp = new URL(req.url).searchParams;
       const { relatedId, kind } = RelationSchema.parse({
          relatedId: sp.get('relatedId'),
          kind: sp.get('kind'),
       });
-      const dto = await removeRelation(db, id, relatedId, kind as (typeof RELATION_KINDS)[number]);
+      const dto = await removeRelation(
+         db,
+         id,
+         relatedId,
+         kind as (typeof RELATION_KINDS)[number],
+         email
+      );
       return dto ? ok(dto) : notFound(`Issue '${id}' não encontrada`);
    });
 }

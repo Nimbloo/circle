@@ -110,6 +110,22 @@ describe('issue detail / comments / activity', () => {
       await expect(addRelation(db, issue.id, 'nope', 'related')).rejects.toThrow();
    });
 
+   it('add/remove de relação gera activity_event (com actorEmail)', async () => {
+      const { db, issue } = await anIssue();
+      const other = await createIssue(
+         db,
+         { teamId: 'CORE', title: 'Bloqueadora', statusId: 'to-do', priorityId: 'low' },
+         ME
+      );
+      await addRelation(db, issue.id, other.id, 'blocked_by', ME);
+      let feed = await listActivity(db, issue.id);
+      expect(feed.some((f) => f.kind === 'event' && f.event === 'blocked')).toBe(true);
+
+      await removeRelation(db, issue.id, other.id, 'blocked_by', ME);
+      feed = await listActivity(db, issue.id);
+      expect(feed.some((f) => f.kind === 'event' && f.event === 'unblocked')).toBe(true);
+   });
+
    it('aggregates reactions by emoji and can remove them', async () => {
       const { db, issue } = await anIssue();
       const c = await addComment(db, issue.id, 'c', ME);

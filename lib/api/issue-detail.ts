@@ -154,12 +154,49 @@ export async function updateIssueContent(
 export type RelationKind = 'sub' | 'related' | 'blocked_by';
 export const RELATION_KINDS: readonly RelationKind[] = ['sub', 'related', 'blocked_by'];
 
+/** Evento de atividade (event, text) para add/remove de cada tipo de relação. O feed
+ * já tem ícones para related/blocked/unblocked; sub cai no ícone default. */
+function relationEvent(kind: RelationKind, added: boolean): { event: string; text: string } {
+   if (kind === 'blocked_by')
+      return added
+         ? { event: 'blocked', text: 'marcou como bloqueada' }
+         : { event: 'unblocked', text: 'removeu um bloqueio' };
+   if (kind === 'sub')
+      return added
+         ? { event: 'sub', text: 'adicionou uma sub-issue' }
+         : { event: 'sub', text: 'removeu uma sub-issue' };
+   return added
+      ? { event: 'related', text: 'vinculou uma issue relacionada' }
+      : { event: 'related', text: 'removeu uma issue relacionada' };
+}
+
+async function recordRelationEvent(
+   db: Db,
+   issueId: string,
+   kind: RelationKind,
+   added: boolean,
+   actorEmail?: string
+): Promise<void> {
+   if (!actorEmail) return;
+   const actor = await getOrCreateUser(db, actorEmail);
+   const { event, text } = relationEvent(kind, added);
+   await db.insert(activityEvent).values({
+      id: randomUUID(),
+      issueId,
+      actorId: actor.id,
+      event,
+      text,
+      createdAt: new Date(),
+   });
+}
+
 /** Cria uma relação issueId -> relatedId (idempotente). Retorna o detail atualizado. */
 export async function addRelation(
    db: Db,
    issueId: string,
    relatedId: string,
-   kind: RelationKind
+   kind: RelationKind,
+   actorEmail?: string
 ): Promise<IssueDetailDto | null> {
    if (issueId === relatedId)
       throw new ApiError(400, 'Uma issue não pode se relacionar consigo mesma');
@@ -182,6 +219,8 @@ export async function addRelation(
       .limit(1);
    if (existing.length === 0) {
       await db.insert(issueRelation).values({ id: randomUUID(), issueId, relatedId, kind });
+      // trilha no feed só quando o vínculo é novo (re-add idempotente não gera evento)
+      await recordRelationEvent(db, issueId, kind, true, actorEmail);
    }
    publish({ entity: 'issue', action: 'updated', id: issueId });
    return getIssueDetail(db, issueId);
@@ -192,9 +231,10 @@ export async function removeRelation(
    db: Db,
    issueId: string,
    relatedId: string,
-   kind: RelationKind
+   kind: RelationKind,
+   actorEmail?: string
 ): Promise<IssueDetailDto | null> {
-   await db
+   const deleted = await db
       .delete(issueRelation)
       .where(
          and(
@@ -202,7 +242,9 @@ export async function removeRelation(
             eq(issueRelation.relatedId, relatedId),
             eq(issueRelation.kind, kind)
          )
-      );
+      )
+      .returning({ id: issueRelation.id });
+   if (deleted.length > 0) await recordRelationEvent(db, issueId, kind, false, actorEmail);
    publish({ entity: 'issue', action: 'updated', id: issueId });
    return getIssueDetail(db, issueId);
 }
