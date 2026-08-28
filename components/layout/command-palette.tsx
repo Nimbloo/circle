@@ -216,6 +216,12 @@ export function CommandPalette() {
       reset();
    }, [reset]);
 
+   // Feedback truthful: toasta sucesso SÓ quando a mutação confirma na API. O store já
+   // faz rollback + toast.error na falha (fonte única) → sem duplo-toast contraditório.
+   const withToast = (p: Promise<void>, msg: string) => {
+      void p.then(() => toast.success(msg)).catch(() => {});
+   };
+
    // ⌘K / Ctrl+K
    useEffect(() => {
       const onKeyDown = (event: KeyboardEvent) => {
@@ -350,8 +356,7 @@ export function CommandPalette() {
                            </CommandItem>
                            <CommandItem
                               onSelect={() => {
-                                 updateIssueAssignee(issue.id, null);
-                                 toast.success('Un-assigned');
+                                 withToast(updateIssueAssignee(issue.id, null), 'Un-assigned');
                                  close();
                               }}
                            >
@@ -631,8 +636,10 @@ export function CommandPalette() {
                            <CommandItem
                               key={user.id}
                               onSelect={() => {
-                                 updateIssueAssignee(issue.id, user);
-                                 toast.success(`Assigned to ${user.name}`);
+                                 withToast(
+                                    updateIssueAssignee(issue.id, user),
+                                    `Assigned to ${user.name}`
+                                 );
                                  close();
                               }}
                            >
@@ -657,8 +664,10 @@ export function CommandPalette() {
                            <CommandItem
                               key={candidate.id}
                               onSelect={() => {
-                                 updateIssueStatus(issue.id, candidate);
-                                 toast.success(`Status set to ${candidate.name}`);
+                                 withToast(
+                                    updateIssueStatus(issue.id, candidate),
+                                    `Status set to ${candidate.name}`
+                                 );
                                  close();
                               }}
                            >
@@ -678,8 +687,10 @@ export function CommandPalette() {
                            <CommandItem
                               key={candidate.id}
                               onSelect={() => {
-                                 updateIssuePriority(issue.id, candidate);
-                                 toast.success(`Priority set to ${candidate.name}`);
+                                 withToast(
+                                    updateIssuePriority(issue.id, candidate),
+                                    `Priority set to ${candidate.name}`
+                                 );
                                  close();
                               }}
                            >
@@ -703,9 +714,10 @@ export function CommandPalette() {
                               <CommandItem
                                  key={label.id}
                                  onSelect={() => {
-                                    if (active) removeIssueLabel(issue.id, label.id);
-                                    else addIssueLabel(issue.id, label);
-                                    toast.success(
+                                    withToast(
+                                       active
+                                          ? removeIssueLabel(issue.id, label.id)
+                                          : addIssueLabel(issue.id, label),
                                        active
                                           ? `Label ${label.name} removed`
                                           : `Label ${label.name} added`
@@ -728,8 +740,10 @@ export function CommandPalette() {
                      <CommandGroup heading="Move to project…">
                         <CommandItem
                            onSelect={() => {
-                              updateIssueProject(issue.id, undefined);
-                              toast.success('Removed from project');
+                              withToast(
+                                 updateIssueProject(issue.id, undefined),
+                                 'Removed from project'
+                              );
                               close();
                            }}
                         >
@@ -740,8 +754,10 @@ export function CommandPalette() {
                            <CommandItem
                               key={project.id}
                               onSelect={() => {
-                                 updateIssueProject(issue.id, project);
-                                 toast.success(`Moved to ${project.name}`);
+                                 withToast(
+                                    updateIssueProject(issue.id, project),
+                                    `Moved to ${project.name}`
+                                 );
                                  close();
                               }}
                            >
@@ -759,8 +775,10 @@ export function CommandPalette() {
                      <CommandGroup heading="Move to cycle…">
                         <CommandItem
                            onSelect={() => {
-                              updateIssue(issue.id, { cycleId: '' });
-                              toast.success('Removed from cycle');
+                              withToast(
+                                 updateIssue(issue.id, { cycleId: '' }),
+                                 'Removed from cycle'
+                              );
                               close();
                            }}
                         >
@@ -771,8 +789,10 @@ export function CommandPalette() {
                            <CommandItem
                               key={cycle.id}
                               onSelect={() => {
-                                 updateIssue(issue.id, { cycleId: cycle.id });
-                                 toast.success(`Moved to ${cycle.name}`);
+                                 withToast(
+                                    updateIssue(issue.id, { cycleId: cycle.id }),
+                                    `Moved to ${cycle.name}`
+                                 );
                                  close();
                               }}
                            >
@@ -807,8 +827,10 @@ export function CommandPalette() {
                                  const date = `${d.getFullYear()}-${String(
                                     d.getMonth() + 1
                                  ).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                                 updateIssue(issue.id, { dueDate: date });
-                                 toast.success(`Due date set to ${label.toLowerCase()}`);
+                                 withToast(
+                                    updateIssue(issue.id, { dueDate: date }),
+                                    `Due date set to ${label.toLowerCase()}`
+                                 );
                                  close();
                               }}
                            >
@@ -818,8 +840,10 @@ export function CommandPalette() {
                         ))}
                         <CommandItem
                            onSelect={() => {
-                              updateIssue(issue.id, { dueDate: undefined });
-                              toast.success('Due date cleared');
+                              withToast(
+                                 updateIssue(issue.id, { dueDate: undefined }),
+                                 'Due date cleared'
+                              );
                               close();
                            }}
                         >
