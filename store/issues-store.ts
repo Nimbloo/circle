@@ -80,6 +80,7 @@ function toUpdateInput(updated: Partial<Issue>): UpdateIssueInput {
    if ('cycleId' in updated) patch.cycleId = updated.cycleId;
    if ('dueDate' in updated) patch.dueDate = updated.dueDate ?? null;
    if ('estimate' in updated) patch.estimate = updated.estimate ?? null;
+   if ('snoozedUntil' in updated) patch.snoozedUntil = updated.snoozedUntil ?? null;
    return patch;
 }
 

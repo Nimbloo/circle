@@ -60,6 +60,14 @@ export default function AllIssues({ categories }: AllIssuesProps) {
    const scopedIssues = useMemo<Issue[]>(() => {
       let list = teamId ? issues.filter((issue) => issue.teamId === teamId) : issues;
       if (categories) list = list.filter((issue) => categories.includes(issue.status.category));
+      // Snooze de triage (paridade Linear): issue em triage adiada some da fila até vencer.
+      const now = Date.now();
+      list = list.filter(
+         (issue) =>
+            issue.status.category !== 'triage' ||
+            !issue.snoozedUntil ||
+            new Date(issue.snoozedUntil).getTime() <= now
+      );
       return list;
    }, [issues, categories, teamId]);
 

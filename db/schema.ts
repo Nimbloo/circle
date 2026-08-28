@@ -272,6 +272,8 @@ export const issue = pgTable(
       rank: varchar('rank', { length: 64 }).notNull(), // lexorank
       dueDate: date('due_date'),
       estimate: integer('estimate'), // pontos de estimativa (nullable = sem estimativa)
+      // Snooze da issue (paridade Linear/triage): enquanto > now, some da fila de triage.
+      snoozedUntil: timestamp('snoozed_until'),
       // Card originado de um erro do Sentry: id da issue do Sentry (dedup/idempotência).
       // Nullable (issues normais = null); único → replay/retry do Sentry não duplica card.
       sentryIssueId: varchar('sentry_issue_id', { length: 128 }),

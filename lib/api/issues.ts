@@ -65,6 +65,8 @@ export interface IssueDto {
    /** Rollup de sub-issues (paridade Linear): total de filhas e quantas concluídas. */
    subIssueCount: number;
    subIssueDoneCount: number;
+   /** Snooze de triage: ISO enquanto adiada, null caso contrário. */
+   snoozedUntil: string | null;
    createdAt: string;
    updatedAt: string;
 }
@@ -272,6 +274,8 @@ async function assemble(
       estimate: r.estimate,
       subIssueCount: rollup.get(r.id)?.count ?? 0,
       subIssueDoneCount: rollup.get(r.id)?.done ?? 0,
+      snoozedUntil:
+         r.snoozedUntil instanceof Date ? r.snoozedUntil.toISOString() : (r.snoozedUntil ?? null),
       createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
       updatedAt: r.updatedAt instanceof Date ? r.updatedAt.toISOString() : String(r.updatedAt),
    }));
@@ -481,6 +485,8 @@ export interface UpdateIssueInput {
    cycleId?: string | null;
    dueDate?: string | null;
    estimate?: number | null;
+   /** Snooze de triage: ISO para adiar, null para reativar. */
+   snoozedUntil?: string | null;
 }
 
 export async function updateIssue(
@@ -505,6 +511,8 @@ export async function updateIssue(
    if (patch.cycleId !== undefined) set.cycleId = patch.cycleId || null;
    if (patch.dueDate !== undefined) set.dueDate = patch.dueDate;
    if (patch.estimate !== undefined) set.estimate = patch.estimate;
+   if (patch.snoozedUntil !== undefined)
+      set.snoozedUntil = patch.snoozedUntil ? new Date(patch.snoozedUntil) : null;
 
    await db.update(issue).set(set).where(eq(issue.id, id));
 

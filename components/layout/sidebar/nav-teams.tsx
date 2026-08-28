@@ -7,6 +7,7 @@ import {
    ChevronRight,
    CopyMinus,
    Home,
+   Inbox,
    Layers,
    Link as LinkIcon,
    MoreHorizontal,
@@ -114,6 +115,14 @@ export function NavTeams() {
                                  <Link href={`/nimbloo/team/${item.id}/all`}>
                                     <CopyMinus size={14} />
                                     <span>Issues</span>
+                                 </Link>
+                              </SidebarMenuSubButton>
+                           </SidebarMenuSubItem>
+                           <SidebarMenuSubItem>
+                              <SidebarMenuSubButton asChild>
+                                 <Link href={`/nimbloo/team/${item.id}/triage`}>
+                                    <Inbox size={14} />
+                                    <span>Triage</span>
                                  </Link>
                               </SidebarMenuSubButton>
                            </SidebarMenuSubItem>

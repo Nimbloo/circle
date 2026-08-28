@@ -22,6 +22,8 @@ export interface Issue {
    /** Rollup de sub-issues (paridade Linear): total e concluídas. 0/0 = sem filhas. */
    subIssueCount?: number;
    subIssueDoneCount?: number;
+   /** Snooze de triage (ISO) — enquanto futuro, some da fila de triage. */
+   snoozedUntil?: string | null;
    rank: string;
    dueDate?: string;
    /** Pontos de estimativa (undefined = sem estimativa). */

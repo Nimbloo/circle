@@ -177,6 +177,14 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
       toast.success(`Marked as ${target.name}`);
    };
 
+   // Snooze de triage: adia a issue por N dias (0 = remove). Some da fila de triage.
+   const snoozeInDays = (days: number, label: string) => {
+      if (!issueId) return;
+      const until = days > 0 ? new Date(Date.now() + days * 86400000).toISOString() : null;
+      updateIssue(issueId, { snoozedUntil: until });
+      toast.success(until ? `Adiada até ${label}` : 'Snooze removido');
+   };
+
    const copyToClipboard = (text: string, msg: string) => {
       void navigator.clipboard.writeText(text).then(() => toast.success(msg));
    };
@@ -223,6 +231,22 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
                      >
                         <CircleCheck className="size-4 text-muted-foreground" /> Decline
                      </ContextMenuItem>
+                     <ContextMenuSub>
+                        <ContextMenuSubTrigger>
+                           <CalendarClock className="mr-2 size-4" /> Snooze
+                        </ContextMenuSubTrigger>
+                        <ContextMenuSubContent className="w-44">
+                           <ContextMenuItem onClick={() => snoozeInDays(1, 'amanhã')}>
+                              Amanhã
+                           </ContextMenuItem>
+                           <ContextMenuItem onClick={() => snoozeInDays(7, 'próxima semana')}>
+                              Próxima semana
+                           </ContextMenuItem>
+                           <ContextMenuItem onClick={() => snoozeInDays(0, '')}>
+                              Remover snooze
+                           </ContextMenuItem>
+                        </ContextMenuSubContent>
+                     </ContextMenuSub>
                   </ContextMenuGroup>
                   <ContextMenuSeparator />
                </>

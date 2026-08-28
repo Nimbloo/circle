@@ -135,6 +135,22 @@ describe('issues', () => {
       expect(found.map((i) => i.title)).toEqual(['Alpha']);
    });
 
+   it('snooze de triage: updateIssue seta snoozedUntil e o DTO carrega', async () => {
+      const db = await setup();
+      const i = await createIssue(
+         db,
+         { teamId: 'CORE', title: 'Triage', statusId: 'triage', priorityId: 'low' },
+         ME
+      );
+      expect(i.snoozedUntil).toBeNull();
+      const until = new Date(Date.now() + 86400000).toISOString();
+      const upd = await updateIssue(db, i.id, { snoozedUntil: until }, ME);
+      expect(upd?.snoozedUntil).not.toBeNull();
+      // remover
+      const cleared = await updateIssue(db, i.id, { snoozedUntil: null }, ME);
+      expect(cleared?.snoozedUntil).toBeNull();
+   });
+
    it('busca por q casa também o corpo de comentários', async () => {
       const db = await setup();
       const target = await createIssue(

@@ -102,6 +102,7 @@ export function adaptIssue(dto: IssueDto): Issue {
       estimate: dto.estimate ?? undefined,
       subIssueCount: dto.subIssueCount,
       subIssueDoneCount: dto.subIssueDoneCount,
+      snoozedUntil: dto.snoozedUntil,
       createdById: dto.createdBy?.id ?? undefined,
    };
 }
