@@ -15,6 +15,7 @@ import { AssigneeUser } from '../assignee-user';
 import { ActivityFeed } from './activity-feed';
 import { ContentBlocks } from './content-blocks';
 import { IssuePropertiesPanel } from './issue-properties-panel';
+import { IssueDetailSkeleton } from './issue-detail-skeleton';
 import { RelationEditor } from './relation-editor';
 import { SubIssueCreate } from './sub-issue-create';
 
@@ -104,14 +105,8 @@ export default function IssueDetails() {
    }, [issue]);
 
    if (!issue) {
-      // Ainda resolvendo o deep-link → loading (não "not found" prematuro).
-      if (resolvingIssue) {
-         return (
-            <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-               Carregando…
-            </div>
-         );
-      }
+      // Ainda resolvendo o deep-link → skeleton (não "not found" prematuro).
+      if (resolvingIssue) return <IssueDetailSkeleton />;
       return (
          <div className="flex flex-col items-center justify-center h-full gap-2 text-sm text-muted-foreground">
             <p>Issue {issueId} not found.</p>
@@ -123,9 +118,11 @@ export default function IssueDetails() {
    }
 
    if (loading || !detail) {
+      // Loading → skeleton; erro real (não-loading, sem detail) → mensagem.
+      if (loading) return <IssueDetailSkeleton />;
       return (
          <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-            {loading ? 'Loading…' : 'Could not load issue details.'}
+            Could not load issue details.
          </div>
       );
    }

@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { DocumentOutline, getOutlineItems } from './document-outline';
 import { ProjectResources } from './project-resources';
 import { ProjectSidePanel } from './project-side-panel';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface ProjectOverviewProps {
    projectId: string;
@@ -80,9 +81,33 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    const outlineItems = useMemo(() => getOutlineItems(detail.description), [detail.description]);
 
    if (!project) {
+      // Ainda carregando → skeleton; carregado sem projeto → not found.
+      if (!loaded) {
+         return (
+            <div className="w-full h-full flex overflow-hidden">
+               <div className="flex-1 min-w-0 px-8 py-6 flex flex-col gap-5">
+                  <Skeleton className="h-7 w-1/2" />
+                  <Skeleton className="h-4 w-24" />
+                  <div className="flex flex-col gap-3 mt-2">
+                     <Skeleton className="h-4 w-full" />
+                     <Skeleton className="h-4 w-11/12" />
+                     <Skeleton className="h-4 w-3/4" />
+                  </div>
+               </div>
+               <div className="w-72 shrink-0 border-l px-5 py-6 flex flex-col gap-5">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                     <div key={i} className="flex flex-col gap-2">
+                        <Skeleton className="h-3 w-16" />
+                        <Skeleton className="h-6 w-32" />
+                     </div>
+                  ))}
+               </div>
+            </div>
+         );
+      }
       return (
          <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-            {loaded ? 'Project not found.' : 'Loading…'}
+            Project not found.
          </div>
       );
    }

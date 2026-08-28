@@ -12,6 +12,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import { ReviewDetail, ReviewSection } from './review-detail';
 import { toast } from 'sonner';
 import { PrIcon } from './review-shared';
+import { Skeleton } from '@/components/ui/skeleton';
 
 /** Hand-drawn empty-state sketch (paper plane over a folded sheet). */
 function EmptySketch() {
@@ -236,7 +237,15 @@ export default function Reviews({
             </div>
             <div className="flex-1 overflow-y-auto">
                {loading ? (
-                  <div className="px-4 py-6 text-sm text-muted-foreground">Loading…</div>
+                  <div className="flex flex-col divide-y divide-border/50">
+                     {Array.from({ length: 8 }).map((_, i) => (
+                        <div key={i} className="flex items-center gap-3 px-4 py-3">
+                           <Skeleton className="size-4 rounded-full shrink-0" />
+                           <Skeleton className="h-4 flex-1 max-w-md" />
+                           <Skeleton className="h-4 w-16 shrink-0" />
+                        </div>
+                     ))}
+                  </div>
                ) : error ? (
                   <div className="px-4 py-6 text-sm text-muted-foreground">
                      Could not load reviews.
