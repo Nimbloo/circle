@@ -149,6 +149,9 @@ export async function setRead(
       .set({ read })
       .where(and(eq(notification.id, id), eq(notification.recipientId, recipientId)))
       .returning({ id: notification.id });
+   // Propaga por SSE: marcar lido/não-lido sincroniza o badge entre abas/dispositivos
+   // (antes só setSnooze publicava — read-state não propagava em tempo real).
+   if (res.length > 0) publish({ entity: 'notification', action: 'updated', id });
    return res.length > 0;
 }
 
@@ -158,6 +161,7 @@ export async function markAllRead(db: Db, recipientId: string): Promise<number> 
       .set({ read: true })
       .where(and(eq(notification.recipientId, recipientId), eq(notification.read, false)))
       .returning({ id: notification.id });
+   if (res.length > 0) publish({ entity: 'notification', action: 'updated', id: recipientId });
    return res.length;
 }
 

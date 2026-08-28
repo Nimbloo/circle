@@ -22,7 +22,7 @@ import {
    Vault,
    Wallpaper,
 } from 'lucide-react';
-import { RemixiconComponentType } from '@remixicon/react';
+import type { ComponentType } from 'react';
 import { User, users } from './users';
 import { LabelInterface, labels } from './labels';
 import { Priority, priorities } from './priorities';
@@ -30,7 +30,8 @@ export interface Project {
    id: string;
    name: string;
    status: Status;
-   icon: LucideIcon | RemixiconComponentType;
+   /** Ícone lucide OU componente SVG custom (ex.: CyclePlayIcon). Antes incluía Remixicon (removido). */
+   icon: LucideIcon | ComponentType<{ className?: string }>;
    percentComplete: number;
    startDate: string;
    /** Planned completion date (Linear "Target date"). */
