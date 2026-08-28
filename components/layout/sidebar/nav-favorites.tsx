@@ -2,7 +2,7 @@
 
 import { Box, CircleDot, Layers, LucideIcon, Star } from 'lucide-react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 
 import {
@@ -34,6 +34,7 @@ function hrefFor(orgId: string, f: FavoriteDto): string {
 
 export function NavFavorites() {
    const { orgId } = useParams<{ orgId: string }>();
+   const pathname = usePathname();
    const items = useFavoritesStore((s) => s.items);
    const loaded = useFavoritesStore((s) => s.loaded);
    const load = useFavoritesStore((s) => s.load);
@@ -53,10 +54,12 @@ export function NavFavorites() {
          <SidebarMenu>
             {items.map((f) => {
                const Icon = ICON[f.entityType];
+               const href = hrefFor(orgId, f);
+               const active = pathname === href || pathname.startsWith(`${href}/`);
                return (
                   <SidebarMenuItem key={f.id}>
-                     <SidebarMenuButton asChild>
-                        <Link href={hrefFor(orgId, f)}>
+                     <SidebarMenuButton asChild isActive={active}>
+                        <Link href={href}>
                            <Icon />
                            <span className="truncate">
                               {f.entityType === 'issue' && f.identifier && (

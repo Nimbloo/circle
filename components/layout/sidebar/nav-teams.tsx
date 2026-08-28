@@ -14,6 +14,8 @@ import {
    Settings,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useParams, usePathname } from 'next/navigation';
+import type { ReactNode } from 'react';
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
@@ -37,7 +39,19 @@ import {
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
 
+/** Sub-item de time com href resolvido pelo orgId real e realce de rota ativa. */
+function TeamSub({ href, children }: { href: string; children: ReactNode }) {
+   const pathname = usePathname();
+   const active = pathname === href || pathname.startsWith(`${href}/`);
+   return (
+      <SidebarMenuSubButton asChild isActive={active}>
+         <Link href={href}>{children}</Link>
+      </SidebarMenuSubButton>
+   );
+}
+
 export function NavTeams() {
+   const { orgId } = useParams<{ orgId: string }>();
    const teams = useWorkspaceStore((s) => s.teams);
    const joinedTeams = teams.filter((t) => t.joined);
    return (
@@ -103,68 +117,52 @@ export function NavTeams() {
                      <CollapsibleContent>
                         <SidebarMenuSub>
                            <SidebarMenuSubItem>
-                              <SidebarMenuSubButton asChild>
-                                 <Link href={`/nimbloo/team/${item.id}/overview`}>
-                                    <Home size={14} />
-                                    <span>Home</span>
-                                 </Link>
-                              </SidebarMenuSubButton>
+                              <TeamSub href={`/${orgId}/team/${item.id}/overview`}>
+                                 <Home size={14} />
+                                 <span>Home</span>
+                              </TeamSub>
                            </SidebarMenuSubItem>
                            <SidebarMenuSubItem>
-                              <SidebarMenuSubButton asChild>
-                                 <Link href={`/nimbloo/team/${item.id}/all`}>
-                                    <CopyMinus size={14} />
-                                    <span>Issues</span>
-                                 </Link>
-                              </SidebarMenuSubButton>
+                              <TeamSub href={`/${orgId}/team/${item.id}/all`}>
+                                 <CopyMinus size={14} />
+                                 <span>Issues</span>
+                              </TeamSub>
                            </SidebarMenuSubItem>
                            <SidebarMenuSubItem>
-                              <SidebarMenuSubButton asChild>
-                                 <Link href={`/nimbloo/team/${item.id}/triage`}>
-                                    <Inbox size={14} />
-                                    <span>Triage</span>
-                                 </Link>
-                              </SidebarMenuSubButton>
+                              <TeamSub href={`/${orgId}/team/${item.id}/triage`}>
+                                 <Inbox size={14} />
+                                 <span>Triage</span>
+                              </TeamSub>
                            </SidebarMenuSubItem>
                            <SidebarMenuSubItem>
-                              <SidebarMenuSubButton asChild>
-                                 <Link href={`/nimbloo/team/${item.id}/cycles`}>
-                                    <CyclePlayIcon className="size-3.5" />
-                                    <span>Cycles</span>
-                                 </Link>
-                              </SidebarMenuSubButton>
+                              <TeamSub href={`/${orgId}/team/${item.id}/cycles`}>
+                                 <CyclePlayIcon className="size-3.5" />
+                                 <span>Cycles</span>
+                              </TeamSub>
                               <SidebarMenuSub className="mr-0 pr-0">
                                  <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild>
-                                       <Link href={`/nimbloo/team/${item.id}/cycle/active`}>
-                                          <span>Current</span>
-                                       </Link>
-                                    </SidebarMenuSubButton>
+                                    <TeamSub href={`/${orgId}/team/${item.id}/cycle/active`}>
+                                       <span>Current</span>
+                                    </TeamSub>
                                  </SidebarMenuSubItem>
                                  <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild>
-                                       <Link href={`/nimbloo/team/${item.id}/cycle/upcoming`}>
-                                          <span>Upcoming</span>
-                                       </Link>
-                                    </SidebarMenuSubButton>
+                                    <TeamSub href={`/${orgId}/team/${item.id}/cycle/upcoming`}>
+                                       <span>Upcoming</span>
+                                    </TeamSub>
                                  </SidebarMenuSubItem>
                               </SidebarMenuSub>
                            </SidebarMenuSubItem>
                            <SidebarMenuSubItem>
-                              <SidebarMenuSubButton asChild>
-                                 <Link href={`/nimbloo/team/${item.id}/projects`}>
-                                    <Box size={14} />
-                                    <span>Projects</span>
-                                 </Link>
-                              </SidebarMenuSubButton>
+                              <TeamSub href={`/${orgId}/team/${item.id}/projects`}>
+                                 <Box size={14} />
+                                 <span>Projects</span>
+                              </TeamSub>
                            </SidebarMenuSubItem>
                            <SidebarMenuSubItem>
-                              <SidebarMenuSubButton asChild>
-                                 <Link href={`/nimbloo/team/${item.id}/views`}>
-                                    <Layers size={14} />
-                                    <span>Views</span>
-                                 </Link>
-                              </SidebarMenuSubButton>
+                              <TeamSub href={`/${orgId}/team/${item.id}/views`}>
+                                 <Layers size={14} />
+                                 <span>Views</span>
+                              </TeamSub>
                            </SidebarMenuSubItem>
                         </SidebarMenuSub>
                      </CollapsibleContent>

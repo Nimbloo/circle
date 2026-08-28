@@ -32,7 +32,7 @@ import {
    useSidebarPrefsStore,
 } from '@/store/sidebar-prefs-store';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { CustomizeSidebarDialog } from './customize-sidebar-dialog';
 
@@ -54,6 +54,7 @@ const WORKSPACE_NAV: WorkspaceNavItem[] = [
 
 export function NavWorkspace() {
    const { orgId } = useParams<{ orgId: string }>();
+   const pathname = usePathname();
    const { visibility, order } = useSidebarPrefsStore();
    const [customizeOpen, setCustomizeOpen] = useState(false);
    const [mounted, setMounted] = useState(false);
@@ -79,16 +80,20 @@ export function NavWorkspace() {
       <SidebarGroup className="group-data-[collapsible=icon]:hidden">
          <SidebarGroupLabel>Workspace</SidebarGroupLabel>
          <SidebarMenu>
-            {items.map((item) => (
-               <SidebarMenuItem key={item.key}>
-                  <SidebarMenuButton asChild>
-                     <Link href={`/${orgId}${item.url}`}>
-                        <item.icon />
-                        <span>{item.name}</span>
-                     </Link>
-                  </SidebarMenuButton>
-               </SidebarMenuItem>
-            ))}
+            {items.map((item) => {
+               const href = `/${orgId}${item.url}`;
+               const active = pathname === href || pathname.startsWith(`${href}/`);
+               return (
+                  <SidebarMenuItem key={item.key}>
+                     <SidebarMenuButton asChild isActive={active}>
+                        <Link href={href}>
+                           <item.icon />
+                           <span>{item.name}</span>
+                        </Link>
+                     </SidebarMenuButton>
+                  </SidebarMenuItem>
+               );
+            })}
             <SidebarMenuItem>
                <DropdownMenu>
                   <DropdownMenuTrigger asChild>

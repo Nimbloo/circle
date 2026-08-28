@@ -18,7 +18,7 @@ import {
    useSidebarPrefsStore,
 } from '@/store/sidebar-prefs-store';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 const ITEM_KEYS: Record<string, SidebarItemKey> = {
@@ -30,6 +30,7 @@ const ITEM_KEYS: Record<string, SidebarItemKey> = {
 
 export function NavInbox() {
    const { orgId } = useParams<{ orgId: string }>();
+   const pathname = usePathname();
    const { visibility, badgeStyle, order } = useSidebarPrefsStore();
    const { getUnreadCount } = useNotificationsStore();
    const [mounted, setMounted] = useState(false);
@@ -73,29 +74,33 @@ export function NavInbox() {
    return (
       <SidebarGroup className="group-data-[collapsible=icon]:hidden">
          <SidebarMenu>
-            {items.map((item) => (
-               <SidebarMenuItem key={item.name}>
-                  <SidebarMenuButton asChild>
-                     <Link href={`/${orgId}${item.url}`}>
-                        <item.icon />
-                        <span>{item.name}</span>
-                     </Link>
-                  </SidebarMenuButton>
-                  {mounted && item.name === 'Inbox' && unread > 0 && (
-                     <SidebarMenuBadge className="text-muted-foreground">
-                        {badgeStyle === 'count' ? (
-                           unread > 99 ? (
-                              '99+'
+            {items.map((item) => {
+               const href = `/${orgId}${item.url}`;
+               const active = pathname === href || pathname.startsWith(`${href}/`);
+               return (
+                  <SidebarMenuItem key={item.name}>
+                     <SidebarMenuButton asChild isActive={active}>
+                        <Link href={href}>
+                           <item.icon />
+                           <span>{item.name}</span>
+                        </Link>
+                     </SidebarMenuButton>
+                     {mounted && item.name === 'Inbox' && unread > 0 && (
+                        <SidebarMenuBadge className="text-muted-foreground">
+                           {badgeStyle === 'count' ? (
+                              unread > 99 ? (
+                                 '99+'
+                              ) : (
+                                 unread
+                              )
                            ) : (
-                              unread
-                           )
-                        ) : (
-                           <span className="size-1.5 rounded-full bg-muted-foreground inline-block" />
-                        )}
-                     </SidebarMenuBadge>
-                  )}
-               </SidebarMenuItem>
-            ))}
+                              <span className="size-1.5 rounded-full bg-muted-foreground inline-block" />
+                           )}
+                        </SidebarMenuBadge>
+                     )}
+                  </SidebarMenuItem>
+               );
+            })}
          </SidebarMenu>
       </SidebarGroup>
    );
