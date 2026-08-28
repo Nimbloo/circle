@@ -74,6 +74,20 @@ describe('notifySlackEvent', () => {
       expect(bodyText()).toContain('atribuída a Ana');
    });
 
+   it('escapes Slack mention injection in user-controlled title', async () => {
+      const db = await makeTestDb();
+      await notifySlackEvent(db, {
+         type: 'issue.created',
+         identifier: 'ENG-9',
+         title: '<!channel> pwn <@U123> & more',
+      });
+      const t = bodyText();
+      expect(t).not.toContain('<!channel>');
+      expect(t).not.toContain('<@U123>');
+      expect(t).toContain('&lt;!channel&gt;');
+      expect(t).toContain('&amp;');
+   });
+
    it('no-ops without a webhook configured', async () => {
       delete process.env.SLACK_WEBHOOK_URL;
       const db = await makeTestDb();

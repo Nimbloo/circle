@@ -38,12 +38,14 @@ const validPayload = () => ({
 describe('verifyKeycloakJwt', () => {
    beforeEach(() => {
       process.env.AUTH_KEYCLOAK_ISSUER = ISS;
+      process.env.CIRCLE_KEYCLOAK_ALLOWED_CLIENTS = 'circle-ci,another';
       vi.stubGlobal(
          'fetch',
          vi.fn(async () => ({ ok: true, json: async () => ({ keys: [jwk] }) }))
       );
    });
    afterEach(() => {
+      delete process.env.CIRCLE_KEYCLOAK_ALLOWED_CLIENTS;
       vi.unstubAllGlobals();
       vi.restoreAllMocks();
    });
@@ -88,11 +90,39 @@ describe('verifyKeycloakJwt', () => {
       delete process.env.AUTH_KEYCLOAK_ISSUER;
       expect(await verifyKeycloakJwt(makeToken(validPayload()))).toBeNull();
    });
+
+   it('rejects a token whose azp is not in the allowlist', async () => {
+      const p = await verifyKeycloakJwt(makeToken({ ...validPayload(), azp: 'rogue-client' }));
+      expect(p).toBeNull();
+   });
+
+   it('rejects all bearer tokens when the allowlist is unset (fail-closed)', async () => {
+      delete process.env.CIRCLE_KEYCLOAK_ALLOWED_CLIENTS;
+      expect(await verifyKeycloakJwt(makeToken(validPayload()))).toBeNull();
+   });
+
+   it('accepts via aud when azp is absent but aud is allowed', async () => {
+      const { azp: _omit, ...noAzp } = validPayload();
+      const p = await verifyKeycloakJwt(makeToken({ ...noAzp, aud: ['another', 'account'] }));
+      expect(p).not.toBeNull();
+   });
+
+   it('rejects a token without exp (would never expire)', async () => {
+      const { exp: _omit, ...noExp } = validPayload();
+      expect(await verifyKeycloakJwt(makeToken(noExp))).toBeNull();
+   });
 });
 
 describe('identityFromPayload', () => {
-   it('prefers the email claim', () => {
-      expect(identityFromPayload({ email: 'Bot@Nimbloo.AI', azp: 'x' })).toBe('bot@nimbloo.ai');
+   it('prefers the email claim when verified', () => {
+      expect(identityFromPayload({ email: 'Bot@Nimbloo.AI', email_verified: true, azp: 'x' })).toBe(
+         'bot@nimbloo.ai'
+      );
+   });
+   it('ignores an unverified email and falls back to azp synthesis', () => {
+      expect(identityFromPayload({ email: 'spoof@admin.com', azp: 'circle-ci' })).toBe(
+         'service-account-circle-ci@circle.local'
+      );
    });
    it('synthesizes from azp for service accounts without email', () => {
       expect(identityFromPayload({ azp: 'circle-CI' })).toBe(

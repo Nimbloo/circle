@@ -63,13 +63,15 @@ export async function updateSlackConfig(
    db: Db,
    patch: Partial<SlackConfigDto>
 ): Promise<SlackConfigDto> {
-   const current = await getSlackConfig(db);
-   const next = { ...current, ...patch };
+   // Update PARCIAL atômico: o `set` toca só as colunas do patch (não o row inteiro),
+   // então patches concorrentes de toggles diferentes não se sobrescrevem. O insert
+   // (1ª vez) semeia os defaults; colunas ausentes no patch mantêm o default/valor atual.
+   const updatedAt = new Date();
    await db
       .insert(slackConfig)
-      .values({ id: CONFIG_ID, ...next, updatedAt: new Date() })
-      .onConflictDoUpdate({ target: slackConfig.id, set: { ...next, updatedAt: new Date() } });
-   return next;
+      .values({ id: CONFIG_ID, ...DEFAULT_CONFIG, ...patch, updatedAt })
+      .onConflictDoUpdate({ target: slackConfig.id, set: { ...patch, updatedAt } });
+   return getSlackConfig(db);
 }
 
 /* --------------------------- Notificação por evento ----------------------- */
@@ -87,16 +89,27 @@ const TOGGLE: Record<SlackEvent['type'], keyof SlackConfigDto> = {
    'pr.merged': 'onPrMerged',
 };
 
+/**
+ * Escapa texto controlado pelo usuário antes de interpolar no mrkdwn do Slack.
+ * Sem isto, um título de issue como `<!channel>` ou `<@U123>` viraria menção real
+ * (spam/abuso disparável por qualquer Member). Spec do Slack: escapar & < >.
+ */
+function esc(s: string): string {
+   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function formatEvent(ev: SlackEvent): string {
+   const id = esc(ev.identifier);
+   const title = esc(ev.title);
    switch (ev.type) {
       case 'issue.created':
-         return `:sparkles: *${ev.identifier}* criada${ev.actor ? ` por ${ev.actor}` : ''}: ${ev.title}`;
+         return `:sparkles: *${id}* criada${ev.actor ? ` por ${esc(ev.actor)}` : ''}: ${title}`;
       case 'issue.completed':
-         return `:white_check_mark: *${ev.identifier}* concluída: ${ev.title}`;
+         return `:white_check_mark: *${id}* concluída: ${title}`;
       case 'issue.assigned':
-         return `:bust_in_silhouette: *${ev.identifier}* atribuída a ${ev.assignee}: ${ev.title}`;
+         return `:bust_in_silhouette: *${id}* atribuída a ${esc(ev.assignee)}: ${title}`;
       case 'pr.merged':
-         return `:git-merge: PR mergeado → *${ev.identifier}* concluída: ${ev.title}`;
+         return `:git-merge: PR mergeado → *${id}* concluída: ${title}`;
    }
 }
 

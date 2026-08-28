@@ -29,7 +29,17 @@ interface JwksCache {
 }
 
 const JWKS_TTL_MS = 10 * 60 * 1000; // 10 min
+const FORCED_REFRESH_THROTTLE_MS = 60 * 1000; // no máx 1 refetch forçado/min
 let cache: JwksCache | null = null;
+let lastForcedRefreshAt = 0;
+
+/** Clientes autorizados (azp/aud). Sem allowlist → Bearer desligado (fail-closed). */
+function allowedClients(): string[] {
+   return (process.env.CIRCLE_KEYCLOAK_ALLOWED_CLIENTS ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+}
 
 /** Decodifica um segmento base64url (edge-safe, sem Buffer). */
 function b64urlToBytes(seg: string): Uint8Array {
@@ -79,10 +89,19 @@ export async function verifyKeycloakJwt(token: string): Promise<Record<string, u
       if (header.alg !== 'RS256') return null; // hardcode: rejeita none/HS*/etc
       const kid = typeof header.kid === 'string' ? header.kid : null;
 
+      // Allowlist de clientes ANTES de qualquer trabalho caro (assinatura/JWKS): num
+      // realm SSO compartilhado, sem isto qualquer token do realm autenticaria. Também
+      // corta o refetch de JWKS disparado por tokens não-autorizados. Fail-closed.
+      const allowed = allowedClients();
+      if (allowed.length === 0) return null;
+
       let keys = await getJwks(iss);
       let jwk = keys.find((k) => k.kid === kid && k.kty === 'RSA');
-      // kid desconhecido (rotação recente) → força um refresh do JWKS uma vez.
-      if (!jwk) {
+      // kid desconhecido (rotação recente) → força UM refresh, no máx 1x/min (throttle
+      // anti-DoS: sem isto, tokens com kid aleatório fariam refetch + cache-thrash a cada
+      // request, pré-auth). Fora da janela, rejeita sem refetch.
+      if (!jwk && Date.now() - lastForcedRefreshAt > FORCED_REFRESH_THROTTLE_MS) {
+         lastForcedRefreshAt = Date.now();
          cache = null;
          keys = await getJwks(iss);
          jwk = keys.find((k) => k.kid === kid && k.kty === 'RSA');
@@ -104,8 +123,19 @@ export async function verifyKeycloakJwt(token: string): Promise<Record<string, u
       const payload = b64urlToJson(payloadB64);
       if (payload.iss !== iss) return null; // issuer exato do realm
       const now = Math.floor(Date.now() / 1000);
-      if (typeof payload.exp === 'number' && payload.exp + 30 < now) return null; // skew 30s
+      // exp OBRIGATÓRIO (não best-effort): token sem exp jamais expiraria.
+      if (typeof payload.exp !== 'number' || payload.exp + 30 < now) return null; // skew 30s
       if (typeof payload.nbf === 'number' && payload.nbf - 30 > now) return null;
+
+      // Client autorizado: azp OU algum aud na allowlist (checada no topo).
+      const azp = typeof payload.azp === 'string' ? payload.azp : null;
+      const audList = Array.isArray(payload.aud)
+         ? (payload.aud as unknown[]).filter((a): a is string => typeof a === 'string')
+         : typeof payload.aud === 'string'
+           ? [payload.aud]
+           : [];
+      const clientOk = (azp && allowed.includes(azp)) || audList.some((a) => allowed.includes(a));
+      if (!clientOk) return null;
 
       return payload;
    } catch {
@@ -119,7 +149,10 @@ export async function verifyKeycloakJwt(token: string): Promise<Record<string, u
  */
 export function identityFromPayload(payload: Record<string, unknown>): string | null {
    const email = payload.email;
-   if (typeof email === 'string' && email.includes('@')) return email.trim().toLowerCase();
+   // Só confia no e-mail se VERIFICADO — senão um realm com auto-registro/e-mail
+   // arbitrário permitiria forjar um dos CIRCLE_ADMIN_EMAILS e provisionar como Admin.
+   if (typeof email === 'string' && email.includes('@') && payload.email_verified === true)
+      return email.trim().toLowerCase();
    const azp = payload.azp ?? payload.client_id ?? payload.clientId;
    if (typeof azp === 'string' && azp.length > 0)
       return `service-account-${azp.toLowerCase()}@circle.local`;

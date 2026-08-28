@@ -11,7 +11,8 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
    return handle(async () => {
-      await requireEmail(req);
+      const email = await requireEmail(req);
+      if (!(await isAdmin(email, db))) throw new ApiError(403, 'Apenas admin');
       return ok(await getSlackConfig(db));
    });
 }

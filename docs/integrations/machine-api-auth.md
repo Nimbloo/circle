@@ -16,7 +16,10 @@ no Keycloak (princípio "IdP único").
    sintetiza `service-account-<clientId>@circle.local`. O usuário é provisionado JIT
    como **Member** (elevar role é ação de admin, igual ao fluxo humano).
 
-Nenhuma env nova: reusa `AUTH_KEYCLOAK_ISSUER`.
+Reusa `AUTH_KEYCLOAK_ISSUER` (JWKS/issuer) + **exige** `CIRCLE_KEYCLOAK_ALLOWED_CLIENTS`
+(csv dos `client_id` autorizados). Num realm SSO compartilhado, sem essa allowlist
+qualquer token do realm autenticaria — por isso, **allowlist vazia = Bearer desligado**
+(fail-closed). O token precisa ter `azp` (ou um `aud`) na lista.
 
 ## Setup no Keycloak (ops, uma vez por cliente)
 
@@ -47,3 +50,6 @@ curl -s https://circle.nimbloo.com/api/v1/issues \
 - JWKS é cacheado em memória por 10 min, com refresh forçado quando aparece um `kid`
   desconhecido (rotação de chave).
 - O token é validado **duas vezes** (gate + rota) por defesa em profundidade.
+- Validações aplicadas: assinatura RS256 (alg travado), `iss` exato, `exp` **obrigatório**,
+  `azp`/`aud` na allowlist, e — para identidade por `email` — `email_verified === true`.
+- Refetch de JWKS por `kid` desconhecido é throttled (1x/min) contra cache-thrash pré-auth.
