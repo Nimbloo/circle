@@ -86,7 +86,7 @@ export function CustomDragLayer() {
 export function IssueGrid({ issue, orderedIssues, layout = true }: IssueGridProps) {
    const ref = useRef<HTMLDivElement>(null);
    const { orgId } = useParams<{ orgId: string }>();
-   const { displayProperties } = useDisplaySettingsStore();
+   const displayProperties = useDisplaySettingsStore((s) => s.displayProperties);
    const reorderIssue = useIssuesStore((s) => s.reorderIssue);
    const updateIssueStatus = useIssuesStore((s) => s.updateIssueStatus);
 

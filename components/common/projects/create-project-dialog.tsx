@@ -42,6 +42,8 @@ import { toast } from 'sonner';
 type IconCmp = ComponentType<{ className?: string; style?: CSSProperties }>;
 
 interface DraftMilestone {
+   /** Key estável (React) — evita remount/salto de foco ao remover do meio da lista. */
+   key: string;
    name: string;
    targetDate: string;
 }
@@ -601,7 +603,10 @@ export function CreateProjectButton() {
                         className="size-6"
                         aria-label="Add milestone"
                         onClick={() =>
-                           setMilestones((cur) => [...cur, { name: '', targetDate: '' }])
+                           setMilestones((cur) => [
+                              ...cur,
+                              { key: crypto.randomUUID(), name: '', targetDate: '' },
+                           ])
                         }
                      >
                         <Plus className="size-4" />
@@ -610,7 +615,7 @@ export function CreateProjectButton() {
                   {milestones.length > 0 && (
                      <div className="flex flex-col gap-1.5 mt-2">
                         {milestones.map((m, idx) => (
-                           <div key={idx} className="flex items-center gap-2">
+                           <div key={m.key} className="flex items-center gap-2">
                               <input
                                  value={m.name}
                                  onChange={(e) =>

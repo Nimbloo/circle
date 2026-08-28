@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { useNotificationsStore } from '@/store/notifications-store';
 import { Button } from '@/components/ui/button';
@@ -50,22 +50,27 @@ export default function Inbox() {
       if (tab === 'snoozed') void hydrateSnoozed();
    }, [tab, hydrateSnoozed]);
 
-   // Filter and sort notifications based on settings
-   const filteredNotifications = notifications
-      .filter((notification) => {
-         if (!showRead && notification.read) return false;
-         return true;
-      })
-      .sort((a, b) => {
-         if (showUnreadFirst) {
-            if (!a.read && b.read) return -1;
-            if (a.read && !b.read) return 1;
-         }
-         // Ordena pelo ISO cru (sortAt); timestamp é string relativa só p/ exibir.
-         return ordering === 'newest'
-            ? new Date(b.sortAt).getTime() - new Date(a.sortAt).getTime()
-            : new Date(a.sortAt).getTime() - new Date(b.sortAt).getTime();
-      });
+   // Filter and sort notifications based on settings (memoizado: era recomputado — array
+   // novo + re-sort — a cada render, re-renderizando toda a lista de notificações).
+   const filteredNotifications = useMemo(
+      () =>
+         notifications
+            .filter((notification) => {
+               if (!showRead && notification.read) return false;
+               return true;
+            })
+            .sort((a, b) => {
+               if (showUnreadFirst) {
+                  if (!a.read && b.read) return -1;
+                  if (a.read && !b.read) return 1;
+               }
+               // Ordena pelo ISO cru (sortAt); timestamp é string relativa só p/ exibir.
+               return ordering === 'newest'
+                  ? new Date(b.sortAt).getTime() - new Date(a.sortAt).getTime()
+                  : new Date(a.sortAt).getTime() - new Date(b.sortAt).getTime();
+            }),
+      [notifications, showRead, showUnreadFirst, ordering]
+   );
 
    const listPane = (
       <>
