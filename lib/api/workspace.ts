@@ -51,7 +51,8 @@ export async function bootstrapWorkspace(db: Db, email: string): Promise<Workspa
       listProjects(db, {}),
       listMembers(db, {}),
       listInitiatives(db, {}),
-      listViews(db),
+      // Views escopadas: compartilhadas (com time) + as pessoais do próprio usuário.
+      listViews(db, undefined, me.id),
    ]);
 
    // membros por time (bulk)
