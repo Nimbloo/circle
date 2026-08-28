@@ -181,6 +181,7 @@ export function CreateNewIssue() {
                   />
                   <EstimateSelector
                      estimate={addIssueForm.estimate}
+                     teamId={teamId}
                      onChange={(newEstimate) =>
                         setAddIssueForm({ ...addIssueForm, estimate: newEstimate })
                      }

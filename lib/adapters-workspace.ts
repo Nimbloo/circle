@@ -125,6 +125,7 @@ export function adaptTeam(t: TeamFull): Team {
       icon: t.icon ?? '📁',
       joined: t.joined,
       color: t.color ?? '#8f9299',
+      estimateScale: t.estimateScale,
       members: t.members.map(adaptMemberToUser),
       projects: t.projects.map(adaptProject),
    };

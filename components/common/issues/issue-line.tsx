@@ -15,6 +15,7 @@ import { PrioritySelector } from './priority-selector';
 import { ProjectBadge } from './project-badge';
 import { StatusSelector } from './status-selector';
 import { SubIssueProgress } from './sub-issue-progress';
+import { estimateLabel, normalizeScale } from '@/data/estimate-scales';
 import { motion } from 'motion/react';
 import { memo } from 'react';
 
@@ -26,6 +27,7 @@ function IssueLineComponent({ issue, layoutId = false }: { issue: Issue; layoutI
    const { displayProperties } = useDisplaySettingsStore();
    const getCycleById = useWorkspaceStore((s) => s.getCycleById);
    const cycle = displayProperties.cycle && issue.cycleId ? getCycleById(issue.cycleId) : undefined;
+   const team = useWorkspaceStore((s) => (issue.teamId ? s.getTeamById(issue.teamId) : undefined));
    const selected = useBulkSelectionStore((s) => s.selected.has(issue.id));
    const anySelected = useBulkSelectionStore((s) => s.selected.size > 0);
    const toggleSelected = useBulkSelectionStore((s) => s.toggle);
@@ -87,7 +89,7 @@ function IssueLineComponent({ issue, layoutId = false }: { issue: Issue; layoutI
                   <SubIssueProgress count={issue.subIssueCount} done={issue.subIssueDoneCount} />
                   {displayProperties.estimate && issue.estimate !== undefined && (
                      <span className="text-xs text-muted-foreground border border-border rounded-md px-1.5 py-0.5 shrink-0 hidden sm:inline-block tabular-nums">
-                        {issue.estimate}
+                        {estimateLabel(issue.estimate, normalizeScale(team?.estimateScale))}
                      </span>
                   )}
                   {cycle && (

@@ -219,8 +219,15 @@ export const api = {
       list: (q = '') => get<TeamDto[]>(`/teams${q}`),
       get: (key: string) => get<TeamDto>(`/teams/${key}`),
       create: (input: CreateTeamInput) => post<TeamDto>('/teams', input),
-      update: (key: string, body: { name?: string; icon?: string | null; color?: string | null }) =>
-         patch<TeamDto>(`/teams/${key}`, body),
+      update: (
+         key: string,
+         body: {
+            name?: string;
+            icon?: string | null;
+            color?: string | null;
+            estimateScale?: string;
+         }
+      ) => patch<TeamDto>(`/teams/${key}`, body),
       remove: (key: string) => del<{ deleted: boolean }>(`/teams/${key}`),
       members: (key: string) => get<MemberDto[]>(`/teams/${key}/members`),
       addMember: (key: string, email: string) =>

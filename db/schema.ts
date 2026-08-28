@@ -100,6 +100,8 @@ export const team = pgTable('team', {
    icon: varchar('icon', { length: 16 }),
    color: varchar('color', { length: 16 }),
    issueSeq: integer('issue_seq').notNull().default(0), // contador p/ identifier <KEY>-<n>
+   // Escala de estimate do time (paridade Linear): fibonacci|exponential|linear|tshirt.
+   estimateScale: varchar('estimate_scale', { length: 16 }).notNull().default('fibonacci'),
 });
 
 export const teamMember = pgTable(

@@ -141,6 +141,13 @@
          "when": 1787876363606,
          "tag": "0019_project_status",
          "breakpoints": true
+      },
+      {
+         "idx": 20,
+         "version": "7",
+         "when": 1787877538614,
+         "tag": "0020_team_estimate_scale",
+         "breakpoints": true
       }
    ]
 }

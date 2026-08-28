@@ -176,6 +176,7 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
                <div className="flex items-center gap-1.5 -ml-1.5 mt-0.5">
                   <EstimateSelector
                      estimate={issue.estimate}
+                     teamId={issue.teamId}
                      onChange={(estimate) => updateIssue(issue.id, { estimate })}
                   />
                </div>

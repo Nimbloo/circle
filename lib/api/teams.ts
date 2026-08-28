@@ -26,6 +26,7 @@ export interface TeamDto {
    name: string;
    icon: string | null;
    color: string | null;
+   estimateScale: string; // fibonacci|exponential|linear|tshirt
    memberCount: number;
    projectCount: number;
    joined: boolean;
@@ -68,6 +69,7 @@ function toDto(
       name: t.name,
       icon: t.icon,
       color: t.color,
+      estimateScale: t.estimateScale,
       memberCount: counts.members.get(t.id) ?? 0,
       projectCount: counts.projects.get(t.id) ?? 0,
       joined: joined.has(t.id),
@@ -369,6 +371,7 @@ export interface UpdateTeamInput {
    name?: string;
    icon?: string | null;
    color?: string | null;
+   estimateScale?: string;
 }
 
 /** Atualização parcial (name/icon/color). Retorna o TeamDto ou null se não existir. */
@@ -383,6 +386,7 @@ export async function updateTeam(
    if (patch.name !== undefined) set.name = patch.name.trim();
    if (patch.icon !== undefined) set.icon = patch.icon;
    if (patch.color !== undefined) set.color = patch.color;
+   if (patch.estimateScale !== undefined) set.estimateScale = patch.estimateScale;
    if (Object.keys(set).length) await db.update(teamT).set(set).where(eq(teamT.id, id));
    publish({ entity: 'team', action: 'updated', id });
    return getTeam(db, id);

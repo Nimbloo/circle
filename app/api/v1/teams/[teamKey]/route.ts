@@ -26,6 +26,7 @@ const UpdateSchema = z.object({
    name: z.string().min(1).optional(),
    icon: z.string().nullish(),
    color: z.string().nullish(),
+   estimateScale: z.enum(['fibonacci', 'exponential', 'linear', 'tshirt']).optional(),
 });
 
 export async function PATCH(req: Request, { params }: Params) {
