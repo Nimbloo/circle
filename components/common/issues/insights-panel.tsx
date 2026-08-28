@@ -7,8 +7,10 @@ import type { Status } from '@/data/status';
 import { usePriorities, useWorkflowOrderedStatuses } from '@/store/catalog-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { X } from 'lucide-react';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { usePanelFilter } from './use-panel-filter';
+import { api } from '@/lib/client';
+import type { TimeMetrics } from '@/lib/api/aggregations';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -27,6 +29,74 @@ interface InsightsRow {
 
 interface InsightsPanelProps {
    issues: Issue[];
+}
+
+/** Formata dias em "3.2d" ou "5h" quando < 1 dia. */
+function fmtDays(d: number): string {
+   if (d <= 0) return '—';
+   if (d < 1) return `${Math.round(d * 24)}h`;
+   return `${d}d`;
+}
+
+/**
+ * Faixa de métricas temporais (workspace): cycle time, lead time e throughput
+ * das issues concluídas. Busca do servidor (deriva de startedAt/completedAt).
+ */
+function TimeMetricsStrip() {
+   const [m, setM] = useState<TimeMetrics | null>(null);
+   useEffect(() => {
+      let alive = true;
+      api.issues
+         .timeMetrics()
+         .then((res) => alive && setM(res))
+         .catch(() => {});
+      return () => {
+         alive = false;
+      };
+   }, []);
+
+   if (!m || m.sample === 0) return null;
+   const maxWk = Math.max(1, ...m.throughput.map((t) => t.completed));
+
+   return (
+      <div className="px-4 pb-3 border-b">
+         <div className="grid grid-cols-2 gap-3">
+            <div>
+               <div className="text-xs text-muted-foreground">Cycle time (median)</div>
+               <div className="text-lg font-semibold tabular-nums">
+                  {fmtDays(m.cycleTime.median)}
+                  <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                     avg {fmtDays(m.cycleTime.avg)} · p90 {fmtDays(m.cycleTime.p90)}
+                  </span>
+               </div>
+            </div>
+            <div>
+               <div className="text-xs text-muted-foreground">Lead time (median)</div>
+               <div className="text-lg font-semibold tabular-nums">
+                  {fmtDays(m.leadTime.median)}
+                  <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                     avg {fmtDays(m.leadTime.avg)} · p90 {fmtDays(m.leadTime.p90)}
+                  </span>
+               </div>
+            </div>
+         </div>
+         <div className="mt-3">
+            <div className="text-xs text-muted-foreground mb-1">
+               Throughput · {m.sample} completed
+            </div>
+            <div className="flex items-end gap-1 h-10">
+               {m.throughput.map((t) => (
+                  <div
+                     key={t.weekStart}
+                     className="flex-1 bg-primary/70 rounded-sm min-h-[2px]"
+                     style={{ height: `${(t.completed / maxWk) * 100}%` }}
+                     title={`${t.weekStart}: ${t.completed}`}
+                  />
+               ))}
+            </div>
+         </div>
+      </div>
+   );
 }
 
 /** Custom X axis tick rendering the status icon under each bar. */
@@ -98,8 +168,13 @@ export function InsightsPanel({ issues }: InsightsPanelProps) {
             </Button>
          </div>
 
+         {/* Time metrics (cycle/lead time + throughput) */}
+         <div className="shrink-0">
+            <TimeMetricsStrip />
+         </div>
+
          {/* Stacked bar chart */}
-         <div className="px-2 shrink-0">
+         <div className="px-2 shrink-0 pt-2">
             <ResponsiveContainer width="100%" height={220}>
                <BarChart data={chartData} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
                   <XAxis

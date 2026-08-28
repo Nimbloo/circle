@@ -280,6 +280,10 @@ export const issue = pgTable(
       milestoneId: varchar('milestone_id', { length: 36 }),
       // Snooze da issue (paridade Linear/triage): enquanto > now, some da fila de triage.
       snoozedUntil: timestamp('snoozed_until'),
+      // Marcos temporais p/ métricas (cycle/lead time). startedAt = 1ª entrada em status
+      // 'started' (sticky); completedAt = entrada em 'completed' (limpo se reaberto).
+      startedAt: timestamp('started_at'),
+      completedAt: timestamp('completed_at'),
       // Card originado de um erro do Sentry: id da issue do Sentry (dedup/idempotência).
       // Nullable (issues normais = null); único → replay/retry do Sentry não duplica card.
       sentryIssueId: varchar('sentry_issue_id', { length: 128 }),

@@ -404,11 +404,13 @@ export async function createIssue(
 
    // valida FKs de catálogo antes do insert (senão a FK estoura como 500)
    const statusRows = await db
-      .select({ id: statusT.id })
+      .select({ id: statusT.id, category: statusT.category })
       .from(statusT)
       .where(eq(statusT.id, input.statusId))
       .limit(1);
    if (statusRows.length === 0) throw new ApiError(400, `Status '${input.statusId}' não existe`);
+   // Marcos temporais quando a issue já nasce started/completed (cycle/lead time).
+   const startCat = statusRows[0].category;
    const priorityRows = await db
       .select({ id: priorityT.id })
       .from(priorityT)
@@ -453,6 +455,8 @@ export async function createIssue(
          dueDate: input.dueDate ?? null,
          estimate: input.estimate ?? null,
          sentryIssueId: input.sentryIssueId ?? null,
+         startedAt: startCat === 'started' || startCat === 'completed' ? now : null,
+         completedAt: startCat === 'completed' ? now : null,
          createdAt: now,
          updatedAt: now,
       });
@@ -545,17 +549,25 @@ export async function updateIssue(
       set.milestoneId = patch.milestoneId || null;
    }
 
-   // Auto-add ao cycle atual (paridade Linear): issue que ENTRA em "started" e não tem
-   // cycle é atribuída ao cycle corrente do time — a menos que o cycle esteja sendo
-   // setado explicitamente neste patch.
-   if (
-      patch.statusId !== undefined &&
-      patch.statusId !== prev.statusId &&
-      patch.cycleId === undefined &&
-      !prev.cycleId
-   ) {
-      const cat = await loadCatalogs(db).then((c) => c.statuses.get(patch.statusId!)?.category);
-      if (cat === 'started') {
+   // Transição de status: marcos temporais (cycle/lead time) + auto-add ao cycle.
+   if (patch.statusId !== undefined && patch.statusId !== prev.statusId) {
+      const cat = (await loadCatalogs(db)).statuses.get(patch.statusId)?.category;
+      const now = set.updatedAt as Date;
+      // startedAt: 1ª entrada em "started" (sticky — não sobrescreve).
+      if (cat === 'started' && !prev.startedAt) set.startedAt = now;
+      // completedAt: entra em "completed" grava; sai de "completed" (reabriu) limpa.
+      if (cat === 'completed') {
+         set.completedAt = now;
+         // Pulou direto p/ done sem passar por started: cycle time ~0 (consistente c/ create).
+         if (!prev.startedAt) set.startedAt = now;
+      } else if (prev.completedAt) {
+         set.completedAt = null;
+      }
+
+      // Auto-add ao cycle atual (paridade Linear): issue que ENTRA em "started" e não tem
+      // cycle é atribuída ao cycle corrente do time — a menos que o cycle esteja sendo
+      // setado explicitamente neste patch.
+      if (cat === 'started' && patch.cycleId === undefined && !prev.cycleId) {
          const [cur] = await db
             .select({ id: cycleT.id })
             .from(cycleT)

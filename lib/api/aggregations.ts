@@ -1,4 +1,4 @@
-import { count, eq, inArray } from 'drizzle-orm';
+import { and, count, eq, inArray, isNotNull } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    issue as issueT,
@@ -51,6 +51,76 @@ export async function issueMatrix(db: Db, opts: { team?: string } = {}): Promise
       totalsByStatus,
       totalsByPriority,
       total,
+   };
+}
+
+/**
+ * Métricas temporais (paridade Linear Insights): lead time (created→completed)
+ * e cycle time (started→completed) das issues concluídas, + throughput semanal.
+ * Durações em DIAS. Só considera issues com `completedAt` gravado.
+ */
+export interface TimeMetrics {
+   sample: number; // nº de issues concluídas consideradas
+   leadTime: { avg: number; median: number; p90: number };
+   cycleTime: { avg: number; median: number; p90: number };
+   /** Concluídas por semana (ISO week start, ascendente), últimas `weeks` semanas. */
+   throughput: { weekStart: string; completed: number }[];
+}
+
+const DAY_MS = 86_400_000;
+
+function stats(values: number[]): { avg: number; median: number; p90: number } {
+   if (values.length === 0) return { avg: 0, median: 0, p90: 0 };
+   const sorted = [...values].sort((a, b) => a - b);
+   const avg = sorted.reduce((s, v) => s + v, 0) / sorted.length;
+   const at = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
+   const round1 = (n: number) => Math.round(n * 10) / 10;
+   return { avg: round1(avg), median: round1(at(0.5)), p90: round1(at(0.9)) };
+}
+
+export async function timeMetrics(
+   db: Db,
+   opts: { team?: string; weeks?: number; now?: Date } = {}
+): Promise<TimeMetrics> {
+   const weeks = opts.weeks ?? 8;
+   const now = opts.now ?? new Date();
+   const rows = await db
+      .select({
+         createdAt: issueT.createdAt,
+         startedAt: issueT.startedAt,
+         completedAt: issueT.completedAt,
+      })
+      .from(issueT)
+      .where(
+         and(isNotNull(issueT.completedAt), opts.team ? eq(issueT.teamId, opts.team) : undefined)
+      );
+
+   const lead: number[] = [];
+   const cycle: number[] = [];
+   for (const r of rows) {
+      if (!r.completedAt) continue;
+      const done = r.completedAt.getTime();
+      lead.push(Math.max(0, (done - r.createdAt.getTime()) / DAY_MS));
+      if (r.startedAt) cycle.push(Math.max(0, (done - r.startedAt.getTime()) / DAY_MS));
+   }
+
+   // Throughput semanal: buckets de 7 dias terminando em `now`.
+   const buckets: { weekStart: string; completed: number }[] = [];
+   for (let w = weeks - 1; w >= 0; w--) {
+      const end = now.getTime() - w * 7 * DAY_MS;
+      const start = end - 7 * DAY_MS;
+      const completed = rows.filter((r) => {
+         const t = r.completedAt!.getTime();
+         return t > start && t <= end;
+      }).length;
+      buckets.push({ weekStart: new Date(start).toISOString().slice(0, 10), completed });
+   }
+
+   return {
+      sample: rows.length,
+      leadTime: stats(lead),
+      cycleTime: stats(cycle),
+      throughput: buckets,
    };
 }
 

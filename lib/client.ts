@@ -47,7 +47,7 @@ import type {
    ActivityItem,
    MyActivityItemDto,
 } from '@/lib/api/issue-detail';
-import type { IssueMatrix, ProjectProgress } from '@/lib/api/aggregations';
+import type { IssueMatrix, ProjectProgress, TimeMetrics } from '@/lib/api/aggregations';
 import type { MeDto } from '@/lib/api/users';
 import type { AuditLogDto } from '@/lib/api/audit';
 import type { FavoriteDto, FavoriteEntityType } from '@/lib/api/favorites';
@@ -219,6 +219,8 @@ export const api = {
          post<CommentDto>(`/issues/${id}/comments`, { body, parentId: parentId ?? null }),
       aggregate: (team?: string) =>
          get<IssueMatrix>(`/issues/aggregate${team ? `?team=${team}` : ''}`),
+      timeMetrics: (team?: string) =>
+         get<TimeMetrics>(`/issues/time-metrics${team ? `?team=${team}` : ''}`),
    },
 
    teams: {
