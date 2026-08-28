@@ -155,6 +155,13 @@
          "when": 1787879551259,
          "tag": "0021_issue_snooze",
          "breakpoints": true
+      },
+      {
+         "idx": 22,
+         "version": "7",
+         "when": 1787881055029,
+         "tag": "0022_initiative_update",
+         "breakpoints": true
       }
    ]
 }

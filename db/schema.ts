@@ -470,6 +470,25 @@ export const projectUpdate = pgTable(
    (t) => [index('idx_project_update_project').on(t.projectId)]
 );
 
+// Updates de INITIATIVE (espelha project_update; health do último update propaga p/
+// initiative.healthId, paridade Linear).
+export const initiativeUpdate = pgTable(
+   'initiative_update',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      initiativeId: varchar('initiative_id', { length: 36 })
+         .notNull()
+         .references(() => initiative.id),
+      authorId: varchar('author_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      health: varchar('health', { length: 16 }).notNull(), // on-track|at-risk|off-track
+      blocks: text('blocks').notNull(),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_initiative_update_initiative').on(t.initiativeId)]
+);
+
 export const projectActivity = pgTable(
    'project_activity',
    {

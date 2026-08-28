@@ -20,8 +20,11 @@ import { CalendarRange, ChevronDown, Plus, Tag, UserRound, X } from 'lucide-reac
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import type { InitiativeUpdateDto } from '@/lib/api/initiative-detail';
 import { InitiativeProgressPanel } from './initiative-progress-panel';
 import { InitiativeStatusIcon } from './initiative-status-icon';
 import { InitiativeActions } from './initiative-actions';
@@ -354,11 +357,120 @@ function Overview({ initiative }: { initiative: Initiative }) {
 
 /* ------------------------------- activity tab ----------------------------- */
 
-function Activity() {
+const UPDATE_HEALTHS = [
+   { id: 'on-track', label: 'On track', color: '#4cb782' },
+   { id: 'at-risk', label: 'At risk', color: '#f2c94c' },
+   { id: 'off-track', label: 'Off track', color: '#eb5757' },
+] as const;
+
+/** Activity da initiative: composer de update (health + texto) + feed. O health do
+ * último update propaga pro health da initiative (paridade Linear). */
+function Activity({ initiativeId }: { initiativeId: string }) {
+   const [updates, setUpdates] = useState<InitiativeUpdateDto[]>([]);
+   const [health, setHealth] = useState<'on-track' | 'at-risk' | 'off-track'>('on-track');
+   const [text, setText] = useState('');
+   const [busy, setBusy] = useState(false);
+   const hydrateWs = useWorkspaceStore((s) => s.hydrate);
+
+   useEffect(() => {
+      let active = true;
+      api.initiatives
+         .updates(initiativeId)
+         .then((u) => active && setUpdates(u))
+         .catch(() => active && setUpdates([]));
+      return () => {
+         active = false;
+      };
+   }, [initiativeId]);
+
+   const post = async () => {
+      if (busy) return;
+      setBusy(true);
+      try {
+         const blocks = text.trim() ? [{ type: 'paragraph' as const, text: text.trim() }] : [];
+         const dto = await api.initiatives.postUpdate(initiativeId, { health, blocks });
+         setUpdates((prev) => [dto, ...prev]);
+         setText('');
+         await hydrateWs(); // reflete o novo health da initiative no workspace
+         toast.success('Update publicado');
+      } catch {
+         toast.error('Não foi possível publicar o update');
+      } finally {
+         setBusy(false);
+      }
+   };
+
    return (
       <div className="max-w-2xl mx-auto px-8 py-10 flex flex-col gap-4 w-full">
          <h2 className="text-lg font-medium">Activity</h2>
-         <p className="text-sm text-muted-foreground">No activity recorded yet.</p>
+         <div className="rounded-lg border border-border/60 bg-container p-3 flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+               {UPDATE_HEALTHS.map((h) => (
+                  <button
+                     key={h.id}
+                     type="button"
+                     onClick={() => setHealth(h.id)}
+                     className={cn(
+                        'inline-flex items-center gap-1.5 text-xs rounded-md border px-2 py-1 transition-colors',
+                        health === h.id
+                           ? 'border-foreground/30'
+                           : 'border-border text-muted-foreground'
+                     )}
+                  >
+                     <span className="size-2 rounded-full" style={{ backgroundColor: h.color }} />
+                     {h.label}
+                  </button>
+               ))}
+            </div>
+            <textarea
+               value={text}
+               onChange={(e) => setText(e.target.value)}
+               rows={2}
+               placeholder="O que mudou nesta iniciativa?"
+               disabled={busy}
+               className="w-full resize-none bg-transparent outline-none text-sm placeholder:text-muted-foreground disabled:opacity-60"
+            />
+            <div className="flex justify-end">
+               <Button size="xs" onClick={() => void post()} disabled={busy}>
+                  {busy ? 'Publicando…' : 'Publicar update'}
+               </Button>
+            </div>
+         </div>
+
+         {updates.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum update ainda.</p>
+         ) : (
+            <div className="flex flex-col gap-3">
+               {updates.map((u) => {
+                  const h = UPDATE_HEALTHS.find((x) => x.id === u.health);
+                  return (
+                     <div
+                        key={u.id}
+                        className="rounded-lg border border-border/60 bg-container p-3"
+                     >
+                        <div className="flex items-center gap-2 mb-1.5 text-sm">
+                           <span
+                              className="size-2 rounded-full"
+                              style={{ backgroundColor: h?.color ?? '#8f9299' }}
+                           />
+                           <span className="font-medium">{h?.label ?? u.health}</span>
+                           <span className="text-xs text-muted-foreground">
+                              {u.author?.name ?? 'Alguém'} ·{' '}
+                              {new Date(u.createdAt).toLocaleDateString()}
+                           </span>
+                        </div>
+                        {u.blocks.map((b, i) =>
+                           b.type === 'paragraph' ? (
+                              <p key={i} className="text-sm text-ink-2">
+                                 {b.text}
+                              </p>
+                           ) : null
+                        )}
+                     </div>
+                  );
+               })}
+            </div>
+         )}
       </div>
    );
 }
@@ -392,7 +504,7 @@ export default function InitiativeDetails({ initiativeId }: { initiativeId: stri
       );
    }
 
-   if (tab === 'activity') return <Activity />;
+   if (tab === 'activity') return <Activity initiativeId={initiativeId} />;
    if (tab === 'projects') return <ProjectsTimeline groups={timelineGroups} />;
    return <Overview initiative={initiative} />;
 }

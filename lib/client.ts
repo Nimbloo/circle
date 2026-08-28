@@ -20,6 +20,7 @@ import type {
    AddResourceInput,
    PostUpdateInput,
 } from '@/lib/api/project-detail';
+import type { InitiativeUpdateDto, PostInitiativeUpdateInput } from '@/lib/api/initiative-detail';
 import type { TeamDto, CreateTeamInput, JoinRequestDto } from '@/lib/api/teams';
 import type { MemberDto } from '@/lib/api/members';
 import type { CycleDto, CreateCycleInput, UpdateCycleInput } from '@/lib/api/cycles';
@@ -352,6 +353,9 @@ export const api = {
       update: (id: string, body: UpdateInitiativeInput) =>
          patch<InitiativeDto>(`/initiatives/${id}`, body),
       remove: (id: string) => del<{ deleted: boolean }>(`/initiatives/${id}`),
+      updates: (id: string) => get<InitiativeUpdateDto[]>(`/initiatives/${id}/updates`),
+      postUpdate: (id: string, body: PostInitiativeUpdateInput) =>
+         post<InitiativeUpdateDto>(`/initiatives/${id}/updates`, body),
    },
 
    views: {
