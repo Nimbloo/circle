@@ -40,7 +40,7 @@ function IssueLineComponent({ issue, layoutId = false }: { issue: Issue; layoutI
             <motion.div
                {...(layoutId && { layoutId: `issue-line-${issue.identifier}` })}
                className={cn(
-                  'group/line w-full flex items-center justify-start h-10 px-6 hover:bg-sidebar/50',
+                  'group/line w-full flex items-center justify-start h-9 px-6 hover:bg-sidebar/50',
                   selected && 'bg-primary/5'
                )}
             >
