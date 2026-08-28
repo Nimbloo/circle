@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import { ListSkeleton } from '@/components/common/list-skeleton';
 import {
    Dialog,
    DialogContent,
@@ -255,7 +256,7 @@ export default function IssueTemplatesSettings() {
 
          <div className="rounded-lg border bg-container overflow-hidden">
             {loading ? (
-               <div className="px-4 py-6 text-sm text-muted-foreground">Carregando…</div>
+               <ListSkeleton rows={4} />
             ) : templates.length === 0 ? (
                <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
                   <FileText className="size-8 text-muted-foreground/40" />

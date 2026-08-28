@@ -1,6 +1,7 @@
 'use client';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { ListSkeleton } from '@/components/common/list-skeleton';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
@@ -119,7 +120,7 @@ export default function TeamDocuments() {
                )}
             </div>
 
-            {loading && <div className="px-4 py-8 text-sm text-muted-foreground">Loading…</div>}
+            {loading && <ListSkeleton rows={5} />}
             {!loading && error && (
                <div className="px-4 py-8 text-sm text-muted-foreground">
                   Could not load documents.
