@@ -208,6 +208,20 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
       if (issue) copyToClipboard(issue.title, 'Título copiado');
    };
 
+   // Nome de branch git no padrão Linear: <identifier>-<título-kebab> (minúsculo, sem acento).
+   const copyBranch = () => {
+      const issue = issueId ? getIssueById(issueId) : undefined;
+      if (!issue) return;
+      const slug = issue.title
+         .normalize('NFD')
+         .replace(/[̀-ͯ]/g, '')
+         .toLowerCase()
+         .replace(/[^a-z0-9]+/g, '-')
+         .replace(/^-+|-+$/g, '')
+         .slice(0, 60);
+      copyToClipboard(`${issue.identifier.toLowerCase()}-${slug}`, 'Branch copiada');
+   };
+
    // Cycles do time da issue (Linear lista os cycles do time da própria issue).
    const issue = issueId ? getIssueById(issueId) : undefined;
    const teamCycles = issue?.teamId ? getCyclesByTeam(issue.teamId) : [];
@@ -418,6 +432,7 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
                   <ContextMenuItem onClick={copyLink}>Copy link</ContextMenuItem>
                   <ContextMenuItem onClick={copyId}>Copy ID</ContextMenuItem>
                   <ContextMenuItem onClick={copyTitle}>Copy title</ContextMenuItem>
+                  <ContextMenuItem onClick={copyBranch}>Copy git branch</ContextMenuItem>
                </ContextMenuSubContent>
             </ContextMenuSub>
 

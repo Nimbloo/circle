@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '@/db';
-import { review, issue as issueT, issuePrLink } from '@/db/schema';
+import { review, issue as issueT, issuePrLink, status as statusT } from '@/db/schema';
 import { ApiError } from './errors';
 
 /** Status do review (open|merged|closed) → status do link de PR na issue (open|merged|draft). */
@@ -103,6 +103,7 @@ interface GitHubPr {
    html_url: string;
    created_at: string;
    user?: { login: string };
+   body?: string | null;
    base?: { ref: string };
    head?: { ref: string };
    // Só presentes no GET individual do PR (a lista /pulls não os retorna).
@@ -133,10 +134,17 @@ function statusOf(pr: GitHubPr): string {
    return 'open';
 }
 
-/** Extrai o identifier da issue resolvida (ex "[LNUI-701] ...") do título. */
-function parseResolves(title: string): string | null {
-   const m = title.match(/\b([A-Z]{2,}-\d+)\b/);
-   return m ? m[1] : null;
+/** Extrai o identifier da issue resolvida (ex "LNUI-701") do título, branch OU corpo do PR
+ * (paridade Linear: reconhece o id no título, no nome do branch e na descrição). */
+function parseResolves(...sources: (string | null | undefined)[]): string | null {
+   for (const s of sources) {
+      if (!s) continue;
+      // case-insensitive: branches usam minúsculo (core-42-...). Ids inexistentes são
+      // ignorados depois (linkPrsToIssues valida contra issues reais), então sem risco.
+      const m = s.match(/\b([A-Za-z]{2,}-\d+)\b/);
+      if (m) return m[1].toUpperCase();
+   }
+   return null;
 }
 
 export interface SyncOptions {
@@ -251,7 +259,7 @@ async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike)
    // issue. Coletado no loop e resolvido em batch no fim (1 query por identifier set).
    const linkByIdentifier = new Map<string, { title: string; status: string }>();
    for (const pr of prs) {
-      const resolvesId = parseResolves(pr.title);
+      const resolvesId = parseResolves(pr.title, pr.head?.ref, pr.body);
       const detail = detailByNumber.get(pr.number);
       const row = {
          id: `${repo}#${pr.number}`,
@@ -319,13 +327,37 @@ async function linkPrsToIssues(
 ): Promise<void> {
    if (linkByIdentifier.size === 0) return;
    const identifiers = [...linkByIdentifier.keys()];
-   const issues = await db
-      .select({ id: issueT.id, identifier: issueT.identifier, title: issueT.title })
-      .from(issueT)
-      .where(inArray(issueT.identifier, identifiers));
+   const [issues, statuses] = await Promise.all([
+      db
+         .select({
+            id: issueT.id,
+            identifier: issueT.identifier,
+            title: issueT.title,
+            statusId: issueT.statusId,
+         })
+         .from(issueT)
+         .where(inArray(issueT.identifier, identifiers)),
+      db.select().from(statusT),
+   ]);
+   const catById = new Map(statuses.map((s) => [s.id, s.category]));
+   // Status "concluído" alvo do auto-transition (menor position na categoria completed).
+   const doneStatus = statuses
+      .filter((s) => s.category === 'completed')
+      .sort((a, b) => a.position - b.position)[0];
    for (const iss of issues) {
       const link = linkByIdentifier.get(iss.identifier);
       if (!link) continue;
+      // PR mergeado → move a issue pra Done (paridade Linear), a menos que já esteja
+      // completed/canceled (idempotente; não sobrescreve estados finais nem re-dispara).
+      if (link.status === 'merged' && doneStatus) {
+         const cat = catById.get(iss.statusId);
+         if (cat !== 'completed' && cat !== 'canceled') {
+            await db
+               .update(issueT)
+               .set({ statusId: doneStatus.id, updatedAt: new Date() })
+               .where(eq(issueT.id, iss.id));
+         }
+      }
       // id estável por (issue, repo, PR-título-normalizado) → re-sync atualiza, não duplica.
       const id = createHash('md5').update(`${iss.id}|${repo}|${link.title}`).digest('hex');
       try {
