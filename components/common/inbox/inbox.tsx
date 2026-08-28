@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import {
    DropdownMenu,
    DropdownMenuContent,
+   DropdownMenuItem,
    DropdownMenuSeparator,
    DropdownMenuTrigger,
    DropdownMenuLabel,
@@ -14,13 +15,34 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { SlidersHorizontal, CheckCheck, ArrowUpDown, InboxIcon, Clock } from 'lucide-react';
+import {
+   SlidersHorizontal,
+   CheckCheck,
+   ArrowUpDown,
+   InboxIcon,
+   Clock,
+   ListFilter,
+} from 'lucide-react';
+import type { NotificationType } from '@/data/inbox';
 import { cn } from '@/lib/utils';
 import NotificationPreview from './issue-preview';
 import IssueLine from './issue-line';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ChevronLeft } from 'lucide-react';
+
+/** Rótulos legíveis dos tipos de notificação para o filtro (ordem do Linear). */
+const TYPE_LABELS: { value: NotificationType; label: string }[] = [
+   { value: 'assignment', label: 'Assigned' },
+   { value: 'mention', label: 'Mentioned' },
+   { value: 'comment', label: 'Comment' },
+   { value: 'status', label: 'Status changed' },
+   { value: 'reopened', label: 'Reopened' },
+   { value: 'closed', label: 'Closed' },
+   { value: 'created', label: 'Created' },
+   { value: 'edited', label: 'Edited' },
+   { value: 'upload', label: 'Upload' },
+];
 
 export default function Inbox() {
    const {
@@ -44,6 +66,16 @@ export default function Inbox() {
    const [ordering, setOrdering] = useState('newest');
    const [showId, setShowId] = useState(true);
    const [showStatusIcon, setShowStatusIcon] = useState(true);
+   // Filtro por tipo (padrão Linear): vazio = todos os tipos.
+   const [typeFilter, setTypeFilter] = useState<Set<NotificationType>>(new Set());
+
+   const toggleType = (type: NotificationType) =>
+      setTypeFilter((prev) => {
+         const next = new Set(prev);
+         if (next.has(type)) next.delete(type);
+         else next.add(type);
+         return next;
+      });
 
    // Ao entrar na aba Snoozed, carrega as adiadas.
    useEffect(() => {
@@ -57,6 +89,7 @@ export default function Inbox() {
          notifications
             .filter((notification) => {
                if (!showRead && notification.read) return false;
+               if (typeFilter.size > 0 && !typeFilter.has(notification.type)) return false;
                return true;
             })
             .sort((a, b) => {
@@ -69,7 +102,7 @@ export default function Inbox() {
                   ? new Date(b.sortAt).getTime() - new Date(a.sortAt).getTime()
                   : new Date(a.sortAt).getTime() - new Date(b.sortAt).getTime();
             }),
-      [notifications, showRead, showUnreadFirst, ordering]
+      [notifications, showRead, showUnreadFirst, ordering, typeFilter]
    );
 
    const listPane = (
@@ -105,6 +138,45 @@ export default function Inbox() {
             </div>
 
             <div className="flex items-center gap-2">
+               <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                     <Button
+                        variant="ghost"
+                        size="xs"
+                        className="relative"
+                        disabled={tab !== 'inbox'}
+                        aria-label="Filter by type"
+                     >
+                        <ListFilter className="w-4 h-4" />
+                        {typeFilter.size > 0 && (
+                           <span className="absolute -right-0.5 -top-0.5 flex size-3.5 items-center justify-center rounded-full bg-primary text-[9px] font-medium text-primary-foreground">
+                              {typeFilter.size}
+                           </span>
+                        )}
+                     </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                     <DropdownMenuLabel>Filter by type</DropdownMenuLabel>
+                     {TYPE_LABELS.map((type) => (
+                        <DropdownMenuCheckboxItem
+                           key={type.value}
+                           checked={typeFilter.has(type.value)}
+                           onCheckedChange={() => toggleType(type.value)}
+                           onSelect={(event) => event.preventDefault()}
+                        >
+                           {type.label}
+                        </DropdownMenuCheckboxItem>
+                     ))}
+                     {typeFilter.size > 0 && (
+                        <>
+                           <DropdownMenuSeparator />
+                           <DropdownMenuItem onClick={() => setTypeFilter(new Set())}>
+                              Clear filter
+                           </DropdownMenuItem>
+                        </>
+                     )}
+                  </DropdownMenuContent>
+               </DropdownMenu>
                <Button
                   variant="ghost"
                   size="xs"
