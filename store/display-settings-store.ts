@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-export type GroupingKey = 'status' | 'assignee' | 'priority' | 'project' | 'none';
-export type OrderingKey = 'priority' | 'created' | 'title';
+export type GroupingKey = 'status' | 'assignee' | 'priority' | 'project' | 'label' | 'none';
+export type OrderingKey = 'priority' | 'created' | 'title' | 'manual' | 'dueDate';
 export type CompletedIssuesFilter = 'all' | 'none';
 
 export type DisplayPropertyKey =
