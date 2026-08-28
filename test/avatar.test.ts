@@ -10,6 +10,8 @@ import type { Db } from '@/db';
 const PNG_1X1 =
    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 const PNG_DATA_URL = `data:image/png;base64,${PNG_1X1}`;
+// WebP 1x1 válido (magic RIFF….WEBP) — pro teste de upsert com content-type webp.
+const WEBP_1X1 = 'UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==';
 
 async function avatarUrlOf(db: Db, userId: string): Promise<string | null> {
    const rows = await db
@@ -46,7 +48,7 @@ describe('avatar service (setAvatar/getAvatar/deleteAvatar)', () => {
       const db = await makeTestDb();
       const uid = await seedUser(db, { name: 'Ana', email: 'ana@nimbloo.ai' });
       await setAvatar(db, uid, PNG_DATA_URL, 'image/png');
-      await setAvatar(db, uid, `data:image/webp;base64,${PNG_1X1}`, 'image/webp');
+      await setAvatar(db, uid, `data:image/webp;base64,${WEBP_1X1}`, 'image/webp');
       const bytes = await getAvatar(db, uid);
       expect(bytes?.contentType).toBe('image/webp');
    });
@@ -64,6 +66,16 @@ describe('avatar service (setAvatar/getAvatar/deleteAvatar)', () => {
       const uid = await seedUser(db, { name: 'Ana', email: 'ana@nimbloo.ai' });
       await expect(
          setAvatar(db, uid, `data:image/png;base64,${PNG_1X1}`, 'image/webp')
+      ).rejects.toMatchObject({ status: 400 });
+   });
+
+   it('rejeita bytes que não são imagem (magic-byte não bate)', async () => {
+      const db = await makeTestDb();
+      const uid = await seedUser(db, { name: 'Ana', email: 'ana@nimbloo.ai' });
+      // base64 válido de "hello world" — rotulado como png, mas sem magic PNG.
+      const notAnImage = Buffer.from('hello world hello').toString('base64');
+      await expect(
+         setAvatar(db, uid, `data:image/png;base64,${notAnImage}`, 'image/png')
       ).rejects.toMatchObject({ status: 400 });
    });
 

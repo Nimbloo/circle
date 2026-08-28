@@ -1,6 +1,7 @@
 'use client';
 
 import { ContentBlocks } from '@/components/common/issues/details/content-blocks';
+import { ListSkeleton } from '@/components/common/list-skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -136,9 +137,10 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
    };
 
    if (!project) {
+      if (!loaded) return <ListSkeleton rows={6} />;
       return (
          <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-            {loaded ? 'Project not found.' : 'Loading…'}
+            Project not found.
          </div>
       );
    }

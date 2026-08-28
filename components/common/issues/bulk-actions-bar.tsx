@@ -53,33 +53,48 @@ export function BulkActionsBar() {
    const ids = [...selected];
    if (ids.length === 0) return null;
 
+   // Toasta sucesso SÓ quando TODAS as mutações confirmam (Promise.all). O store já
+   // faz rollback + toast.error por issue na falha (fonte única) → sem toast de sucesso
+   // enganoso quando parte do lote falha.
+   const withToast = (ps: Promise<void>[], msg: string) => {
+      void Promise.all(ps)
+         .then(() => toast.success(msg))
+         .catch(() => {});
+   };
+
    const applyStatus = (statusId: string) => {
       const s = allStatus.find((x) => x.id === statusId);
       if (!s) return;
-      ids.forEach((id) => updateIssueStatus(id, s));
-      toast.success(`${ids.length} issues → ${s.name}`);
+      withToast(
+         ids.map((id) => updateIssueStatus(id, s)),
+         `${ids.length} issues → ${s.name}`
+      );
    };
 
    const applyPriority = (priorityId: string) => {
       const p = priorities.find((x) => x.id === priorityId);
       if (!p) return;
-      ids.forEach((id) => updateIssuePriority(id, p));
-      toast.success(`${ids.length} issues → ${p.name}`);
+      withToast(
+         ids.map((id) => updateIssuePriority(id, p)),
+         `${ids.length} issues → ${p.name}`
+      );
    };
 
    const applyAssignee = (userId: string | null) => {
       const u = userId ? (users.find((x) => x.id === userId) ?? null) : null;
-      ids.forEach((id) => updateIssueAssignee(id, u));
-      toast.success(
+      withToast(
+         ids.map((id) => updateIssueAssignee(id, u)),
          u ? `Assigned ${ids.length} issues to ${u.name}` : `Unassigned ${ids.length} issues`
       );
    };
 
    const remove = () => {
       const n = ids.length;
-      ids.forEach((id) => deleteIssue(id));
+      withToast(
+         ids.map((id) => deleteIssue(id)),
+         `Deleted ${n} ${n === 1 ? 'issue' : 'issues'}`
+      );
       clear();
-      toast.success(`Deleted ${n} ${n === 1 ? 'issue' : 'issues'}`);
    };
 
    return (

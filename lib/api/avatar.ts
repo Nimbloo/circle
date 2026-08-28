@@ -55,8 +55,27 @@ function isValidBase64(s: string): boolean {
 }
 
 /**
+ * Confere a assinatura (magic bytes) do binário contra o content-type declarado —
+ * impede gravar bytes arbitrários rotulados como imagem (defesa em profundidade
+ * junto do nosniff no endpoint de servir).
+ */
+function magicBytesMatch(base64: string, ct: string): boolean {
+   // Decodifica só o prefixo necessário (16 bytes cobrem PNG/JPEG/WEBP).
+   const b = Buffer.from(base64.slice(0, 24), 'base64');
+   if (ct === 'image/png') return b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47;
+   if (ct === 'image/jpeg') return b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
+   if (ct === 'image/webp')
+      return (
+         b.length >= 12 &&
+         b.toString('ascii', 0, 4) === 'RIFF' &&
+         b.toString('ascii', 8, 12) === 'WEBP'
+      );
+   return false;
+}
+
+/**
  * Grava (upsert) a foto de perfil do usuário e aponta o `avatar_url` pro endpoint
- * de servir. Valida content-type (allow-list), formato base64 e tamanho (cap).
+ * de servir. Valida content-type (allow-list), base64, magic bytes e tamanho (cap).
  * Retorna a nova `avatarUrl`.
  */
 export async function setAvatar(
@@ -73,8 +92,12 @@ export async function setAvatar(
    if (!isValidBase64(base64)) {
       throw new ApiError(400, 'Imagem inválida (base64 malformado)');
    }
+   // Tamanho ANTES do magic-byte: rejeita payload gigante sem decodificar/inspecionar.
    if (Buffer.byteLength(base64, 'utf8') > MAX_AVATAR_BASE64_BYTES) {
       throw new ApiError(413, 'Imagem excede o tamanho máximo (512KB)');
+   }
+   if (!magicBytesMatch(base64, ct)) {
+      throw new ApiError(400, 'Conteúdo não corresponde ao tipo de imagem declarado');
    }
 
    // Guarda de existência ANTES do insert em user_avatar (que tem FK pro app_user):

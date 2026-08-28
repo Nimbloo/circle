@@ -1,8 +1,6 @@
 'use client';
 
 import {
-   Archive,
-   Bell,
    Box,
    ChevronRight,
    CopyMinus,
@@ -22,7 +20,6 @@ import {
    DropdownMenu,
    DropdownMenuContent,
    DropdownMenuItem,
-   DropdownMenuSeparator,
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -37,6 +34,7 @@ import {
    SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { toast } from 'sonner';
 import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
 
 /** Sub-item de time com href resolvido pelo orgId real e realce de rota ativa. */
@@ -94,26 +92,23 @@ export function NavTeams() {
                                  side="right"
                                  align="start"
                               >
-                                 <DropdownMenuItem>
-                                    <Settings className="size-4" />
-                                    <span>Team settings</span>
+                                 <DropdownMenuItem asChild>
+                                    <Link href={`/${orgId}/settings/teams/${item.id}`}>
+                                       <Settings className="size-4" />
+                                       <span>Team settings</span>
+                                    </Link>
                                  </DropdownMenuItem>
-                                 <DropdownMenuItem>
+                                 <DropdownMenuItem
+                                    onSelect={() => {
+                                       void navigator.clipboard
+                                          .writeText(
+                                             `${window.location.origin}/${orgId}/team/${item.id}/overview`
+                                          )
+                                          .then(() => toast.success('Link copiado'));
+                                    }}
+                                 >
                                     <LinkIcon className="size-4" />
                                     <span>Copy link</span>
-                                 </DropdownMenuItem>
-                                 <DropdownMenuItem>
-                                    <Archive className="size-4" />
-                                    <span>Open archive</span>
-                                 </DropdownMenuItem>
-                                 <DropdownMenuSeparator />
-                                 <DropdownMenuItem>
-                                    <Bell className="size-4" />
-                                    <span>Subscribe</span>
-                                 </DropdownMenuItem>
-                                 <DropdownMenuSeparator />
-                                 <DropdownMenuItem>
-                                    <span>Leave team...</span>
                                  </DropdownMenuItem>
                               </DropdownMenuContent>
                            </DropdownMenu>

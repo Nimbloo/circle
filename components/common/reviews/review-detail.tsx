@@ -1,6 +1,7 @@
 'use client';
 
 import { fetchReview } from '@/lib/adapters-reviews';
+import { ListSkeleton } from '@/components/common/list-skeleton';
 import type { Review } from '@/data/reviews';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -35,13 +36,7 @@ export function ReviewDetail({ reviewId }: { reviewId: string; section?: ReviewS
       };
    }, [reviewId]);
 
-   if (loading) {
-      return (
-         <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
-            Loading…
-         </div>
-      );
-   }
+   if (loading) return <ListSkeleton rows={6} />;
 
    if (!review) {
       return (

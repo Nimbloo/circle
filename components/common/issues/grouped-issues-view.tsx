@@ -1,6 +1,7 @@
 'use client';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { Issue, sortIssuesByPriority } from '@/data/issues';
 import { Status } from '@/data/status';
@@ -63,7 +64,7 @@ function IssuesEmptyState({
       );
    }
    if (loading) {
-      return <span className="text-sm text-muted-foreground">Carregando…</span>;
+      return <Skeleton className="h-4 w-16" />;
    }
    return <span className="text-sm text-muted-foreground">Nenhuma issue</span>;
 }
