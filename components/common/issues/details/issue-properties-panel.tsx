@@ -16,14 +16,19 @@ import { useIssuesStore } from '@/store/issues-store';
 import { IssueDetail } from '@/data/issue-details';
 import { Issue } from '@/data/issues';
 import { LabelInterface } from '@/data/labels';
-import { Ban, CheckIcon, GitPullRequestArrow } from 'lucide-react';
-import { useState } from 'react';
+import { Ban, Bell, BellOff, CheckIcon, GitPullRequestArrow } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { api } from '@/lib/client';
+import type { ProjectMilestoneDto } from '@/lib/api/project-detail';
+import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import { LabelBadge } from '../label-badge';
 import { PrioritySelector } from '../priority-selector';
 import { StatusSelector } from '../status-selector';
 import { AssigneeSelector } from '@/components/layout/sidebar/create-new-issue/assignee-selector';
 import { LabelSelector } from '@/components/layout/sidebar/create-new-issue/label-selector';
 import { EstimateSelector } from '@/components/layout/sidebar/create-new-issue/estimate-selector';
+import { DueDateSelector } from '@/components/layout/sidebar/create-new-issue/due-date-selector';
 import { IssueRefRow } from './content-blocks';
 import { RelationEditor } from './relation-editor';
 
@@ -100,6 +105,97 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 /**
+ * Selector de milestone do projeto da issue. Lista as milestones reais do
+ * projeto (FK issue.milestoneId → project_milestone) + "No milestone".
+ */
+function MilestoneSelector({
+   issueId,
+   projectId,
+   currentId,
+   currentName,
+   onChanged,
+}: {
+   issueId: string;
+   projectId: string;
+   currentId: string | null;
+   currentName: string | null;
+   onChanged?: () => Promise<void> | void;
+}) {
+   const [open, setOpen] = useState(false);
+   const [milestones, setMilestones] = useState<ProjectMilestoneDto[] | null>(null);
+
+   // Invalida o cache quando o projeto da issue muda — senão a lista fica a do projeto
+   // anterior (nunca refetcha) e nenhum item casa o currentId.
+   useEffect(() => {
+      setMilestones(null);
+   }, [projectId]);
+
+   const load = async () => {
+      if (milestones) return;
+      try {
+         setMilestones(await api.projects.milestones(projectId));
+      } catch {
+         setMilestones([]);
+      }
+   };
+
+   const select = async (milestoneId: string | null) => {
+      setOpen(false);
+      if (milestoneId === currentId) return;
+      try {
+         await api.issues.update(issueId, { milestoneId });
+         await onChanged?.();
+      } catch {
+         toast.error('Could not update the milestone');
+      }
+   };
+
+   return (
+      <Popover
+         open={open}
+         onOpenChange={(o) => {
+            setOpen(o);
+            if (o) void load();
+         }}
+      >
+         <PopoverTrigger asChild>
+            <button
+               type="button"
+               className={cn(
+                  'truncate text-left',
+                  currentName ? 'text-muted-foreground' : 'text-muted-foreground/60',
+                  'hover:text-foreground transition-colors'
+               )}
+            >
+               {currentName || 'Add milestone'}
+            </button>
+         </PopoverTrigger>
+         <PopoverContent className="border-input w-64 p-0" align="start">
+            <Command>
+               <CommandInput placeholder="Set milestone..." />
+               <CommandList>
+                  <CommandEmpty>No milestones</CommandEmpty>
+                  <CommandGroup>
+                     <CommandItem value="__none__" onSelect={() => void select(null)}>
+                        <span className="flex-1">No milestone</span>
+                        {currentId === null && <CheckIcon className="size-4" />}
+                     </CommandItem>
+                     {milestones?.map((m) => (
+                        <CommandItem key={m.id} value={m.name} onSelect={() => void select(m.id)}>
+                           <span className="size-2 rotate-45 border border-amber-400 shrink-0 mr-1" />
+                           <span className="flex-1 truncate">{m.name}</span>
+                           {currentId === m.id && <CheckIcon className="size-4" />}
+                        </CommandItem>
+                     ))}
+                  </CommandGroup>
+               </CommandList>
+            </Command>
+         </PopoverContent>
+      </Popover>
+   );
+}
+
+/**
  * Right sidebar of the issue page: editable properties (status, priority,
  * assignee), cycle, labels, project + milestone, relations and linked PRs.
  */
@@ -108,6 +204,10 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
    const updateIssueAssignee = useIssuesStore((s) => s.updateIssueAssignee);
    const addIssueLabel = useIssuesStore((s) => s.addIssueLabel);
    const removeIssueLabel = useIssuesStore((s) => s.removeIssueLabel);
+   const subscribed = useWorkspaceStore(
+      (s) => s.me?.subscribedIssueIds.includes(issue.id) ?? false
+   );
+   const toggleSubscription = useWorkspaceStore((s) => s.toggleSubscription);
 
    // Diff entre a seleção do LabelSelector e as labels atuais → add/remove no store.
    const onLabelsChange = (next: LabelInterface[]) => {
@@ -121,6 +221,19 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
 
    return (
       <div className="flex flex-col gap-7">
+         <button
+            type="button"
+            onClick={() => toggleSubscription(issue.id)}
+            aria-pressed={subscribed}
+            className={cn(
+               'flex items-center gap-2 h-8 px-2 -mx-2 rounded-md text-sm transition-colors hover:bg-accent/50',
+               subscribed ? 'text-foreground' : 'text-muted-foreground'
+            )}
+         >
+            {subscribed ? <Bell className="size-4" /> : <BellOff className="size-4" />}
+            {subscribed ? 'Subscribed' : 'Subscribe'}
+         </button>
+
          <Section title="Properties">
             <div className="flex flex-col gap-1.5">
                <div className="flex items-center gap-1.5 -ml-1.5">
@@ -143,7 +256,14 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
                <div className="flex items-center gap-1.5 -ml-1.5 mt-0.5">
                   <EstimateSelector
                      estimate={issue.estimate}
+                     teamId={issue.teamId}
                      onChange={(estimate) => updateIssue(issue.id, { estimate })}
+                  />
+               </div>
+               <div className="flex items-center gap-1.5 -ml-1.5 mt-0.5">
+                  <DueDateSelector
+                     dueDate={issue.dueDate}
+                     onChange={(dueDate) => updateIssue(issue.id, { dueDate })}
                   />
                </div>
             </div>
@@ -162,11 +282,26 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
                   <issue.project.icon className="size-4 text-muted-foreground shrink-0" />
                   <span className="truncate">{issue.project.name}</span>
                </div>
-               {detail.milestone && (
-                  <div className="flex items-center gap-2 text-sm mt-1.5 pl-6 text-muted-foreground">
+               {onChanged ? (
+                  <div className="flex items-center gap-2 text-sm mt-1.5 pl-6">
                      <span className="size-2 rotate-45 border border-amber-400 shrink-0" />
-                     <span className="truncate">{detail.milestone}</span>
+                     <MilestoneSelector
+                        issueId={issue.id}
+                        projectId={issue.project.id}
+                        currentId={detail.milestoneId ?? null}
+                        currentName={detail.milestoneName ?? detail.milestone ?? null}
+                        onChanged={onChanged}
+                     />
                   </div>
+               ) : (
+                  (detail.milestoneName || detail.milestone) && (
+                     <div className="flex items-center gap-2 text-sm mt-1.5 pl-6">
+                        <span className="size-2 rotate-45 border border-amber-400 shrink-0" />
+                        <span className="truncate text-muted-foreground">
+                           {detail.milestoneName || detail.milestone}
+                        </span>
+                     </div>
+                  )
                )}
             </Section>
          )}
@@ -197,6 +332,20 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
             )
          )}
 
+         {/* Blocking (lado inverso, derivado de blocked_by) — read-only, paridade Linear "Blocks" */}
+         {detail.blockingIds && detail.blockingIds.length > 0 && (
+            <Section title="Blocking">
+               <div className="flex flex-col">
+                  {detail.blockingIds.map((identifier) => (
+                     <div key={identifier} className="flex items-center gap-1.5 min-w-0">
+                        <Ban className="size-3.5 text-orange-500 shrink-0" />
+                        <IssueRefRow identifier={identifier} />
+                     </div>
+                  ))}
+               </div>
+            </Section>
+         )}
+
          {onChanged ? (
             <Section title="Related">
                <RelationEditor
@@ -213,6 +362,29 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
                <Section title="Related">
                   <div className="flex flex-col">
                      {detail.relatedIds.map((identifier) => (
+                        <IssueRefRow key={identifier} identifier={identifier} />
+                     ))}
+                  </div>
+               </Section>
+            )
+         )}
+
+         {onChanged ? (
+            <Section title="Duplicate of">
+               <RelationEditor
+                  issueId={issue.id}
+                  kind="duplicate"
+                  relatedIds={detail.duplicateIds ?? []}
+                  addLabel="Mark as duplicate of"
+                  onChanged={onChanged}
+               />
+            </Section>
+         ) : (
+            detail.duplicateIds &&
+            detail.duplicateIds.length > 0 && (
+               <Section title="Duplicate of">
+                  <div className="flex flex-col">
+                     {detail.duplicateIds.map((identifier) => (
                         <IssueRefRow key={identifier} identifier={identifier} />
                      ))}
                   </div>

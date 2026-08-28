@@ -7,7 +7,7 @@ import {
    project as projectT,
    priority as priorityT,
    health as healthT,
-   status as statusT,
+   projectStatus as projectStatusT,
    appUser,
 } from '@/db/schema';
 import { ApiError } from './errors';
@@ -71,7 +71,8 @@ async function projectsByInitiative(db: Db, initIds: string[]) {
               .from(projectT)
               .where(inArray(projectT.id, projectIds))
          : Promise.resolve([]),
-      db.select().from(statusT),
+      // Categorias dos status de PROJETO (projeto usa project_status, não o de issue).
+      db.select().from(projectStatusT),
    ]);
    const catById = new Map(statuses.map((s) => [s.id, s.category]));
    const isCompleted = new Map(

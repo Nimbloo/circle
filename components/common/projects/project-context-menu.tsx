@@ -25,9 +25,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { api } from '@/lib/client';
 import type { UpdateProjectInput } from '@/lib/api/projects';
 import { Project } from '@/data/projects';
-import { usePriorities, useStatuses, useHealthStates } from '@/store/catalog-store';
+import { usePriorities, useProjectStatuses, useHealthStates } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { CheckIcon, Copy, Link2, Target, Trash2, UserRound } from 'lucide-react';
+import { CheckIcon, Copy, Link2, Star, Target, Trash2, UserRound } from 'lucide-react';
+import { useFavoritesStore } from '@/store/favorites-store';
+import { cn } from '@/lib/utils';
 import { useParams } from 'next/navigation';
 import type { ComponentType, CSSProperties } from 'react';
 import { useState } from 'react';
@@ -54,11 +56,13 @@ export function ProjectContextMenu({
    const removeProjectLocal = useWorkspaceStore((s) => s.removeProjectLocal);
    const users = useWorkspaceStore((s) => s.users);
    const initiatives = useWorkspaceStore((s) => s.initiatives);
-   const statuses = useStatuses();
+   const statuses = useProjectStatuses();
    const priorities = usePriorities();
    const healthStates = useHealthStates();
    const [confirmOpen, setConfirmOpen] = useState(false);
    const [busy, setBusy] = useState(false);
+   const toggleFavorite = useFavoritesStore((s) => s.toggle);
+   const isFav = useFavoritesStore((s) => s.isFavorite('project', project.id));
 
    const patch = async (body: UpdateProjectInput, msg: string) => {
       try {
@@ -235,6 +239,10 @@ export function ProjectContextMenu({
                </ContextMenuSub>
 
                <ContextMenuSeparator />
+               <ContextMenuItem onSelect={() => void toggleFavorite('project', project.id)}>
+                  <Star className={cn('size-4', isFav && 'fill-amber-400 text-amber-400')} />
+                  {isFav ? 'Remove from favorites' : 'Add to favorites'}
+               </ContextMenuItem>
                <ContextMenuItem onSelect={copyLink}>
                   <Link2 className="size-4" />
                   Copy link

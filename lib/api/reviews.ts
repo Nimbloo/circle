@@ -1,7 +1,14 @@
-import { count, desc, eq } from 'drizzle-orm';
+import { createHash } from 'node:crypto';
+import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '@/db';
-import { review } from '@/db/schema';
+import { review, issue as issueT, issuePrLink, status as statusT } from '@/db/schema';
 import { ApiError } from './errors';
+import { notifySlackEvent } from './integrations/slack';
+
+/** Status do review (open|merged|closed) → status do link de PR na issue (open|merged|draft). */
+function prLinkStatus(reviewStatus: string): string {
+   return reviewStatus === 'merged' ? 'merged' : 'open';
+}
 
 type ReviewRow = typeof review.$inferSelect;
 
@@ -97,6 +104,7 @@ interface GitHubPr {
    html_url: string;
    created_at: string;
    user?: { login: string };
+   body?: string | null;
    base?: { ref: string };
    head?: { ref: string };
    // Só presentes no GET individual do PR (a lista /pulls não os retorna).
@@ -127,10 +135,17 @@ function statusOf(pr: GitHubPr): string {
    return 'open';
 }
 
-/** Extrai o identifier da issue resolvida (ex "[LNUI-701] ...") do título. */
-function parseResolves(title: string): string | null {
-   const m = title.match(/\b([A-Z]{2,}-\d+)\b/);
-   return m ? m[1] : null;
+/** Extrai o identifier da issue resolvida (ex "LNUI-701") do título, branch OU corpo do PR
+ * (paridade Linear: reconhece o id no título, no nome do branch e na descrição). */
+function parseResolves(...sources: (string | null | undefined)[]): string | null {
+   for (const s of sources) {
+      if (!s) continue;
+      // case-insensitive: branches usam minúsculo (core-42-...). Ids inexistentes são
+      // ignorados depois (linkPrsToIssues valida contra issues reais), então sem risco.
+      const m = s.match(/\b([A-Za-z]{2,}-\d+)\b/);
+      if (m) return m[1].toUpperCase();
+   }
+   return null;
 }
 
 export interface SyncOptions {
@@ -240,8 +255,12 @@ async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike)
    }
 
    let count = 0;
+   // Auto-link PR↔issue (paridade Linear): PRs cujo título referencia um identifier
+   // (ex.: CORE-123) viram linha em issue_pr_link, populando o painel "PR links" da
+   // issue. Coletado no loop e resolvido em batch no fim (1 query por identifier set).
+   const linkByIdentifier = new Map<string, { title: string; status: string }>();
    for (const pr of prs) {
-      const resolvesId = parseResolves(pr.title);
+      const resolvesId = parseResolves(pr.title, pr.head?.ref, pr.body);
       const detail = detailByNumber.get(pr.number);
       const row = {
          id: `${repo}#${pr.number}`,
@@ -288,15 +307,153 @@ async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike)
       try {
          await db.insert(review).values(row).onConflictDoUpdate({ target: review.id, set });
          count += 1;
+         if (resolvesId) linkByIdentifier.set(resolvesId, { title: row.title, status: row.status });
       } catch (e) {
          // Um PR com dado ruim NÃO aborta o sync do repo — loga e segue.
          console.warn(`[circle] review upsert falhou (${row.id}):`, (e as Error).message);
       }
    }
+
+   // Resolve os identifiers → issues reais (batch) e faz upsert dos links (id md5
+   // determinístico = idempotente no re-sync). Identifier sem issue correspondente é ignorado.
+   await linkPrsToIssues(db, repo, linkByIdentifier);
    return count;
+}
+
+/** Upsert idempotente de issue_pr_link para os identifiers que casam com issues reais. */
+async function linkPrsToIssues(
+   db: Db,
+   repo: string,
+   linkByIdentifier: Map<string, { title: string; status: string }>
+): Promise<void> {
+   if (linkByIdentifier.size === 0) return;
+   const identifiers = [...linkByIdentifier.keys()];
+   const [issues, statuses] = await Promise.all([
+      db
+         .select({
+            id: issueT.id,
+            identifier: issueT.identifier,
+            title: issueT.title,
+            statusId: issueT.statusId,
+         })
+         .from(issueT)
+         .where(inArray(issueT.identifier, identifiers)),
+      db.select().from(statusT),
+   ]);
+   const catById = new Map(statuses.map((s) => [s.id, s.category]));
+   // Status "concluído" alvo do auto-transition (menor position na categoria completed).
+   const doneStatus = statuses
+      .filter((s) => s.category === 'completed')
+      .sort((a, b) => a.position - b.position)[0];
+   for (const iss of issues) {
+      const link = linkByIdentifier.get(iss.identifier);
+      if (!link) continue;
+      // PR mergeado → move a issue pra Done (paridade Linear), a menos que já esteja
+      // completed/canceled (idempotente; não sobrescreve estados finais nem re-dispara).
+      if (link.status === 'merged' && doneStatus) {
+         const cat = catById.get(iss.statusId);
+         if (cat !== 'completed' && cat !== 'canceled') {
+            await db
+               .update(issueT)
+               .set({ statusId: doneStatus.id, updatedAt: new Date() })
+               .where(eq(issueT.id, iss.id));
+            // Feed do canal Slack (best-effort). Gated pelo slack_config.onPrMerged.
+            void notifySlackEvent(db, {
+               type: 'pr.merged',
+               identifier: iss.identifier,
+               title: iss.title,
+            });
+         }
+      }
+      // id estável por (issue, repo, PR-título-normalizado) → re-sync atualiza, não duplica.
+      const id = createHash('md5').update(`${iss.id}|${repo}|${link.title}`).digest('hex');
+      try {
+         await db
+            .insert(issuePrLink)
+            .values({ id, issueId: iss.id, title: link.title, status: prLinkStatus(link.status) })
+            .onConflictDoUpdate({
+               target: issuePrLink.id,
+               set: { title: link.title, status: prLinkStatus(link.status) },
+            });
+         // resolvesTitle correto: o título da ISSUE do Circle (era o título do PR, enganoso
+         // — exibido como "Ticket" no overview). Corrige os reviews deste repo que a resolvem.
+         await db
+            .update(review)
+            .set({ resolvesTitle: iss.title })
+            .where(and(eq(review.repo, repo), eq(review.resolvesIdentifier, iss.identifier)));
+      } catch (e) {
+         console.warn(`[circle] pr-link upsert falhou (${iss.identifier}):`, (e as Error).message);
+      }
+   }
 }
 
 /** Trunca uma string ao limite da coluna (null passa direto). Evita varchar overflow. */
 function clip<T extends string | null | undefined>(s: T, max: number): T {
    return s != null && s.length > max ? (s.slice(0, max) as T) : s;
+}
+
+/** Payload do evento `pull_request` do webhook do GitHub (subset consumido). */
+export interface PullRequestEvent {
+   repository?: { full_name?: string };
+   pull_request?: GitHubPr;
+}
+
+/**
+ * Processa um evento `pull_request` do webhook do GitHub em TEMPO REAL: upsert do
+ * review + link PR↔issue (com auto-transition PR-merged → Done). Reusa a mesma
+ * lógica do sync por polling, mas para UM PR — o payload do webhook já traz
+ * additions/deletions (ao contrário da lista /pulls). Retorna o identifier vinculado.
+ */
+export async function handlePullRequestEvent(
+   db: Db,
+   payload: PullRequestEvent
+): Promise<{ linked: string | null }> {
+   const repoFull = payload.repository?.full_name;
+   const pr = payload.pull_request;
+   if (!repoFull || !pr) return { linked: null };
+   const repo = clip(repoFull, 196) as string;
+   const resolvesId = parseResolves(pr.title, pr.head?.ref, pr.body);
+   const status = statusOf(pr);
+   const title = clip(pr.title, 512) as string;
+   const row = {
+      id: `${repo}#${pr.number}`,
+      title,
+      status,
+      repo,
+      prNumber: pr.number,
+      url: clip(pr.html_url ?? null, 512),
+      author: clip(pr.user?.login ?? null, 128),
+      targetBranch: clip(pr.base?.ref ?? null, 196),
+      sourceBranch: clip(pr.head?.ref ?? null, 196),
+      additions: pr.additions ?? 0,
+      deletions: pr.deletions ?? 0,
+      resolvesIdentifier: resolvesId,
+      resolvesTitle: resolvesId ? title : null,
+      checksPassed: 0,
+      checksTotal: 0,
+      createdAt: new Date(pr.created_at),
+      syncedAt: new Date(),
+   };
+   const set: Partial<typeof review.$inferInsert> = {
+      title: row.title,
+      status: row.status,
+      author: row.author,
+      targetBranch: row.targetBranch,
+      sourceBranch: row.sourceBranch,
+      url: row.url,
+      resolvesIdentifier: row.resolvesIdentifier,
+      resolvesTitle: row.resolvesTitle,
+      syncedAt: row.syncedAt,
+   };
+   // additions/deletions só entram no update quando o payload os traz (evita zerar
+   // o contador de um PR que já tinha detalhe — mesmo cuidado do sync por polling).
+   if (pr.additions != null || pr.deletions != null) {
+      set.additions = row.additions;
+      set.deletions = row.deletions;
+   }
+   await db.insert(review).values(row).onConflictDoUpdate({ target: review.id, set });
+   if (resolvesId) {
+      await linkPrsToIssues(db, repo, new Map([[resolvesId, { title, status }]]));
+   }
+   return { linked: resolvesId };
 }

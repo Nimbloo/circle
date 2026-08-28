@@ -12,6 +12,7 @@ import {
    initiativeProject,
    issue as issueT,
    status as statusT,
+   projectStatus as projectStatusT,
    priority as priorityT,
    health as healthT,
    label as labelT,
@@ -49,20 +50,28 @@ export interface ProjectDto {
 
 interface Maps {
    statuses: Map<string, StatusRow>;
+   /** IDs dos status de ISSUE na categoria 'completed' — para o % real do projeto. */
+   completedIssueStatusIds: string[];
    priorities: Map<string, PriorityRow>;
    healths: Map<string, HealthRow>;
    labels: Map<string, LabelRow>;
 }
 
 async function loadMaps(db: Db): Promise<Maps> {
-   const [statuses, priorities, healths, labels] = await Promise.all([
+   // `statuses` = catálogo de status de PROJETO (project_status). Os status de ISSUE
+   // ainda são necessários para contar as issues concluídas (percentComplete real).
+   const [projectStatuses, issueStatuses, priorities, healths, labels] = await Promise.all([
+      db.select().from(projectStatusT),
       db.select().from(statusT),
       db.select().from(priorityT),
       db.select().from(healthT),
       db.select().from(labelT),
    ]);
    return {
-      statuses: new Map(statuses.map((s) => [s.id, s])),
+      statuses: new Map(projectStatuses.map((s) => [s.id, s])),
+      completedIssueStatusIds: issueStatuses
+         .filter((s) => s.category === 'completed')
+         .map((s) => s.id),
       priorities: new Map(priorities.map((p) => [p.id, p])),
       healths: new Map(healths.map((h) => [h.id, h])),
       labels: new Map(labels.map((l) => [l.id, l])),
@@ -80,10 +89,8 @@ async function assemble(db: Db, rows: ProjectRow[], maps: Maps): Promise<Project
    const ids = rows.map((r) => r.id);
    const leadIds = [...new Set(rows.map((r) => r.leadId).filter(Boolean) as string[])];
 
-   // IDs dos status "concluído" (para o % de conclusão real, derivado das issues).
-   const completedStatusIds = [...maps.statuses.values()]
-      .filter((s) => s.category === 'completed')
-      .map((s) => s.id);
+   // IDs dos status de ISSUE "concluído" (para o % de conclusão real, derivado das issues).
+   const completedStatusIds = maps.completedIssueStatusIds;
 
    const [leads, labelLinks, issueCounts, completedCounts] = await Promise.all([
       leadIds.length
@@ -100,10 +107,7 @@ async function assemble(db: Db, rows: ProjectRow[], maps: Maps): Promise<Project
               .select({ projectId: issueT.projectId, n: count() })
               .from(issueT)
               .where(
-                 and(
-                    inArray(issueT.projectId, ids),
-                    inArray(issueT.statusId, completedStatusIds)
-                 )
+                 and(inArray(issueT.projectId, ids), inArray(issueT.statusId, completedStatusIds))
               )
               .groupBy(issueT.projectId)
          : Promise.resolve([]),

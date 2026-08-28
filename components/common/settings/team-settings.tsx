@@ -21,6 +21,7 @@ import {
    AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { api } from '@/lib/client';
+import { ESTIMATE_SCALE_META, normalizeScale, type EstimateScale } from '@/data/estimate-scales';
 import { useLabels, useStatuses } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import {
@@ -61,22 +62,29 @@ function EditTeamDialog({
    onOpenChange: (v: boolean) => void;
 }) {
    const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const teamFromStore = useWorkspaceStore((s) => s.getTeamById(team.id));
    const [busy, setBusy] = useState(false);
    const [name, setName] = useState(team.name);
    const [icon, setIcon] = useState(team.icon ?? '');
+   const [scale, setScale] = useState<EstimateScale>('fibonacci');
 
    useEffect(() => {
       if (open) {
          setName(team.name);
          setIcon(team.icon ?? '');
+         setScale(normalizeScale(teamFromStore?.estimateScale));
       }
-   }, [open, team]);
+   }, [open, team, teamFromStore]);
 
    const save = async () => {
       if (!name.trim() || busy) return;
       setBusy(true);
       try {
-         await api.teams.update(team.id, { name: name.trim(), icon: icon.trim() || null });
+         await api.teams.update(team.id, {
+            name: name.trim(),
+            icon: icon.trim() || null,
+            estimateScale: scale,
+         });
          await hydrate();
          onOpenChange(false);
          toast.success('Time atualizado');
@@ -111,6 +119,21 @@ function EditTeamDialog({
                      placeholder="📋"
                      onChange={(e) => setIcon(e.target.value)}
                   />
+               </div>
+               <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="edit-team-scale">Escala de estimativa</Label>
+                  <select
+                     id="edit-team-scale"
+                     value={scale}
+                     onChange={(e) => setScale(e.target.value as EstimateScale)}
+                     className="h-9 rounded-md border border-input bg-transparent px-3 text-sm outline-none focus:ring-1 focus:ring-ring"
+                  >
+                     {(Object.keys(ESTIMATE_SCALE_META) as EstimateScale[]).map((s) => (
+                        <option key={s} value={s}>
+                           {ESTIMATE_SCALE_META[s]}
+                        </option>
+                     ))}
+                  </select>
                </div>
             </div>
             <DialogFooter>

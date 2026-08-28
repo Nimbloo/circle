@@ -15,6 +15,7 @@ import { LabelBadge } from './label-badge';
 import { PrioritySelector } from './priority-selector';
 import { ProjectBadge } from './project-badge';
 import { StatusSelector } from './status-selector';
+import { SubIssueProgress } from './sub-issue-progress';
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { IssueContextMenu } from './issue-context-menu';
 
@@ -34,27 +35,24 @@ type IssueGridProps = {
 function IssueDragPreview({ issue }: { issue: Issue }) {
    return (
       <div className="w-full p-3 bg-background rounded-md border border-border/50 overflow-hidden">
-         <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5">
-               <PrioritySelector priority={issue.priority} issueId={issue.id} />
-               <span className="text-xs text-muted-foreground font-medium">{issue.identifier}</span>
-            </div>
-            <StatusSelector status={issue.status} issueId={issue.id} />
+         <div className="flex items-center justify-between gap-2 mb-2 min-h-5">
+            <span className="text-xs text-muted-foreground font-medium">{issue.identifier}</span>
+            <AssigneeUser user={issue.assignee} issueId={issue.id} />
          </div>
-
-         <h3 className="text-sm font-semibold mb-3 line-clamp-2">{issue.title}</h3>
-
-         <div className="flex flex-wrap gap-1.5 mb-3 min-h-[1.5rem]">
+         <div className="flex items-start gap-1.5 mb-2">
+            <span className="mt-px shrink-0">
+               <StatusSelector status={issue.status} issueId={issue.id} />
+            </span>
+            <h3 className="text-sm font-medium leading-snug line-clamp-2">{issue.title}</h3>
+         </div>
+         <div className="flex items-center flex-wrap gap-1.5 mb-2">
+            <PrioritySelector priority={issue.priority} issueId={issue.id} />
             <LabelBadge label={issue.labels} />
             {issue.project && <ProjectBadge project={issue.project} />}
          </div>
-
-         <div className="flex items-center justify-between mt-auto pt-2">
-            <span className="text-xs text-muted-foreground">
-               {format(new Date(issue.createdAt), 'MMM dd')}
-            </span>
-            <AssigneeUser user={issue.assignee} issueId={issue.id} />
-         </div>
+         <span className="text-xs text-muted-foreground">
+            Created {format(new Date(issue.createdAt), 'MMM d')}
+         </span>
       </div>
    );
 }
@@ -88,7 +86,7 @@ export function CustomDragLayer() {
 export function IssueGrid({ issue, orderedIssues, layout = true }: IssueGridProps) {
    const ref = useRef<HTMLDivElement>(null);
    const { orgId } = useParams<{ orgId: string }>();
-   const { displayProperties } = useDisplaySettingsStore();
+   const displayProperties = useDisplaySettingsStore((s) => s.displayProperties);
    const reorderIssue = useIssuesStore((s) => s.reorderIssue);
    const updateIssueStatus = useIssuesStore((s) => s.updateIssueStatus);
 
@@ -156,34 +154,11 @@ export function IssueGrid({ issue, orderedIssues, layout = true }: IssueGridProp
                   cursor: isDragging ? 'grabbing' : 'default',
                }}
             >
-               <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-1.5">
-                     {displayProperties.priority && (
-                        <PrioritySelector priority={issue.priority} issueId={issue.id} />
-                     )}
-                     {displayProperties.id && (
-                        <span className="text-xs text-muted-foreground font-medium">
-                           {issue.identifier}
-                        </span>
-                     )}
-                  </div>
-                  {displayProperties.status && (
-                     <StatusSelector status={issue.status} issueId={issue.id} />
-                  )}
-               </div>
-               <Link href={`/${orgId ?? 'nimbloo'}/issue/${issue.identifier}`}>
-                  <h3 className="text-sm font-semibold mb-3 line-clamp-2">{issue.title}</h3>
-               </Link>
-               <div className="flex flex-wrap gap-1.5 mb-3 min-h-[1.5rem]">
-                  {displayProperties.labels && <LabelBadge label={issue.labels} />}
-                  {displayProperties.project && issue.project && (
-                     <ProjectBadge project={issue.project} />
-                  )}
-               </div>
-               <div className="flex items-center justify-between mt-auto pt-2">
-                  {displayProperties.created ? (
-                     <span className="text-xs text-muted-foreground">
-                        {format(new Date(issue.createdAt), 'MMM dd')}
+               {/* Row 1: id (esq) + assignee (dir) — padrão Linear */}
+               <div className="flex items-center justify-between gap-2 mb-2 min-h-5">
+                  {displayProperties.id ? (
+                     <span className="text-xs text-muted-foreground font-medium">
+                        {issue.identifier}
                      </span>
                   ) : (
                      <span />
@@ -191,6 +166,43 @@ export function IssueGrid({ issue, orderedIssues, layout = true }: IssueGridProp
                   {displayProperties.assignee && (
                      <AssigneeUser user={issue.assignee} issueId={issue.id} />
                   )}
+               </div>
+               {/* Row 2: status inline com o título */}
+               <div className="flex items-start gap-1.5 mb-2">
+                  {displayProperties.status && (
+                     <span className="mt-px shrink-0">
+                        <StatusSelector status={issue.status} issueId={issue.id} />
+                     </span>
+                  )}
+                  <Link
+                     href={`/${orgId ?? 'nimbloo'}/issue/${issue.identifier}`}
+                     className="min-w-0"
+                  >
+                     <h3 className="text-sm font-medium leading-snug line-clamp-2">
+                        {issue.title}
+                     </h3>
+                  </Link>
+               </div>
+               {/* Row 3: prioridade + labels + projeto */}
+               <div className="flex items-center flex-wrap gap-1.5 mb-2">
+                  {displayProperties.priority && (
+                     <PrioritySelector priority={issue.priority} issueId={issue.id} />
+                  )}
+                  {displayProperties.labels && <LabelBadge label={issue.labels} />}
+                  {displayProperties.project && issue.project && (
+                     <ProjectBadge project={issue.project} />
+                  )}
+               </div>
+               {/* Row 4: created (esq) + rollup de sub-issues (dir) */}
+               <div className="flex items-center justify-between gap-2">
+                  {displayProperties.created ? (
+                     <span className="text-xs text-muted-foreground">
+                        Created {format(new Date(issue.createdAt), 'MMM d')}
+                     </span>
+                  ) : (
+                     <span />
+                  )}
+                  <SubIssueProgress count={issue.subIssueCount} done={issue.subIssueDoneCount} />
                </div>
             </motion.div>
          </ContextMenuTrigger>

@@ -55,7 +55,16 @@ export function ViewFilterEditor({
       onChange({ ...filter, [key]: next.length ? next : undefined });
    };
 
+   const toggleCategory = (cat: string) => {
+      const cur = filter.statusCategories ?? [];
+      const next = cur.includes(cat) ? cur.filter((x) => x !== cat) : [...cur, cat];
+      onChange({ ...filter, statusCategories: next.length ? next : undefined });
+   };
+
+   // Categorias distintas do catálogo (triage/backlog/unstarted/started/completed/canceled).
+   const categories = [...new Set(statuses.map((s) => s.category))];
    const statusCount = filter.statusIds?.length ?? 0;
+   const categoryCount = filter.statusCategories?.length ?? 0;
    const priorityCount = filter.priorityIds?.length ?? 0;
    const labelCount = filter.labelIds?.length ?? 0;
 
@@ -87,6 +96,33 @@ export function ViewFilterEditor({
                               </CommandItem>
                            );
                         })}
+                     </CommandGroup>
+                  </CommandList>
+               </Command>
+            </PopoverContent>
+         </Popover>
+
+         {/* Category (statusCategories) — antes persistia mas não era editável na UI */}
+         <Popover>
+            <PopoverTrigger asChild>
+               <Chip active={categoryCount > 0}>
+                  {categoryCount > 0 ? `${categoryCount} category` : 'Category'}
+               </Chip>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-52 p-0">
+               <Command>
+                  <CommandInput placeholder="Category…" />
+                  <CommandList>
+                     <CommandEmpty>No results.</CommandEmpty>
+                     <CommandGroup>
+                        {categories.map((cat) => (
+                           <CommandItem key={cat} onSelect={() => toggleCategory(cat)}>
+                              <span className="capitalize">{cat}</span>
+                              {filter.statusCategories?.includes(cat) && (
+                                 <CheckIcon className="ml-auto size-3.5" />
+                              )}
+                           </CommandItem>
+                        ))}
                      </CommandGroup>
                   </CommandList>
                </Command>

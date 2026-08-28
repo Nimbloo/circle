@@ -17,7 +17,7 @@ type Row =
    | { kind: 'issue'; issue: Issue };
 
 const HEADER_H = 40; // group header (h-10)
-const ROW_H = 44; // IssueLine (h-11)
+const ROW_H = 40; // IssueLine (h-10) — densidade Linear
 
 /**
  * List view VIRTUALIZADA (estilo Linear): achata [header, ...rows, header, ...] numa

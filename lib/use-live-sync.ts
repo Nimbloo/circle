@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useIssuesStore } from '@/store/issues-store';
 import { useNotificationsStore } from '@/store/notifications-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { api } from '@/lib/client';
 import type { CircleEntity } from '@/lib/api/events';
 
 /**
@@ -36,7 +37,8 @@ const DEBOUNCE_MS = 400;
 
 function hydrateTarget(target: SyncTarget): void {
    if (target === 'issues') void useIssuesStore.getState().hydrate();
-   else if (target === 'workspace') void useWorkspaceStore.getState().hydrate();
+   // Refetch de SSE: pula o rollover de cycles (escrita) — só o boot da página o faz.
+   else if (target === 'workspace') void useWorkspaceStore.getState().hydrate({ rollover: false });
    else void useNotificationsStore.getState().hydrate();
 }
 
@@ -101,6 +103,31 @@ export function useLiveSync(): void {
             if (entity === 'issue' && parsed.id) {
                if (parsed.action === 'deleted') useIssuesStore.getState().removeRemote(parsed.id);
                else void useIssuesStore.getState().applyRemote(parsed.id); // created|updated
+            } else if (
+               (entity === 'project' || entity === 'initiative') &&
+               parsed.id &&
+               parsed.action !== 'created'
+            ) {
+               // TARGETED p/ project/initiative (o caso QUENTE — toda edição de detalhe/
+               // milestone publica project/updated): re-busca SÓ aquela entidade e faz
+               // apply, em vez de re-hidratar o workspace INTEIRO (que ainda roda o
+               // rollover de cycles). `created` cai no full hydrate (precisa inserir a nova).
+               const ws = useWorkspaceStore.getState();
+               const id = parsed.id;
+               if (parsed.action === 'deleted') {
+                  if (entity === 'project') ws.removeProjectLocal(id);
+                  else ws.removeInitiativeLocal(id);
+               } else if (entity === 'project') {
+                  api.projects
+                     .get(id)
+                     .then(ws.applyProject)
+                     .catch(() => scheduleHydrate('workspace')); // 404/erro → reconcilia
+               } else {
+                  api.initiatives
+                     .get(id)
+                     .then(ws.applyInitiative)
+                     .catch(() => scheduleHydrate('workspace'));
+               }
             } else if (entity !== 'comment') {
                // 'comment' (e reactions, que publicam como comment) NÃO mexem na lista do
                // board — só no detalhe/feed da issue aberta, que é atualizado via o

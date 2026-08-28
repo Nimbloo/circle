@@ -35,8 +35,8 @@ interface IssuesState {
    getAllIssues: () => Issue[];
 
    addIssue: (issue: Issue) => Promise<void>;
-   updateIssue: (id: string, updatedIssue: Partial<Issue>) => void;
-   deleteIssue: (id: string) => void;
+   updateIssue: (id: string, updatedIssue: Partial<Issue>) => Promise<void>;
+   deleteIssue: (id: string) => Promise<void>;
 
    /** Sync em tempo real TARGETED: re-busca UMA issue e faz splice no store (sem
     *  re-hidratar as ~500). Fallback pra hydrate() só se o GET falhar (ex.: deletada). */
@@ -53,12 +53,12 @@ interface IssuesState {
    searchIssues: (query: string) => Issue[];
    filterIssues: (filters: FilterOptions) => Issue[];
 
-   updateIssueStatus: (issueId: string, newStatus: Status) => void;
-   updateIssuePriority: (issueId: string, newPriority: Priority) => void;
-   updateIssueAssignee: (issueId: string, newAssignee: User | null) => void;
-   addIssueLabel: (issueId: string, label: LabelInterface) => void;
-   removeIssueLabel: (issueId: string, labelId: string) => void;
-   updateIssueProject: (issueId: string, newProject: Project | undefined) => void;
+   updateIssueStatus: (issueId: string, newStatus: Status) => Promise<void>;
+   updateIssuePriority: (issueId: string, newPriority: Priority) => Promise<void>;
+   updateIssueAssignee: (issueId: string, newAssignee: User | null) => Promise<void>;
+   addIssueLabel: (issueId: string, label: LabelInterface) => Promise<void>;
+   removeIssueLabel: (issueId: string, labelId: string) => Promise<void>;
+   updateIssueProject: (issueId: string, newProject: Project | undefined) => Promise<void>;
    /** Reordena a issue por rank (drag-and-drop) entre dois vizinhos. Otimista + rollback. */
    reorderIssue: (id: string, beforeId: string | null, afterId: string | null) => void;
 
@@ -80,6 +80,7 @@ function toUpdateInput(updated: Partial<Issue>): UpdateIssueInput {
    if ('cycleId' in updated) patch.cycleId = updated.cycleId;
    if ('dueDate' in updated) patch.dueDate = updated.dueDate ?? null;
    if ('estimate' in updated) patch.estimate = updated.estimate ?? null;
+   if ('snoozedUntil' in updated) patch.snoozedUntil = updated.snoozedUntil ?? null;
    return patch;
 }
 
@@ -196,6 +197,9 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
       });
    },
 
+   // Retorna a promise e RE-LANÇA no erro (após rollback + toast.error): assim os
+   // chamadores (⌘K, bulk) podem toastar sucesso SÓ quando a API confirma, sem o
+   // duplo-toast contraditório. O toast de erro segue fonte única aqui.
    updateIssue: (id: string, updatedIssue: Partial<Issue>) => {
       const snapshot = { issues: get().issues, issuesByStatus: get().issuesByStatus };
       set((state) => {
@@ -204,10 +208,14 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          );
          return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
       });
-      api.issues.update(id, toUpdateInput(updatedIssue)).catch(() => {
-         set(snapshot);
-         toast.error('Falha ao atualizar a issue');
-      });
+      return api.issues
+         .update(id, toUpdateInput(updatedIssue))
+         .catch((e) => {
+            set(snapshot);
+            toast.error('Falha ao atualizar a issue');
+            throw e;
+         })
+         .then(() => {});
    },
 
    deleteIssue: (id: string) => {
@@ -216,10 +224,14 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          const newIssues = state.issues.filter((issue) => issue.id !== id);
          return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
       });
-      api.issues.remove(id).catch(() => {
-         set(snapshot);
-         toast.error('Falha ao excluir a issue');
-      });
+      return api.issues
+         .remove(id)
+         .catch((e) => {
+            set(snapshot);
+            toast.error('Falha ao excluir a issue');
+            throw e;
+         })
+         .then(() => {});
    },
 
    filterByStatus: (statusId) => get().issues.filter((i) => i.status.id === statusId),
@@ -273,7 +285,7 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
 
    addIssueLabel: (issueId, label) => {
       const issue = get().getIssueById(issueId);
-      if (!issue) return;
+      if (!issue) return Promise.resolve();
       const snapshot = { issues: get().issues, issuesByStatus: get().issuesByStatus };
       set((state) => {
          const newIssues = state.issues.map((i) =>
@@ -281,10 +293,14 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          );
          return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
       });
-      api.issues.addLabel(issueId, label.id).catch(() => {
-         set(snapshot);
-         toast.error('Falha ao adicionar a label');
-      });
+      return api.issues
+         .addLabel(issueId, label.id)
+         .catch((e) => {
+            set(snapshot);
+            toast.error('Falha ao adicionar a label');
+            throw e;
+         })
+         .then(() => {});
    },
 
    removeIssueLabel: (issueId, labelId) => {
@@ -295,10 +311,14 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          );
          return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
       });
-      api.issues.removeLabel(issueId, labelId).catch(() => {
-         set(snapshot);
-         toast.error('Falha ao remover a label');
-      });
+      return api.issues
+         .removeLabel(issueId, labelId)
+         .catch((e) => {
+            set(snapshot);
+            toast.error('Falha ao remover a label');
+            throw e;
+         })
+         .then(() => {});
    },
 
    updateIssueProject: (issueId, newProject) => get().updateIssue(issueId, { project: newProject }),

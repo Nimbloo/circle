@@ -106,6 +106,111 @@
          "when": 1787531419021,
          "tag": "0014_simple_agent_zero",
          "breakpoints": true
+      },
+      {
+         "idx": 15,
+         "version": "7",
+         "when": 1787844958748,
+         "tag": "0015_issue_subscription",
+         "breakpoints": true
+      },
+      {
+         "idx": 16,
+         "version": "7",
+         "when": 1787869452400,
+         "tag": "0016_agent_chats",
+         "breakpoints": true
+      },
+      {
+         "idx": 17,
+         "version": "7",
+         "when": 1787870679805,
+         "tag": "0017_notification_snooze",
+         "breakpoints": true
+      },
+      {
+         "idx": 18,
+         "version": "7",
+         "when": 1787871115640,
+         "tag": "0018_comment_threading",
+         "breakpoints": true
+      },
+      {
+         "idx": 19,
+         "version": "7",
+         "when": 1787876363606,
+         "tag": "0019_project_status",
+         "breakpoints": true
+      },
+      {
+         "idx": 20,
+         "version": "7",
+         "when": 1787877538614,
+         "tag": "0020_team_estimate_scale",
+         "breakpoints": true
+      },
+      {
+         "idx": 21,
+         "version": "7",
+         "when": 1787879551259,
+         "tag": "0021_issue_snooze",
+         "breakpoints": true
+      },
+      {
+         "idx": 22,
+         "version": "7",
+         "when": 1787881055029,
+         "tag": "0022_initiative_update",
+         "breakpoints": true
+      },
+      {
+         "idx": 23,
+         "version": "7",
+         "when": 1787881897257,
+         "tag": "0023_audit_log",
+         "breakpoints": true
+      },
+      {
+         "idx": 24,
+         "version": "7",
+         "when": 1787882206864,
+         "tag": "0024_label_group",
+         "breakpoints": true
+      },
+      {
+         "idx": 25,
+         "version": "7",
+         "when": 1787882206865,
+         "tag": "0025_backfill_label_group",
+         "breakpoints": true
+      },
+      {
+         "idx": 26,
+         "version": "7",
+         "when": 1787882862029,
+         "tag": "0026_issue_milestone_fk",
+         "breakpoints": true
+      },
+      {
+         "idx": 27,
+         "version": "7",
+         "when": 1787883517786,
+         "tag": "0027_favorite",
+         "breakpoints": true
+      },
+      {
+         "idx": 28,
+         "version": "7",
+         "when": 1787884151091,
+         "tag": "0028_issue_time_metrics",
+         "breakpoints": true
+      },
+      {
+         "idx": 29,
+         "version": "7",
+         "when": 1787885960321,
+         "tag": "0029_slack_config",
+         "breakpoints": true
       }
    ]
 }

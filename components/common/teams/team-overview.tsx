@@ -5,8 +5,8 @@ import { adaptFolders } from '@/lib/adapters-documents';
 import { api } from '@/lib/client';
 import type { TeamDocument } from '@/data/documents';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { RiDonutChartFill } from '@remixicon/react';
-import { Box, CopyMinus, Layers, Settings } from 'lucide-react';
+import { Box, CopyMinus, Inbox, Layers, Settings } from 'lucide-react';
+import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -51,7 +51,8 @@ export default function TeamOverview() {
    const goToLinks = [
       { label: 'Team settings', icon: Settings, href: `/${orgId}/settings` },
       { label: 'Issues', icon: CopyMinus, href: `/${orgId}/team/${team.id}/all` },
-      { label: 'Cycles', icon: RiDonutChartFill, href: `/${orgId}/team/${team.id}/cycles` },
+      { label: 'Triage', icon: Inbox, href: `/${orgId}/team/${team.id}/triage` },
+      { label: 'Cycles', icon: CyclePlayIcon, href: `/${orgId}/team/${team.id}/cycles` },
       { label: 'Projects', icon: Box, href: `/${orgId}/projects` },
       { label: 'Views', icon: Layers, href: `/${orgId}/team/${team.id}/views` },
    ];

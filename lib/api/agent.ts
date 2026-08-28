@@ -6,10 +6,13 @@ import {
    type Tool,
    type ToolConfiguration,
 } from '@aws-sdk/client-bedrock-runtime';
-import { eq } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 import type { Db } from '@/db';
-import { issue as issueT, appUser } from '@/db/schema';
+import { issue as issueT, appUser, agentChat, agentMessage } from '@/db/schema';
 import { getOrCreateUser } from './users';
+import { getUserSettings } from './settings';
+import { ApiError } from './errors';
 import { listTeams } from './teams';
 import { listIssues, createIssue, updateIssue, type IssueListOptions } from './issues';
 import { listCyclesByTeam } from './cycles';
@@ -313,13 +316,22 @@ export async function runAgent(
       .filter((m) => m.content.trim() !== '')
       .map((m) => ({ role: m.role, content: [{ text: m.content }] }));
 
+   // Personalização do agente (settings/agent-personalization): a guidance do usuário
+   // é anexada ao system prompt. Antes era persistida mas nunca lida — inerte.
+   const settings = await getUserSettings(db, me.id);
+   const prefs = (settings.preferences ?? {}) as { agentGuidance?: unknown };
+   const guidance = typeof prefs.agentGuidance === 'string' ? prefs.agentGuidance.trim() : '';
+   const systemText = guidance
+      ? `${SYSTEM}\n\n--- Instruções personalizadas do usuário (respeite-as, sem violar as regras acima) ---\n${guidance}`
+      : SYSTEM;
+
    const toolConfig: ToolConfiguration = { tools: TOOLS };
 
    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       const res = await client().send(
          new ConverseCommand({
             modelId: MODEL_ID,
-            system: [{ text: SYSTEM }],
+            system: [{ text: systemText }],
             messages,
             toolConfig,
             inferenceConfig: { maxTokens: 1024, temperature: 0.2 },
@@ -351,4 +363,83 @@ export async function runAgent(
       return text || '(sem resposta)';
    }
    return 'Não consegui completar a análise — muitas rodadas de ferramentas. Reformule a pergunta, por favor.';
+}
+
+// ── Persistência de conversas do agente (#23) ────────────────────────────
+export interface AgentChatSummary {
+   id: string;
+   title: string;
+   updatedAt: string;
+}
+
+/** Chats do usuário (mais recentes primeiro). */
+export async function listAgentChats(db: Db, email: string): Promise<AgentChatSummary[]> {
+   const me = await getOrCreateUser(db, email);
+   const rows = await db
+      .select({ id: agentChat.id, title: agentChat.title, updatedAt: agentChat.updatedAt })
+      .from(agentChat)
+      .where(eq(agentChat.userId, me.id))
+      .orderBy(desc(agentChat.updatedAt));
+   return rows.map((r) => ({ id: r.id, title: r.title, updatedAt: r.updatedAt.toISOString() }));
+}
+
+/** Mensagens de um chat (valida dono). */
+export async function getAgentChat(
+   db: Db,
+   email: string,
+   chatId: string
+): Promise<{ id: string; title: string; messages: AgentChatMessage[] } | null> {
+   const me = await getOrCreateUser(db, email);
+   const [chat] = await db
+      .select()
+      .from(agentChat)
+      .where(and(eq(agentChat.id, chatId), eq(agentChat.userId, me.id)))
+      .limit(1);
+   if (!chat) return null;
+   const msgs = await db
+      .select({ role: agentMessage.role, content: agentMessage.content })
+      .from(agentMessage)
+      .where(eq(agentMessage.chatId, chatId))
+      .orderBy(asc(agentMessage.createdAt));
+   return {
+      id: chat.id,
+      title: chat.title,
+      messages: msgs.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+   };
+}
+
+/**
+ * Envia uma mensagem: cria o chat se `chatId` for null (título = 1ª msg), persiste
+ * a msg do usuário, roda o agente com o histórico e persiste a resposta.
+ */
+export async function sendAgentMessage(
+   db: Db,
+   email: string,
+   chatId: string | null,
+   content: string
+): Promise<{ chatId: string; title: string; reply: string }> {
+   const me = await getOrCreateUser(db, email);
+   let id = chatId;
+   let title = '';
+   let history: AgentChatMessage[] = [];
+   if (id) {
+      const chat = await getAgentChat(db, email, id);
+      if (!chat) throw new ApiError(404, 'Chat não encontrado');
+      title = chat.title;
+      history = chat.messages;
+   } else {
+      id = randomUUID();
+      title = content.trim().slice(0, 80) || 'New chat';
+      const now = new Date();
+      await db
+         .insert(agentChat)
+         .values({ id, userId: me.id, title, createdAt: now, updatedAt: now });
+   }
+   await db.insert(agentMessage).values({ id: randomUUID(), chatId: id, role: 'user', content });
+   const reply = await runAgent(db, email, [...history, { role: 'user', content }]);
+   await db
+      .insert(agentMessage)
+      .values({ id: randomUUID(), chatId: id, role: 'assistant', content: reply });
+   await db.update(agentChat).set({ updatedAt: new Date() }).where(eq(agentChat.id, id));
+   return { chatId: id, title, reply };
 }

@@ -1,14 +1,11 @@
-import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
-import bcrypt from 'bcryptjs';
 import type { Db } from '@/db';
-import { appUser, teamMember } from '@/db/schema';
+import { appUser, teamMember, issueSubscription } from '@/db/schema';
 import { isAdmin } from './auth';
 import { ApiError } from './errors';
 
 export type UserRow = typeof appUser.$inferSelect;
-
-const BCRYPT_ROUNDS = 10;
 
 /** Token de convite forte (32 bytes → 64 chars hex, cabe no varchar(64)). */
 export function generateInviteToken(): string {
@@ -21,14 +18,6 @@ export function signupUrl(email: string, token: string): string {
    return `${base}/signup?email=${encodeURIComponent(email)}&token=${token}`;
 }
 
-/** Compara dois tokens em tempo constante, com guarda de tamanho (evita timing/length leak). */
-function tokensMatch(stored: string, provided: string): boolean {
-   const a = Buffer.from(stored, 'utf8');
-   const b = Buffer.from(provided, 'utf8');
-   if (a.length !== b.length) return false;
-   return timingSafeEqual(a, b);
-}
-
 export interface MeDto {
    id: string;
    slug: string;
@@ -38,6 +27,7 @@ export interface MeDto {
    role: string;
    admin: boolean;
    teamIds: string[];
+   subscribedIssueIds: string[];
 }
 
 /** Usuário corrente (do e-mail da sessão) + times + flag admin. */
@@ -47,6 +37,10 @@ export async function getMe(db: Db, email: string): Promise<MeDto> {
       .select({ teamId: teamMember.teamId })
       .from(teamMember)
       .where(eq(teamMember.userId, user.id));
+   const subscriptions = await db
+      .select({ issueId: issueSubscription.issueId })
+      .from(issueSubscription)
+      .where(eq(issueSubscription.userId, user.id));
    return {
       id: user.id,
       slug: user.slug,
@@ -56,6 +50,7 @@ export async function getMe(db: Db, email: string): Promise<MeDto> {
       role: user.role,
       admin: await isAdmin(user.email, db),
       teamIds: teams.map((t) => t.teamId),
+      subscribedIssueIds: subscriptions.map((s) => s.issueId),
    };
 }
 
@@ -218,39 +213,4 @@ export async function updateProfile(
          .where(eq(appUser.id, user.id));
    }
    return getMe(db, user.email);
-}
-
-/**
- * Define a senha (bcrypt) de um usuário JÁ convidado, validando o token single-use.
- * Regras (fecha o takeover de conta via /signup):
- *  - e-mail sem app_user      → 403 (não convidado).
- *  - passwordHash já setado    → 409 (já cadastrado; use o fluxo de reset).
- *  - inviteToken null ou token divergente (compare timing-safe) → 403.
- *    (Usuário SSO tem inviteToken null → nenhum token casa → 403.)
- *  - OK → grava o hash e LIMPA o inviteToken (single-use).
- */
-export async function setPassword(
-   db: Db,
-   email: string,
-   password: string,
-   token: string
-): Promise<void> {
-   const normalized = email.trim().toLowerCase();
-   const rows = await db
-      .select({ id: appUser.id, hash: appUser.passwordHash, inviteToken: appUser.inviteToken })
-      .from(appUser)
-      .where(eq(appUser.email, normalized))
-      .limit(1);
-   // Resposta UNIFORME para todos os casos de falha (403 genérico) — não vaza se o e-mail
-   // existe, se já tem senha, ou se o token diverge (anti-enumeração no endpoint público).
-   // Usuário já cadastrado deve usar o login; SSO tem inviteToken null → nunca casa.
-   const invalid = () => new ApiError(403, 'Convite inválido ou expirado');
-   if (rows.length === 0) throw invalid();
-   if (rows[0].hash) throw invalid();
-   if (!rows[0].inviteToken || !tokensMatch(rows[0].inviteToken, token)) throw invalid();
-   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-   await db
-      .update(appUser)
-      .set({ passwordHash, inviteToken: null, updatedAt: new Date() })
-      .where(eq(appUser.email, normalized));
 }

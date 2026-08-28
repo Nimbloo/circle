@@ -15,6 +15,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useLabels, usePriorities, useStatuses } from '@/store/catalog-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
 import { useIssuesStore } from '@/store/issues-store';
+import { useRecentsStore } from '@/store/recents-store';
+import { api } from '@/lib/client';
 import { useShallow } from 'zustand/react/shallow';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import {
@@ -40,7 +42,7 @@ import {
    UserRoundPlus,
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 type PaletteRoute =
@@ -111,24 +113,56 @@ export function CommandPalette() {
 
    const orgId = pathname.split('/')[1] || 'nimbloo';
 
+   // Busca server-side (best-effort, debounced): o servidor casa também a DESCRIÇÃO
+   // da issue (corpo), que a busca client-side não alcança. Guarda os ids casados;
+   // resolvidos contra o store (que tem todas as issues) para render consistente.
+   const [serverIssueIds, setServerIssueIds] = useState<Set<string>>(new Set());
+   useEffect(() => {
+      const q = query.trim();
+      if (q.length < 2) {
+         setServerIssueIds(new Set());
+         return;
+      }
+      let active = true;
+      const t = setTimeout(() => {
+         api.issues
+            .list({ q })
+            .then((dtos) => {
+               if (active) setServerIssueIds(new Set(dtos.map((d) => d.id)));
+            })
+            .catch(() => {
+               // best-effort: mantém só a busca client-side se o servidor falhar
+            });
+      }, 250);
+      return () => {
+         active = false;
+         clearTimeout(t);
+      };
+   }, [query]);
+
    // Busca de entidades no ⌘K (padrão Linear): quando o usuário digita, além dos
    // comandos estáticos, mostra issues/projects/members que casam com o texto e
    // navega direto. Antes o ⌘K só filtrava a lista fixa de comandos.
    const searchResults = useMemo(() => {
       const q = query.trim().toLowerCase();
       if (!q) return { issues: [], projects: [], members: [] };
+      const clientIssues = issues.filter(
+         (i) => i.title.toLowerCase().includes(q) || i.identifier.toLowerCase().includes(q)
+      );
+      // Adiciona matches por descrição (server) que o client não pegou.
+      const serverExtra = serverIssueIds.size
+         ? issues.filter(
+              (i) => serverIssueIds.has(i.id) && !clientIssues.some((c) => c.id === i.id)
+           )
+         : [];
       return {
-         issues: issues
-            .filter(
-               (i) => i.title.toLowerCase().includes(q) || i.identifier.toLowerCase().includes(q)
-            )
-            .slice(0, 6),
+         issues: [...clientIssues, ...serverExtra].slice(0, 6),
          projects: allProjects.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 4),
          members: users
             .filter((u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q))
             .slice(0, 4),
       };
-   }, [query, issues, allProjects, users]);
+   }, [query, issues, allProjects, users, serverIssueIds]);
    const hasSearchResults =
       searchResults.issues.length + searchResults.projects.length + searchResults.members.length >
       0;
@@ -141,6 +175,36 @@ export function CommandPalette() {
 
    const issue = contextCleared ? undefined : contextIssue;
 
+   // Registro de "recentes": grava a entidade da rota atual (issue/project) p/ o
+   // grupo "Recently viewed" do ⌘K. Captura toda visita, não só via palette.
+   const recents = useRecentsStore((s) => s.recents);
+   const pushRecent = useRecentsStore((s) => s.push);
+   // Guarda o último recent gravado: como as deps incluem `issues`/`allProjects` (arrays
+   // que trocam de ref a cada mutação do store), o effect re-roda muito; sem este guard
+   // ele re-gravaria o MESMO recent (localStorage + re-render à toa). Mantém o dep de
+   // `issues`/`allProjects` p/ o auto-heal (grava quando a entidade finalmente hidrata).
+   const lastPushedRef = useRef<string>('');
+   useEffect(() => {
+      const push = (r: Parameters<typeof pushRecent>[0]) => {
+         const key = `${r.type}:${r.id}`;
+         if (lastPushedRef.current === key) return;
+         lastPushedRef.current = key;
+         pushRecent(r);
+      };
+      const im = pathname.match(/^\/[^/]+\/issue\/([^/]+)/);
+      if (im) {
+         const found = issues.find((i) => i.identifier === im[1]);
+         if (found)
+            push({ type: 'issue', id: found.id, label: found.title, identifier: found.identifier });
+         return;
+      }
+      const pm = pathname.match(/^\/[^/]+\/project\/([^/]+)/);
+      if (pm) {
+         const found = allProjects.find((p) => p.id === pm[1]);
+         if (found) push({ type: 'project', id: found.id, label: found.name });
+      }
+   }, [pathname, issues, allProjects, pushRecent]);
+
    const reset = useCallback(() => {
       setRoute('root');
       setQuery('');
@@ -151,6 +215,12 @@ export function CommandPalette() {
       setOpen(false);
       reset();
    }, [reset]);
+
+   // Feedback truthful: toasta sucesso SÓ quando a mutação confirma na API. O store já
+   // faz rollback + toast.error na falha (fonte única) → sem duplo-toast contraditório.
+   const withToast = (p: Promise<void>, msg: string) => {
+      void p.then(() => toast.success(msg)).catch(() => {});
+   };
 
    // ⌘K / Ctrl+K
    useEffect(() => {
@@ -286,8 +356,7 @@ export function CommandPalette() {
                            </CommandItem>
                            <CommandItem
                               onSelect={() => {
-                                 updateIssueAssignee(issue.id, null);
-                                 toast.success('Un-assigned');
+                                 withToast(updateIssueAssignee(issue.id, null), 'Un-assigned');
                                  close();
                               }}
                            >
@@ -427,6 +496,35 @@ export function CommandPalette() {
 
                   {route === 'root' && !issue && (
                      <>
+                        {!query.trim() && recents.length > 0 && (
+                           <CommandGroup heading="Recently viewed">
+                              {recents.map((r) => (
+                                 <CommandItem
+                                    key={`${r.type}:${r.id}`}
+                                    value={`recent ${r.identifier ?? ''} ${r.label}`}
+                                    onSelect={() =>
+                                       go(
+                                          r.type === 'issue'
+                                             ? `/issue/${r.identifier ?? r.id}`
+                                             : `/project/${r.id}/overview`
+                                       )
+                                    }
+                                 >
+                                    {r.type === 'issue' ? (
+                                       <CircleDot className="text-muted-foreground" />
+                                    ) : (
+                                       <Box className="text-muted-foreground" />
+                                    )}
+                                    {r.identifier && (
+                                       <span className="text-muted-foreground text-xs shrink-0">
+                                          {r.identifier}
+                                       </span>
+                                    )}
+                                    <span className="truncate">{r.label}</span>
+                                 </CommandItem>
+                              ))}
+                           </CommandGroup>
+                        )}
                         {hasSearchResults && (
                            <>
                               {searchResults.issues.length > 0 && (
@@ -538,8 +636,10 @@ export function CommandPalette() {
                            <CommandItem
                               key={user.id}
                               onSelect={() => {
-                                 updateIssueAssignee(issue.id, user);
-                                 toast.success(`Assigned to ${user.name}`);
+                                 withToast(
+                                    updateIssueAssignee(issue.id, user),
+                                    `Assigned to ${user.name}`
+                                 );
                                  close();
                               }}
                            >
@@ -564,8 +664,10 @@ export function CommandPalette() {
                            <CommandItem
                               key={candidate.id}
                               onSelect={() => {
-                                 updateIssueStatus(issue.id, candidate);
-                                 toast.success(`Status set to ${candidate.name}`);
+                                 withToast(
+                                    updateIssueStatus(issue.id, candidate),
+                                    `Status set to ${candidate.name}`
+                                 );
                                  close();
                               }}
                            >
@@ -585,8 +687,10 @@ export function CommandPalette() {
                            <CommandItem
                               key={candidate.id}
                               onSelect={() => {
-                                 updateIssuePriority(issue.id, candidate);
-                                 toast.success(`Priority set to ${candidate.name}`);
+                                 withToast(
+                                    updateIssuePriority(issue.id, candidate),
+                                    `Priority set to ${candidate.name}`
+                                 );
                                  close();
                               }}
                            >
@@ -610,9 +714,10 @@ export function CommandPalette() {
                               <CommandItem
                                  key={label.id}
                                  onSelect={() => {
-                                    if (active) removeIssueLabel(issue.id, label.id);
-                                    else addIssueLabel(issue.id, label);
-                                    toast.success(
+                                    withToast(
+                                       active
+                                          ? removeIssueLabel(issue.id, label.id)
+                                          : addIssueLabel(issue.id, label),
                                        active
                                           ? `Label ${label.name} removed`
                                           : `Label ${label.name} added`
@@ -635,8 +740,10 @@ export function CommandPalette() {
                      <CommandGroup heading="Move to project…">
                         <CommandItem
                            onSelect={() => {
-                              updateIssueProject(issue.id, undefined);
-                              toast.success('Removed from project');
+                              withToast(
+                                 updateIssueProject(issue.id, undefined),
+                                 'Removed from project'
+                              );
                               close();
                            }}
                         >
@@ -647,8 +754,10 @@ export function CommandPalette() {
                            <CommandItem
                               key={project.id}
                               onSelect={() => {
-                                 updateIssueProject(issue.id, project);
-                                 toast.success(`Moved to ${project.name}`);
+                                 withToast(
+                                    updateIssueProject(issue.id, project),
+                                    `Moved to ${project.name}`
+                                 );
                                  close();
                               }}
                            >
@@ -666,8 +775,10 @@ export function CommandPalette() {
                      <CommandGroup heading="Move to cycle…">
                         <CommandItem
                            onSelect={() => {
-                              updateIssue(issue.id, { cycleId: '' });
-                              toast.success('Removed from cycle');
+                              withToast(
+                                 updateIssue(issue.id, { cycleId: '' }),
+                                 'Removed from cycle'
+                              );
                               close();
                            }}
                         >
@@ -678,8 +789,10 @@ export function CommandPalette() {
                            <CommandItem
                               key={cycle.id}
                               onSelect={() => {
-                                 updateIssue(issue.id, { cycleId: cycle.id });
-                                 toast.success(`Moved to ${cycle.name}`);
+                                 withToast(
+                                    updateIssue(issue.id, { cycleId: cycle.id }),
+                                    `Moved to ${cycle.name}`
+                                 );
                                  close();
                               }}
                            >
@@ -714,8 +827,10 @@ export function CommandPalette() {
                                  const date = `${d.getFullYear()}-${String(
                                     d.getMonth() + 1
                                  ).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                                 updateIssue(issue.id, { dueDate: date });
-                                 toast.success(`Due date set to ${label.toLowerCase()}`);
+                                 withToast(
+                                    updateIssue(issue.id, { dueDate: date }),
+                                    `Due date set to ${label.toLowerCase()}`
+                                 );
                                  close();
                               }}
                            >
@@ -725,8 +840,10 @@ export function CommandPalette() {
                         ))}
                         <CommandItem
                            onSelect={() => {
-                              updateIssue(issue.id, { dueDate: undefined });
-                              toast.success('Due date cleared');
+                              withToast(
+                                 updateIssue(issue.id, { dueDate: undefined }),
+                                 'Due date cleared'
+                              );
                               close();
                            }}
                         >

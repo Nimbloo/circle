@@ -12,12 +12,8 @@ import {
    DropdownMenuGroup,
    DropdownMenuItem,
    DropdownMenuLabel,
-   DropdownMenuPortal,
    DropdownMenuSeparator,
    DropdownMenuShortcut,
-   DropdownMenuSub,
-   DropdownMenuSubContent,
-   DropdownMenuSubTrigger,
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -30,6 +26,8 @@ import { ThemeToggle } from '../theme-toggle';
 export function OrgSwitcher() {
    const { orgId } = useParams<{ orgId: string }>();
    const org = orgId ?? 'nimbloo';
+   // Nome do workspace (paridade Linear: o topo é o WORKSPACE, não a conta).
+   const workspaceName = org.charAt(0).toUpperCase() + org.slice(1);
    const me = useWorkspaceStore((s) => s.me);
    const name = me?.name ?? 'Você';
    const email = me?.email ?? '';
@@ -44,19 +42,15 @@ export function OrgSwitcher() {
                         size="lg"
                         className="h-8 p-1 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                      >
-                        {/* Identidade = usuário LOGADO (dinâmico do `me`), não o workspace. */}
-                        <Avatar className="size-6 rounded-md">
-                           <AvatarImage src={me?.avatarUrl ?? undefined} alt={name} />
-                           {/* delayMs: só mostra a inicial se a foto demorar de verdade →
-                               elimina o flash "D → foto" no login pra quem tem avatar. */}
-                           <AvatarFallback delayMs={500} className="rounded-md text-xs">
-                              {name.charAt(0).toUpperCase()}
-                           </AvatarFallback>
-                        </Avatar>
+                        {/* Identidade = WORKSPACE (logo + nome), como no Linear. A conta
+                            do usuário vive no dropdown abaixo. */}
+                        <div className="size-6 rounded-md bg-sidebar-accent flex items-center justify-center shrink-0">
+                           <NimblooLogo size={16} />
+                        </div>
                         <span className="grid flex-1 text-left text-sm leading-tight truncate font-medium">
-                           {name}
+                           {workspaceName}
                         </span>
-                        <ChevronsUpDown className="ml-auto" />
+                        <ChevronsUpDown className="ml-auto size-4 text-muted-foreground" />
                      </SidebarMenuButton>
                   </DropdownMenuTrigger>
 
@@ -70,11 +64,20 @@ export function OrgSwitcher() {
                   align="end"
                   sideOffset={4}
                >
-                  <DropdownMenuLabel className="truncate font-normal">
-                     <div className="font-medium">{name}</div>
-                     {email && (
-                        <div className="text-muted-foreground text-xs truncate">{email}</div>
-                     )}
+                  {/* Conta do usuário logado (avatar + nome + email). */}
+                  <DropdownMenuLabel className="flex items-center gap-2 font-normal">
+                     <Avatar className="size-7 rounded-md">
+                        <AvatarImage src={me?.avatarUrl ?? undefined} alt={name} />
+                        <AvatarFallback delayMs={500} className="rounded-md text-xs">
+                           {name.charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                     </Avatar>
+                     <div className="min-w-0">
+                        <div className="font-medium truncate">{name}</div>
+                        {email && (
+                           <div className="text-muted-foreground text-xs truncate">{email}</div>
+                        )}
+                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuGroup>
@@ -89,22 +92,6 @@ export function OrgSwitcher() {
                      </DropdownMenuItem>
                   </DropdownMenuGroup>
                   <DropdownMenuSeparator />
-                  <DropdownMenuSub>
-                     <DropdownMenuSubTrigger>Workspace</DropdownMenuSubTrigger>
-                     <DropdownMenuPortal>
-                        <DropdownMenuSubContent>
-                           <DropdownMenuLabel className="text-muted-foreground text-xs">
-                              {email}
-                           </DropdownMenuLabel>
-                           <DropdownMenuSeparator />
-                           <DropdownMenuItem asChild>
-                              <Link href={`/${org}`}>
-                                 <NimblooLogo size={20} />
-                              </Link>
-                           </DropdownMenuItem>
-                        </DropdownMenuSubContent>
-                     </DropdownMenuPortal>
-                  </DropdownMenuSub>
                   <DropdownMenuItem onSelect={() => signOut({ callbackUrl: '/login' })}>
                      Log out
                      <DropdownMenuShortcut>⌥⇧Q</DropdownMenuShortcut>

@@ -1,6 +1,7 @@
 'use client';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { Issue, sortIssuesByPriority } from '@/data/issues';
 import { Status } from '@/data/status';
@@ -63,7 +64,7 @@ function IssuesEmptyState({
       );
    }
    if (loading) {
-      return <span className="text-sm text-muted-foreground">Carregando…</span>;
+      return <Skeleton className="h-4 w-16" />;
    }
    return <span className="text-sm text-muted-foreground">Nenhuma issue</span>;
 }
@@ -75,18 +76,28 @@ interface GroupEntry {
    total: number;
 }
 
-const sortIssues = (issues: Issue[], ordering: string): Issue[] => {
-   switch (ordering) {
-      case 'created':
-         return [...issues].sort(
-            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-         );
-      case 'title':
-         return [...issues].sort((a, b) => a.title.localeCompare(b.title));
-      case 'priority':
-      default:
-         return sortIssuesByPriority(issues);
-   }
+const sortIssues = (issues: Issue[], ordering: string, completedByRecency = false): Issue[] => {
+   const base = ((): Issue[] => {
+      switch (ordering) {
+         case 'created':
+            return [...issues].sort(
+               (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+         case 'title':
+            return [...issues].sort((a, b) => a.title.localeCompare(b.title));
+         case 'priority':
+         default:
+            return sortIssuesByPriority(issues);
+      }
+   })();
+   if (!completedByRecency) return base;
+   // Linear "Order completed by recency": completed vão pro fim, por recência
+   // (createdAt desc como proxy — o circle não expõe completedAt).
+   const active = base.filter((i) => i.status.category !== 'completed');
+   const done = base
+      .filter((i) => i.status.category === 'completed')
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+   return [...active, ...done];
 };
 
 const groupByKey = (issues: Issue[], keyOf: (issue: Issue) => string): Map<string, Issue[]> => {
@@ -176,7 +187,8 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
    error,
    onRetry,
 }) => {
-   const { grouping, ordering, completedIssues, showEmptyGroups } = useDisplaySettingsStore();
+   const { grouping, ordering, orderCompletedByRecency, completedIssues, showEmptyGroups } =
+      useDisplaySettingsStore();
    const { filters } = useFilterStore();
    const priorities = usePriorities();
    const hasActiveFilters = filters.length > 0;
@@ -295,22 +307,30 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
 
       return buildGroups().map((entry) => ({
          ...entry,
-         issues: sortIssues(entry.issues, ordering),
+         issues: sortIssues(entry.issues, ordering, orderCompletedByRecency),
       }));
-   }, [issues, totalIssues, statuses, priorities, grouping, ordering, completedIssues]);
+   }, [
+      issues,
+      totalIssues,
+      statuses,
+      priorities,
+      grouping,
+      ordering,
+      orderCompletedByRecency,
+      completedIssues,
+   ]);
 
    const hiddenCount = Math.max(0, totalIssues.length - issues.length);
    const showFooter = hasActiveFilters && hiddenCount > 0;
 
    /* ------------------------------- Board ------------------------------- */
    if (isViewTypeGrid) {
-      // With filters on, columns fully emptied by them move to "Hidden columns".
-      const boardGroups = hasActiveFilters
-         ? groups.filter((entry) => entry.issues.length > 0)
-         : groups.filter((entry) => showEmptyGroups || entry.issues.length > 0);
-      const hiddenGroups = hasActiveFilters
-         ? groups.filter((entry) => entry.issues.length === 0)
-         : [];
+      // Padrão Linear: TODA coluna vazia (por filtro OU naturalmente sem issues)
+      // colapsa em "Hidden columns" — a menos que "Show empty groups" esteja ligado.
+      const boardGroups = groups.filter((entry) => showEmptyGroups || entry.issues.length > 0);
+      const hiddenGroups = showEmptyGroups
+         ? []
+         : groups.filter((entry) => entry.issues.length === 0);
 
       return (
          <DndProvider backend={HTML5Backend}>

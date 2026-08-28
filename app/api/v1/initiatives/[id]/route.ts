@@ -26,6 +26,7 @@ const UpdateSchema = z.object({
    healthId: z.string().optional(),
    ownerId: z.string().nullish(),
    target: z.string().nullish(),
+   projectIds: z.array(z.string()).optional(),
 });
 
 export async function PATCH(req: Request, { params }: Params) {

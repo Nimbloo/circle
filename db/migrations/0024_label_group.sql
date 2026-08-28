@@ -1,0 +1,1 @@
+ALTER TABLE "label" ADD COLUMN "group_id" varchar(64);

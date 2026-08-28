@@ -23,6 +23,9 @@ export async function GET(_req: Request, { params }: Params) {
          status: 200,
          headers: {
             'content-type': avatar.contentType,
+            // nosniff: o content-type é validado contra allowlist de imagem no upload,
+            // mas os bytes não; impede o browser de re-interpretar o conteúdo.
+            'x-content-type-options': 'nosniff',
             // A avatar_url carrega cache-bust (?v=timestamp) que muda a cada upload,
             // então a versão servida é imutável — cache privado agressivo é seguro.
             'cache-control': 'private, max-age=86400',

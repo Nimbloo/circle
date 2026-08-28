@@ -1,6 +1,7 @@
 'use client';
 
 import { GroupedIssuesView } from '@/components/common/issues/grouped-issues-view';
+import { ListSkeleton } from '@/components/common/list-skeleton';
 import { applyIssueFilters } from '@/components/common/issues/issue-filter-columns';
 import { IssueFilterBar } from '@/components/common/issues/issue-filter-bar';
 import { adaptProjectDetail, emptyProjectDetail } from '@/lib/adapters-project-detail';
@@ -51,9 +52,10 @@ export default function ProjectIssues({ projectId }: ProjectIssuesProps) {
    const displayedIssues = useMemo(() => applyIssueFilters(issues, filters), [issues, filters]);
 
    if (!project) {
+      if (!loaded) return <ListSkeleton rows={8} />;
       return (
          <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-            {loaded ? 'Project not found.' : 'Loading…'}
+            Project not found.
          </div>
       );
    }

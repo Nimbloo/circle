@@ -17,6 +17,7 @@ export async function GET(req: Request) {
          await listInbox(db, me.id, {
             read: readParam === null ? undefined : readParam === 'true',
             type: multi(sp, 'type'),
+            snoozed: sp.get('snoozed') === 'true',
          })
       );
    });

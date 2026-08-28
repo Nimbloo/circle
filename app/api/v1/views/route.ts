@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { ok } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
+import { getOrCreateUser } from '@/lib/api/users';
 import { listViews, createView } from '@/lib/api/views';
 
 export const runtime = 'nodejs';
@@ -9,8 +10,12 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
    return handle(async () => {
+      // Escopo por usuário: sem o viewerId, listViews retornava as views PESSOAIS de
+      // todos os usuários (vazamento). Passa o meId → só compartilhadas + as do próprio.
+      const email = await requireEmail(req);
+      const me = await getOrCreateUser(db, email);
       const sp = new URL(req.url).searchParams;
-      return ok(await listViews(db, sp.get('team') ?? undefined));
+      return ok(await listViews(db, sp.get('team') ?? undefined, me.id));
    });
 }
 

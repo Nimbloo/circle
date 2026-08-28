@@ -34,6 +34,12 @@ export function HealthPopover({ project, onHealthChange }: HealthPopoverProps) {
    const healthStates = useHealthStates();
    const [open, setOpen] = useState(false);
 
+   // Staleness do health (paridade Linear): update atrasado deixa o indicador "envelhecido"
+   // — anel tracejado quando >2 dias sem update, e esmaecido quando ≥9 dias.
+   const ago = project.healthUpdatedAgoDays;
+   const stale = ago !== undefined && ago > 2;
+   const veryStale = ago !== undefined && ago >= 9;
+
    const handleSelect = (healthId: string) => {
       setOpen(false);
       if (onHealthChange && healthId !== project.health.id) onHealthChange(healthId);
@@ -46,8 +52,17 @@ export function HealthPopover({ project, onHealthChange }: HealthPopoverProps) {
                className="flex items-center justify-center gap-1 h-7 px-2"
                size="sm"
                variant="ghost"
+               title={ago !== undefined ? `Health atualizado há ${ago} dia(s)` : undefined}
             >
-               {getHealthIcon(project.health.id)}
+               <span
+                  className={cn(
+                     'inline-flex items-center justify-center rounded-full',
+                     stale && 'border border-dashed border-muted-foreground/60 p-[1px]',
+                     veryStale && 'opacity-50'
+                  )}
+               >
+                  {getHealthIcon(project.health.id)}
+               </span>
                <span className="text-xs mt-[1px] ml-0.5 hidden xl:inline">
                   {project.health.name}
                </span>

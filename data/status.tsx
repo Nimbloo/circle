@@ -9,6 +9,7 @@ export type StatusCategory =
    | 'triage'
    | 'backlog'
    | 'unstarted'
+   | 'planned' // só status de PROJETO (Linear); issue nunca usa
    | 'started'
    | 'completed'
    | 'canceled';
@@ -192,6 +193,7 @@ const CATEGORY_ORDER: Record<StatusCategory, number> = {
    triage: 0,
    backlog: 1,
    unstarted: 2,
+   planned: 2,
    started: 3,
    completed: 4,
    canceled: 5,
@@ -201,6 +203,7 @@ const CATEGORY_ORDER: Record<StatusCategory, number> = {
 const DISPLAY_CATEGORY_ORDER: Record<StatusCategory, number> = {
    started: 0,
    unstarted: 1,
+   planned: 1,
    triage: 2,
    backlog: 3,
    completed: 4,

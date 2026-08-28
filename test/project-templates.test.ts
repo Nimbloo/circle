@@ -18,7 +18,7 @@ describe('project templates', () => {
          teamId: 'CORE',
          name: 'Novo serviço',
          projectName: 'serviço-',
-         statusId: 'to-do',
+         statusId: 'proj-planned',
          priorityId: 'high',
       });
       expect(t.id).toBeTruthy();
@@ -31,7 +31,7 @@ describe('project templates', () => {
       const upd = await updateProjectTemplate(db, t.id, { name: 'Serviço', projectName: null });
       expect(upd?.name).toBe('Serviço');
       expect(upd?.projectName).toBeNull();
-      expect(upd?.statusId).toBe('to-do'); // preservado
+      expect(upd?.statusId).toBe('proj-planned'); // preservado
 
       expect(await deleteProjectTemplate(db, t.id)).toBe(true);
       list = await listProjectTemplatesByTeam(db, 'CORE');

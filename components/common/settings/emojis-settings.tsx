@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import { ListSkeleton } from '@/components/common/list-skeleton';
 import {
    Dialog,
    DialogContent,
@@ -199,7 +200,7 @@ export default function EmojisSettings() {
          </div>
 
          {loading ? (
-            <div className="text-sm text-muted-foreground">Carregando…</div>
+            <ListSkeleton rows={4} />
          ) : emojis.length === 0 ? (
             <div className="flex flex-col items-center gap-2 rounded-lg border bg-container px-4 py-10 text-center">
                <Smile className="size-8 text-muted-foreground/40" />

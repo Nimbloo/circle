@@ -33,6 +33,9 @@ export const label = pgTable('label', {
    id: varchar('id', { length: 64 }).primaryKey(),
    name: varchar('name', { length: 128 }).notNull(),
    color: varchar('color', { length: 32 }).notNull(), // nome de cor, não hex
+   // Grupo de labels (paridade Linear): labels no mesmo grupo são mutuamente exclusivas
+   // por issue. NULL = label solta. O nome do grupo é a chave (ex.: 'kind', 'area').
+   groupId: varchar('group_id', { length: 64 }),
 });
 
 export const health = pgTable('health', {
@@ -40,6 +43,17 @@ export const health = pgTable('health', {
    name: varchar('name', { length: 128 }).notNull(),
    color: varchar('color', { length: 16 }).notNull(),
    description: varchar('description', { length: 512 }),
+});
+
+// Catálogo de status de PROJETO (separado do workflow de issue — paridade Linear:
+// Backlog / Planned / In Progress / Completed / Canceled). Antes o projeto reusava
+// a tabela `status` das issues.
+export const projectStatus = pgTable('project_status', {
+   id: varchar('id', { length: 64 }).primaryKey(),
+   name: varchar('name', { length: 128 }).notNull(),
+   color: varchar('color', { length: 16 }).notNull(),
+   category: varchar('category', { length: 32 }).notNull(), // backlog|planned|started|completed|canceled
+   position: integer('position').notNull(),
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -71,6 +85,18 @@ export const userSettings = pgTable('user_settings', {
    updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
+// Config das notificações de saída pro Slack (singleton, id='default'). Quais
+// eventos disparam mensagem no Incoming Webhook (SLACK_WEBHOOK_URL, no env). O
+// envio em si é best-effort; estes toggles decidem QUAIS eventos notificam.
+export const slackConfig = pgTable('slack_config', {
+   id: varchar('id', { length: 16 }).primaryKey(), // 'default'
+   onIssueCreated: boolean('on_issue_created').notNull().default(true),
+   onIssueCompleted: boolean('on_issue_completed').notNull().default(true),
+   onIssueAssigned: boolean('on_issue_assigned').notNull().default(true),
+   onPrMerged: boolean('on_pr_merged').notNull().default(true),
+   updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
 // Foto de perfil (avatar) enviada pelo usuário, armazenada self-contained no
 // banco como data-URL base64. Servida por /api/v1/users/{id}/avatar; o
 // `app_user.avatar_url` aponta pra esse endpoint. Linha 1:1 com o usuário (PK = userId).
@@ -89,6 +115,8 @@ export const team = pgTable('team', {
    icon: varchar('icon', { length: 16 }),
    color: varchar('color', { length: 16 }),
    issueSeq: integer('issue_seq').notNull().default(0), // contador p/ identifier <KEY>-<n>
+   // Escala de estimate do time (paridade Linear): fibonacci|exponential|linear|tshirt.
+   estimateScale: varchar('estimate_scale', { length: 16 }).notNull().default('fibonacci'),
 });
 
 export const teamMember = pgTable(
@@ -160,7 +188,7 @@ export const project = pgTable(
       name: varchar('name', { length: 196 }).notNull(),
       statusId: varchar('status_id', { length: 64 })
          .notNull()
-         .references(() => status.id),
+         .references(() => projectStatus.id),
       iconKey: varchar('icon_key', { length: 64 }),
       percentComplete: integer('percent_complete').notNull().default(0),
       startDate: date('start_date'),
@@ -259,6 +287,15 @@ export const issue = pgTable(
       rank: varchar('rank', { length: 64 }).notNull(), // lexorank
       dueDate: date('due_date'),
       estimate: integer('estimate'), // pontos de estimativa (nullable = sem estimativa)
+      // Milestone estruturada (paridade Linear): FK p/ project_milestone. Substitui o
+      // texto livre issue_content.milestone. NULL = sem milestone.
+      milestoneId: varchar('milestone_id', { length: 36 }),
+      // Snooze da issue (paridade Linear/triage): enquanto > now, some da fila de triage.
+      snoozedUntil: timestamp('snoozed_until'),
+      // Marcos temporais p/ métricas (cycle/lead time). startedAt = 1ª entrada em status
+      // 'started' (sticky); completedAt = entrada em 'completed' (limpo se reaberto).
+      startedAt: timestamp('started_at'),
+      completedAt: timestamp('completed_at'),
       // Card originado de um erro do Sentry: id da issue do Sentry (dedup/idempotência).
       // Nullable (issues normais = null); único → replay/retry do Sentry não duplica card.
       sentryIssueId: varchar('sentry_issue_id', { length: 128 }),
@@ -328,6 +365,47 @@ export const issuePrLink = pgTable('issue_pr_link', {
    status: varchar('status', { length: 16 }).notNull(), // open|merged|draft
 });
 
+// Assinatura de issue (Linear-style): quem recebe atualizações e vê a issue na
+// aba "Subscribed"/"Activity" do My issues. Auto-assinada em create/assign/comment/
+// mention; PK composta (uma linha por issue+user).
+export const issueSubscription = pgTable(
+   'issue_subscription',
+   {
+      issueId: varchar('issue_id', { length: 36 })
+         .notNull()
+         .references(() => issue.id),
+      userId: varchar('user_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [
+      primaryKey({ columns: [t.issueId, t.userId] }),
+      index('idx_issue_subscription_user').on(t.userId),
+   ]
+);
+
+// Favoritos do usuário (paridade Linear): pin heterogêneo de issue/project/view
+// numa seção dedicada da sidebar. Integridade app-level (sem FK polimorfica) —
+// entidade removida é limpa no resolve/list. `position` p/ ordenação (drag futuro).
+export const favorite = pgTable(
+   'favorite',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      userId: varchar('user_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      entityType: varchar('entity_type', { length: 16 }).notNull(), // issue | project | view
+      entityId: varchar('entity_id', { length: 36 }).notNull(),
+      position: integer('position').notNull().default(0),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [
+      unique('uniq_favorite_user_entity').on(t.userId, t.entityType, t.entityId),
+      index('idx_favorite_user').on(t.userId),
+   ]
+);
+
 export const comment = pgTable(
    'comment',
    {
@@ -339,9 +417,11 @@ export const comment = pgTable(
          .notNull()
          .references(() => appUser.id),
       body: text('body').notNull(), // ContentBlock[] (json)
+      /** Comentário-pai (threading, paridade Linear). NULL = comentário raiz. */
+      parentId: varchar('parent_id', { length: 36 }),
       createdAt: timestamp('created_at').notNull().defaultNow(),
    },
-   (t) => [index('idx_comment_issue').on(t.issueId)]
+   (t) => [index('idx_comment_issue').on(t.issueId), index('idx_comment_parent').on(t.parentId)]
 );
 
 export const commentReaction = pgTable(
@@ -408,9 +488,28 @@ export const notification = pgTable(
       type: varchar('type', { length: 16 }).notNull(),
       content: varchar('content', { length: 1024 }),
       read: boolean('read').notNull().default(false),
+      /** Adiado até este instante (paridade Linear "snooze"): enquanto > now, some do
+       * inbox e não conta como não-lida; NULL = nunca adiada. */
+      snoozedUntil: timestamp('snoozed_until'),
       createdAt: timestamp('created_at').notNull().defaultNow(),
    },
    (t) => [index('idx_notification_recipient').on(t.recipientId)]
+);
+
+// Audit log append-only no nível workspace (paridade Linear): quem fez o quê nas
+// ações administrativas (role change, criar/excluir time, add/remove membro, join-request).
+export const auditLog = pgTable(
+   'audit_log',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      actorId: varchar('actor_id', { length: 36 }).references(() => appUser.id),
+      action: varchar('action', { length: 48 }).notNull(), // role.change|team.create|...
+      targetType: varchar('target_type', { length: 24 }), // team|member|...
+      targetId: varchar('target_id', { length: 64 }),
+      meta: text('meta'), // JSON opcional (ex.: {from,to})
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_audit_log_created').on(t.createdAt)]
 );
 
 export const projectUpdate = pgTable(
@@ -428,6 +527,25 @@ export const projectUpdate = pgTable(
       createdAt: timestamp('created_at').notNull().defaultNow(),
    },
    (t) => [index('idx_project_update_project').on(t.projectId)]
+);
+
+// Updates de INITIATIVE (espelha project_update; health do último update propaga p/
+// initiative.healthId, paridade Linear).
+export const initiativeUpdate = pgTable(
+   'initiative_update',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      initiativeId: varchar('initiative_id', { length: 36 })
+         .notNull()
+         .references(() => initiative.id),
+      authorId: varchar('author_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      health: varchar('health', { length: 16 }).notNull(), // on-track|at-risk|off-track
+      blocks: text('blocks').notNull(),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_initiative_update_initiative').on(t.initiativeId)]
 );
 
 export const projectActivity = pgTable(
@@ -560,12 +678,41 @@ export const projectTemplate = pgTable(
       name: varchar('name', { length: 128 }).notNull(),
       projectName: varchar('project_name', { length: 256 }),
       description: text('description'),
-      statusId: varchar('status_id', { length: 64 }).references(() => status.id),
+      statusId: varchar('status_id', { length: 64 }).references(() => projectStatus.id),
       priorityId: varchar('priority_id', { length: 64 }).references(() => priority.id),
       healthId: varchar('health_id', { length: 64 }).references(() => health.id),
       createdAt: timestamp('created_at').notNull().defaultNow(),
    },
    (t) => [index('idx_project_template_team').on(t.teamId)]
+);
+
+// ── Agent (chat com IA — Bedrock) — conversas persistidas ────────────────
+export const agentChat = pgTable(
+   'agent_chat',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      userId: varchar('user_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      title: varchar('title', { length: 256 }).notNull(),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+      updatedAt: timestamp('updated_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_agent_chat_user').on(t.userId)]
+);
+
+export const agentMessage = pgTable(
+   'agent_message',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      chatId: varchar('chat_id', { length: 36 })
+         .notNull()
+         .references(() => agentChat.id),
+      role: varchar('role', { length: 16 }).notNull(), // user|assistant
+      content: text('content').notNull(),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_agent_message_chat').on(t.chatId, t.createdAt)]
 );
 
 /** Emojis customizados do workspace (imagem no S3/CDN), usados em reações. */

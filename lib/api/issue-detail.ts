@@ -9,6 +9,8 @@ import {
    comment as commentT,
    commentReaction,
    activityEvent,
+   issueSubscription,
+   projectMilestone,
    appUser,
 } from '@/db/schema';
 import { getOrCreateUser } from './users';
@@ -38,6 +40,7 @@ export interface CommentDto {
    id: string;
    author: UserRef | null;
    body: string;
+   parentId: string | null;
    createdAt: string;
    reactions: ReactionDto[];
 }
@@ -50,16 +53,24 @@ export interface ActivityItem {
    event?: string;
    text?: string;
    body?: string;
+   parentId?: string | null;
    reactions?: ReactionDto[];
 }
 
 export interface IssueDetailDto {
    identifier: string;
    description: string | null;
+   /** Milestone livre (legado). Novo fluxo usa milestoneId/milestoneName estruturados. */
    milestone: string | null;
+   /** Milestone estruturada (FK project_milestone) + nome resolvido. */
+   milestoneId: string | null;
+   milestoneName: string | null;
    subIssueIds: string[];
    relatedIds: string[];
    blockedByIds: string[];
+   /** Issues que ESTA bloqueia (lado inverso de blocked_by — paridade Linear "Blocks"). */
+   blockingIds: string[];
+   duplicateIds: string[];
    prLinks: { id: string; title: string; status: string }[];
 }
 
@@ -103,18 +114,34 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
    const rows = await db.select().from(issueT).where(eq(issueT.id, issueId)).limit(1);
    if (rows.length === 0) return null;
    const iss = rows[0];
-   const [content, relations, prs] = await Promise.all([
+   const [content, relations, blocking, prs, ms] = await Promise.all([
       db.select().from(issueContent).where(eq(issueContent.issueId, issueId)).limit(1),
       db.select().from(issueRelation).where(eq(issueRelation.issueId, issueId)),
+      // Lado inverso: outras issues que declaram ESTA como blocked_by → ESTA as bloqueia.
+      db
+         .select({ issueId: issueRelation.issueId })
+         .from(issueRelation)
+         .where(and(eq(issueRelation.relatedId, issueId), eq(issueRelation.kind, 'blocked_by'))),
       db.select().from(issuePrLink).where(eq(issuePrLink.issueId, issueId)),
+      iss.milestoneId
+         ? db
+              .select({ id: projectMilestone.id, name: projectMilestone.name })
+              .from(projectMilestone)
+              .where(eq(projectMilestone.id, iss.milestoneId))
+              .limit(1)
+         : Promise.resolve([]),
    ]);
    return {
       identifier: iss.identifier,
       description: content[0]?.description ?? null,
       milestone: content[0]?.milestone ?? null,
+      milestoneId: iss.milestoneId ?? null,
+      milestoneName: ms[0]?.name ?? null,
       subIssueIds: relations.filter((r) => r.kind === 'sub').map((r) => r.relatedId),
       relatedIds: relations.filter((r) => r.kind === 'related').map((r) => r.relatedId),
       blockedByIds: relations.filter((r) => r.kind === 'blocked_by').map((r) => r.relatedId),
+      blockingIds: blocking.map((b) => b.issueId),
+      duplicateIds: relations.filter((r) => r.kind === 'duplicate').map((r) => r.relatedId),
       prLinks: prs.map((p) => ({ id: p.id, title: p.title, status: p.status })),
    };
 }
@@ -124,7 +151,7 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
 export async function updateIssueContent(
    db: Db,
    issueId: string,
-   description: string | null
+   patch: { description?: string | null; milestone?: string | null }
 ): Promise<IssueDetailDto | null> {
    const exists = await db
       .select({ id: issueT.id })
@@ -132,23 +159,77 @@ export async function updateIssueContent(
       .where(eq(issueT.id, issueId))
       .limit(1);
    if (exists.length === 0) return null;
+   // Upsert parcial: só os campos presentes no patch são alterados numa linha existente.
+   const set: Partial<typeof issueContent.$inferInsert> = {};
+   if (patch.description !== undefined) set.description = patch.description;
+   if (patch.milestone !== undefined) set.milestone = patch.milestone;
    await db
       .insert(issueContent)
-      .values({ issueId, description })
-      .onConflictDoUpdate({ target: issueContent.issueId, set: { description } });
+      .values({
+         issueId,
+         description: patch.description ?? null,
+         milestone: patch.milestone ?? null,
+      })
+      .onConflictDoUpdate({ target: issueContent.issueId, set });
    publish({ entity: 'issue', action: 'updated', id: issueId });
    return getIssueDetail(db, issueId);
 }
 
-export type RelationKind = 'sub' | 'related' | 'blocked_by';
-export const RELATION_KINDS: readonly RelationKind[] = ['sub', 'related', 'blocked_by'];
+export type RelationKind = 'sub' | 'related' | 'blocked_by' | 'duplicate';
+export const RELATION_KINDS: readonly RelationKind[] = [
+   'sub',
+   'related',
+   'blocked_by',
+   'duplicate',
+];
+
+/** Evento de atividade (event, text) para add/remove de cada tipo de relação. O feed
+ * já tem ícones para related/blocked/unblocked; sub cai no ícone default. */
+function relationEvent(kind: RelationKind, added: boolean): { event: string; text: string } {
+   if (kind === 'blocked_by')
+      return added
+         ? { event: 'blocked', text: 'marcou como bloqueada' }
+         : { event: 'unblocked', text: 'removeu um bloqueio' };
+   if (kind === 'sub')
+      return added
+         ? { event: 'sub', text: 'adicionou uma sub-issue' }
+         : { event: 'sub', text: 'removeu uma sub-issue' };
+   if (kind === 'duplicate')
+      return added
+         ? { event: 'duplicate', text: 'marcou como duplicada' }
+         : { event: 'duplicate', text: 'removeu a marca de duplicada' };
+   return added
+      ? { event: 'related', text: 'vinculou uma issue relacionada' }
+      : { event: 'related', text: 'removeu uma issue relacionada' };
+}
+
+async function recordRelationEvent(
+   db: Db,
+   issueId: string,
+   kind: RelationKind,
+   added: boolean,
+   actorEmail?: string
+): Promise<void> {
+   if (!actorEmail) return;
+   const actor = await getOrCreateUser(db, actorEmail);
+   const { event, text } = relationEvent(kind, added);
+   await db.insert(activityEvent).values({
+      id: randomUUID(),
+      issueId,
+      actorId: actor.id,
+      event,
+      text,
+      createdAt: new Date(),
+   });
+}
 
 /** Cria uma relação issueId -> relatedId (idempotente). Retorna o detail atualizado. */
 export async function addRelation(
    db: Db,
    issueId: string,
    relatedId: string,
-   kind: RelationKind
+   kind: RelationKind,
+   actorEmail?: string
 ): Promise<IssueDetailDto | null> {
    if (issueId === relatedId)
       throw new ApiError(400, 'Uma issue não pode se relacionar consigo mesma');
@@ -171,6 +252,8 @@ export async function addRelation(
       .limit(1);
    if (existing.length === 0) {
       await db.insert(issueRelation).values({ id: randomUUID(), issueId, relatedId, kind });
+      // trilha no feed só quando o vínculo é novo (re-add idempotente não gera evento)
+      await recordRelationEvent(db, issueId, kind, true, actorEmail);
    }
    publish({ entity: 'issue', action: 'updated', id: issueId });
    return getIssueDetail(db, issueId);
@@ -181,9 +264,10 @@ export async function removeRelation(
    db: Db,
    issueId: string,
    relatedId: string,
-   kind: RelationKind
+   kind: RelationKind,
+   actorEmail?: string
 ): Promise<IssueDetailDto | null> {
-   await db
+   const deleted = await db
       .delete(issueRelation)
       .where(
          and(
@@ -191,7 +275,9 @@ export async function removeRelation(
             eq(issueRelation.relatedId, relatedId),
             eq(issueRelation.kind, kind)
          )
-      );
+      )
+      .returning({ id: issueRelation.id });
+   if (deleted.length > 0) await recordRelationEvent(db, issueId, kind, false, actorEmail);
    publish({ entity: 'issue', action: 'updated', id: issueId });
    return getIssueDetail(db, issueId);
 }
@@ -232,6 +318,7 @@ export async function listComments(
       id: c.id,
       author: userRef(users.get(c.authorId)),
       body: c.body,
+      parentId: c.parentId ?? null,
       createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : String(c.createdAt),
       reactions: reactions.get(c.id) ?? [],
    }));
@@ -241,7 +328,8 @@ export async function addComment(
    db: Db,
    issueId: string,
    body: string,
-   actorEmail: string
+   actorEmail: string,
+   parentId?: string | null
 ): Promise<CommentDto> {
    const [iss] = await db
       .select({ assigneeId: issueT.assigneeId })
@@ -250,10 +338,32 @@ export async function addComment(
       .limit(1);
    if (!iss) throw new ApiError(404, `Issue '${issueId}' não encontrada`);
 
+   // Threading: valida que o pai existe E é da MESMA issue (sem cross-issue thread).
+   // Só um nível de aninhamento — responder a uma resposta ancora no mesmo pai raiz.
+   let rootParentId: string | null = null;
+   let parentAuthorId: string | null = null;
+   if (parentId) {
+      const [parent] = await db
+         .select({
+            id: commentT.id,
+            issueId: commentT.issueId,
+            parentId: commentT.parentId,
+            authorId: commentT.authorId,
+         })
+         .from(commentT)
+         .where(eq(commentT.id, parentId))
+         .limit(1);
+      if (!parent || parent.issueId !== issueId) throw new ApiError(400, 'Comentário-pai inválido');
+      rootParentId = parent.parentId ?? parent.id;
+      parentAuthorId = parent.authorId;
+   }
+
    const author = await getOrCreateUser(db, actorEmail);
    const id = randomUUID();
    const now = new Date();
-   await db.insert(commentT).values({ id, issueId, authorId: author.id, body, createdAt: now });
+   await db
+      .insert(commentT)
+      .values({ id, issueId, authorId: author.id, body, parentId: rootParentId, createdAt: now });
 
    // @mentions: resolve os slugs (prefixo do e-mail) citados no corpo e notifica.
    const slugs = [
@@ -263,6 +373,12 @@ export async function addComment(
       ? await db.select().from(appUser).where(inArray(appUser.slug, slugs))
       : [];
    const mentionedIds = new Set(mentioned.filter((u) => u.id !== author.id).map((u) => u.id));
+
+   // auto-subscribe (Linear-style): quem comenta e quem é mencionado passa a seguir a issue
+   await db
+      .insert(issueSubscription)
+      .values([author.id, ...mentionedIds].map((userId) => ({ issueId, userId })))
+      .onConflictDoNothing();
 
    const notifications: Promise<void>[] = [...mentionedIds].map((recipientId) =>
       dispatchNotification(db, {
@@ -286,13 +402,38 @@ export async function addComment(
          })
       );
    }
+   // Resposta: notifica o autor do comentário-pai (se não for o próprio autor,
+   // nem o assignee/mencionado já notificados acima).
+   if (
+      parentAuthorId &&
+      parentAuthorId !== author.id &&
+      parentAuthorId !== iss.assigneeId &&
+      !mentionedIds.has(parentAuthorId)
+   ) {
+      notifications.push(
+         dispatchNotification(db, {
+            type: 'comment',
+            issueId,
+            recipientId: parentAuthorId,
+            actorId: author.id,
+            content: `${author.name} respondeu ao seu comentário`,
+         })
+      );
+   }
    // Fire-and-forget: as notificações (Slack/SES) não bloqueiam a resposta do comentário.
    void Promise.all(notifications).catch((e) =>
       console.error('[circle] notificações de comentário falharam:', e)
    );
 
    publish({ entity: 'comment', action: 'created', id, actorEmail });
-   return { id, author: userRef(author), body, createdAt: now.toISOString(), reactions: [] };
+   return {
+      id,
+      author: userRef(author),
+      body,
+      parentId: rootParentId,
+      createdAt: now.toISOString(),
+      reactions: [],
+   };
 }
 
 /**
@@ -320,6 +461,7 @@ export async function updateComment(
       id: c.id,
       author: userRef(users.get(c.authorId)),
       body,
+      parentId: c.parentId ?? null,
       createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : String(c.createdAt),
       reactions: reactions.get(c.id) ?? [],
    };
@@ -339,8 +481,15 @@ export async function deleteComment(
    const c = rows[0];
    const actor = await getOrCreateUser(db, actorEmail);
    if (c.authorId !== actor.id) throw new ApiError(403, 'Só o autor pode excluir o comentário');
-   await db.delete(commentReaction).where(eq(commentReaction.commentId, commentId));
-   await db.delete(commentT).where(eq(commentT.id, commentId));
+   // Threading: excluir um comentário-raiz leva junto suas respostas (e as reactions
+   // de todas). Como só há 1 nível, basta pegar os filhos diretos deste id.
+   const replies = await db
+      .select({ id: commentT.id })
+      .from(commentT)
+      .where(eq(commentT.parentId, commentId));
+   const ids = [commentId, ...replies.map((r) => r.id)];
+   await db.delete(commentReaction).where(inArray(commentReaction.commentId, ids));
+   await db.delete(commentT).where(inArray(commentT.id, ids));
    publish({ entity: 'comment', action: 'deleted', id: commentId, actorEmail });
    return true;
 }
@@ -371,9 +520,95 @@ export async function listActivity(
       actor: c.author,
       createdAt: c.createdAt,
       body: c.body,
+      parentId: c.parentId,
       reactions: c.reactions,
    }));
    return [...eventItems, ...commentItems].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+export interface MyActivityItemDto {
+   id: string;
+   issueId: string;
+   issueIdentifier: string;
+   issueTitle: string;
+   actor: UserRef | null;
+   event: string; // tipo do evento (status|priority|...|created) ou 'comment'
+   text: string | null;
+   createdAt: string;
+}
+
+/**
+ * "My issues > Activity" (padrão Linear = issues em que EU estive ativo): eventos
+ * onde o usuário é o ATOR + comentários que ele escreveu, mais recentes primeiro.
+ * A aba renderiza essas issues como board; este método também serve de feed cru.
+ */
+export async function listMyActivity(
+   db: Db,
+   userId: string,
+   limit = 50
+): Promise<MyActivityItemDto[]> {
+   const [events, comments] = await Promise.all([
+      db.select().from(activityEvent).where(eq(activityEvent.actorId, userId)),
+      db
+         .select({
+            id: commentT.id,
+            issueId: commentT.issueId,
+            authorId: commentT.authorId,
+            createdAt: commentT.createdAt,
+         })
+         .from(commentT)
+         .where(eq(commentT.authorId, userId)),
+   ]);
+   const issueIds = [
+      ...new Set([...events.map((e) => e.issueId), ...comments.map((c) => c.issueId)]),
+   ];
+   if (issueIds.length === 0) return [];
+   const issues = await db
+      .select({ id: issueT.id, identifier: issueT.identifier, title: issueT.title })
+      .from(issueT)
+      .where(inArray(issueT.id, issueIds));
+   const issueMap = new Map(issues.map((i) => [i.id, i]));
+   const actorIds = [
+      ...new Set(
+         [...events.map((e) => e.actorId), ...comments.map((c) => c.authorId)].filter(
+            Boolean
+         ) as string[]
+      ),
+   ];
+   const users = await loadUsers(db, actorIds);
+   const toIso = (d: unknown) => (d instanceof Date ? d.toISOString() : String(d));
+
+   const items: MyActivityItemDto[] = [];
+   for (const e of events) {
+      const iss = issueMap.get(e.issueId);
+      if (!iss) continue;
+      items.push({
+         id: e.id,
+         issueId: e.issueId,
+         issueIdentifier: iss.identifier,
+         issueTitle: iss.title,
+         actor: userRef(e.actorId ? users.get(e.actorId) : undefined),
+         event: e.event,
+         text: e.text ?? null,
+         createdAt: toIso(e.createdAt),
+      });
+   }
+   for (const c of comments) {
+      const iss = issueMap.get(c.issueId);
+      if (!iss) continue;
+      items.push({
+         id: c.id,
+         issueId: c.issueId,
+         issueIdentifier: iss.identifier,
+         issueTitle: iss.title,
+         actor: userRef(users.get(c.authorId)),
+         event: 'comment',
+         text: 'commented',
+         createdAt: toIso(c.createdAt),
+      });
+   }
+   items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+   return items.slice(0, limit);
 }
 
 export async function addReaction(

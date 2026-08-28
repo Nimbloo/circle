@@ -204,7 +204,7 @@ describe('aggregations', () => {
       const ana = await seedUser(db, { name: 'Ana', email: 'ana@nimbloo.ai' });
       const proj = await createProject(db, {
          name: 'P',
-         statusId: 'in-progress',
+         statusId: 'proj-in-progress',
          priorityId: 'high',
          healthId: 'on-track',
          teamId: 'CORE',

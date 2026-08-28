@@ -12,8 +12,8 @@ import { api } from '@/lib/client';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { ProjectProgressChart } from './project-progress-chart';
-import { ArrowRight, Calendar, Check, Compass, Plus, Tag, UserPlus } from 'lucide-react';
-import { useMemo } from 'react';
+import { ArrowRight, Calendar, Check, Compass, Plus, Tag, Trash2, UserPlus, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 interface ProjectPropertiesPanelProps {
@@ -134,17 +134,34 @@ export function ProjectPropertiesPanel({
    // Edição de milestones só quando o pai passa projectId + onChanged (overview/activity).
    const canEditMilestones = Boolean(projectId && onChanged);
 
-   const handleAddMilestone = async () => {
-      if (!projectId) return;
-      const name = window.prompt('Milestone name');
-      if (!name?.trim()) return;
-      const targetDate = window.prompt('Target date (YYYY-MM-DD, optional)')?.trim() || undefined;
+   const [adding, setAdding] = useState(false);
+   const [newName, setNewName] = useState('');
+   const [newDate, setNewDate] = useState('');
+
+   const submitMilestone = async () => {
+      if (!projectId || !newName.trim()) return;
       try {
-         await api.projects.addMilestone(projectId, { name: name.trim(), targetDate });
+         await api.projects.addMilestone(projectId, {
+            name: newName.trim(),
+            targetDate: newDate || undefined,
+         });
+         setNewName('');
+         setNewDate('');
+         setAdding(false);
          await onChanged?.();
          toast.success('Milestone added');
       } catch {
          toast.error('Could not add the milestone');
+      }
+   };
+
+   const handleDeleteMilestone = async (milestoneId: string) => {
+      if (!projectId) return;
+      try {
+         await api.projects.removeMilestone(projectId, milestoneId);
+         await onChanged?.();
+      } catch {
+         toast.error('Could not delete the milestone');
       }
    };
 
@@ -353,7 +370,7 @@ export function ProjectPropertiesPanel({
                {canEditMilestones && (
                   <button
                      type="button"
-                     onClick={handleAddMilestone}
+                     onClick={() => setAdding(true)}
                      className="text-muted-foreground hover:text-foreground transition-colors"
                   >
                      <Plus className="size-3.5" />
@@ -370,7 +387,7 @@ export function ProjectPropertiesPanel({
                   {detail.milestones.map((milestone) => (
                      <div
                         key={milestone.id}
-                        className="flex items-center justify-between gap-2 text-sm"
+                        className="group/ms flex items-center justify-between gap-2 text-sm"
                      >
                         <span className="flex items-center gap-2 min-w-0">
                            <button
@@ -398,11 +415,52 @@ export function ProjectPropertiesPanel({
                               {milestone.name}
                            </span>
                         </span>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                           {formatDay(milestone.targetDate)}
+                        <span className="flex items-center gap-1.5 shrink-0">
+                           <span className="text-xs text-muted-foreground whitespace-nowrap">
+                              {formatDay(milestone.targetDate)}
+                           </span>
+                           {canEditMilestones && (
+                              <button
+                                 type="button"
+                                 onClick={() => handleDeleteMilestone(milestone.id)}
+                                 aria-label="Delete milestone"
+                                 className="opacity-0 group-hover/ms:opacity-100 text-muted-foreground hover:text-red-500 transition-opacity"
+                              >
+                                 <Trash2 className="size-3.5" />
+                              </button>
+                           )}
                         </span>
                      </div>
                   ))}
+               </div>
+            )}
+            {adding && canEditMilestones && (
+               <div className="flex items-center gap-2 mt-2">
+                  <input
+                     value={newName}
+                     onChange={(e) => setNewName(e.target.value)}
+                     autoFocus
+                     placeholder="Milestone name"
+                     onKeyDown={(e) => {
+                        if (e.key === 'Enter') void submitMilestone();
+                        if (e.key === 'Escape') setAdding(false);
+                     }}
+                     className="flex-1 bg-transparent text-sm outline-none border rounded-md px-2 h-7"
+                  />
+                  <input
+                     type="date"
+                     value={newDate}
+                     onChange={(e) => setNewDate(e.target.value)}
+                     className="bg-transparent text-xs outline-none border rounded-md px-2 h-7 text-muted-foreground"
+                  />
+                  <button
+                     type="button"
+                     onClick={() => setAdding(false)}
+                     className="text-muted-foreground hover:text-foreground"
+                     aria-label="Cancel"
+                  >
+                     <X className="size-3.5" />
+                  </button>
                </div>
             )}
          </div>

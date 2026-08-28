@@ -15,7 +15,7 @@ import { useRightPanelStore } from '@/store/right-panel-store';
 import { useSearchStore } from '@/store/search-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { BarChart3, PanelRight, SearchIcon } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { DisplayOptions } from '../display-options';
 import Notifications from '../issues/notifications';
 
@@ -95,8 +95,10 @@ function HeaderOptions() {
    const issues = useIssuesStore((s) => s.issues);
    const { openPanel, togglePanel } = useRightPanelStore();
    const meId = useWorkspaceStore((s) => s.me?.id);
+   const subscribedIssueIds = useWorkspaceStore((s) => s.me?.subscribedIssueIds);
 
-   const count = scopeMyIssues(issues, tab, meId).length;
+   const subscribedIds = useMemo(() => new Set(subscribedIssueIds ?? []), [subscribedIssueIds]);
+   const count = scopeMyIssues(issues, tab, meId, subscribedIds).length;
 
    return (
       <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">

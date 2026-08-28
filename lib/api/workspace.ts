@@ -1,12 +1,18 @@
 import type { Db } from '@/db';
 import { teamMember } from '@/db/schema';
-import { listStatuses, listPriorities, listLabels, listHealthStates } from './catalogs';
+import {
+   listStatuses,
+   listProjectStatuses,
+   listPriorities,
+   listLabels,
+   listHealthStates,
+} from './catalogs';
 import { listTeams, type TeamDto } from './teams';
 import { listProjects, type ProjectDto } from './projects';
 import { listMembers, type MemberDto } from './members';
 import { listInitiatives, type InitiativeDto } from './initiatives';
 import { listViews, type ViewDto } from './views';
-import { listCyclesForTeams, type CycleDto } from './cycles';
+import { listCyclesForTeams, rolloverCyclesForTeam, type CycleDto } from './cycles';
 import { getMe, type MeDto } from './users';
 
 export interface TeamFull extends TeamDto {
@@ -17,6 +23,7 @@ export interface TeamFull extends TeamDto {
 export interface WorkspaceBootstrap {
    me: MeDto;
    statuses: Awaited<ReturnType<typeof listStatuses>>;
+   projectStatuses: Awaited<ReturnType<typeof listProjectStatuses>>;
    priorities: Awaited<ReturnType<typeof listPriorities>>;
    labels: Awaited<ReturnType<typeof listLabels>>;
    healthStates: Awaited<ReturnType<typeof listHealthStates>>;
@@ -28,12 +35,22 @@ export interface WorkspaceBootstrap {
    views: ViewDto[];
 }
 
-/** Uma chamada: toda a referência do workspace, costurada server-side. */
-export async function bootstrapWorkspace(db: Db, email: string): Promise<WorkspaceBootstrap> {
+/**
+ * Uma chamada: toda a referência do workspace, costurada server-side.
+ * `rollover` (default true) faz o auto-rollover lazy de cycles. Refetches disparados
+ * pelo SSE passam `false` — o rollover é housekeeping de load, não precisa rodar (a
+ * ESCRITA) a cada evento; só no boot genuíno da página.
+ */
+export async function bootstrapWorkspace(
+   db: Db,
+   email: string,
+   opts: { rollover?: boolean } = {}
+): Promise<WorkspaceBootstrap> {
    const me = await getMe(db, email);
 
    const [
       statuses,
+      projectStatuses,
       priorities,
       labels,
       healthStates,
@@ -44,6 +61,7 @@ export async function bootstrapWorkspace(db: Db, email: string): Promise<Workspa
       views,
    ] = await Promise.all([
       listStatuses(db),
+      listProjectStatuses(db),
       listPriorities(db),
       listLabels(db),
       listHealthStates(db),
@@ -51,7 +69,8 @@ export async function bootstrapWorkspace(db: Db, email: string): Promise<Workspa
       listProjects(db, {}),
       listMembers(db, {}),
       listInitiatives(db, {}),
-      listViews(db),
+      // Views escopadas: compartilhadas (com time) + as pessoais do próprio usuário.
+      listViews(db, undefined, me.id),
    ]);
 
    // membros por time (bulk)
@@ -77,14 +96,24 @@ export async function bootstrapWorkspace(db: Db, email: string): Promise<Workspa
       projects: projectsByTeam.get(t.id) ?? [],
    }));
 
+   // Auto-rollover lazy (#24): o app não tem scheduler, então o bootstrap fecha os
+   // cycles vencidos e migra as issues em aberto ANTES de listar. Idempotente; roda
+   // por time em paralelo. (Sem isto o rollover ficava morto — nenhum outro caminho
+   // da UI o dispara.) Pulado em refetch de SSE (`rollover:false`) — não repetir a
+   // escrita a cada evento; o boot da página já cobre.
+   const teamIds = teams.map((t) => t.id);
+   if (opts.rollover !== false) {
+      await Promise.all(teamIds.map((id) => rolloverCyclesForTeam(db, id)));
+   }
+
    // cycles de todos os times — 2 queries no total (era N+1: 1 chamada por time,
    // cada uma re-escaneando a tabela status).
-   const teamIds = teams.map((t) => t.id);
    const cycles: CycleDto[] = await listCyclesForTeams(db, teamIds);
 
    return {
       me,
       statuses,
+      projectStatuses,
       priorities,
       labels,
       healthStates,

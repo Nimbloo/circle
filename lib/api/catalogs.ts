@@ -1,11 +1,15 @@
 import { asc } from 'drizzle-orm';
 import type { Db } from '@/db';
-import { status, priority, label, health } from '@/db/schema';
+import { status, projectStatus, priority, label, health } from '@/db/schema';
 
 /** Catálogos (options dos filtros do frontend). Leituras simples ordenadas. */
 
 export function listStatuses(db: Db) {
    return db.select().from(status).orderBy(asc(status.position));
+}
+
+export function listProjectStatuses(db: Db) {
+   return db.select().from(projectStatus).orderBy(asc(projectStatus.position));
 }
 
 export function listPriorities(db: Db) {

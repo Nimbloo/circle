@@ -44,6 +44,8 @@ export type ActivityItem =
         actor: User;
         timeAgo: string;
         body: ContentBlock[];
+        /** Comentário-pai (threading). undefined/null = raiz. */
+        parentId?: string | null;
         reactions?: CommentReaction[];
      };
 
@@ -60,8 +62,13 @@ export interface IssueDetail {
    subIssueIds?: string[];
    relatedIds?: string[];
    blockedByIds?: string[];
+   blockingIds?: string[];
+   duplicateIds?: string[];
    prLinks?: PrLink[];
+   /** Milestone livre (legado). Novo fluxo usa milestoneId/milestoneName estruturados. */
    milestone?: string;
+   milestoneId?: string | null;
+   milestoneName?: string | null;
 }
 
 /* -------------------------------------------------------------------------- */

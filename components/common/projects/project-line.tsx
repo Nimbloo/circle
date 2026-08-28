@@ -41,7 +41,7 @@ interface ProjectLineProps {
 
 export default function ProjectLine({ project }: ProjectLineProps) {
    const { orgId } = useParams<{ orgId: string }>();
-   const { displayProperties } = useProjectsDisplayStore();
+   const displayProperties = useProjectsDisplayStore((s) => s.displayProperties);
    const applyProject = useWorkspaceStore((s) => s.applyProject);
    const removeProjectLocal = useWorkspaceStore((s) => s.removeProjectLocal);
    const [confirmOpen, setConfirmOpen] = useState(false);

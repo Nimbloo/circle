@@ -43,7 +43,6 @@ export function GroupIssues({ group, issues, count }: GroupIssuesProps) {
    return (
       <div
          className={cn(
-            'bg-conainer',
             isViewTypeGrid
                ? 'overflow-hidden rounded-md h-full flex-shrink-0 w-[348px] flex flex-col'
                : ''
@@ -52,17 +51,15 @@ export function GroupIssues({ group, issues, count }: GroupIssuesProps) {
          <div
             className={cn(
                'sticky top-0 z-10 bg-container w-full',
-               isViewTypeGrid ? 'rounded-t-md h-[50px]' : 'h-10'
+               isViewTypeGrid ? 'h-[50px]' : 'h-10'
             )}
          >
+            {/* Header neutro (padrão Linear): só o ícone de status é colorido, sem tinta de fundo. */}
             <div
                className={cn(
                   'w-full h-full flex items-center justify-between',
                   isViewTypeGrid ? 'px-3' : 'px-6'
                )}
-               style={{
-                  backgroundColor: isViewTypeGrid ? `${group.color}10` : `${group.color}08`,
-               }}
             >
                <div className="flex items-center gap-2">
                   {group.icon}

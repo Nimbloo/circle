@@ -1,0 +1,1 @@
+ALTER TABLE "team" ADD COLUMN "estimate_scale" varchar(16) DEFAULT 'fibonacci' NOT NULL;

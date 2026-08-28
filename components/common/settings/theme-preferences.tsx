@@ -8,6 +8,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch';
 import { DarkVariant, LightVariant, ThemeMode, useThemeStore } from '@/store/theme-store';
+import { isDarkColor } from '@/components/layout/theme-applier';
+import { useTheme } from 'next-themes';
 import { Check, ChevronDown, Pipette } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -152,6 +154,9 @@ export function ThemePreferences() {
       setDarkVariant,
       setCustom,
    } = useThemeStore();
+   // Aplica a classe do next-themes DIRETO no clique (não depende do efeito do
+   // ThemeApplier, que não propagava a mudança live).
+   const { setTheme } = useTheme();
    const [mounted, setMounted] = useState(false);
    useEffect(() => setMounted(true), []);
 
@@ -167,14 +172,20 @@ export function ThemePreferences() {
              : darkVariant;
 
    const handleInterfaceChange = (id: string) => {
-      if (id === 'system') setMode('system');
-      else if (id === 'custom') setMode('custom');
-      else if (LIGHT_VARIANTS.some((candidate) => candidate.id === id)) {
+      if (id === 'system') {
+         setMode('system');
+         setTheme('system');
+      } else if (id === 'custom') {
+         setMode('custom');
+         setTheme(isDarkColor(custom.background) ? 'dark' : 'light');
+      } else if (LIGHT_VARIANTS.some((candidate) => candidate.id === id)) {
          setLightVariant(id as LightVariant);
          setMode('light' as ThemeMode);
+         setTheme('light');
       } else {
          setDarkVariant(id as DarkVariant);
          setMode('dark' as ThemeMode);
+         setTheme('dark');
       }
    };
 
@@ -193,6 +204,7 @@ export function ThemePreferences() {
          if (typeof parsed !== 'object' || parsed === null) throw new Error('invalid');
          setCustom(parsed);
          setMode('custom');
+         setTheme(isDarkColor(parsed.background) ? 'dark' : 'light');
          toast.success('Theme imported from clipboard');
       } catch {
          toast.error('Clipboard does not contain a valid theme');

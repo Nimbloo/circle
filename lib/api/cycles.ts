@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { cycle as cycleT, issue as issueT, status as statusT, team as teamT } from '@/db/schema';
 import { ApiError } from './errors';
@@ -38,13 +38,18 @@ interface Agg {
    completed: number;
 }
 
-/** Conta scope/started/completed por ciclo, a partir das issues reais. */
+/**
+ * Agrega scope/started/completed por ciclo em PONTOS DE ESTIMATE (paridade Linear:
+ * "cycles use estimates to calculate effort"). Issue sem estimate conta como 1 ponto
+ * (o mesmo default do Linear quando não há estimativa) — então times que não estimam
+ * seguem vendo scope == nº de issues.
+ */
 async function aggregatesByCycle(db: Db, cycleIds: string[]): Promise<Map<string, Agg>> {
    const result = new Map<string, Agg>();
    if (cycleIds.length === 0) return result;
    const [issues, statuses] = await Promise.all([
       db
-         .select({ cycleId: issueT.cycleId, statusId: issueT.statusId })
+         .select({ cycleId: issueT.cycleId, statusId: issueT.statusId, estimate: issueT.estimate })
          .from(issueT)
          .where(inArray(issueT.cycleId, cycleIds)),
       db.select().from(statusT),
@@ -55,10 +60,11 @@ async function aggregatesByCycle(db: Db, cycleIds: string[]): Promise<Map<string
       if (!i.cycleId) continue;
       const agg = result.get(i.cycleId);
       if (!agg) continue;
-      agg.scope += 1;
+      const points = i.estimate && i.estimate > 0 ? i.estimate : 1; // fallback 1/issue
+      agg.scope += points;
       const cat = catById.get(i.statusId);
-      if (cat === 'started') agg.started += 1;
-      else if (cat === 'completed') agg.completed += 1;
+      if (cat === 'started') agg.started += points;
+      else if (cat === 'completed') agg.completed += points;
    }
    return result;
 }
@@ -103,6 +109,53 @@ function toDto(row: CycleRow, agg: Agg): CycleDto {
       successRate,
       burnup: buildBurnup(row, agg),
    };
+}
+
+/**
+ * Auto-rollover (#24): quando o cycle 'current' de um time vence (endDate < hoje),
+ * fecha ele, carrega as issues INCOMPLETAS (não completed/canceled) pro próximo
+ * 'upcoming', e promove esse próximo a 'current' se já começou. Idempotente e lazy
+ * (rodado ao listar os cycles do time; o app não tem scheduler).
+ */
+export async function rolloverCyclesForTeam(db: Db, teamId: string): Promise<void> {
+   const today = new Date().toISOString().slice(0, 10);
+   const [current] = await db
+      .select()
+      .from(cycleT)
+      .where(and(eq(cycleT.teamId, teamId), eq(cycleT.status, 'current')))
+      .limit(1);
+   if (!current || current.endDate >= today) return; // sem current ou ainda em andamento
+
+   const [next] = await db
+      .select()
+      .from(cycleT)
+      .where(and(eq(cycleT.teamId, teamId), eq(cycleT.status, 'upcoming')))
+      .orderBy(asc(cycleT.number))
+      .limit(1);
+
+   const statuses = await db.select().from(statusT);
+   // Paridade Linear: só issues "em aberto" (unstarted/started) rolam pro próximo ciclo.
+   // Backlog, triage, completed e canceled NÃO são carregadas (a doc do Linear exclui
+   // explicitamente backlog+triage, além de completed/canceled).
+   const noCarry = new Set(['backlog', 'triage', 'completed', 'canceled']);
+   const excludeIds = statuses.filter((s) => noCarry.has(s.category)).map((s) => s.id);
+
+   if (next) {
+      // carrega as issues em aberto do current pro próximo cycle
+      await db
+         .update(issueT)
+         .set({ cycleId: next.id, updatedAt: new Date() })
+         .where(
+            and(
+               eq(issueT.cycleId, current.id),
+               excludeIds.length ? notInArray(issueT.statusId, excludeIds) : sql`true`
+            )
+         );
+   }
+   await db.update(cycleT).set({ status: 'completed' }).where(eq(cycleT.id, current.id));
+   if (next && next.startDate <= today) {
+      await db.update(cycleT).set({ status: 'current' }).where(eq(cycleT.id, next.id));
+   }
 }
 
 export async function listCyclesByTeam(db: Db, teamId: string): Promise<CycleDto[]> {

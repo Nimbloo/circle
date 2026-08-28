@@ -20,6 +20,7 @@ import type {
    AddResourceInput,
    PostUpdateInput,
 } from '@/lib/api/project-detail';
+import type { InitiativeUpdateDto, PostInitiativeUpdateInput } from '@/lib/api/initiative-detail';
 import type { TeamDto, CreateTeamInput, JoinRequestDto } from '@/lib/api/teams';
 import type { MemberDto } from '@/lib/api/members';
 import type { CycleDto, CreateCycleInput, UpdateCycleInput } from '@/lib/api/cycles';
@@ -39,10 +40,18 @@ import type {
 import type { ViewDto, CreateViewInput, UpdateViewInput } from '@/lib/api/views';
 import type { NotificationDto } from '@/lib/api/notifications';
 import type { ReviewDto } from '@/lib/api/reviews';
-import type { FolderDto } from '@/lib/api/documents';
-import type { IssueDetailDto, CommentDto, ActivityItem } from '@/lib/api/issue-detail';
-import type { IssueMatrix, ProjectProgress } from '@/lib/api/aggregations';
+import type { FolderDto, DocumentDto } from '@/lib/api/documents';
+import type {
+   IssueDetailDto,
+   CommentDto,
+   ActivityItem,
+   MyActivityItemDto,
+} from '@/lib/api/issue-detail';
+import type { IssueMatrix, ProjectProgress, TimeMetrics } from '@/lib/api/aggregations';
 import type { MeDto } from '@/lib/api/users';
+import type { AuditLogDto } from '@/lib/api/audit';
+import type { FavoriteDto, FavoriteEntityType } from '@/lib/api/favorites';
+import type { SlackConfigDto } from '@/lib/api/integrations/slack';
 
 export class ApiError extends Error {
    constructor(
@@ -114,6 +123,7 @@ const me = Object.assign(() => get<MeDto>('/me'), {
    uploadAvatar: (dataUrl: string, contentType: string) =>
       post<MeDto>('/me/avatar', { dataUrl, contentType }),
    removeAvatar: () => del<MeDto>('/me/avatar'),
+   activity: () => get<MyActivityItemDto[]>('/me/activity'),
 });
 
 export const api = {
@@ -123,6 +133,19 @@ export const api = {
    agent: {
       chat: (messages: { role: 'user' | 'assistant'; content: string }[]) =>
          post<{ reply: string }>('/agent/chat', { messages }),
+      /** Conversas persistidas (#23). */
+      chats: () => get<{ id: string; title: string; updatedAt: string }[]>('/agent/chats'),
+      getChat: (id: string) =>
+         get<{
+            id: string;
+            title: string;
+            messages: { role: 'user' | 'assistant'; content: string }[];
+         }>(`/agent/chats/${id}`),
+      send: (chatId: string | null, content: string) =>
+         post<{ chatId: string; title: string; reply: string }>('/agent/chats', {
+            chatId,
+            content,
+         }),
    },
 
    settings: {
@@ -130,6 +153,9 @@ export const api = {
       put: (data: Record<string, unknown>) =>
          request<Record<string, unknown>>('PUT', '/settings', data),
    },
+
+   /** Audit log de ações administrativas (só admin). */
+   audit: () => get<AuditLogDto[]>('/audit'),
 
    statuses: Object.assign(() => get<StatusDto[]>('/statuses'), {
       create: (input: CreateStatusInput) => post<StatusDto>('/statuses', input),
@@ -174,28 +200,43 @@ export const api = {
       removeLabel: (id: string, labelId: string) =>
          del<IssueDto>(`/issues/${id}/labels/${labelId}`),
       detail: (id: string) => get<IssueDetailDto>(`/issues/${id}/detail`),
-      updateDetail: (id: string, body: { description: string | null }) =>
-         patch<IssueDetailDto>(`/issues/${id}/detail`, body),
+      updateDetail: (
+         id: string,
+         body: { description?: string | null; milestone?: string | null }
+      ) => patch<IssueDetailDto>(`/issues/${id}/detail`, body),
       addRelation: (id: string, relatedId: string, kind: string) =>
          post<IssueDetailDto>(`/issues/${id}/relations`, { relatedId, kind }),
       removeRelation: (id: string, relatedId: string, kind: string) =>
          del<IssueDetailDto>(
             `/issues/${id}/relations?relatedId=${encodeURIComponent(relatedId)}&kind=${kind}`
          ),
+      subscribe: (id: string) =>
+         post<{ id: string; subscribed: boolean }>(`/issues/${id}/subscription`, {}),
+      unsubscribe: (id: string) =>
+         del<{ id: string; subscribed: boolean }>(`/issues/${id}/subscription`),
       activity: (id: string) => get<ActivityItem[]>(`/issues/${id}/activity`),
       comments: (id: string) => get<CommentDto[]>(`/issues/${id}/comments`),
-      addComment: (id: string, body: string) =>
-         post<CommentDto>(`/issues/${id}/comments`, { body }),
+      addComment: (id: string, body: string, parentId?: string | null) =>
+         post<CommentDto>(`/issues/${id}/comments`, { body, parentId: parentId ?? null }),
       aggregate: (team?: string) =>
          get<IssueMatrix>(`/issues/aggregate${team ? `?team=${team}` : ''}`),
+      timeMetrics: (team?: string) =>
+         get<TimeMetrics>(`/issues/time-metrics${team ? `?team=${team}` : ''}`),
    },
 
    teams: {
       list: (q = '') => get<TeamDto[]>(`/teams${q}`),
       get: (key: string) => get<TeamDto>(`/teams/${key}`),
       create: (input: CreateTeamInput) => post<TeamDto>('/teams', input),
-      update: (key: string, body: { name?: string; icon?: string | null; color?: string | null }) =>
-         patch<TeamDto>(`/teams/${key}`, body),
+      update: (
+         key: string,
+         body: {
+            name?: string;
+            icon?: string | null;
+            color?: string | null;
+            estimateScale?: string;
+         }
+      ) => patch<TeamDto>(`/teams/${key}`, body),
       remove: (key: string) => del<{ deleted: boolean }>(`/teams/${key}`),
       members: (key: string) => get<MemberDto[]>(`/teams/${key}/members`),
       addMember: (key: string, email: string) =>
@@ -215,6 +256,12 @@ export const api = {
          get<IssueDto[]>(`/teams/${key}/issues${issueQuery(opts)}`),
       cycles: (key: string) => get<CycleDto[]>(`/teams/${key}/cycles`),
       documents: (key: string) => get<FolderDto[]>(`/teams/${key}/documents`),
+      createFolder: (key: string, input: { name: string; icon?: string | null; id?: string }) =>
+         post<FolderDto>(`/teams/${key}/documents`, { kind: 'folder', ...input }),
+      createDocument: (
+         key: string,
+         input: { folderId: string; name: string; icon?: string | null; pinned?: boolean }
+      ) => post<DocumentDto>(`/teams/${key}/documents`, { kind: 'document', ...input }),
       /** Templates de issue do time (CRUD; escrita exige admin). */
       templates: (key: string) => get<TemplateDto[]>(`/teams/${key}/templates`),
       createTemplate: (key: string, input: Omit<CreateTemplateInput, 'teamId'>) =>
@@ -234,6 +281,13 @@ export const api = {
          del<{ deleted: boolean }>(`/teams/${key}/project-templates/${id}`),
    },
 
+   /** Documentos (update/delete por id; escrita exige criador ou admin). */
+   documents: {
+      update: (id: string, body: { name?: string; icon?: string | null; pinned?: boolean }) =>
+         patch<{ id: string }>(`/documents/${id}`, body),
+      remove: (id: string) => del<{ deleted: boolean }>(`/documents/${id}`),
+   },
+
    integrations: {
       /** Quais integrações estão configuradas (por env) — pro badge "Conectado". */
       status: () =>
@@ -242,6 +296,10 @@ export const api = {
          ),
       /** Dispara uma mensagem de teste ao Slack (admin) — verificação da integração. */
       slackTest: () => post<{ sent: boolean; reason?: string }>('/integrations/slack/test', {}),
+      /** Config dos eventos que notificam o Slack (feed do canal). */
+      slackConfig: () => get<SlackConfigDto>('/integrations/slack/config'),
+      updateSlackConfig: (body: Partial<SlackConfigDto>) =>
+         patch<SlackConfigDto>('/integrations/slack/config', body),
    },
 
    members: {
@@ -277,6 +335,8 @@ export const api = {
       resources: (id: string) => get<ProjectResourceDto[]>(`/projects/${id}/resources`),
       addResource: (id: string, body: AddResourceInput) =>
          post<ProjectResourceDto>(`/projects/${id}/resources`, body),
+      updateResource: (id: string, rid: string, body: { label: string }) =>
+         patch<{ id: string }>(`/projects/${id}/resources/${rid}`, body),
       removeResource: (id: string, rid: string) =>
          del<{ deleted: boolean }>(`/projects/${id}/resources/${rid}`),
    },
@@ -305,6 +365,9 @@ export const api = {
       update: (id: string, body: UpdateInitiativeInput) =>
          patch<InitiativeDto>(`/initiatives/${id}`, body),
       remove: (id: string) => del<{ deleted: boolean }>(`/initiatives/${id}`),
+      updates: (id: string) => get<InitiativeUpdateDto[]>(`/initiatives/${id}/updates`),
+      postUpdate: (id: string, body: PostInitiativeUpdateInput) =>
+         post<InitiativeUpdateDto>(`/initiatives/${id}/updates`, body),
    },
 
    views: {
@@ -324,7 +387,18 @@ export const api = {
       unreadCount: () => get<{ count: number }>('/inbox/unread-count'),
       setRead: (id: string, read: boolean) =>
          patch<{ id: string; read: boolean }>(`/notifications/${id}`, { read }),
+      /** Adia até `until` (ISO) ou desfaz com null. */
+      snooze: (id: string, snoozedUntil: string | null) =>
+         patch<{ id: string }>(`/notifications/${id}`, { snoozedUntil }),
       readAll: () => post<{ marked: number }>('/notifications/read-all'),
+   },
+
+   favorites: {
+      list: () => get<FavoriteDto[]>('/favorites'),
+      add: (entityType: FavoriteEntityType, entityId: string) =>
+         post<{ added: boolean }>('/favorites', { entityType, entityId }),
+      remove: (entityType: FavoriteEntityType, entityId: string) =>
+         del<{ removed: boolean }>(`/favorites?entityType=${entityType}&entityId=${entityId}`),
    },
 
    reviews: {

@@ -3,6 +3,7 @@ import { AppSidebar } from '@/components/layout/sidebar/app-sidebar';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { DeferredChrome } from '@/components/layout/deferred-chrome';
 import { DataHydrator } from '@/components/layout/data-hydrator';
+import { KeyboardShortcuts } from '@/components/layout/keyboard-shortcuts';
 
 /**
  * Shell PERSISTENTE do workspace. O Next mantém este layout montado ao navegar entre
@@ -16,6 +17,7 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
       <SidebarProvider>
          <DataHydrator />
          <DeferredChrome />
+         <KeyboardShortcuts />
          <AppSidebar />
          <div className="h-svh overflow-hidden lg:p-2 w-full">{children}</div>
       </SidebarProvider>

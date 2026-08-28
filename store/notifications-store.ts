@@ -19,22 +19,31 @@ export interface InboxNotification extends InboxItem {
 interface NotificationsState {
    // Data
    notifications: InboxNotification[];
+   /** Notificações atualmente adiadas (aba Snoozed) — carregadas sob demanda. */
+   snoozed: InboxNotification[];
    selectedNotification: InboxNotification | undefined;
+   // Contagem autoritativa de não-lidas (servidor) — a lista hidratada é capada
+   // (DEFAULT_INBOX_LIMIT) e descarta itens sem issue conhecida, então contar
+   // localmente subconta. Mantida em sincronia por deltas otimistas nas ações.
+   unreadCount: number;
 
    // Hydration
    hydrate: () => Promise<void>;
+   /** Carrega a lista de adiadas vigentes (aba Snoozed). */
+   hydrateSnoozed: () => Promise<void>;
 
    // Actions
    setSelectedNotification: (notification: InboxNotification | undefined) => void;
    markAsRead: (id: string) => void;
    markAllAsRead: () => void;
    markAsUnread: (id: string) => void;
+   /** Adia a notificação por `hours` horas (some do inbox até vencer). */
+   snooze: (id: string, hours: number) => void;
+   /** Desfaz o adiamento: volta pro inbox e some da aba Snoozed. */
+   unsnooze: (id: string) => void;
 
    // Filters
    getUnreadNotifications: () => InboxNotification[];
-   getReadNotifications: () => InboxNotification[];
-   getNotificationsByType: (type: NotificationType) => InboxNotification[];
-   getNotificationsByUser: (userId: string) => InboxNotification[];
 
    // Utility functions
    getNotificationById: (id: string) => InboxNotification | undefined;
@@ -83,18 +92,36 @@ function adaptNotification(
 export const useNotificationsStore = create<NotificationsState>((set, get) => ({
    // Initial state — vazio; populado via hydrate() a partir da API.
    notifications: [],
+   snoozed: [],
    selectedNotification: undefined,
+   unreadCount: 0,
 
    hydrate: async () => {
       try {
-         const dtos = await api.inbox.list();
+         const [dtos, countRes] = await Promise.all([
+            api.inbox.list(),
+            api.inbox.unreadCount().catch(() => ({ count: 0 })),
+         ]);
          const issueById = new Map(useIssuesStore.getState().issues.map((i) => [i.id, i]));
          const items = dtos
             .map((dto) => adaptNotification(dto, issueById))
             .filter((item): item is InboxNotification => item !== null);
-         set({ notifications: items });
+         set({ notifications: items, unreadCount: countRes.count });
       } catch {
          // Degradação graciosa — mantém o estado atual se a API falhar.
+      }
+   },
+
+   hydrateSnoozed: async () => {
+      try {
+         const dtos = await api.inbox.list('?snoozed=true');
+         const issueById = new Map(useIssuesStore.getState().issues.map((i) => [i.id, i]));
+         const items = dtos
+            .map((dto) => adaptNotification(dto, issueById))
+            .filter((item): item is InboxNotification => item !== null);
+         set({ snoozed: items });
+      } catch {
+         // Degradação graciosa.
       }
    },
 
@@ -107,7 +134,9 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       const snapshot = {
          notifications: get().notifications,
          selectedNotification: get().selectedNotification,
+         unreadCount: get().unreadCount,
       };
+      const wasUnread = get().notifications.some((n) => n.id === id && !n.read);
       set((state) => ({
          notifications: state.notifications.map((notification) =>
             notification.id === id ? { ...notification, read: true } : notification
@@ -116,6 +145,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
             state.selectedNotification?.id === id
                ? { ...state.selectedNotification, read: true }
                : state.selectedNotification,
+         unreadCount: wasUnread ? Math.max(0, state.unreadCount - 1) : state.unreadCount,
       }));
       void api.inbox.setRead(id, true).catch(() => {
          set(snapshot);
@@ -127,6 +157,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       const snapshot = {
          notifications: get().notifications,
          selectedNotification: get().selectedNotification,
+         unreadCount: get().unreadCount,
       };
       set((state) => ({
          notifications: state.notifications.map((notification) => ({
@@ -136,6 +167,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
          selectedNotification: state.selectedNotification
             ? { ...state.selectedNotification, read: true }
             : undefined,
+         unreadCount: 0,
       }));
       void api.inbox.readAll().catch(() => {
          set(snapshot);
@@ -147,7 +179,9 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       const snapshot = {
          notifications: get().notifications,
          selectedNotification: get().selectedNotification,
+         unreadCount: get().unreadCount,
       };
+      const wasRead = get().notifications.some((n) => n.id === id && n.read);
       set((state) => ({
          notifications: state.notifications.map((notification) =>
             notification.id === id ? { ...notification, read: false } : notification
@@ -156,6 +190,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
             state.selectedNotification?.id === id
                ? { ...state.selectedNotification, read: false }
                : state.selectedNotification,
+         unreadCount: wasRead ? state.unreadCount + 1 : state.unreadCount,
       }));
       void api.inbox.setRead(id, false).catch(() => {
          set(snapshot);
@@ -163,21 +198,49 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       });
    },
 
+   snooze: (id: string, hours: number) => {
+      const snapshot = {
+         notifications: get().notifications,
+         selectedNotification: get().selectedNotification,
+         unreadCount: get().unreadCount,
+      };
+      const wasUnread = get().notifications.some((n) => n.id === id && !n.read);
+      // Otimista: a adiada some do inbox default (o backend a filtra até vencer).
+      set((state) => ({
+         notifications: state.notifications.filter((n) => n.id !== id),
+         selectedNotification:
+            state.selectedNotification?.id === id ? undefined : state.selectedNotification,
+         unreadCount: wasUnread ? Math.max(0, state.unreadCount - 1) : state.unreadCount,
+      }));
+      const until = new Date(Date.now() + hours * 3600_000).toISOString();
+      void api.inbox
+         .snooze(id, until)
+         .then(() => toast.success(`Adiada por ${hours}h`))
+         .catch(() => {
+            set(snapshot);
+            toast.error('Falha ao adiar');
+         });
+   },
+
+   unsnooze: (id: string) => {
+      const prevSnoozed = get().snoozed;
+      // Otimista: some da aba Snoozed; ao recarregar o inbox ela reaparece.
+      set({ snoozed: prevSnoozed.filter((n) => n.id !== id) });
+      void api.inbox
+         .snooze(id, null)
+         .then(() => {
+            toast.success('Adiamento desfeito');
+            void get().hydrate();
+         })
+         .catch(() => {
+            set({ snoozed: prevSnoozed });
+            toast.error('Falha ao desfazer o adiamento');
+         });
+   },
+
    // Filters
    getUnreadNotifications: () => {
       return get().notifications.filter((notification) => !notification.read);
-   },
-
-   getReadNotifications: () => {
-      return get().notifications.filter((notification) => notification.read);
-   },
-
-   getNotificationsByType: (type: NotificationType) => {
-      return get().notifications.filter((notification) => notification.type === type);
-   },
-
-   getNotificationsByUser: (userId: string) => {
-      return get().notifications.filter((notification) => notification.user.id === userId);
    },
 
    // Utility functions
@@ -186,6 +249,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
    },
 
    getUnreadCount: () => {
-      return get().notifications.filter((notification) => !notification.read).length;
+      // Contagem autoritativa do servidor (não a da lista hidratada, que é capada).
+      return get().unreadCount;
    },
 }));

@@ -1,5 +1,5 @@
 import type { Db } from './index';
-import { status, priority, label, health } from './schema';
+import { status, priority, label, health, projectStatus } from './schema';
 
 /** Catálogos fixos do produto — valores 1:1 do mock-data (status.tsx, priorities.tsx, labels.ts, projects.ts). */
 
@@ -39,18 +39,20 @@ export const PRIORITY_SEED = [
    { id: 'low', name: 'Low', position: 4, sortRank: 3 },
 ];
 
+// groupId agrupa labels mutuamente exclusivas (paridade Linear). 'kind' = tipo de
+// trabalho (uma issue é de um tipo só); labels sem grupo são livres/acumuláveis.
 export const LABEL_SEED = [
-   { id: 'ui', name: 'UI Enhancement', color: 'purple' },
-   { id: 'bug', name: 'Bug', color: 'red' },
-   { id: 'feature', name: 'Feature', color: 'green' },
-   { id: 'documentation', name: 'Documentation', color: 'blue' },
-   { id: 'refactor', name: 'Refactor', color: 'yellow' },
-   { id: 'performance', name: 'Performance', color: 'orange' },
-   { id: 'design', name: 'Design', color: 'pink' },
-   { id: 'security', name: 'Security', color: 'gray' },
-   { id: 'accessibility', name: 'Accessibility', color: 'indigo' },
-   { id: 'testing', name: 'Testing', color: 'teal' },
-   { id: 'internationalization', name: 'Internationalization', color: 'cyan' },
+   { id: 'ui', name: 'UI Enhancement', color: 'purple', groupId: null },
+   { id: 'bug', name: 'Bug', color: 'red', groupId: 'kind' },
+   { id: 'feature', name: 'Feature', color: 'green', groupId: 'kind' },
+   { id: 'documentation', name: 'Documentation', color: 'blue', groupId: 'kind' },
+   { id: 'refactor', name: 'Refactor', color: 'yellow', groupId: 'kind' },
+   { id: 'performance', name: 'Performance', color: 'orange', groupId: null },
+   { id: 'design', name: 'Design', color: 'pink', groupId: null },
+   { id: 'security', name: 'Security', color: 'gray', groupId: null },
+   { id: 'accessibility', name: 'Accessibility', color: 'indigo', groupId: null },
+   { id: 'testing', name: 'Testing', color: 'teal', groupId: null },
+   { id: 'internationalization', name: 'Internationalization', color: 'cyan', groupId: null },
 ];
 
 export const HEALTH_SEED = [
@@ -60,10 +62,32 @@ export const HEALTH_SEED = [
    { id: 'at-risk', name: 'At Risk', color: '#f2c94c', description: null },
 ];
 
+// Status de PROJETO (paridade Linear) — separados do workflow de issue.
+export const PROJECT_STATUS_SEED = [
+   { id: 'proj-backlog', name: 'Backlog', color: '#95a2b3', category: 'backlog', position: 0 },
+   { id: 'proj-planned', name: 'Planned', color: '#99a2b2', category: 'planned', position: 1 },
+   {
+      id: 'proj-in-progress',
+      name: 'In Progress',
+      color: '#facc15',
+      category: 'started',
+      position: 2,
+   },
+   {
+      id: 'proj-completed',
+      name: 'Completed',
+      color: '#5e6ad2',
+      category: 'completed',
+      position: 3,
+   },
+   { id: 'proj-canceled', name: 'Canceled', color: '#95a2b3', category: 'canceled', position: 4 },
+];
+
 /** Idempotente: só semeia se vazio (onConflictDoNothing). */
 export async function seedCatalogs(db: Db) {
    await db.insert(status).values(STATUS_SEED).onConflictDoNothing();
    await db.insert(priority).values(PRIORITY_SEED).onConflictDoNothing();
    await db.insert(label).values(LABEL_SEED).onConflictDoNothing();
    await db.insert(health).values(HEALTH_SEED).onConflictDoNothing();
+   await db.insert(projectStatus).values(PROJECT_STATUS_SEED).onConflictDoNothing();
 }

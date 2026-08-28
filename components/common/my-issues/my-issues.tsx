@@ -6,6 +6,7 @@ import { GroupedIssuesView } from '@/components/common/issues/grouped-issues-vie
 import { InsightsPanel } from '@/components/common/issues/insights-panel';
 import { IssueLine } from '@/components/common/issues/issue-line';
 import { BreakdownPanel } from './breakdown-panel';
+import { api } from '@/lib/client';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
 import { useIssuesStore } from '@/store/issues-store';
@@ -13,7 +14,7 @@ import { useRightPanelStore } from '@/store/right-panel-store';
 import { useSearchStore } from '@/store/search-store';
 import { useViewStore } from '@/store/view-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { scopeMyIssues, useMyIssuesTab } from './use-my-issues';
 
 /**
@@ -32,12 +33,33 @@ export default function MyIssues() {
    const hydrate = useIssuesStore((s) => s.hydrate);
    const { openPanel } = useRightPanelStore();
    const meId = useWorkspaceStore((s) => s.me?.id);
+   const subscribedIssueIds = useWorkspaceStore((s) => s.me?.subscribedIssueIds);
    const displayOrderedStatus = useDisplayOrderedStatuses();
 
    const isSearching = isSearchOpen && searchQuery.trim() !== '';
    const isViewTypeGrid = viewType === 'grid';
 
-   const scopedIssues = useMemo(() => scopeMyIssues(issues, tab, meId), [issues, tab, meId]);
+   const subscribedIds = useMemo(() => new Set(subscribedIssueIds ?? []), [subscribedIssueIds]);
+
+   // Aba "Activity" (padrão Linear = board de issues em que estive ativo): busca os
+   // ids das issues com atividade minha e usa como escopo do board.
+   const [activeIds, setActiveIds] = useState<ReadonlySet<string>>(new Set());
+   useEffect(() => {
+      if (tab !== 'activity') return;
+      let alive = true;
+      api.me
+         .activity()
+         .then((items) => alive && setActiveIds(new Set(items.map((i) => i.issueId))))
+         .catch(() => {});
+      return () => {
+         alive = false;
+      };
+   }, [tab]);
+
+   const scopedIssues = useMemo(
+      () => scopeMyIssues(issues, tab, meId, subscribedIds, activeIds),
+      [issues, tab, meId, subscribedIds, activeIds]
+   );
 
    const displayedIssues = useMemo(
       () => applyIssueFilters(scopedIssues, filters),

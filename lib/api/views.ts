@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNotNull, or } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { savedView } from '@/db/schema';
 import { getOrCreateUser } from './users';
@@ -58,16 +58,32 @@ function toDto(v: ViewRow): ViewDto {
    };
 }
 
-export async function listViews(db: Db, teamId?: string): Promise<ViewDto[]> {
-   const rows = teamId
-      ? await db.select().from(savedView).where(eq(savedView.teamId, teamId))
+/**
+ * Lista views aplicando o escopo pessoal/compartilhada (paridade Linear):
+ * - `viewerId` definido → retorna as COMPARTILHADAS (com teamId) + as PESSOAIS do viewer
+ *   (ownerId = viewerId). Antes toda view era global (todos viam as pessoais de todos).
+ * - `viewerId` omitido → todas (uso administrativo/interno).
+ * `teamId` restringe a um time específico (listagem por time).
+ */
+export async function listViews(db: Db, teamId?: string, viewerId?: string): Promise<ViewDto[]> {
+   const conds = [];
+   if (teamId) conds.push(eq(savedView.teamId, teamId));
+   if (viewerId) conds.push(or(isNotNull(savedView.teamId), eq(savedView.ownerId, viewerId))!);
+   const where = conds.length === 0 ? undefined : conds.length === 1 ? conds[0] : and(...conds);
+   const rows = where
+      ? await db.select().from(savedView).where(where)
       : await db.select().from(savedView);
    return rows.map(toDto).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export async function getView(db: Db, id: string): Promise<ViewDto | null> {
+export async function getView(db: Db, id: string, viewerId?: string): Promise<ViewDto | null> {
    const rows = await db.select().from(savedView).where(eq(savedView.id, id)).limit(1);
-   return rows.length ? toDto(rows[0]) : null;
+   if (!rows.length) return null;
+   const v = rows[0];
+   // View PESSOAL (sem time) só é visível ao dono — senão qualquer autenticado leria a
+   // view pessoal de outro por id direto (mesma regra do listViews).
+   if (viewerId && !v.teamId && v.ownerId !== viewerId) return null;
+   return toDto(v);
 }
 
 export interface CreateViewInput {
@@ -155,9 +171,10 @@ export async function deleteView(db: Db, id: string, actorEmail: string): Promis
 /** Aplica o filtro salvo da view a issues (ou projects). */
 export async function resolveView(
    db: Db,
-   id: string
+   id: string,
+   viewerId?: string
 ): Promise<{ type: string; issues?: IssueDto[]; projects?: ProjectDto[] } | null> {
-   const view = await getView(db, id);
+   const view = await getView(db, id, viewerId);
    if (!view) return null;
    const f = view.filter;
 

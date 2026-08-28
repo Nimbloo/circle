@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { Check, Laptop, Moon, Sun } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import {
    DropdownMenu,
@@ -33,6 +34,10 @@ const DARK_VARIANTS: { id: DarkVariant; label: string }[] = [
 export function ThemeToggle() {
    const { mode, lightVariant, darkVariant, setMode, setLightVariant, setDarkVariant } =
       useThemeStore();
+   // Aplica a classe light/dark do next-themes DIRETO no clique (evento do usuário) —
+   // não depende do efeito do ThemeApplier, que não estava propagando a mudança live
+   // (a seleção só valia após reload). O ThemeApplier segue cuidando das variantes.
+   const { setTheme } = useTheme();
 
    // Avoid hydration mismatches: the store is persisted in localStorage.
    const [mounted, setMounted] = React.useState(false);
@@ -69,6 +74,7 @@ export function ThemeToggle() {
                         onClick={() => {
                            setLightVariant(variant.id);
                            setMode('light');
+                           setTheme('light');
                         }}
                      >
                         <span className="flex-1">{variant.label}</span>
@@ -92,6 +98,7 @@ export function ThemeToggle() {
                         onClick={() => {
                            setDarkVariant(variant.id);
                            setMode('dark');
+                           setTheme('dark');
                         }}
                      >
                         <span className="flex-1">{variant.label}</span>
@@ -102,7 +109,12 @@ export function ThemeToggle() {
                   ))}
                </DropdownMenuSubContent>
             </DropdownMenuSub>
-            <DropdownMenuItem onClick={() => setMode('system')}>
+            <DropdownMenuItem
+               onClick={() => {
+                  setMode('system');
+                  setTheme('system');
+               }}
+            >
                <Laptop className="mr-2 h-4 w-4" />
                <span className="flex-1">System</span>
                {mode === 'system' && <Check className="h-3.5 w-3.5" />}

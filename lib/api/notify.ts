@@ -57,8 +57,12 @@ export async function dispatchNotification(db: Db, input: NotifyInput): Promise<
       // erro ao ler settings → canal habilitado (não silenciar notificação por acidente).
       const [emailEnabled, slackEnabled] = await channelPrefs(db, input.recipientId);
 
+      // Slack de 'assignment' é coberto pelo feed do canal (notifySlackEvent, gated pelo
+      // slack_config admin) — não duplicar aqui. Comment/mention/etc seguem no Slack.
+      const slackForType = slackEnabled && input.type !== 'assignment';
+
       await Promise.allSettled([
-         slackEnabled ? sendSlack(`${summary}\n${iss.title}`) : Promise.resolve({ sent: false }),
+         slackForType ? sendSlack(`${summary}\n${iss.title}`) : Promise.resolve({ sent: false }),
          recipient?.email && emailEnabled
             ? sendEmail(recipient.email, summary, html)
             : Promise.resolve({ sent: false }),

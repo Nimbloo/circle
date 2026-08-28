@@ -1,7 +1,7 @@
 import { Issue, issues } from './issues';
 import { Project, projects } from './projects';
 import { StatusCategory } from './status';
-import { User, users } from './users';
+import { User } from './users';
 
 export type ViewType = 'issue' | 'project';
 
@@ -75,6 +75,11 @@ export function filterProjectsForView(view: View, source: Project[] = projects):
       // filtrar project view por status virava no-op (mostrava tudo).
       if (filter.statusIds && !filter.statusIds.includes(project.status.id)) return false;
       if (filter.priorityIds && !filter.priorityIds.includes(project.priority.id)) return false;
+      // labelIds: alinhado ao resolveView do servidor (antes o client ignorava, então
+      // uma project view com labelIds renderizava diferente do backend).
+      if (filter.labelIds && !project.labels.some((label) => filter.labelIds?.includes(label.id))) {
+         return false;
+      }
       return true;
    });
 }

@@ -8,6 +8,8 @@ import {
    projectResource,
    projectUpdate,
    projectActivity,
+   issue as issueT,
+   status as statusT,
    appUser,
 } from '@/db/schema';
 import { ApiError } from './errors';
@@ -27,6 +29,8 @@ export interface ProjectMilestoneDto {
    name: string;
    targetDate: string | null;
    completed: boolean;
+   /** Progresso derivado das issues ligadas (paridade Linear): concluídas/total. */
+   progress: { done: number; total: number };
 }
 
 export interface ProjectResourceDto {
@@ -117,11 +121,34 @@ export async function listMilestones(db: Db, projectId: string): Promise<Project
       .from(projectMilestone)
       .where(eq(projectMilestone.projectId, projectId))
       .orderBy(asc(projectMilestone.targetDate), asc(projectMilestone.name));
+   // Progresso derivado: conta issues por milestone e quantas estão em status 'completed'.
+   const ids = rows.map((m) => m.id);
+   const prog = new Map<string, { done: number; total: number }>();
+   if (ids.length) {
+      const [issues, statuses] = await Promise.all([
+         db
+            .select({ milestoneId: issueT.milestoneId, statusId: issueT.statusId })
+            .from(issueT)
+            .where(inArray(issueT.milestoneId, ids)),
+         db.select({ id: statusT.id, category: statusT.category }).from(statusT),
+      ]);
+      const doneStatus = new Set(
+         statuses.filter((s) => s.category === 'completed').map((s) => s.id)
+      );
+      for (const i of issues) {
+         if (!i.milestoneId) continue;
+         const p = prog.get(i.milestoneId) ?? { done: 0, total: 0 };
+         p.total += 1;
+         if (doneStatus.has(i.statusId)) p.done += 1;
+         prog.set(i.milestoneId, p);
+      }
+   }
    return rows.map((m) => ({
       id: m.id,
       name: m.name,
       targetDate: m.targetDate ?? null,
       completed: m.completed,
+      progress: prog.get(m.id) ?? { done: 0, total: 0 },
    }));
 }
 
@@ -259,7 +286,13 @@ export async function addMilestone(
       completed: false,
    });
    publish({ entity: 'project', action: 'updated', id: projectId });
-   return { id, name: input.name.trim(), targetDate: input.targetDate ?? null, completed: false };
+   return {
+      id,
+      name: input.name.trim(),
+      targetDate: input.targetDate ?? null,
+      completed: false,
+      progress: { done: 0, total: 0 },
+   };
 }
 
 export interface UpdateMilestoneInput {
@@ -291,7 +324,34 @@ export async function updateMilestone(
    }
    publish({ entity: 'project', action: 'updated', id: rows[0].projectId });
    const m = { ...rows[0], ...set };
-   return { id: m.id, name: m.name, targetDate: m.targetDate ?? null, completed: m.completed };
+   return {
+      id: m.id,
+      name: m.name,
+      targetDate: m.targetDate ?? null,
+      completed: m.completed,
+      // Progresso REAL (não 0/0 hardcoded): senão renomear/completar a milestone zeraria
+      // o contador no estado local até o próximo reload.
+      progress: await milestoneProgress(db, milestoneId),
+   };
+}
+
+/** Progresso (done/total) de UMA milestone, derivado das issues vinculadas. */
+async function milestoneProgress(
+   db: Db,
+   milestoneId: string
+): Promise<{ done: number; total: number }> {
+   const [issues, statuses] = await Promise.all([
+      db
+         .select({ statusId: issueT.statusId })
+         .from(issueT)
+         .where(eq(issueT.milestoneId, milestoneId)),
+      db.select({ id: statusT.id, category: statusT.category }).from(statusT),
+   ]);
+   const done = new Set(statuses.filter((s) => s.category === 'completed').map((s) => s.id));
+   return {
+      done: issues.filter((i) => done.has(i.statusId)).length,
+      total: issues.length,
+   };
 }
 
 export async function deleteMilestone(db: Db, milestoneId: string): Promise<boolean> {
@@ -301,7 +361,13 @@ export async function deleteMilestone(db: Db, milestoneId: string): Promise<bool
       .where(eq(projectMilestone.id, milestoneId))
       .limit(1);
    if (rows.length === 0) return false;
-   await db.delete(projectMilestone).where(eq(projectMilestone.id, milestoneId));
+   // Atômico: desvincula as issues E remove a milestone juntos (milestone_id não tem FK
+   // cascade). Sem transação, um delete que falha após o update deixaria issues sem
+   // vínculo mas a milestone viva.
+   await db.transaction(async (tx) => {
+      await tx.update(issueT).set({ milestoneId: null }).where(eq(issueT.milestoneId, milestoneId));
+      await tx.delete(projectMilestone).where(eq(projectMilestone.id, milestoneId));
+   });
    publish({ entity: 'project', action: 'updated', id: rows[0].projectId });
    return true;
 }
@@ -325,6 +391,27 @@ export async function addResource(
       .values({ id, projectId, label: input.label.trim(), url: input.url.trim() });
    publish({ entity: 'project', action: 'updated', id: projectId });
    return { id, label: input.label.trim(), url: input.url.trim() };
+}
+
+/** Edita o label de um resource (Linear: hover → ⋮ → edit). */
+export async function updateResource(
+   db: Db,
+   resourceId: string,
+   input: { label: string }
+): Promise<boolean> {
+   if (!input.label?.trim()) throw new ApiError(400, 'label é obrigatório');
+   const rows = await db
+      .select({ projectId: projectResource.projectId })
+      .from(projectResource)
+      .where(eq(projectResource.id, resourceId))
+      .limit(1);
+   if (rows.length === 0) return false;
+   await db
+      .update(projectResource)
+      .set({ label: input.label.trim() })
+      .where(eq(projectResource.id, resourceId));
+   publish({ entity: 'project', action: 'updated', id: rows[0].projectId });
+   return true;
 }
 
 export async function deleteResource(db: Db, resourceId: string): Promise<boolean> {
@@ -363,6 +450,13 @@ export async function postProjectUpdate(
       blocks: JSON.stringify(input.blocks ?? []),
       createdAt: now,
    });
+   // Paridade Linear: o health do projeto vem do ÚLTIMO update. Os valores do update
+   // (on-track/at-risk/off-track) são exatamente ids do catálogo health, então propaga
+   // direto — antes o update era registrado mas o health do projeto não mudava.
+   await db
+      .update(projectT)
+      .set({ healthId: input.health, healthUpdatedAt: now })
+      .where(eq(projectT.id, projectId));
    const users = await loadUsers(db, [authorId]);
    publish({ entity: 'project', action: 'updated', id: projectId });
    return {

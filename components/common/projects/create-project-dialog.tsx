@@ -15,7 +15,12 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { api } from '@/lib/client';
 import type { ProjectTemplateDto } from '@/lib/api/project-templates';
 import { cn } from '@/lib/utils';
-import { useLabels, usePriorities, useStatuses, useHealthStates } from '@/store/catalog-store';
+import {
+   useLabels,
+   usePriorities,
+   useProjectStatuses,
+   useHealthStates,
+} from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import {
    CalendarClock,
@@ -37,6 +42,8 @@ import { toast } from 'sonner';
 type IconCmp = ComponentType<{ className?: string; style?: CSSProperties }>;
 
 interface DraftMilestone {
+   /** Key estável (React) — evita remount/salto de foco ao remover do meio da lista. */
+   key: string;
    name: string;
    targetDate: string;
 }
@@ -66,7 +73,7 @@ export function CreateProjectButton() {
    const teams = useWorkspaceStore((s) => s.teams);
    const users = useWorkspaceStore((s) => s.users);
    const initiatives = useWorkspaceStore((s) => s.initiatives);
-   const statuses = useStatuses();
+   const statuses = useProjectStatuses();
    const priorities = usePriorities();
    const labels = useLabels();
    const healthStates = useHealthStates();
@@ -596,7 +603,10 @@ export function CreateProjectButton() {
                         className="size-6"
                         aria-label="Add milestone"
                         onClick={() =>
-                           setMilestones((cur) => [...cur, { name: '', targetDate: '' }])
+                           setMilestones((cur) => [
+                              ...cur,
+                              { key: crypto.randomUUID(), name: '', targetDate: '' },
+                           ])
                         }
                      >
                         <Plus className="size-4" />
@@ -605,7 +615,7 @@ export function CreateProjectButton() {
                   {milestones.length > 0 && (
                      <div className="flex flex-col gap-1.5 mt-2">
                         {milestones.map((m, idx) => (
-                           <div key={idx} className="flex items-center gap-2">
+                           <div key={m.key} className="flex items-center gap-2">
                               <input
                                  value={m.name}
                                  onChange={(e) =>

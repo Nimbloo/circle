@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { RiEditLine } from '@remixicon/react';
+import { SquarePen } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { Issue } from '@/data/issues';
 import { usePriorities, useStatuses } from '@/store/catalog-store';
@@ -18,6 +18,7 @@ import { AssigneeSelector } from './assignee-selector';
 import { ProjectSelector } from './project-selector';
 import { LabelSelector } from './label-selector';
 import { EstimateSelector } from './estimate-selector';
+import { DueDateSelector } from './due-date-selector';
 import { TemplateSelector } from './template-selector';
 import { LexoRank } from '@/lib/utils';
 import { DialogTitle } from '@radix-ui/react-dialog';
@@ -121,7 +122,7 @@ export function CreateNewIssue() {
       <Dialog open={isOpen} onOpenChange={(value) => (value ? openModal() : closeModal())}>
          <DialogTrigger asChild>
             <Button className="size-8 shrink-0" variant="secondary" size="icon">
-               <RiEditLine />
+               <SquarePen className="size-4" />
             </Button>
          </DialogTrigger>
          <DialogContent className="w-full sm:max-w-[750px] p-0 shadow-xl top-[30%]">
@@ -180,8 +181,15 @@ export function CreateNewIssue() {
                   />
                   <EstimateSelector
                      estimate={addIssueForm.estimate}
+                     teamId={teamId}
                      onChange={(newEstimate) =>
                         setAddIssueForm({ ...addIssueForm, estimate: newEstimate })
+                     }
+                  />
+                  <DueDateSelector
+                     dueDate={addIssueForm.dueDate}
+                     onChange={(newDueDate) =>
+                        setAddIssueForm({ ...addIssueForm, dueDate: newDueDate })
                      }
                   />
                </div>

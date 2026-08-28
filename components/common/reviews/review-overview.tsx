@@ -238,17 +238,17 @@ export function ReviewOverview({ review }: { review: Review }) {
                <span className="text-sm font-medium">Reviewers</span>
                <span className="text-sm text-muted-foreground">No reviewers</span>
             </div>
-            <div className="flex flex-col gap-2">
-               <span className="text-sm font-medium">Checks</span>
-               <span className="inline-flex items-center gap-1.5 text-sm">
-                  <ChevronRight className="size-3.5 text-muted-foreground" />
-                  {review.checksPassed} / {review.checksTotal} passed
-               </span>
-               <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <span className="size-3.5 rounded-full border-2 border-muted-foreground/50 inline-block" />
-                  gate
-               </span>
-            </div>
+            {/* Checks: só renderiza quando há dado real. O sync do GitHub ainda não
+                ingere CI checks (checksTotal fica 0) — mostrar "0 / 0 passed" era falso. */}
+            {review.checksTotal > 0 && (
+               <div className="flex flex-col gap-2">
+                  <span className="text-sm font-medium">Checks</span>
+                  <span className="inline-flex items-center gap-1.5 text-sm">
+                     <ChevronRight className="size-3.5 text-muted-foreground" />
+                     {review.checksPassed} / {review.checksTotal} passed
+                  </span>
+               </div>
+            )}
             <FilesPanel review={review} />
          </aside>
       </div>

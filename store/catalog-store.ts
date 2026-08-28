@@ -20,11 +20,17 @@ import type { WorkspaceBootstrap } from '@/lib/api/workspace';
 
 type CatalogBootstrap = Pick<
    WorkspaceBootstrap,
-   'statuses' | 'priorities' | 'labels' | 'healthStates'
+   'statuses' | 'projectStatuses' | 'priorities' | 'labels' | 'healthStates'
 >;
 
 const statusIconById = new Map(mockStatuses.map((s) => [s.id, s.icon]));
 const priorityIconById = new Map(mockPriorities.map((p) => [p.id, p.icon]));
+
+// Ícone por CATEGORIA (1º status de issue de cada categoria) — reusado para dar aos
+// status de PROJETO um ícone coerente sem ids correspondentes no mock.
+const iconByCategory = new Map<StatusCategory, Status['icon']>();
+for (const s of mockStatuses)
+   if (!iconByCategory.has(s.category)) iconByCategory.set(s.category, s.icon);
 
 function toStatus(row: CatalogBootstrap['statuses'][number]): Status {
    return {
@@ -33,6 +39,18 @@ function toStatus(row: CatalogBootstrap['statuses'][number]): Status {
       color: row.color,
       category: row.category as StatusCategory,
       icon: statusIconById.get(row.id) ?? Circle,
+   };
+}
+
+function toProjectStatus(row: CatalogBootstrap['projectStatuses'][number]): Status {
+   const category = row.category as StatusCategory;
+   return {
+      id: row.id,
+      name: row.name,
+      color: row.color,
+      category,
+      // 'planned' não existe em issue: cai no ícone de 'unstarted' (to-do) como aproximação.
+      icon: iconByCategory.get(category) ?? iconByCategory.get('unstarted') ?? Circle,
    };
 }
 
@@ -45,7 +63,7 @@ function toPriority(row: CatalogBootstrap['priorities'][number]): Priority {
 }
 
 function toLabel(row: CatalogBootstrap['labels'][number]): LabelInterface {
-   return { id: row.id, name: row.name, color: row.color };
+   return { id: row.id, name: row.name, color: row.color, groupId: row.groupId };
 }
 
 function toHealth(row: CatalogBootstrap['healthStates'][number]): Health {
@@ -61,8 +79,20 @@ function toHealth(row: CatalogBootstrap['healthStates'][number]): Health {
 const DISPLAY_CATEGORY_ORDER: Record<StatusCategory, number> = {
    started: 0,
    unstarted: 1,
+   planned: 1,
    triage: 2,
    backlog: 3,
+   completed: 4,
+   canceled: 5,
+};
+
+/** Ordem das colunas do board de PROJETOS (Backlog → Planned → In Progress → …). */
+const PROJECT_DISPLAY_CATEGORY_ORDER: Record<StatusCategory, number> = {
+   backlog: 0,
+   planned: 1,
+   started: 2,
+   unstarted: 2,
+   triage: 3,
    completed: 4,
    canceled: 5,
 };
@@ -72,6 +102,7 @@ const WORKFLOW_CATEGORY_ORDER: Record<StatusCategory, number> = {
    triage: 0,
    backlog: 1,
    unstarted: 2,
+   planned: 2,
    started: 3,
    completed: 4,
    canceled: 5,
@@ -88,6 +119,7 @@ function orderStatuses(statuses: Status[], order: Record<StatusCategory, number>
 interface CatalogState {
    loaded: boolean;
    statuses: Status[];
+   projectStatuses: Status[];
    priorities: Priority[];
    labels: LabelInterface[];
    healthStates: Health[];
@@ -99,12 +131,14 @@ export const useCatalogStore = create<CatalogState>((set) => ({
    loaded: false,
    // Seed = catálogos demo (mock) p/ render instantâneo; trocado pela API no bootstrap.
    statuses: mockStatuses,
+   projectStatuses: mockStatuses, // seed provisório; trocado pelo catálogo real no bootstrap
    priorities: mockPriorities,
    labels: mockLabels,
    healthStates: mockHealth,
    setCatalogs: (data) =>
       set({
          statuses: data.statuses.map(toStatus),
+         projectStatuses: data.projectStatuses.map(toProjectStatus),
          priorities: data.priorities.map(toPriority),
          labels: data.labels.map(toLabel),
          healthStates: data.healthStates.map(toHealth),
@@ -115,6 +149,7 @@ export const useCatalogStore = create<CatalogState>((set) => ({
 /* --------------------------- Hooks de conveniência -------------------------- */
 
 export const useStatuses = (): Status[] => useCatalogStore((s) => s.statuses);
+export const useProjectStatuses = (): Status[] => useCatalogStore((s) => s.projectStatuses);
 export const usePriorities = (): Priority[] => useCatalogStore((s) => s.priorities);
 export const useLabels = (): LabelInterface[] => useCatalogStore((s) => s.labels);
 export const useHealthStates = (): Health[] => useCatalogStore((s) => s.healthStates);
@@ -129,4 +164,10 @@ export const useDisplayOrderedStatuses = (): Status[] => {
 export const useWorkflowOrderedStatuses = (): Status[] => {
    const statuses = useCatalogStore((s) => s.statuses);
    return useMemo(() => orderStatuses(statuses, WORKFLOW_CATEGORY_ORDER), [statuses]);
+};
+
+/** Status de PROJETO ordenados p/ as colunas do board de projetos. */
+export const useDisplayOrderedProjectStatuses = (): Status[] => {
+   const statuses = useCatalogStore((s) => s.projectStatuses);
+   return useMemo(() => orderStatuses(statuses, PROJECT_DISPLAY_CATEGORY_ORDER), [statuses]);
 };

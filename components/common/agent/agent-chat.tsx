@@ -174,7 +174,8 @@ function ChatComposer({
  * podem ser revisitadas pelo dropdown do header.
  */
 export default function AgentChat() {
-   const { chats, activeChatId, sendMessage, failMessage } = useAgentChatStore();
+   const { chats, activeChatId, sendMessage, failMessage, hydrate, loadChat, rekeyChat } =
+      useAgentChatStore();
    const me = useWorkspaceStore((s) => s.me);
    const stream = useStreamReply();
    const [bannerDismissed, setBannerDismissed] = useState(false);
@@ -188,12 +189,25 @@ export default function AgentChat() {
       scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
    }, [activeChat?.messages]);
 
+   // Carrega a lista de chats persistidos ao montar.
+   useEffect(() => {
+      void hydrate();
+   }, [hydrate]);
+
+   // Ao abrir um chat ainda sem mensagens carregadas, busca do servidor.
+   useEffect(() => {
+      if (activeChat && activeChat.messages.length === 0) void loadChat(activeChat.id);
+   }, [activeChat, loadChat]);
+
    const handleSend = async (input: string) => {
       if (isStreaming) return;
-      const { chatId, assistantMessageId, history } = sendMessage(input);
+      const wasNew = activeChatId === null;
+      const { chatId, assistantMessageId } = sendMessage(input);
       try {
-         const { reply } = await api.agent.chat(history);
-         stream(chatId, assistantMessageId, reply);
+         // Persiste no servidor (cria o chat se for novo) e devolve a resposta.
+         const res = await api.agent.send(wasNew ? null : chatId, input);
+         if (wasNew) rekeyChat(chatId, res.chatId, res.title);
+         stream(res.chatId, assistantMessageId, res.reply);
       } catch {
          failMessage(
             chatId,

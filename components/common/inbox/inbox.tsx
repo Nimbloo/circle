@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { useNotificationsStore } from '@/store/notifications-store';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { SlidersHorizontal, CheckCheck, ArrowUpDown, InboxIcon } from 'lucide-react';
+import { SlidersHorizontal, CheckCheck, ArrowUpDown, InboxIcon, Clock } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import NotificationPreview from './issue-preview';
 import IssueLine from './issue-line';
 import { SidebarTrigger } from '@/components/ui/sidebar';
@@ -29,39 +30,78 @@ export default function Inbox() {
       markAsRead,
       markAsUnread,
       markAllAsRead,
+      snooze,
+      unsnooze,
+      snoozed,
+      hydrateSnoozed,
       getUnreadNotifications,
    } = useNotificationsStore();
 
    const isMobile = useIsMobile();
+   const [tab, setTab] = useState<'inbox' | 'snoozed'>('inbox');
    const [showRead, setShowRead] = useState(true);
    const [showUnreadFirst, setShowUnreadFirst] = useState(false);
    const [ordering, setOrdering] = useState('newest');
    const [showId, setShowId] = useState(true);
    const [showStatusIcon, setShowStatusIcon] = useState(true);
 
-   // Filter and sort notifications based on settings
-   const filteredNotifications = notifications
-      .filter((notification) => {
-         if (!showRead && notification.read) return false;
-         return true;
-      })
-      .sort((a, b) => {
-         if (showUnreadFirst) {
-            if (!a.read && b.read) return -1;
-            if (a.read && !b.read) return 1;
-         }
-         // Ordena pelo ISO cru (sortAt); timestamp é string relativa só p/ exibir.
-         return ordering === 'newest'
-            ? new Date(b.sortAt).getTime() - new Date(a.sortAt).getTime()
-            : new Date(a.sortAt).getTime() - new Date(b.sortAt).getTime();
-      });
+   // Ao entrar na aba Snoozed, carrega as adiadas.
+   useEffect(() => {
+      if (tab === 'snoozed') void hydrateSnoozed();
+   }, [tab, hydrateSnoozed]);
+
+   // Filter and sort notifications based on settings (memoizado: era recomputado — array
+   // novo + re-sort — a cada render, re-renderizando toda a lista de notificações).
+   const filteredNotifications = useMemo(
+      () =>
+         notifications
+            .filter((notification) => {
+               if (!showRead && notification.read) return false;
+               return true;
+            })
+            .sort((a, b) => {
+               if (showUnreadFirst) {
+                  if (!a.read && b.read) return -1;
+                  if (a.read && !b.read) return 1;
+               }
+               // Ordena pelo ISO cru (sortAt); timestamp é string relativa só p/ exibir.
+               return ordering === 'newest'
+                  ? new Date(b.sortAt).getTime() - new Date(a.sortAt).getTime()
+                  : new Date(a.sortAt).getTime() - new Date(b.sortAt).getTime();
+            }),
+      [notifications, showRead, showUnreadFirst, ordering]
+   );
 
    const listPane = (
       <>
          <div className="flex items-center justify-between px-4 h-10 border-b border-border">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
                <SidebarTrigger className="inline-flex lg:hidden" />
-               <h2 className="text-lg font-semibold">Inbox</h2>
+               <button
+                  type="button"
+                  onClick={() => setTab('inbox')}
+                  className={cn(
+                     'text-lg font-semibold transition-colors',
+                     tab === 'inbox'
+                        ? 'text-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                  )}
+               >
+                  Inbox
+               </button>
+               <button
+                  type="button"
+                  onClick={() => setTab('snoozed')}
+                  className={cn(
+                     'inline-flex items-center gap-1 text-lg font-semibold transition-colors',
+                     tab === 'snoozed'
+                        ? 'text-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                  )}
+               >
+                  <Clock className="size-4" />
+                  Snoozed
+               </button>
             </div>
 
             <div className="flex items-center gap-2">
@@ -69,7 +109,7 @@ export default function Inbox() {
                   variant="ghost"
                   size="xs"
                   onClick={markAllAsRead}
-                  disabled={getUnreadNotifications().length === 0}
+                  disabled={tab !== 'inbox' || getUnreadNotifications().length === 0}
                   aria-label="Mark all as read"
                >
                   <CheckCheck className="w-4 h-4" />
@@ -149,7 +189,31 @@ export default function Inbox() {
             </div>
          </div>
          <div className="w-full flex flex-col items-center justify-start overflow-y-scroll h-[calc(100%-40px)] pb-0.25">
-            {filteredNotifications.length === 0 ? (
+            {tab === 'snoozed' ? (
+               snoozed.length === 0 ? (
+                  <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-24 text-center">
+                     <div className="flex size-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
+                        <Clock className="size-6" />
+                     </div>
+                     <div className="flex flex-col gap-1">
+                        <p className="text-sm font-medium">Nada adiado</p>
+                        <p className="max-w-xs text-sm text-muted-foreground">
+                           Notificações adiadas aparecem aqui até a hora agendada.
+                        </p>
+                     </div>
+                  </div>
+               ) : (
+                  snoozed.map((notification) => (
+                     <IssueLine
+                        key={notification.id}
+                        notification={notification}
+                        onUnsnooze={() => unsnooze(notification.id)}
+                        showId={showId}
+                        showStatusIcon={showStatusIcon}
+                     />
+                  ))
+               )
+            ) : filteredNotifications.length === 0 ? (
                <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-24 text-center">
                   <div className="flex size-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
                      <InboxIcon className="size-6" />
@@ -173,6 +237,7 @@ export default function Inbox() {
                         // Padrão Linear: abrir a notificação já a marca como lida.
                         if (!notification.read) markAsRead(notification.id);
                      }}
+                     onSnooze={(hours) => snooze(notification.id, hours)}
                      showId={showId}
                      showStatusIcon={showStatusIcon}
                   />
@@ -193,7 +258,11 @@ export default function Inbox() {
                Inbox
             </button>
             <div className="flex-1 min-h-0">
-               <NotificationPreview notification={selectedNotification} onMarkAsRead={markAsRead} onMarkAsUnread={markAsUnread} />
+               <NotificationPreview
+                  notification={selectedNotification}
+                  onMarkAsRead={markAsRead}
+                  onMarkAsUnread={markAsUnread}
+               />
             </div>
          </div>
       ) : (
@@ -212,7 +281,11 @@ export default function Inbox() {
          </ResizablePanel>
          <ResizableHandle withHandle />
          <ResizablePanel defaultSize={350} maxSize={500}>
-            <NotificationPreview notification={selectedNotification} onMarkAsRead={markAsRead} onMarkAsUnread={markAsUnread} />
+            <NotificationPreview
+               notification={selectedNotification}
+               onMarkAsRead={markAsRead}
+               onMarkAsUnread={markAsUnread}
+            />
          </ResizablePanel>
       </ResizablePanelGroup>
    );

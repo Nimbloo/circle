@@ -27,7 +27,22 @@ function mentionTokenAt(text: string, caret: number): { query: string; start: nu
  * membros do workspace (por nome/slug); selecionar insere "@slug". Posta via
  * api.issues.addComment e chama onPosted (o pai refetch o feed).
  */
-export function CommentComposer({ issueId, onPosted }: { issueId: string; onPosted: () => void }) {
+export function CommentComposer({
+   issueId,
+   onPosted,
+   parentId = null,
+   placeholder = 'Leave a comment... (@ to mention)',
+   autoFocus = false,
+   onCancel,
+}: {
+   issueId: string;
+   onPosted: () => void;
+   /** Se definido, o comentário vira resposta a este comentário (threading). */
+   parentId?: string | null;
+   placeholder?: string;
+   autoFocus?: boolean;
+   onCancel?: () => void;
+}) {
    const users = useWorkspaceStore((s) => s.users);
    const [draft, setDraft] = useState('');
    const [submitting, setSubmitting] = useState(false);
@@ -74,7 +89,7 @@ export function CommentComposer({ issueId, onPosted }: { issueId: string; onPost
       if (!text || submitting) return;
       setSubmitting(true);
       try {
-         await api.issues.addComment(issueId, text);
+         await api.issues.addComment(issueId, text, parentId);
          setDraft('');
          setMention(null);
          onPosted();
@@ -116,6 +131,7 @@ export function CommentComposer({ issueId, onPosted }: { issueId: string; onPost
          )}
          <textarea
             ref={ref}
+            autoFocus={autoFocus}
             value={draft}
             onChange={(event) => sync(event.target.value)}
             onKeyDown={(event) => {
@@ -145,16 +161,27 @@ export function CommentComposer({ issueId, onPosted }: { issueId: string; onPost
                   void submit();
                }
             }}
-            placeholder="Leave a comment... (@ to mention)"
+            placeholder={placeholder}
             rows={2}
             disabled={submitting}
             className="w-full resize-none bg-transparent outline-none text-sm placeholder:text-muted-foreground disabled:opacity-60"
          />
          <div className="flex items-center justify-between">
             <Plus className="size-4 text-muted-foreground" />
-            <Button size="xs" onClick={() => void submit()} disabled={!draft.trim() || submitting}>
-               {submitting ? 'Posting…' : 'Comment'}
-            </Button>
+            <div className="flex items-center gap-2">
+               {onCancel && (
+                  <Button size="xs" variant="ghost" onClick={onCancel} disabled={submitting}>
+                     Cancel
+                  </Button>
+               )}
+               <Button
+                  size="xs"
+                  onClick={() => void submit()}
+                  disabled={!draft.trim() || submitting}
+               >
+                  {submitting ? 'Posting…' : parentId ? 'Reply' : 'Comment'}
+               </Button>
+            </div>
          </div>
       </div>
    );

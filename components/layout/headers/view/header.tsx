@@ -6,6 +6,8 @@ import { filterIssuesForView, filterProjectsForView } from '@/data/views';
 import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { useFavoritesStore } from '@/store/favorites-store';
+import { cn } from '@/lib/utils';
 import { BarChart3, MoreHorizontal, Star } from 'lucide-react';
 import { useParams } from 'next/navigation';
 
@@ -15,6 +17,8 @@ export default function Header() {
    const liveIssues = useIssuesStore((s) => s.issues);
    const liveProjects = useWorkspaceStore((s) => s.projects);
    const { openPanel, togglePanel } = useRightPanelStore();
+   const isFavorite = useFavoritesStore((s) => s.isFavorite('view', viewId));
+   const toggleFavorite = useFavoritesStore((s) => s.toggle);
 
    if (!view) return null;
 
@@ -33,7 +37,21 @@ export default function Header() {
                   {view.icon}
                </span>
                <span className="text-sm font-medium truncate">{view.name}</span>
-               <Star className="size-3.5 text-muted-foreground shrink-0 ml-1" />
+               <button
+                  type="button"
+                  onClick={() => void toggleFavorite('view', viewId)}
+                  aria-label={isFavorite ? 'Unfavorite view' : 'Favorite view'}
+                  className="shrink-0 ml-1"
+               >
+                  <Star
+                     className={cn(
+                        'size-3.5 transition-colors',
+                        isFavorite
+                           ? 'fill-yellow-400 text-yellow-400'
+                           : 'text-muted-foreground hover:text-foreground'
+                     )}
+                  />
+               </button>
                <MoreHorizontal className="size-3.5 text-muted-foreground shrink-0" />
             </div>
          </div>

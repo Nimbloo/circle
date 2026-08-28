@@ -34,8 +34,11 @@ import {
    Trash2,
    CheckCircle2,
    Clipboard,
+   Star,
 } from 'lucide-react';
 import { useIssuesStore } from '@/store/issues-store';
+import { useFavoritesStore } from '@/store/favorites-store';
+import { cn } from '@/lib/utils';
 import { useParams } from 'next/navigation';
 import { useShallow } from 'zustand/react/shallow';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -53,9 +56,16 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
    const status = useStatuses();
    const priorities = usePriorities();
    const labels = useLabels();
+   const toggleFavorite = useFavoritesStore((s) => s.toggle);
+   const isFav = useFavoritesStore((s) => (issueId ? s.isFavorite('issue', issueId) : false));
    const { orgId } = useParams<{ orgId: string }>();
    const statusCompleted = status.find((s) => s.category === 'completed');
    const statusCanceled = status.find((s) => s.category === 'canceled');
+   // Triage (paridade Linear): Accept move p/ o 1º status "aberto" (unstarted/started);
+   // Decline move p/ canceled. Só aparece quando a issue está na categoria triage.
+   const statusAccept =
+      status.find((s) => s.category === 'unstarted') ??
+      status.find((s) => s.category === 'started');
    const [confirmOpen, setConfirmOpen] = useState(false);
 
    const {
@@ -88,60 +98,46 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
       toast.success('Issue deleted');
    };
 
+   // Edições inline reversíveis (status/priority/assignee/label/project/cycle/due):
+   // SEM toast de sucesso — a atualização otimista da UI é o feedback (padrão Linear).
+   // O store cobre a falha com rollback + toast.error (fonte única). Antes, na falha,
+   // apareciam DOIS toasts contraditórios (sucesso + erro).
    const handleStatusChange = (statusId: string) => {
       if (!issueId) return;
       const newStatus = status.find((s) => s.id === statusId);
-      if (newStatus) {
-         updateIssueStatus(issueId, newStatus);
-         toast.success(`Status updated to ${newStatus.name}`);
-      }
+      if (newStatus) updateIssueStatus(issueId, newStatus);
    };
 
    const handlePriorityChange = (priorityId: string) => {
       if (!issueId) return;
       const newPriority = priorities.find((p) => p.id === priorityId);
-      if (newPriority) {
-         updateIssuePriority(issueId, newPriority);
-         toast.success(`Priority updated to ${newPriority.name}`);
-      }
+      if (newPriority) updateIssuePriority(issueId, newPriority);
    };
 
    const handleAssigneeChange = (userId: string | null) => {
       if (!issueId) return;
       const newAssignee = userId ? users.find((u) => u.id === userId) || null : null;
       updateIssueAssignee(issueId, newAssignee);
-      toast.success(newAssignee ? `Assigned to ${newAssignee.name}` : 'Unassigned');
    };
 
    const handleLabelToggle = (labelId: string) => {
       if (!issueId) return;
       const issue = getIssueById(issueId);
       const label = labels.find((l) => l.id === labelId);
-
       if (!issue || !label) return;
-
-      const hasLabel = issue.labels.some((l) => l.id === labelId);
-
-      if (hasLabel) {
-         removeIssueLabel(issueId, labelId);
-         toast.success(`Removed label: ${label.name}`);
-      } else {
-         addIssueLabel(issueId, label);
-         toast.success(`Added label: ${label.name}`);
-      }
+      if (issue.labels.some((l) => l.id === labelId)) removeIssueLabel(issueId, labelId);
+      else addIssueLabel(issueId, label);
    };
 
    const handleProjectChange = (projectId: string | null) => {
       if (!issueId) return;
       const newProject = projectId ? projects.find((p) => p.id === projectId) : undefined;
       updateIssueProject(issueId, newProject);
-      toast.success(newProject ? `Project set to ${newProject.name}` : 'Project removed');
    };
 
-   const handleCycleChange = (cycleId: string, label: string) => {
+   const handleCycleChange = (cycleId: string) => {
       if (!issueId) return;
       updateIssue(issueId, { cycleId });
-      toast.success(cycleId ? `Cycle → ${label}` : 'Removido do cycle');
    };
 
    // Due date no formato YYYY-MM-DD (o que a rota exige: z.string().date()); mandar
@@ -152,24 +148,29 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
          d.getDate()
       ).padStart(2, '0')}`;
 
-   const setDueInDays = (days: number, label: string) => {
+   const setDueInDays = (days: number) => {
       if (!issueId) return;
       const d = new Date();
       d.setDate(d.getDate() + days);
       updateIssue(issueId, { dueDate: fmtDate(d) });
-      toast.success(`Due date → ${label}`);
    };
 
    const clearDueDate = () => {
       if (!issueId) return;
       updateIssue(issueId, { dueDate: undefined });
-      toast.success('Due date removida');
    };
 
    const handleMarkAs = (target?: (typeof status)[number]) => {
       if (!issueId || !target) return;
       updateIssueStatus(issueId, target);
-      toast.success(`Marked as ${target.name}`);
+   };
+
+   // Snooze de triage: adia a issue por N dias (0 = remove). Some da fila de triage.
+   const snoozeInDays = (days: number, label: string) => {
+      if (!issueId) return;
+      const until = days > 0 ? new Date(Date.now() + days * 86400000).toISOString() : null;
+      updateIssue(issueId, { snoozedUntil: until });
+      toast.success(until ? `Adiada até ${label}` : 'Snooze removido');
    };
 
    const copyToClipboard = (text: string, msg: string) => {
@@ -195,6 +196,20 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
       if (issue) copyToClipboard(issue.title, 'Título copiado');
    };
 
+   // Nome de branch git no padrão Linear: <identifier>-<título-kebab> (minúsculo, sem acento).
+   const copyBranch = () => {
+      const issue = issueId ? getIssueById(issueId) : undefined;
+      if (!issue) return;
+      const slug = issue.title
+         .normalize('NFD')
+         .replace(/[̀-ͯ]/g, '')
+         .toLowerCase()
+         .replace(/[^a-z0-9]+/g, '-')
+         .replace(/^-+|-+$/g, '')
+         .slice(0, 60);
+      copyToClipboard(`${issue.identifier.toLowerCase()}-${slug}`, 'Branch copiada');
+   };
+
    // Cycles do time da issue (Linear lista os cycles do time da própria issue).
    const issue = issueId ? getIssueById(issueId) : undefined;
    const teamCycles = issue?.teamId ? getCyclesByTeam(issue.teamId) : [];
@@ -202,6 +217,42 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
    return (
       <>
          <ContextMenuContent className="w-64">
+            {/* Ações de Triage (só quando a issue está na fila de triage) */}
+            {issue?.status.category === 'triage' && (
+               <>
+                  <ContextMenuGroup>
+                     <ContextMenuItem
+                        disabled={!statusAccept}
+                        onClick={() => statusAccept && handleMarkAs(statusAccept)}
+                     >
+                        <CheckCircle2 className="size-4 text-green-500" /> Accept
+                     </ContextMenuItem>
+                     <ContextMenuItem
+                        disabled={!statusCanceled}
+                        onClick={() => statusCanceled && handleMarkAs(statusCanceled)}
+                     >
+                        <CircleCheck className="size-4 text-muted-foreground" /> Decline
+                     </ContextMenuItem>
+                     <ContextMenuSub>
+                        <ContextMenuSubTrigger>
+                           <CalendarClock className="mr-2 size-4" /> Snooze
+                        </ContextMenuSubTrigger>
+                        <ContextMenuSubContent className="w-44">
+                           <ContextMenuItem onClick={() => snoozeInDays(1, 'amanhã')}>
+                              Amanhã
+                           </ContextMenuItem>
+                           <ContextMenuItem onClick={() => snoozeInDays(7, 'próxima semana')}>
+                              Próxima semana
+                           </ContextMenuItem>
+                           <ContextMenuItem onClick={() => snoozeInDays(0, '')}>
+                              Remover snooze
+                           </ContextMenuItem>
+                        </ContextMenuSubContent>
+                     </ContextMenuSub>
+                  </ContextMenuGroup>
+                  <ContextMenuSeparator />
+               </>
+            )}
             <ContextMenuGroup>
                <ContextMenuSub>
                   <ContextMenuSubTrigger>
@@ -300,14 +351,11 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
                      <IterationCcw className="mr-2 size-4" /> Cycle
                   </ContextMenuSubTrigger>
                   <ContextMenuSubContent className="w-56">
-                     <ContextMenuItem onClick={() => handleCycleChange('', '')}>
+                     <ContextMenuItem onClick={() => handleCycleChange('')}>
                         <IterationCcw className="size-4 text-muted-foreground" /> No cycle
                      </ContextMenuItem>
                      {teamCycles.map((cycle) => (
-                        <ContextMenuItem
-                           key={cycle.id}
-                           onClick={() => handleCycleChange(cycle.id, cycle.name)}
-                        >
+                        <ContextMenuItem key={cycle.id} onClick={() => handleCycleChange(cycle.id)}>
                            <IterationCcw className="size-4" /> {cycle.name}
                            {issue?.cycleId === cycle.id && (
                               <CheckCircle2 className="ml-auto size-3.5" />
@@ -325,15 +373,9 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
                      <CalendarClock className="mr-2 size-4" /> Due date
                   </ContextMenuSubTrigger>
                   <ContextMenuSubContent className="w-44">
-                     <ContextMenuItem onClick={() => setDueInDays(0, 'Today')}>
-                        Today
-                     </ContextMenuItem>
-                     <ContextMenuItem onClick={() => setDueInDays(1, 'Tomorrow')}>
-                        Tomorrow
-                     </ContextMenuItem>
-                     <ContextMenuItem onClick={() => setDueInDays(7, 'Next week')}>
-                        Next week
-                     </ContextMenuItem>
+                     <ContextMenuItem onClick={() => setDueInDays(0)}>Today</ContextMenuItem>
+                     <ContextMenuItem onClick={() => setDueInDays(1)}>Tomorrow</ContextMenuItem>
+                     <ContextMenuItem onClick={() => setDueInDays(7)}>Next week</ContextMenuItem>
                      <ContextMenuItem onClick={clearDueDate}>No due date</ContextMenuItem>
                   </ContextMenuSubContent>
                </ContextMenuSub>
@@ -369,8 +411,17 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
                   <ContextMenuItem onClick={copyLink}>Copy link</ContextMenuItem>
                   <ContextMenuItem onClick={copyId}>Copy ID</ContextMenuItem>
                   <ContextMenuItem onClick={copyTitle}>Copy title</ContextMenuItem>
+                  <ContextMenuItem onClick={copyBranch}>Copy git branch</ContextMenuItem>
                </ContextMenuSubContent>
             </ContextMenuSub>
+
+            <ContextMenuItem
+               disabled={!issueId}
+               onClick={() => issueId && void toggleFavorite('issue', issueId)}
+            >
+               <Star className={cn('size-4', isFav && 'fill-amber-400 text-amber-400')} />{' '}
+               {isFav ? 'Remove from favorites' : 'Add to favorites'}
+            </ContextMenuItem>
 
             <ContextMenuSeparator />
 

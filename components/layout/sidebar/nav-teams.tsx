@@ -1,25 +1,25 @@
 'use client';
 
 import {
-   Archive,
-   Bell,
    Box,
    ChevronRight,
    CopyMinus,
    Home,
+   Inbox,
    Layers,
    Link as LinkIcon,
    MoreHorizontal,
    Settings,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useParams, usePathname } from 'next/navigation';
+import type { ReactNode } from 'react';
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
    DropdownMenu,
    DropdownMenuContent,
    DropdownMenuItem,
-   DropdownMenuSeparator,
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -34,9 +34,22 @@ import {
    SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { RiDonutChartFill } from '@remixicon/react';
+import { toast } from 'sonner';
+import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
+
+/** Sub-item de time com href resolvido pelo orgId real e realce de rota ativa. */
+function TeamSub({ href, children }: { href: string; children: ReactNode }) {
+   const pathname = usePathname();
+   const active = pathname === href || pathname.startsWith(`${href}/`);
+   return (
+      <SidebarMenuSubButton asChild isActive={active}>
+         <Link href={href}>{children}</Link>
+      </SidebarMenuSubButton>
+   );
+}
 
 export function NavTeams() {
+   const { orgId } = useParams<{ orgId: string }>();
    const teams = useWorkspaceStore((s) => s.teams);
    const joinedTeams = teams.filter((t) => t.joined);
    return (
@@ -53,8 +66,13 @@ export function NavTeams() {
                   <SidebarMenuItem>
                      <CollapsibleTrigger asChild>
                         <SidebarMenuButton tooltip={item.name}>
-                           <div className="inline-flex size-6 bg-muted/50 items-center justify-center rounded shrink-0">
-                              <div className="text-sm">{item.icon}</div>
+                           {/* Avatar de time colorido pela cor do time (paridade Linear),
+                               com o ícone/emoji ou a inicial do nome. */}
+                           <div
+                              className="inline-flex size-6 items-center justify-center rounded shrink-0 text-xs font-medium text-white"
+                              style={{ backgroundColor: item.color }}
+                           >
+                              {item.icon || item.name.charAt(0).toUpperCase()}
                            </div>
                            <span className="text-sm">{item.name}</span>
                            <span className="w-3 shrink-0">
@@ -74,26 +92,23 @@ export function NavTeams() {
                                  side="right"
                                  align="start"
                               >
-                                 <DropdownMenuItem>
-                                    <Settings className="size-4" />
-                                    <span>Team settings</span>
+                                 <DropdownMenuItem asChild>
+                                    <Link href={`/${orgId}/settings/teams/${item.id}`}>
+                                       <Settings className="size-4" />
+                                       <span>Team settings</span>
+                                    </Link>
                                  </DropdownMenuItem>
-                                 <DropdownMenuItem>
+                                 <DropdownMenuItem
+                                    onSelect={() => {
+                                       void navigator.clipboard
+                                          .writeText(
+                                             `${window.location.origin}/${orgId}/team/${item.id}/overview`
+                                          )
+                                          .then(() => toast.success('Link copiado'));
+                                    }}
+                                 >
                                     <LinkIcon className="size-4" />
                                     <span>Copy link</span>
-                                 </DropdownMenuItem>
-                                 <DropdownMenuItem>
-                                    <Archive className="size-4" />
-                                    <span>Open archive</span>
-                                 </DropdownMenuItem>
-                                 <DropdownMenuSeparator />
-                                 <DropdownMenuItem>
-                                    <Bell className="size-4" />
-                                    <span>Subscribe</span>
-                                 </DropdownMenuItem>
-                                 <DropdownMenuSeparator />
-                                 <DropdownMenuItem>
-                                    <span>Leave team...</span>
                                  </DropdownMenuItem>
                               </DropdownMenuContent>
                            </DropdownMenu>
@@ -102,60 +117,52 @@ export function NavTeams() {
                      <CollapsibleContent>
                         <SidebarMenuSub>
                            <SidebarMenuSubItem>
-                              <SidebarMenuSubButton asChild>
-                                 <Link href={`/nimbloo/team/${item.id}/overview`}>
-                                    <Home size={14} />
-                                    <span>Home</span>
-                                 </Link>
-                              </SidebarMenuSubButton>
+                              <TeamSub href={`/${orgId}/team/${item.id}/overview`}>
+                                 <Home size={14} />
+                                 <span>Home</span>
+                              </TeamSub>
                            </SidebarMenuSubItem>
                            <SidebarMenuSubItem>
-                              <SidebarMenuSubButton asChild>
-                                 <Link href={`/nimbloo/team/${item.id}/all`}>
-                                    <CopyMinus size={14} />
-                                    <span>Issues</span>
-                                 </Link>
-                              </SidebarMenuSubButton>
+                              <TeamSub href={`/${orgId}/team/${item.id}/all`}>
+                                 <CopyMinus size={14} />
+                                 <span>Issues</span>
+                              </TeamSub>
                            </SidebarMenuSubItem>
                            <SidebarMenuSubItem>
-                              <SidebarMenuSubButton asChild>
-                                 <Link href={`/nimbloo/team/${item.id}/cycles`}>
-                                    <RiDonutChartFill size={14} />
-                                    <span>Cycles</span>
-                                 </Link>
-                              </SidebarMenuSubButton>
+                              <TeamSub href={`/${orgId}/team/${item.id}/triage`}>
+                                 <Inbox size={14} />
+                                 <span>Triage</span>
+                              </TeamSub>
+                           </SidebarMenuSubItem>
+                           <SidebarMenuSubItem>
+                              <TeamSub href={`/${orgId}/team/${item.id}/cycles`}>
+                                 <CyclePlayIcon className="size-3.5" />
+                                 <span>Cycles</span>
+                              </TeamSub>
                               <SidebarMenuSub className="mr-0 pr-0">
                                  <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild>
-                                       <Link href={`/nimbloo/team/${item.id}/cycle/active`}>
-                                          <span>Current</span>
-                                       </Link>
-                                    </SidebarMenuSubButton>
+                                    <TeamSub href={`/${orgId}/team/${item.id}/cycle/active`}>
+                                       <span>Current</span>
+                                    </TeamSub>
                                  </SidebarMenuSubItem>
                                  <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild>
-                                       <Link href={`/nimbloo/team/${item.id}/cycle/upcoming`}>
-                                          <span>Upcoming</span>
-                                       </Link>
-                                    </SidebarMenuSubButton>
+                                    <TeamSub href={`/${orgId}/team/${item.id}/cycle/upcoming`}>
+                                       <span>Upcoming</span>
+                                    </TeamSub>
                                  </SidebarMenuSubItem>
                               </SidebarMenuSub>
                            </SidebarMenuSubItem>
                            <SidebarMenuSubItem>
-                              <SidebarMenuSubButton asChild>
-                                 <Link href={`/nimbloo/team/${item.id}/projects`}>
-                                    <Box size={14} />
-                                    <span>Projects</span>
-                                 </Link>
-                              </SidebarMenuSubButton>
+                              <TeamSub href={`/${orgId}/team/${item.id}/projects`}>
+                                 <Box size={14} />
+                                 <span>Projects</span>
+                              </TeamSub>
                            </SidebarMenuSubItem>
                            <SidebarMenuSubItem>
-                              <SidebarMenuSubButton asChild>
-                                 <Link href={`/nimbloo/team/${item.id}/views`}>
-                                    <Layers size={14} />
-                                    <span>Views</span>
-                                 </Link>
-                              </SidebarMenuSubButton>
+                              <TeamSub href={`/${orgId}/team/${item.id}/views`}>
+                                 <Layers size={14} />
+                                 <span>Views</span>
+                              </TeamSub>
                            </SidebarMenuSubItem>
                         </SidebarMenuSub>
                      </CollapsibleContent>

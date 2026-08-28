@@ -14,6 +14,8 @@ import { LabelBadge } from './label-badge';
 import { PrioritySelector } from './priority-selector';
 import { ProjectBadge } from './project-badge';
 import { StatusSelector } from './status-selector';
+import { SubIssueProgress } from './sub-issue-progress';
+import { estimateLabel, normalizeScale } from '@/data/estimate-scales';
 import { motion } from 'motion/react';
 import { memo } from 'react';
 
@@ -22,9 +24,12 @@ import { IssueContextMenu } from './issue-context-menu';
 
 function IssueLineComponent({ issue, layoutId = false }: { issue: Issue; layoutId?: boolean }) {
    const { orgId } = useParams<{ orgId: string }>();
-   const { displayProperties } = useDisplaySettingsStore();
+   // Selector estreito: assina só displayProperties (não o store inteiro) — senão toda
+   // linha memoizada re-renderiza a qualquer mudança do display-store (ex.: showSubIssues).
+   const displayProperties = useDisplaySettingsStore((s) => s.displayProperties);
    const getCycleById = useWorkspaceStore((s) => s.getCycleById);
    const cycle = displayProperties.cycle && issue.cycleId ? getCycleById(issue.cycleId) : undefined;
+   const team = useWorkspaceStore((s) => (issue.teamId ? s.getTeamById(issue.teamId) : undefined));
    const selected = useBulkSelectionStore((s) => s.selected.has(issue.id));
    const anySelected = useBulkSelectionStore((s) => s.selected.size > 0);
    const toggleSelected = useBulkSelectionStore((s) => s.toggle);
@@ -35,7 +40,7 @@ function IssueLineComponent({ issue, layoutId = false }: { issue: Issue; layoutI
             <motion.div
                {...(layoutId && { layoutId: `issue-line-${issue.identifier}` })}
                className={cn(
-                  'group/line w-full flex items-center justify-start h-11 px-6 hover:bg-sidebar/50',
+                  'group/line w-full flex items-center justify-start h-10 px-6 hover:bg-sidebar/50',
                   selected && 'bg-primary/5'
                )}
             >
@@ -83,9 +88,10 @@ function IssueLineComponent({ issue, layoutId = false }: { issue: Issue; layoutI
                         <ProjectBadge project={issue.project} />
                      )}
                   </div>
+                  <SubIssueProgress count={issue.subIssueCount} done={issue.subIssueDoneCount} />
                   {displayProperties.estimate && issue.estimate !== undefined && (
                      <span className="text-xs text-muted-foreground border border-border rounded-md px-1.5 py-0.5 shrink-0 hidden sm:inline-block tabular-nums">
-                        {issue.estimate}
+                        {estimateLabel(issue.estimate, normalizeScale(team?.estimateScale))}
                      </span>
                   )}
                   {cycle && (
@@ -98,13 +104,14 @@ function IssueLineComponent({ issue, layoutId = false }: { issue: Issue; layoutI
                         Due {format(new Date(issue.dueDate), 'MMM dd')}
                      </span>
                   )}
-                  {displayProperties.created && (
-                     <span className="text-xs text-muted-foreground shrink-0 hidden sm:inline-block">
-                        {format(new Date(issue.createdAt), 'MMM dd')}
-                     </span>
-                  )}
+                  {/* Padrão Linear: avatar do assignee ANTES da data */}
                   {displayProperties.assignee && (
                      <AssigneeUser user={issue.assignee} issueId={issue.id} />
+                  )}
+                  {displayProperties.created && (
+                     <span className="text-xs text-muted-foreground shrink-0 hidden sm:inline-block w-12 text-right">
+                        {format(new Date(issue.createdAt), 'MMM d')}
+                     </span>
                   )}
                </div>
             </motion.div>

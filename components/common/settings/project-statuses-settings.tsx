@@ -153,7 +153,8 @@ function StatusDialog({
    );
 }
 
-/** Workspace "Project statuses" — CRUD real do catálogo de status (compartilhado com issues). */
+/** Workspace "Issue statuses" — CRUD do catálogo de status de ISSUE (workflow). Projetos
+ * usam o catálogo project_status próprio (fixo), não editável aqui. */
 export default function ProjectStatusesSettings() {
    const statuses = useStatuses();
    const me = useWorkspaceStore((s) => s.me);
@@ -197,8 +198,8 @@ export default function ProjectStatusesSettings() {
 
    return (
       <SettingsShell
-         title="Project statuses"
-         description="Os estágios que issues e projetos percorrem. Este catálogo é compartilhado — alterações valem para todo o workspace."
+         title="Issue statuses"
+         description="Os estágios do workflow das issues (por categoria). Vale para todo o workspace. Projetos têm seus próprios status (Backlog/Planned/In Progress/Completed/Canceled)."
       >
          <div className="rounded-lg border bg-container overflow-hidden">
             {CATEGORY_GROUPS.map((group) => {

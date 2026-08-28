@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { makeTestDb } from './helpers/db';
+import { seedTeam } from './helpers/fixtures';
+import { issue, issuePrLink } from '@/db/schema';
 import { syncFromGitHub, listReviews, getReview } from '@/lib/api/reviews';
 
 const FAKE_PRS = [
@@ -104,6 +107,82 @@ describe('reviews (GitHub ingestion)', () => {
       expect(second.items).toHaveLength(10);
       const firstIds = new Set(first.items.map((r) => r.id));
       expect(second.items.every((r) => !firstIds.has(r.id))).toBe(true); // sem overlap
+   });
+
+   it('auto-linka PR↔issue (issue_pr_link) quando o título resolve um identifier real', async () => {
+      const db = await makeTestDb();
+      await seedTeam(db, 'LNUI');
+      await db.insert(issue).values({
+         id: 'iss-701',
+         identifier: 'LNUI-701', // casa com o título do PR 42
+         teamId: 'LNUI',
+         title: 'Combobox perde foco',
+         statusId: 'to-do',
+         priorityId: 'low',
+         rank: 'a',
+      });
+
+      await syncFromGitHub(db, { repos: ['x/y'], token: 'fake', fetchImpl: fakeFetch });
+      const links = await db.select().from(issuePrLink).where(eq(issuePrLink.issueId, 'iss-701'));
+      expect(links).toHaveLength(1);
+      expect(links[0].title).toContain('combobox');
+      expect(links[0].status).toBe('open');
+
+      // resolvesTitle passa a ser o título da ISSUE (era o do PR, enganoso)
+      const rv = await getReview(db, 'x/y#42');
+      expect(rv?.resolves?.title).toBe('Combobox perde foco');
+
+      // re-sync não duplica (id md5 determinístico)
+      await syncFromGitHub(db, { repos: ['x/y'], token: 'fake', fetchImpl: fakeFetch });
+      const after = await db.select().from(issuePrLink).where(eq(issuePrLink.issueId, 'iss-701'));
+      expect(after).toHaveLength(1);
+   });
+
+   it('PR mergeado move a issue pra Done + reconhece identifier no branch', async () => {
+      const db = await makeTestDb();
+      await seedTeam(db, 'ENG');
+      await db.insert(issue).values({
+         id: 'iss-eng-1',
+         identifier: 'ENG-1',
+         teamId: 'ENG',
+         title: 'Corrige X',
+         statusId: 'in-progress', // aberta (started)
+         priorityId: 'low',
+         rank: 'a',
+      });
+      // PR mergeado sem id no título, mas com id no NOME DO BRANCH (eng-1-...)
+      const prs = [
+         {
+            number: 7,
+            title: 'Fix the thing',
+            state: 'closed',
+            merged_at: '2026-07-01T00:00:00Z',
+            html_url: 'https://github.com/o/r/pull/7',
+            created_at: '2026-06-30T00:00:00Z',
+            user: { login: 'ana' },
+            base: { ref: 'main' },
+            head: { ref: 'eng-1-fix-the-thing' },
+         },
+      ];
+      const fetchImpl = (async (url: string) => {
+         if (/\/pulls\/\d+/.test(String(url)))
+            return new Response(JSON.stringify(prs[0]), { status: 200 });
+         return new Response(JSON.stringify(prs), { status: 200 });
+      }) as unknown as typeof fetch;
+
+      await syncFromGitHub(db, { repos: ['o/r'], token: 'x', fetchImpl });
+
+      const [iss] = await db.select().from(issue).where(eq(issue.id, 'iss-eng-1'));
+      // 'done' é o completed de menor position no catálogo (2 < shipped 10) → alvo do transition.
+      expect(iss.statusId).toBe('done');
+      const links = await db.select().from(issuePrLink).where(eq(issuePrLink.issueId, 'iss-eng-1'));
+      expect(links).toHaveLength(1); // auto-link por branch
+   });
+
+   it('não cria link quando o identifier não corresponde a issue nenhuma', async () => {
+      const db = await makeTestDb();
+      await syncFromGitHub(db, { repos: ['x/y'], token: 'fake', fetchImpl: fakeFetch });
+      expect(await db.select().from(issuePrLink)).toHaveLength(0);
    });
 
    it('gets a review by id and filters by status', async () => {
