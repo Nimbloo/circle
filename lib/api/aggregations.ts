@@ -143,16 +143,18 @@ export interface ProjectProgress {
 }
 
 export async function projectProgress(db: Db, projectId: string): Promise<ProjectProgress | null> {
-   const issues = await db
-      .select({
-         id: issueT.id,
-         statusId: issueT.statusId,
-         assigneeId: issueT.assigneeId,
-         cycleId: issueT.cycleId,
-      })
-      .from(issueT)
-      .where(eq(issueT.projectId, projectId));
-   const statuses = await db.select().from(statusT);
+   const [issues, statuses] = await Promise.all([
+      db
+         .select({
+            id: issueT.id,
+            statusId: issueT.statusId,
+            assigneeId: issueT.assigneeId,
+            cycleId: issueT.cycleId,
+         })
+         .from(issueT)
+         .where(eq(issueT.projectId, projectId)),
+      db.select().from(statusT),
+   ]);
    const catById = new Map(statuses.map((s) => [s.id, s.category]));
 
    const isCompleted = (statusId: string) => catById.get(statusId) === 'completed';
