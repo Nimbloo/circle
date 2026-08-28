@@ -38,17 +38,32 @@ function fmtDays(d: number): string {
    return `${d}d`;
 }
 
+// Cache leve (módulo) das métricas — o cálculo faz full-scan das issues concluídas;
+// TTL curto evita refetch a cada abertura do painel (M2) sem depender de invalidação
+// por evento (30s de staleness é aceitável para métricas agregadas).
+let metricsCache: { at: number; data: TimeMetrics } | null = null;
+const METRICS_TTL_MS = 30_000;
+
 /**
  * Faixa de métricas temporais (workspace): cycle time, lead time e throughput
  * das issues concluídas. Busca do servidor (deriva de startedAt/completedAt).
  */
 function TimeMetricsStrip() {
-   const [m, setM] = useState<TimeMetrics | null>(null);
+   const [m, setM] = useState<TimeMetrics | null>(() =>
+      metricsCache && Date.now() - metricsCache.at < METRICS_TTL_MS ? metricsCache.data : null
+   );
    useEffect(() => {
+      if (metricsCache && Date.now() - metricsCache.at < METRICS_TTL_MS) {
+         setM(metricsCache.data);
+         return;
+      }
       let alive = true;
       api.issues
          .timeMetrics()
-         .then((res) => alive && setM(res))
+         .then((res) => {
+            metricsCache = { at: Date.now(), data: res };
+            if (alive) setM(res);
+         })
          .catch(() => {});
       return () => {
          alive = false;

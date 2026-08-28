@@ -403,21 +403,14 @@ export async function createIssue(
    const teamRows = await db.select().from(teamT).where(eq(teamT.id, input.teamId)).limit(1);
    if (teamRows.length === 0) throw new ApiError(400, `Team '${input.teamId}' não existe`);
 
-   // valida FKs de catálogo antes do insert (senão a FK estoura como 500)
-   const statusRows = await db
-      .select({ id: statusT.id, category: statusT.category })
-      .from(statusT)
-      .where(eq(statusT.id, input.statusId))
-      .limit(1);
-   if (statusRows.length === 0) throw new ApiError(400, `Status '${input.statusId}' não existe`);
+   // valida FKs de catálogo antes do insert (senão a FK estoura como 500). Usa o cache
+   // de catálogos (memoizado, TTL 30s) em vez de 2 SELECTs por criação de issue.
+   const catalogs = await loadCatalogs(db);
+   const statusRow = catalogs.statuses.get(input.statusId);
+   if (!statusRow) throw new ApiError(400, `Status '${input.statusId}' não existe`);
    // Marcos temporais quando a issue já nasce started/completed (cycle/lead time).
-   const startCat = statusRows[0].category;
-   const priorityRows = await db
-      .select({ id: priorityT.id })
-      .from(priorityT)
-      .where(eq(priorityT.id, input.priorityId))
-      .limit(1);
-   if (priorityRows.length === 0)
+   const startCat = statusRow.category;
+   if (!catalogs.priorities.get(input.priorityId))
       throw new ApiError(400, `Priority '${input.priorityId}' não existe`);
 
    const id = randomUUID();

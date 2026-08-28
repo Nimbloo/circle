@@ -42,7 +42,7 @@ import {
    UserRoundPlus,
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 type PaletteRoute =
@@ -179,23 +179,29 @@ export function CommandPalette() {
    // grupo "Recently viewed" do ⌘K. Captura toda visita, não só via palette.
    const recents = useRecentsStore((s) => s.recents);
    const pushRecent = useRecentsStore((s) => s.push);
+   // Guarda o último recent gravado: como as deps incluem `issues`/`allProjects` (arrays
+   // que trocam de ref a cada mutação do store), o effect re-roda muito; sem este guard
+   // ele re-gravaria o MESMO recent (localStorage + re-render à toa). Mantém o dep de
+   // `issues`/`allProjects` p/ o auto-heal (grava quando a entidade finalmente hidrata).
+   const lastPushedRef = useRef<string>('');
    useEffect(() => {
+      const push = (r: Parameters<typeof pushRecent>[0]) => {
+         const key = `${r.type}:${r.id}`;
+         if (lastPushedRef.current === key) return;
+         lastPushedRef.current = key;
+         pushRecent(r);
+      };
       const im = pathname.match(/^\/[^/]+\/issue\/([^/]+)/);
       if (im) {
          const found = issues.find((i) => i.identifier === im[1]);
          if (found)
-            pushRecent({
-               type: 'issue',
-               id: found.id,
-               label: found.title,
-               identifier: found.identifier,
-            });
+            push({ type: 'issue', id: found.id, label: found.title, identifier: found.identifier });
          return;
       }
       const pm = pathname.match(/^\/[^/]+\/project\/([^/]+)/);
       if (pm) {
          const found = allProjects.find((p) => p.id === pm[1]);
-         if (found) pushRecent({ type: 'project', id: found.id, label: found.name });
+         if (found) push({ type: 'project', id: found.id, label: found.name });
       }
    }, [pathname, issues, allProjects, pushRecent]);
 
