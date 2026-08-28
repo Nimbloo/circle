@@ -19,6 +19,7 @@ import { LabelInterface } from '@/data/labels';
 import { Ban, Bell, BellOff, CheckIcon, GitPullRequestArrow } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '@/lib/client';
+import type { ProjectMilestoneDto } from '@/lib/api/project-detail';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { LabelBadge } from '../label-badge';
@@ -104,6 +105,91 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 /**
+ * Selector de milestone do projeto da issue. Lista as milestones reais do
+ * projeto (FK issue.milestoneId → project_milestone) + "No milestone".
+ */
+function MilestoneSelector({
+   issueId,
+   projectId,
+   currentId,
+   currentName,
+   onChanged,
+}: {
+   issueId: string;
+   projectId: string;
+   currentId: string | null;
+   currentName: string | null;
+   onChanged?: () => Promise<void> | void;
+}) {
+   const [open, setOpen] = useState(false);
+   const [milestones, setMilestones] = useState<ProjectMilestoneDto[] | null>(null);
+
+   const load = async () => {
+      if (milestones) return;
+      try {
+         setMilestones(await api.projects.milestones(projectId));
+      } catch {
+         setMilestones([]);
+      }
+   };
+
+   const select = async (milestoneId: string | null) => {
+      setOpen(false);
+      if (milestoneId === currentId) return;
+      try {
+         await api.issues.update(issueId, { milestoneId });
+         await onChanged?.();
+      } catch {
+         toast.error('Could not update the milestone');
+      }
+   };
+
+   return (
+      <Popover
+         open={open}
+         onOpenChange={(o) => {
+            setOpen(o);
+            if (o) void load();
+         }}
+      >
+         <PopoverTrigger asChild>
+            <button
+               type="button"
+               className={cn(
+                  'truncate text-left',
+                  currentName ? 'text-muted-foreground' : 'text-muted-foreground/60',
+                  'hover:text-foreground transition-colors'
+               )}
+            >
+               {currentName || 'Add milestone'}
+            </button>
+         </PopoverTrigger>
+         <PopoverContent className="border-input w-64 p-0" align="start">
+            <Command>
+               <CommandInput placeholder="Set milestone..." />
+               <CommandList>
+                  <CommandEmpty>No milestones</CommandEmpty>
+                  <CommandGroup>
+                     <CommandItem value="__none__" onSelect={() => void select(null)}>
+                        <span className="flex-1">No milestone</span>
+                        {currentId === null && <CheckIcon className="size-4" />}
+                     </CommandItem>
+                     {milestones?.map((m) => (
+                        <CommandItem key={m.id} value={m.name} onSelect={() => void select(m.id)}>
+                           <span className="size-2 rotate-45 border border-amber-400 shrink-0 mr-1" />
+                           <span className="flex-1 truncate">{m.name}</span>
+                           {currentId === m.id && <CheckIcon className="size-4" />}
+                        </CommandItem>
+                     ))}
+                  </CommandGroup>
+               </CommandList>
+            </Command>
+         </PopoverContent>
+      </Popover>
+   );
+}
+
+/**
  * Right sidebar of the issue page: editable properties (status, priority,
  * assignee), cycle, labels, project + milestone, relations and linked PRs.
  */
@@ -116,18 +202,6 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
       (s) => s.me?.subscribedIssueIds.includes(issue.id) ?? false
    );
    const toggleSubscription = useWorkspaceStore((s) => s.toggleSubscription);
-
-   const [editingMs, setEditingMs] = useState(false);
-   const [msDraft, setMsDraft] = useState('');
-   const saveMilestone = async () => {
-      setEditingMs(false);
-      try {
-         await api.issues.updateDetail(issue.id, { milestone: msDraft.trim() || null });
-         await onChanged?.();
-      } catch {
-         toast.error('Could not update the milestone');
-      }
-   };
 
    // Diff entre a seleção do LabelSelector e as labels atuais → add/remove no store.
    const onLabelsChange = (next: LabelInterface[]) => {
@@ -202,42 +276,26 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
                   <issue.project.icon className="size-4 text-muted-foreground shrink-0" />
                   <span className="truncate">{issue.project.name}</span>
                </div>
-               {(detail.milestone || onChanged) && (
+               {onChanged ? (
                   <div className="flex items-center gap-2 text-sm mt-1.5 pl-6">
                      <span className="size-2 rotate-45 border border-amber-400 shrink-0" />
-                     {editingMs ? (
-                        <input
-                           value={msDraft}
-                           onChange={(e) => setMsDraft(e.target.value)}
-                           autoFocus
-                           placeholder="Milestone"
-                           onBlur={() => void saveMilestone()}
-                           onKeyDown={(e) => {
-                              if (e.key === 'Enter') void saveMilestone();
-                              if (e.key === 'Escape') setEditingMs(false);
-                           }}
-                           className="flex-1 bg-transparent text-sm outline-none border rounded px-1.5 h-6"
-                        />
-                     ) : (
-                        <button
-                           type="button"
-                           disabled={!onChanged}
-                           onClick={() => {
-                              setMsDraft(detail.milestone ?? '');
-                              setEditingMs(true);
-                           }}
-                           className={cn(
-                              'truncate text-left',
-                              detail.milestone
-                                 ? 'text-muted-foreground'
-                                 : 'text-muted-foreground/60',
-                              onChanged && 'hover:text-foreground transition-colors'
-                           )}
-                        >
-                           {detail.milestone || 'Add milestone'}
-                        </button>
-                     )}
+                     <MilestoneSelector
+                        issueId={issue.id}
+                        projectId={issue.project.id}
+                        currentId={detail.milestoneId ?? null}
+                        currentName={detail.milestoneName ?? detail.milestone ?? null}
+                        onChanged={onChanged}
+                     />
                   </div>
+               ) : (
+                  (detail.milestoneName || detail.milestone) && (
+                     <div className="flex items-center gap-2 text-sm mt-1.5 pl-6">
+                        <span className="size-2 rotate-45 border border-amber-400 shrink-0" />
+                        <span className="truncate text-muted-foreground">
+                           {detail.milestoneName || detail.milestone}
+                        </span>
+                     </div>
+                  )
                )}
             </Section>
          )}

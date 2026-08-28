@@ -275,6 +275,9 @@ export const issue = pgTable(
       rank: varchar('rank', { length: 64 }).notNull(), // lexorank
       dueDate: date('due_date'),
       estimate: integer('estimate'), // pontos de estimativa (nullable = sem estimativa)
+      // Milestone estruturada (paridade Linear): FK p/ project_milestone. Substitui o
+      // texto livre issue_content.milestone. NULL = sem milestone.
+      milestoneId: varchar('milestone_id', { length: 36 }),
       // Snooze da issue (paridade Linear/triage): enquanto > now, some da fila de triage.
       snoozedUntil: timestamp('snoozed_until'),
       // Card originado de um erro do Sentry: id da issue do Sentry (dedup/idempotência).

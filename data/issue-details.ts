@@ -65,7 +65,10 @@ export interface IssueDetail {
    blockingIds?: string[];
    duplicateIds?: string[];
    prLinks?: PrLink[];
+   /** Milestone livre (legado). Novo fluxo usa milestoneId/milestoneName estruturados. */
    milestone?: string;
+   milestoneId?: string | null;
+   milestoneName?: string | null;
 }
 
 /* -------------------------------------------------------------------------- */

@@ -8,6 +8,8 @@ import {
    projectResource,
    projectUpdate,
    projectActivity,
+   issue as issueT,
+   status as statusT,
    appUser,
 } from '@/db/schema';
 import { ApiError } from './errors';
@@ -27,6 +29,8 @@ export interface ProjectMilestoneDto {
    name: string;
    targetDate: string | null;
    completed: boolean;
+   /** Progresso derivado das issues ligadas (paridade Linear): concluídas/total. */
+   progress: { done: number; total: number };
 }
 
 export interface ProjectResourceDto {
@@ -117,11 +121,34 @@ export async function listMilestones(db: Db, projectId: string): Promise<Project
       .from(projectMilestone)
       .where(eq(projectMilestone.projectId, projectId))
       .orderBy(asc(projectMilestone.targetDate), asc(projectMilestone.name));
+   // Progresso derivado: conta issues por milestone e quantas estão em status 'completed'.
+   const ids = rows.map((m) => m.id);
+   const prog = new Map<string, { done: number; total: number }>();
+   if (ids.length) {
+      const [issues, statuses] = await Promise.all([
+         db
+            .select({ milestoneId: issueT.milestoneId, statusId: issueT.statusId })
+            .from(issueT)
+            .where(inArray(issueT.milestoneId, ids)),
+         db.select({ id: statusT.id, category: statusT.category }).from(statusT),
+      ]);
+      const doneStatus = new Set(
+         statuses.filter((s) => s.category === 'completed').map((s) => s.id)
+      );
+      for (const i of issues) {
+         if (!i.milestoneId) continue;
+         const p = prog.get(i.milestoneId) ?? { done: 0, total: 0 };
+         p.total += 1;
+         if (doneStatus.has(i.statusId)) p.done += 1;
+         prog.set(i.milestoneId, p);
+      }
+   }
    return rows.map((m) => ({
       id: m.id,
       name: m.name,
       targetDate: m.targetDate ?? null,
       completed: m.completed,
+      progress: prog.get(m.id) ?? { done: 0, total: 0 },
    }));
 }
 
@@ -259,7 +286,13 @@ export async function addMilestone(
       completed: false,
    });
    publish({ entity: 'project', action: 'updated', id: projectId });
-   return { id, name: input.name.trim(), targetDate: input.targetDate ?? null, completed: false };
+   return {
+      id,
+      name: input.name.trim(),
+      targetDate: input.targetDate ?? null,
+      completed: false,
+      progress: { done: 0, total: 0 },
+   };
 }
 
 export interface UpdateMilestoneInput {
@@ -291,7 +324,13 @@ export async function updateMilestone(
    }
    publish({ entity: 'project', action: 'updated', id: rows[0].projectId });
    const m = { ...rows[0], ...set };
-   return { id: m.id, name: m.name, targetDate: m.targetDate ?? null, completed: m.completed };
+   return {
+      id: m.id,
+      name: m.name,
+      targetDate: m.targetDate ?? null,
+      completed: m.completed,
+      progress: { done: 0, total: 0 },
+   };
 }
 
 export async function deleteMilestone(db: Db, milestoneId: string): Promise<boolean> {
@@ -301,6 +340,8 @@ export async function deleteMilestone(db: Db, milestoneId: string): Promise<bool
       .where(eq(projectMilestone.id, milestoneId))
       .limit(1);
    if (rows.length === 0) return false;
+   // Desvincula as issues antes de remover (milestone_id não tem FK cascade).
+   await db.update(issueT).set({ milestoneId: null }).where(eq(issueT.milestoneId, milestoneId));
    await db.delete(projectMilestone).where(eq(projectMilestone.id, milestoneId));
    publish({ entity: 'project', action: 'updated', id: rows[0].projectId });
    return true;

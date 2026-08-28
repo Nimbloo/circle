@@ -1,6 +1,6 @@
 {
-   "id": "0000aaaa-0025-4000-8000-000000000025",
-   "prevId": "684cf8da-bfef-47c5-9592-b65f78b74838",
+   "id": "1bba74e9-4434-4eac-84ab-748b2c899bfc",
+   "prevId": "0000aaaa-0025-4000-8000-000000000025",
    "version": "7",
    "dialect": "postgresql",
    "tables": {
@@ -1156,6 +1156,12 @@
             "estimate": {
                "name": "estimate",
                "type": "integer",
+               "primaryKey": false,
+               "notNull": false
+            },
+            "milestone_id": {
+               "name": "milestone_id",
+               "type": "varchar(36)",
                "primaryKey": false,
                "notNull": false
             },

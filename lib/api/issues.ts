@@ -31,6 +31,7 @@ import {
    project as projectT,
    team as teamT,
    cycle as cycleT,
+   projectMilestone as projectMilestoneT,
 } from '@/db/schema';
 import { getOrCreateUser } from './users';
 import { rankAfter, firstRank, rankBetween } from './rank';
@@ -500,6 +501,8 @@ export interface UpdateIssueInput {
    estimate?: number | null;
    /** Snooze de triage: ISO para adiar, null para reativar. */
    snoozedUntil?: string | null;
+   /** Milestone estruturada (FK project_milestone) ou null p/ remover. */
+   milestoneId?: string | null;
 }
 
 export async function updateIssue(
@@ -526,6 +529,21 @@ export async function updateIssue(
    if (patch.estimate !== undefined) set.estimate = patch.estimate;
    if (patch.snoozedUntil !== undefined)
       set.snoozedUntil = patch.snoozedUntil ? new Date(patch.snoozedUntil) : null;
+   if (patch.milestoneId !== undefined) {
+      if (patch.milestoneId) {
+         // valida que a milestone pertence ao projeto da issue (após aplicar o patch de projeto)
+         const projectId = patch.projectId !== undefined ? patch.projectId || null : prev.projectId;
+         const [m] = await db
+            .select({ projectId: projectMilestoneT.projectId })
+            .from(projectMilestoneT)
+            .where(eq(projectMilestoneT.id, patch.milestoneId))
+            .limit(1);
+         if (!m) throw new ApiError(400, 'Milestone inválida');
+         if (m.projectId !== projectId)
+            throw new ApiError(400, 'Milestone não pertence ao projeto da issue');
+      }
+      set.milestoneId = patch.milestoneId || null;
+   }
 
    // Auto-add ao cycle atual (paridade Linear): issue que ENTRA em "started" e não tem
    // cycle é atribuída ao cycle corrente do time — a menos que o cycle esteja sendo

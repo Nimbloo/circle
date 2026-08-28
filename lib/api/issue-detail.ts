@@ -10,6 +10,7 @@ import {
    commentReaction,
    activityEvent,
    issueSubscription,
+   projectMilestone,
    appUser,
 } from '@/db/schema';
 import { getOrCreateUser } from './users';
@@ -59,7 +60,11 @@ export interface ActivityItem {
 export interface IssueDetailDto {
    identifier: string;
    description: string | null;
+   /** Milestone livre (legado). Novo fluxo usa milestoneId/milestoneName estruturados. */
    milestone: string | null;
+   /** Milestone estruturada (FK project_milestone) + nome resolvido. */
+   milestoneId: string | null;
+   milestoneName: string | null;
    subIssueIds: string[];
    relatedIds: string[];
    blockedByIds: string[];
@@ -109,7 +114,7 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
    const rows = await db.select().from(issueT).where(eq(issueT.id, issueId)).limit(1);
    if (rows.length === 0) return null;
    const iss = rows[0];
-   const [content, relations, blocking, prs] = await Promise.all([
+   const [content, relations, blocking, prs, ms] = await Promise.all([
       db.select().from(issueContent).where(eq(issueContent.issueId, issueId)).limit(1),
       db.select().from(issueRelation).where(eq(issueRelation.issueId, issueId)),
       // Lado inverso: outras issues que declaram ESTA como blocked_by → ESTA as bloqueia.
@@ -118,11 +123,20 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
          .from(issueRelation)
          .where(and(eq(issueRelation.relatedId, issueId), eq(issueRelation.kind, 'blocked_by'))),
       db.select().from(issuePrLink).where(eq(issuePrLink.issueId, issueId)),
+      iss.milestoneId
+         ? db
+              .select({ id: projectMilestone.id, name: projectMilestone.name })
+              .from(projectMilestone)
+              .where(eq(projectMilestone.id, iss.milestoneId))
+              .limit(1)
+         : Promise.resolve([]),
    ]);
    return {
       identifier: iss.identifier,
       description: content[0]?.description ?? null,
       milestone: content[0]?.milestone ?? null,
+      milestoneId: iss.milestoneId ?? null,
+      milestoneName: ms[0]?.name ?? null,
       subIssueIds: relations.filter((r) => r.kind === 'sub').map((r) => r.relatedId),
       relatedIds: relations.filter((r) => r.kind === 'related').map((r) => r.relatedId),
       blockedByIds: relations.filter((r) => r.kind === 'blocked_by').map((r) => r.relatedId),
