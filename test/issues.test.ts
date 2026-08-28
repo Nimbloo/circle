@@ -135,6 +135,24 @@ describe('issues', () => {
       expect(found.map((i) => i.title)).toEqual(['Alpha']);
    });
 
+   it('label group é mutuamente exclusivo (adicionar uma remove a irmã do grupo)', async () => {
+      const db = await setup();
+      const i = await createIssue(
+         db,
+         { teamId: 'CORE', title: 'X', statusId: 'to-do', priorityId: 'low' },
+         ME
+      );
+      // 'bug' e 'feature' são do grupo 'kind' (seed)
+      let dto = await addLabel(db, i.id, 'bug', ME);
+      expect(dto?.labels.map((l) => l.id)).toEqual(['bug']);
+      dto = await addLabel(db, i.id, 'feature', ME); // mesmo grupo → substitui bug
+      expect(dto?.labels.map((l) => l.id)).toEqual(['feature']);
+
+      // label sem grupo acumula (não é exclusiva)
+      dto = await addLabel(db, i.id, 'security', ME);
+      expect(dto?.labels.map((l) => l.id).sort()).toEqual(['feature', 'security']);
+   });
+
    it('snooze de triage: updateIssue seta snoozedUntil e o DTO carrega', async () => {
       const db = await setup();
       const i = await createIssue(

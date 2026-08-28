@@ -1,5 +1,17 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, gt, inArray, isNull, or, sql, ilike, type SQL } from 'drizzle-orm';
+import {
+   and,
+   asc,
+   eq,
+   gt,
+   inArray,
+   isNull,
+   notInArray,
+   or,
+   sql,
+   ilike,
+   type SQL,
+} from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    issue,
@@ -686,11 +698,27 @@ export async function addLabel(
    const issueRows = await db.select({ id: issue.id }).from(issue).where(eq(issue.id, id)).limit(1);
    if (issueRows.length === 0) throw new ApiError(404, `Issue '${id}' não encontrada`);
    const labelRows = await db
-      .select({ id: labelT.id, name: labelT.name })
+      .select({ id: labelT.id, name: labelT.name, groupId: labelT.groupId })
       .from(labelT)
       .where(eq(labelT.id, labelId))
       .limit(1);
    if (labelRows.length === 0) throw new ApiError(400, `Label '${labelId}' não existe`);
+
+   // Grupo mutuamente exclusivo (paridade Linear): ao adicionar uma label de um grupo,
+   // remove as outras labels do MESMO grupo já na issue (uma por grupo).
+   const groupId = labelRows[0].groupId;
+   if (groupId) {
+      const siblings = await db
+         .select({ id: labelT.id })
+         .from(labelT)
+         .where(and(eq(labelT.groupId, groupId), notInArray(labelT.id, [labelId])));
+      const siblingIds = siblings.map((s) => s.id);
+      if (siblingIds.length) {
+         await db
+            .delete(issueLabel)
+            .where(and(eq(issueLabel.issueId, id), inArray(issueLabel.labelId, siblingIds)));
+      }
+   }
 
    const inserted = await db
       .insert(issueLabel)

@@ -39,18 +39,20 @@ export const PRIORITY_SEED = [
    { id: 'low', name: 'Low', position: 4, sortRank: 3 },
 ];
 
+// groupId agrupa labels mutuamente exclusivas (paridade Linear). 'kind' = tipo de
+// trabalho (uma issue é de um tipo só); labels sem grupo são livres/acumuláveis.
 export const LABEL_SEED = [
-   { id: 'ui', name: 'UI Enhancement', color: 'purple' },
-   { id: 'bug', name: 'Bug', color: 'red' },
-   { id: 'feature', name: 'Feature', color: 'green' },
-   { id: 'documentation', name: 'Documentation', color: 'blue' },
-   { id: 'refactor', name: 'Refactor', color: 'yellow' },
-   { id: 'performance', name: 'Performance', color: 'orange' },
-   { id: 'design', name: 'Design', color: 'pink' },
-   { id: 'security', name: 'Security', color: 'gray' },
-   { id: 'accessibility', name: 'Accessibility', color: 'indigo' },
-   { id: 'testing', name: 'Testing', color: 'teal' },
-   { id: 'internationalization', name: 'Internationalization', color: 'cyan' },
+   { id: 'ui', name: 'UI Enhancement', color: 'purple', groupId: null },
+   { id: 'bug', name: 'Bug', color: 'red', groupId: 'kind' },
+   { id: 'feature', name: 'Feature', color: 'green', groupId: 'kind' },
+   { id: 'documentation', name: 'Documentation', color: 'blue', groupId: 'kind' },
+   { id: 'refactor', name: 'Refactor', color: 'yellow', groupId: 'kind' },
+   { id: 'performance', name: 'Performance', color: 'orange', groupId: null },
+   { id: 'design', name: 'Design', color: 'pink', groupId: null },
+   { id: 'security', name: 'Security', color: 'gray', groupId: null },
+   { id: 'accessibility', name: 'Accessibility', color: 'indigo', groupId: null },
+   { id: 'testing', name: 'Testing', color: 'teal', groupId: null },
+   { id: 'internationalization', name: 'Internationalization', color: 'cyan', groupId: null },
 ];
 
 export const HEALTH_SEED = [

@@ -63,7 +63,7 @@ function toPriority(row: CatalogBootstrap['priorities'][number]): Priority {
 }
 
 function toLabel(row: CatalogBootstrap['labels'][number]): LabelInterface {
-   return { id: row.id, name: row.name, color: row.color };
+   return { id: row.id, name: row.name, color: row.color, groupId: row.groupId };
 }
 
 function toHealth(row: CatalogBootstrap['healthStates'][number]): Health {

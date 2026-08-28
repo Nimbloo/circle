@@ -33,6 +33,9 @@ export const label = pgTable('label', {
    id: varchar('id', { length: 64 }).primaryKey(),
    name: varchar('name', { length: 128 }).notNull(),
    color: varchar('color', { length: 32 }).notNull(), // nome de cor, não hex
+   // Grupo de labels (paridade Linear): labels no mesmo grupo são mutuamente exclusivas
+   // por issue. NULL = label solta. O nome do grupo é a chave (ex.: 'kind', 'area').
+   groupId: varchar('group_id', { length: 64 }),
 });
 
 export const health = pgTable('health', {
