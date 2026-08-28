@@ -39,6 +39,7 @@ import { ApiError } from './errors';
 import { dispatchNotification } from './notify';
 import { getCachedCatalogs } from './catalogs';
 import { publish } from './events';
+import { notifySlackEvent } from './integrations/slack';
 
 /** Teto default de linhas nas listagens (proteção; paginação por cursor fica p/ depois). */
 const DEFAULT_LIST_LIMIT = 500;
@@ -491,7 +492,15 @@ export async function createIssue(
    });
 
    publish({ entity: 'issue', action: 'created', id, actorEmail });
-   return (await getIssue(db, id))!;
+   const created = (await getIssue(db, id))!;
+   // Notificação Slack (best-effort, fire-and-forget — não acopla latência à request).
+   void notifySlackEvent(db, {
+      type: 'issue.created',
+      identifier: created.identifier,
+      title: created.title,
+      actor: actor.name,
+   });
+   return created;
 }
 
 export interface UpdateIssueInput {
@@ -550,9 +559,11 @@ export async function updateIssue(
    }
 
    // Transição de status: marcos temporais (cycle/lead time) + auto-add ao cycle.
+   let enteredCompleted = false;
    if (patch.statusId !== undefined && patch.statusId !== prev.statusId) {
       const cat = (await loadCatalogs(db)).statuses.get(patch.statusId)?.category;
       const now = set.updatedAt as Date;
+      enteredCompleted = cat === 'completed';
       // startedAt: 1ª entrada em "started" (sticky — não sobrescreve).
       if (cat === 'started' && !prev.startedAt) set.startedAt = now;
       // completedAt: entra em "completed" grava; sai de "completed" (reabriu) limpa.
@@ -635,7 +646,26 @@ export async function updateIssue(
    }
 
    publish({ entity: 'issue', action: 'updated', id, actorEmail });
-   return getIssue(db, id);
+   const dto = await getIssue(db, id);
+   // Feed do canal Slack (best-effort, fire-and-forget). Gated pelo slack_config admin.
+   if (dto) {
+      if (enteredCompleted)
+         void notifySlackEvent(db, {
+            type: 'issue.completed',
+            identifier: dto.identifier,
+            title: dto.title,
+         });
+      const assignedNow =
+         patch.assigneeId !== undefined && patch.assigneeId && patch.assigneeId !== prev.assigneeId;
+      if (assignedNow && dto.assignee)
+         void notifySlackEvent(db, {
+            type: 'issue.assigned',
+            identifier: dto.identifier,
+            title: dto.title,
+            assignee: dto.assignee.name,
+         });
+   }
+   return dto;
 }
 
 export async function deleteIssue(db: Db, id: string): Promise<boolean> {

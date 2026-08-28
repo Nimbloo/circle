@@ -51,6 +51,7 @@ import type { IssueMatrix, ProjectProgress, TimeMetrics } from '@/lib/api/aggreg
 import type { MeDto } from '@/lib/api/users';
 import type { AuditLogDto } from '@/lib/api/audit';
 import type { FavoriteDto, FavoriteEntityType } from '@/lib/api/favorites';
+import type { SlackConfigDto } from '@/lib/api/integrations/slack';
 
 export class ApiError extends Error {
    constructor(
@@ -295,6 +296,10 @@ export const api = {
          ),
       /** Dispara uma mensagem de teste ao Slack (admin) — verificação da integração. */
       slackTest: () => post<{ sent: boolean; reason?: string }>('/integrations/slack/test', {}),
+      /** Config dos eventos que notificam o Slack (feed do canal). */
+      slackConfig: () => get<SlackConfigDto>('/integrations/slack/config'),
+      updateSlackConfig: (body: Partial<SlackConfigDto>) =>
+         patch<SlackConfigDto>('/integrations/slack/config', body),
    },
 
    members: {

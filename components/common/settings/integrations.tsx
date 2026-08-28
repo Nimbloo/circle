@@ -7,6 +7,7 @@ import { ChevronRight, Search, Send } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { INTEGRATION_LOGOS } from './integration-logos';
+import { SlackEventsConfig } from './slack-events-config';
 import {
    ENABLED_INTEGRATIONS,
    INTEGRATION_CATEGORIES,
@@ -230,6 +231,8 @@ export default function Integrations() {
                   </Button>
                </div>
             )}
+
+            {connectedIds.has('slack') && <SlackEventsConfig />}
 
             {searchResults ? (
                <section className="flex flex-col gap-3">

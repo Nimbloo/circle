@@ -3,6 +3,7 @@ import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { review, issue as issueT, issuePrLink, status as statusT } from '@/db/schema';
 import { ApiError } from './errors';
+import { notifySlackEvent } from './integrations/slack';
 
 /** Status do review (open|merged|closed) → status do link de PR na issue (open|merged|draft). */
 function prLinkStatus(reviewStatus: string): string {
@@ -356,6 +357,12 @@ async function linkPrsToIssues(
                .update(issueT)
                .set({ statusId: doneStatus.id, updatedAt: new Date() })
                .where(eq(issueT.id, iss.id));
+            // Feed do canal Slack (best-effort). Gated pelo slack_config.onPrMerged.
+            void notifySlackEvent(db, {
+               type: 'pr.merged',
+               identifier: iss.identifier,
+               title: iss.title,
+            });
          }
       }
       // id estável por (issue, repo, PR-título-normalizado) → re-sync atualiza, não duplica.

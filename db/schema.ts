@@ -85,6 +85,18 @@ export const userSettings = pgTable('user_settings', {
    updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
+// Config das notificações de saída pro Slack (singleton, id='default'). Quais
+// eventos disparam mensagem no Incoming Webhook (SLACK_WEBHOOK_URL, no env). O
+// envio em si é best-effort; estes toggles decidem QUAIS eventos notificam.
+export const slackConfig = pgTable('slack_config', {
+   id: varchar('id', { length: 16 }).primaryKey(), // 'default'
+   onIssueCreated: boolean('on_issue_created').notNull().default(true),
+   onIssueCompleted: boolean('on_issue_completed').notNull().default(true),
+   onIssueAssigned: boolean('on_issue_assigned').notNull().default(true),
+   onPrMerged: boolean('on_pr_merged').notNull().default(true),
+   updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
 // Foto de perfil (avatar) enviada pelo usuário, armazenada self-contained no
 // banco como data-URL base64. Servida por /api/v1/users/{id}/avatar; o
 // `app_user.avatar_url` aponta pra esse endpoint. Linha 1:1 com o usuário (PK = userId).
