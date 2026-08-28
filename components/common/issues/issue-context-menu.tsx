@@ -56,6 +56,11 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
    const { orgId } = useParams<{ orgId: string }>();
    const statusCompleted = status.find((s) => s.category === 'completed');
    const statusCanceled = status.find((s) => s.category === 'canceled');
+   // Triage (paridade Linear): Accept move p/ o 1º status "aberto" (unstarted/started);
+   // Decline move p/ canceled. Só aparece quando a issue está na categoria triage.
+   const statusAccept =
+      status.find((s) => s.category === 'unstarted') ??
+      status.find((s) => s.category === 'started');
    const [confirmOpen, setConfirmOpen] = useState(false);
 
    const {
@@ -202,6 +207,26 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
    return (
       <>
          <ContextMenuContent className="w-64">
+            {/* Ações de Triage (só quando a issue está na fila de triage) */}
+            {issue?.status.category === 'triage' && (
+               <>
+                  <ContextMenuGroup>
+                     <ContextMenuItem
+                        disabled={!statusAccept}
+                        onClick={() => statusAccept && handleMarkAs(statusAccept)}
+                     >
+                        <CheckCircle2 className="size-4 text-green-500" /> Accept
+                     </ContextMenuItem>
+                     <ContextMenuItem
+                        disabled={!statusCanceled}
+                        onClick={() => statusCanceled && handleMarkAs(statusCanceled)}
+                     >
+                        <CircleCheck className="size-4 text-muted-foreground" /> Decline
+                     </ContextMenuItem>
+                  </ContextMenuGroup>
+                  <ContextMenuSeparator />
+               </>
+            )}
             <ContextMenuGroup>
                <ContextMenuSub>
                   <ContextMenuSubTrigger>
