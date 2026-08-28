@@ -38,13 +38,18 @@ interface Agg {
    completed: number;
 }
 
-/** Conta scope/started/completed por ciclo, a partir das issues reais. */
+/**
+ * Agrega scope/started/completed por ciclo em PONTOS DE ESTIMATE (paridade Linear:
+ * "cycles use estimates to calculate effort"). Issue sem estimate conta como 1 ponto
+ * (o mesmo default do Linear quando não há estimativa) — então times que não estimam
+ * seguem vendo scope == nº de issues.
+ */
 async function aggregatesByCycle(db: Db, cycleIds: string[]): Promise<Map<string, Agg>> {
    const result = new Map<string, Agg>();
    if (cycleIds.length === 0) return result;
    const [issues, statuses] = await Promise.all([
       db
-         .select({ cycleId: issueT.cycleId, statusId: issueT.statusId })
+         .select({ cycleId: issueT.cycleId, statusId: issueT.statusId, estimate: issueT.estimate })
          .from(issueT)
          .where(inArray(issueT.cycleId, cycleIds)),
       db.select().from(statusT),
@@ -55,10 +60,11 @@ async function aggregatesByCycle(db: Db, cycleIds: string[]): Promise<Map<string
       if (!i.cycleId) continue;
       const agg = result.get(i.cycleId);
       if (!agg) continue;
-      agg.scope += 1;
+      const points = i.estimate && i.estimate > 0 ? i.estimate : 1; // fallback 1/issue
+      agg.scope += points;
       const cat = catById.get(i.statusId);
-      if (cat === 'started') agg.started += 1;
-      else if (cat === 'completed') agg.completed += 1;
+      if (cat === 'started') agg.started += points;
+      else if (cat === 'completed') agg.completed += points;
    }
    return result;
 }

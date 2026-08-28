@@ -69,6 +69,44 @@ describe('cycles', () => {
       expect(cycles[0].number).toBe(2);
    });
 
+   it('scope/started/completed são ponderados por estimate points (fallback 1)', async () => {
+      const db = await setup();
+      await createIssue(
+         db,
+         {
+            teamId: 'CORE',
+            title: 'A',
+            statusId: 'in-progress',
+            priorityId: 'low',
+            cycleId: 'c1',
+            estimate: 5,
+         },
+         ME
+      ); // started, 5 pts
+      await createIssue(
+         db,
+         {
+            teamId: 'CORE',
+            title: 'B',
+            statusId: 'done',
+            priorityId: 'low',
+            cycleId: 'c1',
+            estimate: 3,
+         },
+         ME
+      ); // completed, 3 pts
+      await createIssue(
+         db,
+         { teamId: 'CORE', title: 'C', statusId: 'to-do', priorityId: 'low', cycleId: 'c1' },
+         ME
+      ); // unstarted, sem estimate = 1 pt
+
+      const c1 = (await listCyclesByTeam(db, 'CORE')).find((c) => c.id === 'c1')!;
+      expect(c1.scope).toBe(9); // 5 + 3 + 1
+      expect(c1.started).toBe(5);
+      expect(c1.completed).toBe(3);
+   });
+
    it('current cycle has a burnup, upcoming does not', async () => {
       const db = await setup();
       expect((await getCycle(db, 'c1'))?.burnup).not.toBeNull();
