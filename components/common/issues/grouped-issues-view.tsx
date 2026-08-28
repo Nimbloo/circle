@@ -5,11 +5,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { Issue, sortIssuesByPriority } from '@/data/issues';
 import { Status } from '@/data/status';
-import { usePriorities } from '@/store/catalog-store';
+import { usePriorities, useLabels } from '@/store/catalog-store';
 import { useDisplaySettingsStore } from '@/store/display-settings-store';
 import { useFilterStore } from '@/store/filter-store';
 import { useBulkSelectionStore } from '@/store/bulk-selection-store';
-import { Box, ChevronDown, User, X } from 'lucide-react';
+import { Box, ChevronDown, Tag, User, X } from 'lucide-react';
 import { FC, useEffect, useMemo, useState } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
@@ -85,6 +85,17 @@ const sortIssues = (issues: Issue[], ordering: string, completedByRecency = fals
             );
          case 'title':
             return [...issues].sort((a, b) => a.title.localeCompare(b.title));
+         case 'manual':
+            // Ordem manual do Linear: pelo `rank` (LexoRank), ascendente.
+            return [...issues].sort((a, b) => a.rank.localeCompare(b.rank));
+         case 'dueDate':
+            // Due date ascendente; issues sem data vão pro fim.
+            return [...issues].sort((a, b) => {
+               if (!a.dueDate && !b.dueDate) return 0;
+               if (!a.dueDate) return 1;
+               if (!b.dueDate) return -1;
+               return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+            });
          case 'priority':
          default:
             return sortIssuesByPriority(issues);
@@ -191,6 +202,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
       useDisplaySettingsStore();
    const { filters } = useFilterStore();
    const priorities = usePriorities();
+   const labels = useLabels();
    const hasActiveFilters = filters.length > 0;
 
    // Limpa a seleção em lote ao desmontar (troca de view).
@@ -274,6 +286,38 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                      };
                   });
             }
+            case 'label': {
+               // Multi-valorado (padrão Linear): uma issue aparece em cada label que tem.
+               const labelGroups = labels.map((label) => ({
+                  group: {
+                     id: label.id,
+                     name: label.name,
+                     color: '#8f9299',
+                     icon: (
+                        <span
+                           className="size-2.5 rounded-full"
+                           style={{ backgroundColor: label.color }}
+                        />
+                     ),
+                  },
+                  issues: visibleIssues.filter((issue) =>
+                     issue.labels.some((l) => l.id === label.id)
+                  ),
+                  total: scopeIssues.filter((issue) => issue.labels.some((l) => l.id === label.id))
+                     .length,
+               }));
+               const noLabel = {
+                  group: {
+                     id: 'no-label',
+                     name: 'No label',
+                     color: '#8f9299',
+                     icon: <Tag className="size-4 text-muted-foreground" />,
+                  },
+                  issues: visibleIssues.filter((issue) => issue.labels.length === 0),
+                  total: scopeIssues.filter((issue) => issue.labels.length === 0).length,
+               };
+               return [...labelGroups, noLabel];
+            }
             case 'none': {
                return [
                   {
@@ -314,6 +358,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
       totalIssues,
       statuses,
       priorities,
+      labels,
       grouping,
       ordering,
       orderCompletedByRecency,

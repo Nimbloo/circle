@@ -33,12 +33,15 @@ const GROUPINGS: { value: GroupingKey; label: string }[] = [
    { value: 'assignee', label: 'Assignee' },
    { value: 'priority', label: 'Priority' },
    { value: 'project', label: 'Project' },
+   { value: 'label', label: 'Label' },
    { value: 'none', label: 'No grouping' },
 ];
 
 const ORDERINGS: { value: OrderingKey; label: string }[] = [
    { value: 'priority', label: 'Priority' },
+   { value: 'manual', label: 'Manual' },
    { value: 'created', label: 'Created' },
+   { value: 'dueDate', label: 'Due date' },
    { value: 'title', label: 'Title' },
 ];
 
