@@ -44,9 +44,6 @@ interface NotificationsState {
 
    // Filters
    getUnreadNotifications: () => InboxNotification[];
-   getReadNotifications: () => InboxNotification[];
-   getNotificationsByType: (type: NotificationType) => InboxNotification[];
-   getNotificationsByUser: (userId: string) => InboxNotification[];
 
    // Utility functions
    getNotificationById: (id: string) => InboxNotification | undefined;
@@ -244,18 +241,6 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
    // Filters
    getUnreadNotifications: () => {
       return get().notifications.filter((notification) => !notification.read);
-   },
-
-   getReadNotifications: () => {
-      return get().notifications.filter((notification) => notification.read);
-   },
-
-   getNotificationsByType: (type: NotificationType) => {
-      return get().notifications.filter((notification) => notification.type === type);
-   },
-
-   getNotificationsByUser: (userId: string) => {
-      return get().notifications.filter((notification) => notification.user.id === userId);
    },
 
    // Utility functions
