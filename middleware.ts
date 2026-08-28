@@ -28,6 +28,8 @@ const PUBLIC_API_EXACT = new Set([
    '/api/v1/integrations/sentry/issues/link',
    '/api/v1/integrations/sentry/webhook',
    '/api/v1/integrations/sentry/teams/options',
+   // Webhook do GitHub: autenticado por HMAC (X-Hub-Signature-256), não por sessão.
+   '/api/v1/integrations/github/webhook',
 ]);
 // Só o NextAuth precisa do subtree inteiro (/api/auth/*).
 const PUBLIC_API_PREFIXES = ['/api/auth'];

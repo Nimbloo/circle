@@ -384,3 +384,69 @@ async function linkPrsToIssues(
 function clip<T extends string | null | undefined>(s: T, max: number): T {
    return s != null && s.length > max ? (s.slice(0, max) as T) : s;
 }
+
+/** Payload do evento `pull_request` do webhook do GitHub (subset consumido). */
+export interface PullRequestEvent {
+   repository?: { full_name?: string };
+   pull_request?: GitHubPr;
+}
+
+/**
+ * Processa um evento `pull_request` do webhook do GitHub em TEMPO REAL: upsert do
+ * review + link PR↔issue (com auto-transition PR-merged → Done). Reusa a mesma
+ * lógica do sync por polling, mas para UM PR — o payload do webhook já traz
+ * additions/deletions (ao contrário da lista /pulls). Retorna o identifier vinculado.
+ */
+export async function handlePullRequestEvent(
+   db: Db,
+   payload: PullRequestEvent
+): Promise<{ linked: string | null }> {
+   const repoFull = payload.repository?.full_name;
+   const pr = payload.pull_request;
+   if (!repoFull || !pr) return { linked: null };
+   const repo = clip(repoFull, 196) as string;
+   const resolvesId = parseResolves(pr.title, pr.head?.ref, pr.body);
+   const status = statusOf(pr);
+   const title = clip(pr.title, 512) as string;
+   const row = {
+      id: `${repo}#${pr.number}`,
+      title,
+      status,
+      repo,
+      prNumber: pr.number,
+      url: clip(pr.html_url ?? null, 512),
+      author: clip(pr.user?.login ?? null, 128),
+      targetBranch: clip(pr.base?.ref ?? null, 196),
+      sourceBranch: clip(pr.head?.ref ?? null, 196),
+      additions: pr.additions ?? 0,
+      deletions: pr.deletions ?? 0,
+      resolvesIdentifier: resolvesId,
+      resolvesTitle: resolvesId ? title : null,
+      checksPassed: 0,
+      checksTotal: 0,
+      createdAt: new Date(pr.created_at),
+      syncedAt: new Date(),
+   };
+   const set: Partial<typeof review.$inferInsert> = {
+      title: row.title,
+      status: row.status,
+      author: row.author,
+      targetBranch: row.targetBranch,
+      sourceBranch: row.sourceBranch,
+      url: row.url,
+      resolvesIdentifier: row.resolvesIdentifier,
+      resolvesTitle: row.resolvesTitle,
+      syncedAt: row.syncedAt,
+   };
+   // additions/deletions só entram no update quando o payload os traz (evita zerar
+   // o contador de um PR que já tinha detalhe — mesmo cuidado do sync por polling).
+   if (pr.additions != null || pr.deletions != null) {
+      set.additions = row.additions;
+      set.deletions = row.deletions;
+   }
+   await db.insert(review).values(row).onConflictDoUpdate({ target: review.id, set });
+   if (resolvesId) {
+      await linkPrsToIssues(db, repo, new Map([[resolvesId, { title, status }]]));
+   }
+   return { linked: resolvesId };
+}
