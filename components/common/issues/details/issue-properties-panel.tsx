@@ -268,6 +268,20 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
             )
          )}
 
+         {/* Blocking (lado inverso, derivado de blocked_by) — read-only, paridade Linear "Blocks" */}
+         {detail.blockingIds && detail.blockingIds.length > 0 && (
+            <Section title="Blocking">
+               <div className="flex flex-col">
+                  {detail.blockingIds.map((identifier) => (
+                     <div key={identifier} className="flex items-center gap-1.5 min-w-0">
+                        <Ban className="size-3.5 text-orange-500 shrink-0" />
+                        <IssueRefRow identifier={identifier} />
+                     </div>
+                  ))}
+               </div>
+            </Section>
+         )}
+
          {onChanged ? (
             <Section title="Related">
                <RelationEditor

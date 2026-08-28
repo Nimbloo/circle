@@ -62,6 +62,7 @@ export interface IssueDetail {
    subIssueIds?: string[];
    relatedIds?: string[];
    blockedByIds?: string[];
+   blockingIds?: string[];
    duplicateIds?: string[];
    prLinks?: PrLink[];
    milestone?: string;

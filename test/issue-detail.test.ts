@@ -110,6 +110,26 @@ describe('issue detail / comments / activity', () => {
       await expect(addRelation(db, issue.id, 'nope', 'related')).rejects.toThrow();
    });
 
+   it('blocked_by expõe o lado inverso blockingIds (paridade Linear "Blocks")', async () => {
+      const { db, issue } = await anIssue();
+      const blocker = await createIssue(
+         db,
+         { teamId: 'CORE', title: 'Bloqueadora', statusId: 'to-do', priorityId: 'low' },
+         ME
+      );
+      // issue é bloqueada por blocker
+      await addRelation(db, issue.id, blocker.id, 'blocked_by', ME);
+
+      const issueDetail = await getIssueDetail(db, issue.id);
+      expect(issueDetail?.blockedByIds).toEqual([blocker.id]);
+      expect(issueDetail?.blockingIds).toEqual([]);
+
+      // do lado da bloqueadora: ela BLOQUEIA a issue (blockingIds), sem blocked_by
+      const blockerDetail = await getIssueDetail(db, blocker.id);
+      expect(blockerDetail?.blockingIds).toEqual([issue.id]);
+      expect(blockerDetail?.blockedByIds).toEqual([]);
+   });
+
    it('relação duplicate popula duplicateIds (paridade Linear)', async () => {
       const { db, issue } = await anIssue();
       const canonical = await createIssue(

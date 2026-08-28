@@ -11,9 +11,10 @@ export interface EstimateOption {
 }
 
 export const ESTIMATE_SCALES: Record<EstimateScale, EstimateOption[]> = {
-   fibonacci: [1, 2, 3, 5, 8].map((v) => ({ value: v, label: String(v) })),
-   exponential: [1, 2, 4, 8, 16].map((v) => ({ value: v, label: String(v) })),
-   linear: [1, 2, 3, 4, 5].map((v) => ({ value: v, label: String(v) })),
+   // Escalas estendidas do Linear (Fibonacci até 21, Exponential até 64).
+   fibonacci: [1, 2, 3, 5, 8, 13, 21].map((v) => ({ value: v, label: String(v) })),
+   exponential: [1, 2, 4, 8, 16, 32, 64].map((v) => ({ value: v, label: String(v) })),
+   linear: [1, 2, 3, 4, 5, 6, 7].map((v) => ({ value: v, label: String(v) })),
    tshirt: [
       { value: 1, label: 'XS' },
       { value: 2, label: 'S' },

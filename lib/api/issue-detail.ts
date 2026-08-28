@@ -63,6 +63,8 @@ export interface IssueDetailDto {
    subIssueIds: string[];
    relatedIds: string[];
    blockedByIds: string[];
+   /** Issues que ESTA bloqueia (lado inverso de blocked_by — paridade Linear "Blocks"). */
+   blockingIds: string[];
    duplicateIds: string[];
    prLinks: { id: string; title: string; status: string }[];
 }
@@ -107,9 +109,14 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
    const rows = await db.select().from(issueT).where(eq(issueT.id, issueId)).limit(1);
    if (rows.length === 0) return null;
    const iss = rows[0];
-   const [content, relations, prs] = await Promise.all([
+   const [content, relations, blocking, prs] = await Promise.all([
       db.select().from(issueContent).where(eq(issueContent.issueId, issueId)).limit(1),
       db.select().from(issueRelation).where(eq(issueRelation.issueId, issueId)),
+      // Lado inverso: outras issues que declaram ESTA como blocked_by → ESTA as bloqueia.
+      db
+         .select({ issueId: issueRelation.issueId })
+         .from(issueRelation)
+         .where(and(eq(issueRelation.relatedId, issueId), eq(issueRelation.kind, 'blocked_by'))),
       db.select().from(issuePrLink).where(eq(issuePrLink.issueId, issueId)),
    ]);
    return {
@@ -119,6 +126,7 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
       subIssueIds: relations.filter((r) => r.kind === 'sub').map((r) => r.relatedId),
       relatedIds: relations.filter((r) => r.kind === 'related').map((r) => r.relatedId),
       blockedByIds: relations.filter((r) => r.kind === 'blocked_by').map((r) => r.relatedId),
+      blockingIds: blocking.map((b) => b.issueId),
       duplicateIds: relations.filter((r) => r.kind === 'duplicate').map((r) => r.relatedId),
       prLinks: prs.map((p) => ({ id: p.id, title: p.title, status: p.status })),
    };
