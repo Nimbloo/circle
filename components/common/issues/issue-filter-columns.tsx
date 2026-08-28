@@ -4,7 +4,11 @@ import { useMemo } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { createColumnConfigHelper } from '@/components/data-table-filter/core/filters';
 import type { ColumnOption, FiltersState } from '@/components/data-table-filter/core/types';
-import { multiOptionFilterFn, optionFilterFn } from '@/components/data-table-filter/lib/filter-fns';
+import {
+   dateFilterFn,
+   multiOptionFilterFn,
+   optionFilterFn,
+} from '@/components/data-table-filter/lib/filter-fns';
 import { cycleStatusLabel } from '@/data/cycles';
 import type { Cycle } from '@/data/cycles';
 import { Issue } from '@/data/issues';
@@ -17,12 +21,15 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { useCatalogStore } from '@/store/catalog-store';
 import {
    BarChart3,
+   CalendarClock,
+   CalendarPlus,
    CircleCheck,
    CircleDashed,
    CircleUserRound,
    Folder,
    RefreshCcw,
    Tag,
+   UserPen,
 } from 'lucide-react';
 
 /* ------------------------- Options dos catálogos (hidratados) --------------- */
@@ -86,6 +93,19 @@ function assigneeOptions(users: User[]): ColumnOption[] {
          ),
       })),
    ];
+}
+
+function creatorOptions(users: User[]): ColumnOption[] {
+   return users.map((user) => ({
+      value: user.id,
+      label: user.name,
+      icon: (
+         <Avatar className="size-4">
+            <AvatarImage src={user.avatarUrl || undefined} alt={user.name} />
+            <AvatarFallback>{user.name[0]}</AvatarFallback>
+         </Avatar>
+      ),
+   }));
 }
 
 function projectOptions(projects: Project[]): ColumnOption[] {
@@ -181,6 +201,28 @@ function buildIssueFilterColumns(
          .icon(RefreshCcw)
          .options(cycleOptions(cycles))
          .build(),
+      dtf
+         .option()
+         .id('creator')
+         .accessor((i: Issue) => i.createdById ?? '')
+         .displayName('Created by')
+         .icon(UserPen)
+         .options(creatorOptions(users))
+         .build(),
+      dtf
+         .date()
+         .id('dueDate')
+         .accessor((i: Issue) => (i.dueDate ? new Date(i.dueDate) : (undefined as unknown as Date)))
+         .displayName('Due date')
+         .icon(CalendarClock)
+         .build(),
+      dtf
+         .date()
+         .id('createdAt')
+         .accessor((i: Issue) => new Date(i.createdAt))
+         .displayName('Created')
+         .icon(CalendarPlus)
+         .build(),
    ];
 }
 
@@ -220,6 +262,9 @@ export function applyIssueFilters(issues: Issue[], filters: FiltersState): Issue
                return optionFilterFn(String(value ?? ''), filter) ?? true;
             case 'multiOption':
                return multiOptionFilterFn((value as string[]) ?? [], filter) ?? true;
+            case 'date':
+               // issue sem a data (ex.: sem due date) é excluída quando o filtro de data está ativo.
+               return value instanceof Date ? dateFilterFn(value, filter) : false;
             default:
                return true;
          }
