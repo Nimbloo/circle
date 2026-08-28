@@ -369,6 +369,27 @@ export const issueSubscription = pgTable(
    ]
 );
 
+// Favoritos do usuário (paridade Linear): pin heterogêneo de issue/project/view
+// numa seção dedicada da sidebar. Integridade app-level (sem FK polimorfica) —
+// entidade removida é limpa no resolve/list. `position` p/ ordenação (drag futuro).
+export const favorite = pgTable(
+   'favorite',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      userId: varchar('user_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      entityType: varchar('entity_type', { length: 16 }).notNull(), // issue | project | view
+      entityId: varchar('entity_id', { length: 36 }).notNull(),
+      position: integer('position').notNull().default(0),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [
+      unique('uniq_favorite_user_entity').on(t.userId, t.entityType, t.entityId),
+      index('idx_favorite_user').on(t.userId),
+   ]
+);
+
 export const comment = pgTable(
    'comment',
    {

@@ -50,6 +50,7 @@ import type {
 import type { IssueMatrix, ProjectProgress } from '@/lib/api/aggregations';
 import type { MeDto } from '@/lib/api/users';
 import type { AuditLogDto } from '@/lib/api/audit';
+import type { FavoriteDto, FavoriteEntityType } from '@/lib/api/favorites';
 
 export class ApiError extends Error {
    constructor(
@@ -383,6 +384,14 @@ export const api = {
       snooze: (id: string, snoozedUntil: string | null) =>
          patch<{ id: string }>(`/notifications/${id}`, { snoozedUntil }),
       readAll: () => post<{ marked: number }>('/notifications/read-all'),
+   },
+
+   favorites: {
+      list: () => get<FavoriteDto[]>('/favorites'),
+      add: (entityType: FavoriteEntityType, entityId: string) =>
+         post<{ added: boolean }>('/favorites', { entityType, entityId }),
+      remove: (entityType: FavoriteEntityType, entityId: string) =>
+         del<{ removed: boolean }>(`/favorites?entityType=${entityType}&entityId=${entityId}`),
    },
 
    reviews: {

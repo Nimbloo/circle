@@ -34,8 +34,11 @@ import {
    Trash2,
    CheckCircle2,
    Clipboard,
+   Star,
 } from 'lucide-react';
 import { useIssuesStore } from '@/store/issues-store';
+import { useFavoritesStore } from '@/store/favorites-store';
+import { cn } from '@/lib/utils';
 import { useParams } from 'next/navigation';
 import { useShallow } from 'zustand/react/shallow';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -53,6 +56,8 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
    const status = useStatuses();
    const priorities = usePriorities();
    const labels = useLabels();
+   const toggleFavorite = useFavoritesStore((s) => s.toggle);
+   const isFav = useFavoritesStore((s) => (issueId ? s.isFavorite('issue', issueId) : false));
    const { orgId } = useParams<{ orgId: string }>();
    const statusCompleted = status.find((s) => s.category === 'completed');
    const statusCanceled = status.find((s) => s.category === 'canceled');
@@ -435,6 +440,14 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
                   <ContextMenuItem onClick={copyBranch}>Copy git branch</ContextMenuItem>
                </ContextMenuSubContent>
             </ContextMenuSub>
+
+            <ContextMenuItem
+               disabled={!issueId}
+               onClick={() => issueId && void toggleFavorite('issue', issueId)}
+            >
+               <Star className={cn('size-4', isFav && 'fill-amber-400 text-amber-400')} />{' '}
+               {isFav ? 'Remove from favorites' : 'Add to favorites'}
+            </ContextMenuItem>
 
             <ContextMenuSeparator />
 

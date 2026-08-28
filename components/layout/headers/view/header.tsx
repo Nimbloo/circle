@@ -6,7 +6,7 @@ import { filterIssuesForView, filterProjectsForView } from '@/data/views';
 import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { useViewFavoritesStore } from '@/store/view-favorites-store';
+import { useFavoritesStore } from '@/store/favorites-store';
 import { cn } from '@/lib/utils';
 import { BarChart3, MoreHorizontal, Star } from 'lucide-react';
 import { useParams } from 'next/navigation';
@@ -17,8 +17,8 @@ export default function Header() {
    const liveIssues = useIssuesStore((s) => s.issues);
    const liveProjects = useWorkspaceStore((s) => s.projects);
    const { openPanel, togglePanel } = useRightPanelStore();
-   const isFavorite = useViewFavoritesStore((s) => s.favoriteIds.includes(viewId));
-   const toggleFavorite = useViewFavoritesStore((s) => s.toggle);
+   const isFavorite = useFavoritesStore((s) => s.isFavorite('view', viewId));
+   const toggleFavorite = useFavoritesStore((s) => s.toggle);
 
    if (!view) return null;
 
@@ -39,7 +39,7 @@ export default function Header() {
                <span className="text-sm font-medium truncate">{view.name}</span>
                <button
                   type="button"
-                  onClick={() => toggleFavorite(viewId)}
+                  onClick={() => void toggleFavorite('view', viewId)}
                   aria-label={isFavorite ? 'Unfavorite view' : 'Favorite view'}
                   className="shrink-0 ml-1"
                >

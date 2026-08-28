@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 import { View } from '@/data/views';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useViewsDisplayStore, ViewsOrdering } from '@/store/views-display-store';
-import { useViewFavoritesStore } from '@/store/view-favorites-store';
+import { useFavoritesStore } from '@/store/favorites-store';
 import { ArrowDown, SlidersHorizontal, Star } from 'lucide-react';
 import { CreateViewButton } from './create-view-dialog';
 import { ViewActions } from './view-actions';
@@ -106,8 +106,8 @@ function DisplayOptions() {
 
 function ViewRow({ view, orgId }: { view: View; orgId: string }) {
    const { displayProperties } = useViewsDisplayStore();
-   const isFavorite = useViewFavoritesStore((s) => s.favoriteIds.includes(view.id));
-   const toggleFavorite = useViewFavoritesStore((s) => s.toggle);
+   const isFavorite = useFavoritesStore((s) => s.isFavorite('view', view.id));
+   const toggleFavorite = useFavoritesStore((s) => s.toggle);
    return (
       <div className="flex items-center gap-3 px-6 py-2.5 border-b border-border/50 hover:bg-sidebar/50 transition-colors">
          <Link
@@ -145,7 +145,7 @@ function ViewRow({ view, orgId }: { view: View; orgId: string }) {
          </Link>
          <button
             type="button"
-            onClick={() => toggleFavorite(view.id)}
+            onClick={() => void toggleFavorite('view', view.id)}
             aria-label={isFavorite ? 'Unfavorite view' : 'Favorite view'}
             className="shrink-0"
          >
@@ -175,10 +175,12 @@ export default function Views({ teamId }: { teamId?: string }) {
    const views = useWorkspaceStore((s) => s.views);
    const teams = useWorkspaceStore((s) => s.teams);
    const team = teamId ? teams.find((entry) => entry.id === teamId) : undefined;
-   const favoriteIds = useViewFavoritesStore((s) => s.favoriteIds);
+   const favoriteItems = useFavoritesStore((s) => s.items);
 
    const list = useMemo(() => {
-      const favSet = new Set(favoriteIds);
+      const favSet = new Set(
+         favoriteItems.filter((f) => f.entityType === 'view').map((f) => f.entityId)
+      );
       let source = views.filter((view) => view.type === (tab === 'issues' ? 'issue' : 'project'));
       if (teamId) source = source.filter((view) => view.teamId === teamId);
       return [...source].sort((a, b) => {
@@ -190,7 +192,7 @@ export default function Views({ teamId }: { teamId?: string }) {
          if (ordering === 'updated') return b.updatedAt.localeCompare(a.updatedAt);
          return a.name.localeCompare(b.name);
       });
-   }, [views, tab, ordering, teamId, favoriteIds]);
+   }, [views, tab, ordering, teamId, favoriteItems]);
 
    return (
       <div className="w-full h-full overflow-y-auto">
