@@ -35,8 +35,17 @@ export interface WorkspaceBootstrap {
    views: ViewDto[];
 }
 
-/** Uma chamada: toda a referência do workspace, costurada server-side. */
-export async function bootstrapWorkspace(db: Db, email: string): Promise<WorkspaceBootstrap> {
+/**
+ * Uma chamada: toda a referência do workspace, costurada server-side.
+ * `rollover` (default true) faz o auto-rollover lazy de cycles. Refetches disparados
+ * pelo SSE passam `false` — o rollover é housekeeping de load, não precisa rodar (a
+ * ESCRITA) a cada evento; só no boot genuíno da página.
+ */
+export async function bootstrapWorkspace(
+   db: Db,
+   email: string,
+   opts: { rollover?: boolean } = {}
+): Promise<WorkspaceBootstrap> {
    const me = await getMe(db, email);
 
    const [
@@ -90,9 +99,12 @@ export async function bootstrapWorkspace(db: Db, email: string): Promise<Workspa
    // Auto-rollover lazy (#24): o app não tem scheduler, então o bootstrap fecha os
    // cycles vencidos e migra as issues em aberto ANTES de listar. Idempotente; roda
    // por time em paralelo. (Sem isto o rollover ficava morto — nenhum outro caminho
-   // da UI o dispara.)
+   // da UI o dispara.) Pulado em refetch de SSE (`rollover:false`) — não repetir a
+   // escrita a cada evento; o boot da página já cobre.
    const teamIds = teams.map((t) => t.id);
-   await Promise.all(teamIds.map((id) => rolloverCyclesForTeam(db, id)));
+   if (opts.rollover !== false) {
+      await Promise.all(teamIds.map((id) => rolloverCyclesForTeam(db, id)));
+   }
 
    // cycles de todos os times — 2 queries no total (era N+1: 1 chamada por time,
    // cada uma re-escaneando a tabela status).

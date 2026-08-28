@@ -32,7 +32,7 @@ interface WorkspaceState {
    initiatives: Initiative[];
    views: View[];
 
-   hydrate: () => Promise<void>;
+   hydrate: (opts?: { rollover?: boolean }) => Promise<void>;
 
    /** Splice de UM project/initiative a partir do DTO do servidor (após uma mutação),
     * em vez de re-hidratar o workspace inteiro — mesmo padrão do issues-store. */
@@ -71,11 +71,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
    initiatives: [],
    views: [],
 
-   hydrate: async () => {
+   hydrate: async (opts) => {
       if (get().loading) return;
       set({ loading: true });
       try {
-         const res = await fetch('/api/v1/workspace');
+         // Refetch de SSE passa rollover:false — não repetir a escrita do auto-rollover
+         // de cycles a cada evento (só o boot genuíno da página faz o rollover).
+         const qs = opts?.rollover === false ? '?rollover=0' : '';
+         const res = await fetch(`/api/v1/workspace${qs}`);
          if (!res.ok) throw new Error(`workspace ${res.status}`);
          const { data } = (await res.json()) as { data: WorkspaceBootstrap };
          // Catálogos (status/priority/label/health) já vêm no bootstrap — populamos
