@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { ok, notFound } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
+import { getOrCreateUser } from '@/lib/api/users';
 import { getView, updateView, deleteView } from '@/lib/api/views';
 
 export const runtime = 'nodejs';
@@ -9,10 +10,11 @@ export const dynamic = 'force-dynamic';
 
 type Params = { params: Promise<{ id: string }> };
 
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      const dto = await getView(db, id);
+      const me = await getOrCreateUser(db, await requireEmail(req));
+      const dto = await getView(db, id, me.id); // view pessoal só p/ o dono
       return dto ? ok(dto) : notFound(`View '${id}' não encontrada`);
    });
 }

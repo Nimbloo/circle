@@ -76,9 +76,14 @@ export async function listViews(db: Db, teamId?: string, viewerId?: string): Pro
    return rows.map(toDto).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export async function getView(db: Db, id: string): Promise<ViewDto | null> {
+export async function getView(db: Db, id: string, viewerId?: string): Promise<ViewDto | null> {
    const rows = await db.select().from(savedView).where(eq(savedView.id, id)).limit(1);
-   return rows.length ? toDto(rows[0]) : null;
+   if (!rows.length) return null;
+   const v = rows[0];
+   // View PESSOAL (sem time) só é visível ao dono — senão qualquer autenticado leria a
+   // view pessoal de outro por id direto (mesma regra do listViews).
+   if (viewerId && !v.teamId && v.ownerId !== viewerId) return null;
+   return toDto(v);
 }
 
 export interface CreateViewInput {
@@ -166,9 +171,10 @@ export async function deleteView(db: Db, id: string, actorEmail: string): Promis
 /** Aplica o filtro salvo da view a issues (ou projects). */
 export async function resolveView(
    db: Db,
-   id: string
+   id: string,
+   viewerId?: string
 ): Promise<{ type: string; issues?: IssueDto[]; projects?: ProjectDto[] } | null> {
-   const view = await getView(db, id);
+   const view = await getView(db, id, viewerId);
    if (!view) return null;
    const f = view.filter;
 
