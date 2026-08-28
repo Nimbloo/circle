@@ -15,6 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useLabels, usePriorities, useStatuses } from '@/store/catalog-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
 import { useIssuesStore } from '@/store/issues-store';
+import { useRecentsStore } from '@/store/recents-store';
 import { api } from '@/lib/client';
 import { useShallow } from 'zustand/react/shallow';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -173,6 +174,30 @@ export function CommandPalette() {
    }, [pathname, issues]);
 
    const issue = contextCleared ? undefined : contextIssue;
+
+   // Registro de "recentes": grava a entidade da rota atual (issue/project) p/ o
+   // grupo "Recently viewed" do ⌘K. Captura toda visita, não só via palette.
+   const recents = useRecentsStore((s) => s.recents);
+   const pushRecent = useRecentsStore((s) => s.push);
+   useEffect(() => {
+      const im = pathname.match(/^\/[^/]+\/issue\/([^/]+)/);
+      if (im) {
+         const found = issues.find((i) => i.identifier === im[1]);
+         if (found)
+            pushRecent({
+               type: 'issue',
+               id: found.id,
+               label: found.title,
+               identifier: found.identifier,
+            });
+         return;
+      }
+      const pm = pathname.match(/^\/[^/]+\/project\/([^/]+)/);
+      if (pm) {
+         const found = allProjects.find((p) => p.id === pm[1]);
+         if (found) pushRecent({ type: 'project', id: found.id, label: found.name });
+      }
+   }, [pathname, issues, allProjects, pushRecent]);
 
    const reset = useCallback(() => {
       setRoute('root');
@@ -460,6 +485,35 @@ export function CommandPalette() {
 
                   {route === 'root' && !issue && (
                      <>
+                        {!query.trim() && recents.length > 0 && (
+                           <CommandGroup heading="Recently viewed">
+                              {recents.map((r) => (
+                                 <CommandItem
+                                    key={`${r.type}:${r.id}`}
+                                    value={`recent ${r.identifier ?? ''} ${r.label}`}
+                                    onSelect={() =>
+                                       go(
+                                          r.type === 'issue'
+                                             ? `/issue/${r.identifier ?? r.id}`
+                                             : `/project/${r.id}/overview`
+                                       )
+                                    }
+                                 >
+                                    {r.type === 'issue' ? (
+                                       <CircleDot className="text-muted-foreground" />
+                                    ) : (
+                                       <Box className="text-muted-foreground" />
+                                    )}
+                                    {r.identifier && (
+                                       <span className="text-muted-foreground text-xs shrink-0">
+                                          {r.identifier}
+                                       </span>
+                                    )}
+                                    <span className="truncate">{r.label}</span>
+                                 </CommandItem>
+                              ))}
+                           </CommandGroup>
+                        )}
                         {hasSearchResults && (
                            <>
                               {searchResults.issues.length > 0 && (
