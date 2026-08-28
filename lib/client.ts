@@ -49,6 +49,7 @@ import type {
 } from '@/lib/api/issue-detail';
 import type { IssueMatrix, ProjectProgress } from '@/lib/api/aggregations';
 import type { MeDto } from '@/lib/api/users';
+import type { AuditLogDto } from '@/lib/api/audit';
 
 export class ApiError extends Error {
    constructor(
@@ -150,6 +151,9 @@ export const api = {
       put: (data: Record<string, unknown>) =>
          request<Record<string, unknown>>('PUT', '/settings', data),
    },
+
+   /** Audit log de ações administrativas (só admin). */
+   audit: () => get<AuditLogDto[]>('/audit'),
 
    statuses: Object.assign(() => get<StatusDto[]>('/statuses'), {
       create: (input: CreateStatusInput) => post<StatusDto>('/statuses', input),

@@ -5,6 +5,7 @@ import { handle, multi, requireEmail } from '@/lib/api/http';
 import { emailFromRequest } from '@/lib/api/auth';
 import { getOrCreateUser } from '@/lib/api/users';
 import { listTeams, createTeam, type TeamSort } from '@/lib/api/teams';
+import { recordAudit } from '@/lib/api/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,6 +32,15 @@ export async function POST(req: Request) {
       const email = await requireEmail(req);
       const input = CreateTeamSchema.parse(await req.json());
       // Passa o criador → entra automaticamente como membro (senão o time nasce órfão).
-      return ok(await createTeam(db, input, email));
+      const team = await createTeam(db, input, email);
+      const actor = await getOrCreateUser(db, email);
+      await recordAudit(db, {
+         actorId: actor.id,
+         action: 'team.create',
+         targetType: 'team',
+         targetId: team.id,
+         meta: { name: team.name },
+      });
+      return ok(team);
    });
 }

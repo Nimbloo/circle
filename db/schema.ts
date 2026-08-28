@@ -453,6 +453,22 @@ export const notification = pgTable(
    (t) => [index('idx_notification_recipient').on(t.recipientId)]
 );
 
+// Audit log append-only no nível workspace (paridade Linear): quem fez o quê nas
+// ações administrativas (role change, criar/excluir time, add/remove membro, join-request).
+export const auditLog = pgTable(
+   'audit_log',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      actorId: varchar('actor_id', { length: 36 }).references(() => appUser.id),
+      action: varchar('action', { length: 48 }).notNull(), // role.change|team.create|...
+      targetType: varchar('target_type', { length: 24 }), // team|member|...
+      targetId: varchar('target_id', { length: 64 }),
+      meta: text('meta'), // JSON opcional (ex.: {from,to})
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_audit_log_created').on(t.createdAt)]
+);
+
 export const projectUpdate = pgTable(
    'project_update',
    {

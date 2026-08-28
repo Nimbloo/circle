@@ -6,6 +6,7 @@ import { emailFromRequest, isAdmin } from '@/lib/api/auth';
 import { ApiError } from '@/lib/api/errors';
 import { getOrCreateUser } from '@/lib/api/users';
 import { getTeam, updateTeam, deleteTeam } from '@/lib/api/teams';
+import { recordAudit } from '@/lib/api/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -46,6 +47,15 @@ export async function DELETE(req: Request, { params }: Params) {
       const email = await requireEmail(req);
       if (!(await isAdmin(email, db))) throw new ApiError(403, 'Apenas admin');
       const removed = await deleteTeam(db, teamKey);
+      if (removed) {
+         const actor = await getOrCreateUser(db, email);
+         await recordAudit(db, {
+            actorId: actor.id,
+            action: 'team.delete',
+            targetType: 'team',
+            targetId: teamKey,
+         });
+      }
       return removed ? ok({ deleted: true }) : notFound(`Team '${teamKey}' não encontrado`);
    });
 }

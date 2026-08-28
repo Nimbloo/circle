@@ -162,6 +162,13 @@
          "when": 1787881055029,
          "tag": "0022_initiative_update",
          "breakpoints": true
+      },
+      {
+         "idx": 23,
+         "version": "7",
+         "when": 1787881897257,
+         "tag": "0023_audit_log",
+         "breakpoints": true
       }
    ]
 }

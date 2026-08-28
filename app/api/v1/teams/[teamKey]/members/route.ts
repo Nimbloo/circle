@@ -5,6 +5,8 @@ import { handle, requireEmail } from '@/lib/api/http';
 import { isAdmin } from '@/lib/api/auth';
 import { ApiError } from '@/lib/api/errors';
 import { listTeamMembers, addTeamMember } from '@/lib/api/teams';
+import { getOrCreateUser } from '@/lib/api/users';
+import { recordAudit } from '@/lib/api/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -28,6 +30,14 @@ export async function POST(req: Request, { params }: Params) {
       if (!(await isAdmin(actor, db))) throw new ApiError(403, 'Apenas admin');
       const { email } = AddMemberSchema.parse(await req.json());
       await addTeamMember(db, teamKey, email);
+      const actorUser = await getOrCreateUser(db, actor);
+      await recordAudit(db, {
+         actorId: actorUser.id,
+         action: 'member.add',
+         targetType: 'team',
+         targetId: teamKey,
+         meta: { email },
+      });
       return ok(await listTeamMembers(db, teamKey));
    });
 }
