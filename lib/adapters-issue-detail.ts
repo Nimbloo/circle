@@ -182,5 +182,9 @@ export function adaptIssueDetail(dto: IssueDetailDto, activity: ActivityDto[]): 
       duplicateIds: dto.duplicateIds,
       prLinks: dto.prLinks.map((p) => ({ ...p, status: p.status as PrLink['status'] })),
       milestone: dto.milestone ?? undefined,
+      // FK estruturada (o painel exibe milestoneName; sem isto o picker sempre mostrava
+      // "Add milestone" mesmo com milestone salva — o adapter dropava os campos).
+      milestoneId: dto.milestoneId,
+      milestoneName: dto.milestoneName,
    };
 }
