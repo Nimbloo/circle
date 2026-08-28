@@ -2,7 +2,7 @@
 
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
-import { IterationCcw } from 'lucide-react';
+import { CyclePlayIcon } from './cycle-line';
 import { useParams } from 'next/navigation';
 import { Fragment, useMemo } from 'react';
 import CycleLine from './cycle-line';
@@ -28,7 +28,7 @@ export default function Cycles() {
       return (
          <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
             <div className="flex size-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
-               <IterationCcw className="size-6" />
+               <CyclePlayIcon className="size-6" />
             </div>
             <div className="flex flex-col gap-1">
                <p className="text-sm font-medium">No cycles yet</p>
