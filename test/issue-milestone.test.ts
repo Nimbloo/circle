@@ -71,6 +71,40 @@ describe('issue milestone FK', () => {
       expect(detail?.milestoneName).toBeNull();
    });
 
+   it('clears the milestone when the issue leaves/changes project (no orphan)', async () => {
+      const { db, author, project, other } = await setup();
+      const ms = await addMilestone(db, project.id, { name: 'Zeta' });
+      const iss = await createIssue(
+         db,
+         { ...issueBase, title: 'G', projectId: project.id },
+         author
+      );
+      await updateIssue(db, iss.id, { milestoneId: ms.id }, author);
+
+      // Move para OUTRO projeto sem tocar em milestoneId → milestone deve ser limpa.
+      await updateIssue(db, iss.id, { projectId: other.id }, author);
+      const moved = await getIssueDetail(db, iss.id);
+      expect(moved?.milestoneId).toBeNull();
+
+      // A milestone órfã não infla mais o progresso do projeto original.
+      const list = await listMilestones(db, project.id);
+      expect(list.find((m) => m.id === ms.id)?.progress).toEqual({ done: 0, total: 0 });
+   });
+
+   it('clears the milestone when the issue is removed from its project', async () => {
+      const { db, author, project } = await setup();
+      const ms = await addMilestone(db, project.id, { name: 'Eta' });
+      const iss = await createIssue(
+         db,
+         { ...issueBase, title: 'H', projectId: project.id },
+         author
+      );
+      await updateIssue(db, iss.id, { milestoneId: ms.id }, author);
+
+      await updateIssue(db, iss.id, { projectId: null }, author);
+      expect((await getIssueDetail(db, iss.id))?.milestoneId).toBeNull();
+   });
+
    it('deleting a milestone nulls out referencing issues (no orphan FK)', async () => {
       const { db, author, project } = await setup();
       const ms = await addMilestone(db, project.id, { name: 'Gamma' });

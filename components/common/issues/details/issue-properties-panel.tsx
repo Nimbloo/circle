@@ -17,7 +17,7 @@ import { IssueDetail } from '@/data/issue-details';
 import { Issue } from '@/data/issues';
 import { LabelInterface } from '@/data/labels';
 import { Ban, Bell, BellOff, CheckIcon, GitPullRequestArrow } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '@/lib/client';
 import type { ProjectMilestoneDto } from '@/lib/api/project-detail';
 import { cn } from '@/lib/utils';
@@ -123,6 +123,12 @@ function MilestoneSelector({
 }) {
    const [open, setOpen] = useState(false);
    const [milestones, setMilestones] = useState<ProjectMilestoneDto[] | null>(null);
+
+   // Invalida o cache quando o projeto da issue muda — senão a lista fica a do projeto
+   // anterior (nunca refetcha) e nenhum item casa o currentId.
+   useEffect(() => {
+      setMilestones(null);
+   }, [projectId]);
 
    const load = async () => {
       if (milestones) return;

@@ -329,7 +329,28 @@ export async function updateMilestone(
       name: m.name,
       targetDate: m.targetDate ?? null,
       completed: m.completed,
-      progress: { done: 0, total: 0 },
+      // Progresso REAL (não 0/0 hardcoded): senão renomear/completar a milestone zeraria
+      // o contador no estado local até o próximo reload.
+      progress: await milestoneProgress(db, milestoneId),
+   };
+}
+
+/** Progresso (done/total) de UMA milestone, derivado das issues vinculadas. */
+async function milestoneProgress(
+   db: Db,
+   milestoneId: string
+): Promise<{ done: number; total: number }> {
+   const [issues, statuses] = await Promise.all([
+      db
+         .select({ statusId: issueT.statusId })
+         .from(issueT)
+         .where(eq(issueT.milestoneId, milestoneId)),
+      db.select({ id: statusT.id, category: statusT.category }).from(statusT),
+   ]);
+   const done = new Set(statuses.filter((s) => s.category === 'completed').map((s) => s.id));
+   return {
+      done: issues.filter((i) => done.has(i.statusId)).length,
+      total: issues.length,
    };
 }
 
@@ -340,9 +361,13 @@ export async function deleteMilestone(db: Db, milestoneId: string): Promise<bool
       .where(eq(projectMilestone.id, milestoneId))
       .limit(1);
    if (rows.length === 0) return false;
-   // Desvincula as issues antes de remover (milestone_id não tem FK cascade).
-   await db.update(issueT).set({ milestoneId: null }).where(eq(issueT.milestoneId, milestoneId));
-   await db.delete(projectMilestone).where(eq(projectMilestone.id, milestoneId));
+   // Atômico: desvincula as issues E remove a milestone juntos (milestone_id não tem FK
+   // cascade). Sem transação, um delete que falha após o update deixaria issues sem
+   // vínculo mas a milestone viva.
+   await db.transaction(async (tx) => {
+      await tx.update(issueT).set({ milestoneId: null }).where(eq(issueT.milestoneId, milestoneId));
+      await tx.delete(projectMilestone).where(eq(projectMilestone.id, milestoneId));
+   });
    publish({ entity: 'project', action: 'updated', id: rows[0].projectId });
    return true;
 }

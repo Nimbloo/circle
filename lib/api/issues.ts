@@ -556,6 +556,11 @@ export async function updateIssue(
             throw new ApiError(400, 'Milestone não pertence ao projeto da issue');
       }
       set.milestoneId = patch.milestoneId || null;
+   } else if (patch.projectId !== undefined && (patch.projectId || null) !== prev.projectId) {
+      // Trocou/removeu o projeto SEM tocar em milestone: a milestone atual pertence ao
+      // projeto ANTIGO → limpa (senão fica órfã, inflando progresso e aparecendo em issue
+      // de outro projeto). project_milestone não tem FK cascade, então é app-level.
+      if (prev.milestoneId) set.milestoneId = null;
    }
 
    // Transição de status: marcos temporais (cycle/lead time) + auto-add ao cycle.
