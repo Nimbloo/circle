@@ -39,7 +39,7 @@ function unauthorized(): Response {
    });
 }
 
-export default auth((req) => {
+export default auth(async (req) => {
    const { pathname } = req.nextUrl;
 
    if (pathname.startsWith('/api')) {
@@ -47,8 +47,16 @@ export default auth((req) => {
          PUBLIC_API_EXACT.has(pathname) ||
          PUBLIC_API_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
       if (isPublicApi) return;
-      if (!req.auth) return unauthorized();
-      return;
+      if (req.auth) return; // sessão de humano (cookie NextAuth)
+      // Auth de MÁQUINA: Bearer JWT do Keycloak (service accounts). Valida no gate
+      // (Edge-safe, Web Crypto) — senão rotas sem `requireEmail` ficariam expostas.
+      const authz = req.headers.get('authorization');
+      const m = authz?.match(/^Bearer\s+(.+)$/i);
+      if (m) {
+         const { verifyKeycloakJwt } = await import('@/lib/api/keycloak-jwt');
+         if (await verifyKeycloakJwt(m[1].trim())) return;
+      }
+      return unauthorized();
    }
 
    const isPublicPage = PUBLIC_PAGE_PREFIXES.some(

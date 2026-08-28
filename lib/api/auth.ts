@@ -17,6 +17,14 @@ function emailFromTestHeader(req?: Request): string | null {
    return raw ? raw.trim().toLowerCase() : null;
 }
 
+/** Extrai o token de um header `Authorization: Bearer <jwt>`, ou null. */
+function bearerToken(req?: Request): string | null {
+   const h = req?.headers.get('authorization') ?? req?.headers.get('Authorization');
+   if (!h) return null;
+   const m = h.match(/^Bearer\s+(.+)$/i);
+   return m ? m[1].trim() : null;
+}
+
 /**
  * E-mail do usuário autenticado (minúsculo) ou null.
  * Async: em produção consulta a sessão do NextAuth.
@@ -27,6 +35,14 @@ export async function emailFromRequest(req?: Request): Promise<string | null> {
    // do header NUNCA liga em prod, mesmo que NODE_ENV venha errado por acidente.
    if (process.env.NODE_ENV === 'test' && !process.env.NEXT_RUNTIME) {
       return emailFromTestHeader(req);
+   }
+   // Auth de MÁQUINA: Bearer JWT emitido pelo Keycloak (service accounts). Valida
+   // contra o JWKS do realm — coerente com o SSO único, sem cofre de tokens no app.
+   const bearer = bearerToken(req);
+   if (bearer) {
+      const { verifyKeycloakJwt, identityFromPayload } = await import('./keycloak-jwt');
+      const payload = await verifyKeycloakJwt(bearer);
+      return payload ? identityFromPayload(payload) : null;
    }
    // Import dinâmico: mantém o next-auth fora do grafo estático (edge + testes).
    const { auth } = await import('@/auth');
