@@ -9,6 +9,7 @@ import {
    SidebarGroup,
    SidebarGroupLabel,
    SidebarMenu,
+   SidebarMenuAction,
    SidebarMenuButton,
    SidebarMenuItem,
 } from '@/components/ui/sidebar';
@@ -38,6 +39,7 @@ export function NavFavorites() {
    const items = useFavoritesStore((s) => s.items);
    const loaded = useFavoritesStore((s) => s.loaded);
    const load = useFavoritesStore((s) => s.load);
+   const toggle = useFavoritesStore((s) => s.toggle);
 
    useEffect(() => {
       if (!loaded) void load();
@@ -71,6 +73,14 @@ export function NavFavorites() {
                            </span>
                         </Link>
                      </SidebarMenuButton>
+                     {/* Hover revela a estrela p/ desfavoritar (paridade Linear). */}
+                     <SidebarMenuAction
+                        showOnHover
+                        aria-label="Remover dos favoritos"
+                        onClick={() => void toggle(f.entityType, f.entityId)}
+                     >
+                        <Star className="fill-amber-400 text-amber-400" />
+                     </SidebarMenuAction>
                   </SidebarMenuItem>
                );
             })}

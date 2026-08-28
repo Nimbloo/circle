@@ -68,8 +68,13 @@ export function NavTeams() {
                   <SidebarMenuItem>
                      <CollapsibleTrigger asChild>
                         <SidebarMenuButton tooltip={item.name}>
-                           <div className="inline-flex size-6 bg-muted/50 items-center justify-center rounded shrink-0">
-                              <div className="text-sm">{item.icon}</div>
+                           {/* Avatar de time colorido pela cor do time (paridade Linear),
+                               com o ícone/emoji ou a inicial do nome. */}
+                           <div
+                              className="inline-flex size-6 items-center justify-center rounded shrink-0 text-xs font-medium text-white"
+                              style={{ backgroundColor: item.color }}
+                           >
+                              {item.icon || item.name.charAt(0).toUpperCase()}
                            </div>
                            <span className="text-sm">{item.name}</span>
                            <span className="w-3 shrink-0">

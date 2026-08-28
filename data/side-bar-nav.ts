@@ -1,22 +1,4 @@
-import {
-   Bot,
-   GitPullRequestArrow,
-   Inbox,
-   FolderKanban,
-   ContactRound,
-   Box,
-   Settings,
-   Bell,
-   KeyRound,
-   Users,
-   Tag,
-   Layers,
-   FileText,
-   MessageSquare,
-   Clock,
-   Zap,
-   UserRound,
-} from 'lucide-react';
+import { Bot, GitPullRequestArrow, Inbox, FolderKanban } from 'lucide-react';
 
 export const inboxItems = [
    {
@@ -38,51 +20,5 @@ export const inboxItems = [
       name: 'Agent',
       url: '/agent',
       icon: Bot,
-   },
-];
-
-export const workspaceItems = [
-   {
-      name: 'Teams',
-      url: '/teams',
-      icon: ContactRound,
-   },
-   {
-      name: 'Projects',
-      url: '/projects',
-      icon: Box,
-   },
-   {
-      name: 'Members',
-      url: '/members',
-      icon: UserRound,
-   },
-];
-
-export const accountItems = [
-   {
-      name: 'Preferences',
-      url: '/settings/preferences',
-      icon: Settings,
-   },
-   {
-      name: 'Profile',
-      url: '/settings/profile',
-      icon: UserRound,
-   },
-   {
-      name: 'Notifications',
-      url: '/settings/notifications',
-      icon: Bell,
-   },
-   {
-      name: 'Security & access',
-      url: '/settings/security',
-      icon: KeyRound,
-   },
-   {
-      name: 'Connected accounts',
-      url: '/settings/connected-accounts',
-      icon: Users,
    },
 ];
