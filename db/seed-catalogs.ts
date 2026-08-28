@@ -1,5 +1,5 @@
 import type { Db } from './index';
-import { status, priority, label, health } from './schema';
+import { status, priority, label, health, projectStatus } from './schema';
 
 /** Catálogos fixos do produto — valores 1:1 do mock-data (status.tsx, priorities.tsx, labels.ts, projects.ts). */
 
@@ -60,10 +60,32 @@ export const HEALTH_SEED = [
    { id: 'at-risk', name: 'At Risk', color: '#f2c94c', description: null },
 ];
 
+// Status de PROJETO (paridade Linear) — separados do workflow de issue.
+export const PROJECT_STATUS_SEED = [
+   { id: 'proj-backlog', name: 'Backlog', color: '#95a2b3', category: 'backlog', position: 0 },
+   { id: 'proj-planned', name: 'Planned', color: '#99a2b2', category: 'planned', position: 1 },
+   {
+      id: 'proj-in-progress',
+      name: 'In Progress',
+      color: '#facc15',
+      category: 'started',
+      position: 2,
+   },
+   {
+      id: 'proj-completed',
+      name: 'Completed',
+      color: '#5e6ad2',
+      category: 'completed',
+      position: 3,
+   },
+   { id: 'proj-canceled', name: 'Canceled', color: '#95a2b3', category: 'canceled', position: 4 },
+];
+
 /** Idempotente: só semeia se vazio (onConflictDoNothing). */
 export async function seedCatalogs(db: Db) {
    await db.insert(status).values(STATUS_SEED).onConflictDoNothing();
    await db.insert(priority).values(PRIORITY_SEED).onConflictDoNothing();
    await db.insert(label).values(LABEL_SEED).onConflictDoNothing();
    await db.insert(health).values(HEALTH_SEED).onConflictDoNothing();
+   await db.insert(projectStatus).values(PROJECT_STATUS_SEED).onConflictDoNothing();
 }

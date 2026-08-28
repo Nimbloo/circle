@@ -15,7 +15,12 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { api } from '@/lib/client';
 import type { ProjectTemplateDto } from '@/lib/api/project-templates';
 import { cn } from '@/lib/utils';
-import { useLabels, usePriorities, useStatuses, useHealthStates } from '@/store/catalog-store';
+import {
+   useLabels,
+   usePriorities,
+   useProjectStatuses,
+   useHealthStates,
+} from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import {
    CalendarClock,
@@ -66,7 +71,7 @@ export function CreateProjectButton() {
    const teams = useWorkspaceStore((s) => s.teams);
    const users = useWorkspaceStore((s) => s.users);
    const initiatives = useWorkspaceStore((s) => s.initiatives);
-   const statuses = useStatuses();
+   const statuses = useProjectStatuses();
    const priorities = usePriorities();
    const labels = useLabels();
    const healthStates = useHealthStates();

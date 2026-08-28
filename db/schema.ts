@@ -42,6 +42,17 @@ export const health = pgTable('health', {
    description: varchar('description', { length: 512 }),
 });
 
+// Catálogo de status de PROJETO (separado do workflow de issue — paridade Linear:
+// Backlog / Planned / In Progress / Completed / Canceled). Antes o projeto reusava
+// a tabela `status` das issues.
+export const projectStatus = pgTable('project_status', {
+   id: varchar('id', { length: 64 }).primaryKey(),
+   name: varchar('name', { length: 128 }).notNull(),
+   color: varchar('color', { length: 16 }).notNull(),
+   category: varchar('category', { length: 32 }).notNull(), // backlog|planned|started|completed|canceled
+   position: integer('position').notNull(),
+});
+
 // ─────────────────────────────────────────────────────────────
 // Usuários / Times
 // ─────────────────────────────────────────────────────────────
@@ -160,7 +171,7 @@ export const project = pgTable(
       name: varchar('name', { length: 196 }).notNull(),
       statusId: varchar('status_id', { length: 64 })
          .notNull()
-         .references(() => status.id),
+         .references(() => projectStatus.id),
       iconKey: varchar('icon_key', { length: 64 }),
       percentComplete: integer('percent_complete').notNull().default(0),
       startDate: date('start_date'),
@@ -585,7 +596,7 @@ export const projectTemplate = pgTable(
       name: varchar('name', { length: 128 }).notNull(),
       projectName: varchar('project_name', { length: 256 }),
       description: text('description'),
-      statusId: varchar('status_id', { length: 64 }).references(() => status.id),
+      statusId: varchar('status_id', { length: 64 }).references(() => projectStatus.id),
       priorityId: varchar('priority_id', { length: 64 }).references(() => priority.id),
       healthId: varchar('health_id', { length: 64 }).references(() => health.id),
       createdAt: timestamp('created_at').notNull().defaultNow(),

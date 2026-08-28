@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { Status } from '@/data/status';
-import { useStatuses } from '@/store/catalog-store';
+import { useProjectStatuses } from '@/store/catalog-store';
 import { CheckIcon } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
 
@@ -27,7 +27,7 @@ export function StatusWithPercent({
    onStatusChange,
 }: StatusWithPercentProps) {
    const id = useId();
-   const allStatus = useStatuses();
+   const allStatus = useProjectStatuses();
    const [open, setOpen] = useState<boolean>(false);
    const [value, setValue] = useState<string>(status.id);
 

@@ -25,7 +25,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { api } from '@/lib/client';
 import type { UpdateProjectInput } from '@/lib/api/projects';
 import { Project } from '@/data/projects';
-import { usePriorities, useStatuses, useHealthStates } from '@/store/catalog-store';
+import { usePriorities, useProjectStatuses, useHealthStates } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { CheckIcon, Copy, Link2, Target, Trash2, UserRound } from 'lucide-react';
 import { useParams } from 'next/navigation';
@@ -54,7 +54,7 @@ export function ProjectContextMenu({
    const removeProjectLocal = useWorkspaceStore((s) => s.removeProjectLocal);
    const users = useWorkspaceStore((s) => s.users);
    const initiatives = useWorkspaceStore((s) => s.initiatives);
-   const statuses = useStatuses();
+   const statuses = useProjectStatuses();
    const priorities = usePriorities();
    const healthStates = useHealthStates();
    const [confirmOpen, setConfirmOpen] = useState(false);

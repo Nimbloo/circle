@@ -31,8 +31,8 @@ const TAB_ITEMS: { label: string; value: (typeof TABS)[number] }[] = [
    { label: 'Active projects', value: 'active' },
 ];
 
-/** Status categories considered "active" for the Active projects tab. */
-const ACTIVE_CATEGORIES = new Set(['triage', 'backlog', 'unstarted', 'started']);
+/** Categorias de status de PROJETO consideradas "ativas" (Linear: backlog/planned/started). */
+const ACTIVE_CATEGORIES = new Set(['backlog', 'planned', 'started']);
 /** Categories hidden by "Show closed projects: Hide closed". */
 const CLOSED_CATEGORIES = new Set(['completed', 'canceled']);
 

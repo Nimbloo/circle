@@ -26,13 +26,13 @@ describe('projects', () => {
       const { db, lead } = await setup();
       const dto = await createProject(db, {
          name: 'Core Components',
-         statusId: 'in-progress',
+         statusId: 'proj-in-progress',
          leadId: lead,
          ...base,
          labelIds: ['ui'],
       });
       expect(dto.name).toBe('Core Components');
-      expect(dto.status.id).toBe('in-progress');
+      expect(dto.status.id).toBe('proj-in-progress');
       expect(dto.health.id).toBe('on-track');
       expect(dto.lead?.email).toBe('lia@nimbloo.ai');
       expect(dto.labels.map((l) => l.id)).toEqual(['ui']);
@@ -41,8 +41,8 @@ describe('projects', () => {
 
    it('active tab excludes completed/canceled projects', async () => {
       const { db } = await setup();
-      await createProject(db, { name: 'Ativo', statusId: 'in-progress', ...base }); // started
-      await createProject(db, { name: 'Fechado', statusId: 'done', ...base }); // completed
+      await createProject(db, { name: 'Ativo', statusId: 'proj-in-progress', ...base }); // started
+      await createProject(db, { name: 'Fechado', statusId: 'proj-completed', ...base }); // completed
       expect(await listProjects(db, { tab: 'all' })).toHaveLength(2);
       const active = await listProjects(db, { tab: 'active' });
       expect(active).toHaveLength(1);
@@ -53,14 +53,14 @@ describe('projects', () => {
       const { db } = await setup();
       await createProject(db, {
          name: 'A',
-         statusId: 'in-progress',
+         statusId: 'proj-in-progress',
          priorityId: 'urgent',
          healthId: 'at-risk',
          teamId: 'CORE',
       });
       await createProject(db, {
          name: 'B',
-         statusId: 'in-progress',
+         statusId: 'proj-in-progress',
          priorityId: 'low',
          healthId: 'on-track',
          teamId: 'CORE',
@@ -71,7 +71,7 @@ describe('projects', () => {
 
    it('updating health stamps healthUpdatedAt', async () => {
       const { db } = await setup();
-      const p = await createProject(db, { name: 'A', statusId: 'in-progress', ...base });
+      const p = await createProject(db, { name: 'A', statusId: 'proj-in-progress', ...base });
       expect(p.healthUpdatedAt).toBeNull();
       const upd = await updateProject(db, p.id, { healthId: 'off-track' });
       expect(upd?.health.id).toBe('off-track');
@@ -82,7 +82,7 @@ describe('projects', () => {
       const { db } = await setup();
       const p = await createProject(db, {
          name: 'A',
-         statusId: 'in-progress',
+         statusId: 'proj-in-progress',
          ...base,
          labelIds: ['bug'],
       });
@@ -93,7 +93,7 @@ describe('projects', () => {
 
    it('deleting a project nullifies its issues and drops updates/milestones (FK safe)', async () => {
       const { db, lead } = await setup();
-      const p = await createProject(db, { name: 'A', statusId: 'in-progress', ...base });
+      const p = await createProject(db, { name: 'A', statusId: 'proj-in-progress', ...base });
       const issueId = randomUUID();
       await db.insert(issueT).values({
          id: issueId,

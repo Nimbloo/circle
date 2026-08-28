@@ -10,7 +10,7 @@ import {
 } from '@/lib/api/project-detail';
 
 const base = {
-   statusId: 'in-progress',
+   statusId: 'proj-in-progress',
    priorityId: 'high',
    healthId: 'on-track',
    teamId: 'CORE' as const,

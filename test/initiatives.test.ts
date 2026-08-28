@@ -22,8 +22,8 @@ const baseProj = { priorityId: 'high', healthId: 'on-track', teamId: 'CORE' as c
 describe('initiatives', () => {
    it('creates an initiative with nested priority/health and project counts', async () => {
       const db = await setup();
-      const p1 = await createProject(db, { name: 'P1', statusId: 'done', ...baseProj }); // completed
-      const p2 = await createProject(db, { name: 'P2', statusId: 'in-progress', ...baseProj }); // não
+      const p1 = await createProject(db, { name: 'P1', statusId: 'proj-completed', ...baseProj }); // completed
+      const p2 = await createProject(db, { name: 'P2', statusId: 'proj-in-progress', ...baseProj }); // não
 
       const init = await createInitiative(db, {
          slug: 'platform',
@@ -83,7 +83,7 @@ describe('initiatives', () => {
       });
       await createProject(db, {
          name: 'P',
-         statusId: 'in-progress',
+         statusId: 'proj-in-progress',
          ...baseProj,
          initiativeId: init.id,
       });
@@ -99,7 +99,7 @@ describe('initiatives', () => {
          priorityId: 'urgent',
          healthId: 'on-track',
       });
-      const p = await createProject(db, { name: 'P', statusId: 'in-progress', ...baseProj });
+      const p = await createProject(db, { name: 'P', statusId: 'proj-in-progress', ...baseProj });
       expect((await getInitiative(db, init.id))?.projectCount).toBe(0);
 
       await updateProject(db, p.id, { initiativeId: init.id });
@@ -118,8 +118,8 @@ describe('initiatives', () => {
          priorityId: 'urgent',
          healthId: 'on-track',
       });
-      const p1 = await createProject(db, { name: 'P1', statusId: 'in-progress', ...baseProj });
-      const p2 = await createProject(db, { name: 'P2', statusId: 'in-progress', ...baseProj });
+      const p1 = await createProject(db, { name: 'P1', statusId: 'proj-in-progress', ...baseProj });
+      const p2 = await createProject(db, { name: 'P2', statusId: 'proj-in-progress', ...baseProj });
 
       await updateInitiative(db, init.id, { projectIds: [p1.id, p2.id] });
       expect((await getProject(db, p1.id))?.initiativeId).toBe(init.id);
@@ -143,7 +143,7 @@ describe('initiatives', () => {
       });
       const p = await createProject(db, {
          name: 'P',
-         statusId: 'in-progress',
+         statusId: 'proj-in-progress',
          ...baseProj,
          initiativeId: init.id,
       });

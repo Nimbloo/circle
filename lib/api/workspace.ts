@@ -1,6 +1,12 @@
 import type { Db } from '@/db';
 import { teamMember } from '@/db/schema';
-import { listStatuses, listPriorities, listLabels, listHealthStates } from './catalogs';
+import {
+   listStatuses,
+   listProjectStatuses,
+   listPriorities,
+   listLabels,
+   listHealthStates,
+} from './catalogs';
 import { listTeams, type TeamDto } from './teams';
 import { listProjects, type ProjectDto } from './projects';
 import { listMembers, type MemberDto } from './members';
@@ -17,6 +23,7 @@ export interface TeamFull extends TeamDto {
 export interface WorkspaceBootstrap {
    me: MeDto;
    statuses: Awaited<ReturnType<typeof listStatuses>>;
+   projectStatuses: Awaited<ReturnType<typeof listProjectStatuses>>;
    priorities: Awaited<ReturnType<typeof listPriorities>>;
    labels: Awaited<ReturnType<typeof listLabels>>;
    healthStates: Awaited<ReturnType<typeof listHealthStates>>;
@@ -34,6 +41,7 @@ export async function bootstrapWorkspace(db: Db, email: string): Promise<Workspa
 
    const [
       statuses,
+      projectStatuses,
       priorities,
       labels,
       healthStates,
@@ -44,6 +52,7 @@ export async function bootstrapWorkspace(db: Db, email: string): Promise<Workspa
       views,
    ] = await Promise.all([
       listStatuses(db),
+      listProjectStatuses(db),
       listPriorities(db),
       listLabels(db),
       listHealthStates(db),
@@ -92,6 +101,7 @@ export async function bootstrapWorkspace(db: Db, email: string): Promise<Workspa
    return {
       me,
       statuses,
+      projectStatuses,
       priorities,
       labels,
       healthStates,
