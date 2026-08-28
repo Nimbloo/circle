@@ -18,6 +18,7 @@ import {
    appUser,
    project as projectT,
    team as teamT,
+   cycle as cycleT,
 } from '@/db/schema';
 import { getOrCreateUser } from './users';
 import { rankAfter, firstRank, rankBetween } from './rank';
@@ -513,6 +514,26 @@ export async function updateIssue(
    if (patch.estimate !== undefined) set.estimate = patch.estimate;
    if (patch.snoozedUntil !== undefined)
       set.snoozedUntil = patch.snoozedUntil ? new Date(patch.snoozedUntil) : null;
+
+   // Auto-add ao cycle atual (paridade Linear): issue que ENTRA em "started" e não tem
+   // cycle é atribuída ao cycle corrente do time — a menos que o cycle esteja sendo
+   // setado explicitamente neste patch.
+   if (
+      patch.statusId !== undefined &&
+      patch.statusId !== prev.statusId &&
+      patch.cycleId === undefined &&
+      !prev.cycleId
+   ) {
+      const cat = await loadCatalogs(db).then((c) => c.statuses.get(patch.statusId!)?.category);
+      if (cat === 'started') {
+         const [cur] = await db
+            .select({ id: cycleT.id })
+            .from(cycleT)
+            .where(and(eq(cycleT.teamId, prev.teamId), eq(cycleT.status, 'current')))
+            .limit(1);
+         if (cur) set.cycleId = cur.id;
+      }
+   }
 
    await db.update(issue).set(set).where(eq(issue.id, id));
 
