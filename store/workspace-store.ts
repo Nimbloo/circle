@@ -77,10 +77,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       try {
          // Refetch de SSE passa rollover:false — não repetir a escrita do auto-rollover
          // de cycles a cada evento (só o boot genuíno da página faz o rollover).
-         const qs = opts?.rollover === false ? '?rollover=0' : '';
-         const res = await fetch(`/api/v1/workspace${qs}`);
-         if (!res.ok) throw new Error(`workspace ${res.status}`);
-         const { data } = (await res.json()) as { data: WorkspaceBootstrap };
+         const data = await api.workspace({ rollover: opts?.rollover });
          // Catálogos (status/priority/label/health) já vêm no bootstrap — populamos
          // o catalog-store a partir daqui, sem fetch duplicado.
          useCatalogStore.getState().setCatalogs(data);

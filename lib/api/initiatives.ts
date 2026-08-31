@@ -369,11 +369,3 @@ export async function deleteInitiative(db: Db, id: string): Promise<boolean> {
    publish({ entity: 'initiative', action: 'deleted', id });
    return true;
 }
-
-export async function getInitiativeProjects(db: Db, id: string): Promise<string[]> {
-   const links = await db
-      .select({ projectId: initiativeProject.projectId })
-      .from(initiativeProject)
-      .where(eq(initiativeProject.initiativeId, id));
-   return links.map((l) => l.projectId);
-}
