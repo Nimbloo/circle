@@ -1,0 +1,62 @@
+/**
+ * Opções compartilhadas pelos três runtimes do Sentry (server, edge e browser).
+ *
+ * Puro de propósito — sem import de Node — para poder ser carregado também no bundle
+ * Edge do middleware e no cliente. O `init` de cada runtime só acontece quando há DSN;
+ * sem a variável o SDK fica inerte (dev e testes não emitem nada).
+ */
+import type { ErrorEvent } from '@sentry/nextjs';
+
+/** DSN é público por design (identifica o projeto, não autentica). */
+export const SENTRY_DSN = process.env.NEXT_PUBLIC_SENTRY_DSN ?? '';
+
+const ENVIRONMENT = process.env.NEXT_PUBLIC_CIRCLE_ENV ?? process.env.NODE_ENV ?? 'development';
+const RELEASE = process.env.NEXT_PUBLIC_APP_VERSION
+   ? `circle@${process.env.NEXT_PUBLIC_APP_VERSION}`
+   : undefined;
+
+/**
+ * Chaves que nunca podem sair da aplicação. O domínio Nimbloo tem PII (e-mails,
+ * dados de pessoas), então `sendDefaultPii` fica FALSE e este scrubber é a segunda
+ * barreira, sobre o que o SDK ainda anexa (headers, extras, breadcrumbs).
+ */
+const SENSITIVE = /pass|senha|token|secret|authorization|cookie|session|api[-_]?key|dsn/i;
+
+function scrub<T>(obj: T): T {
+   if (!obj || typeof obj !== 'object') return obj;
+   for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+      if (SENSITIVE.test(k)) (obj as Record<string, unknown>)[k] = '[Filtered]';
+      else if (v && typeof v === 'object') scrub(v);
+   }
+   return obj;
+}
+
+function beforeSend(event: ErrorEvent): ErrorEvent | null {
+   if (event.request?.headers) scrub(event.request.headers);
+   if (event.request?.cookies) event.request.cookies = { cookies: '[Filtered]' };
+   if (event.extra) scrub(event.extra);
+   if (event.contexts) scrub(event.contexts);
+   return event;
+}
+
+/**
+ * Erro NUNCA é amostrado (`sampleRate: 1.0`) — amostragem só vale para tracing,
+ * onde o volume é a preocupação.
+ */
+export const sentryBaseOptions = {
+   dsn: SENTRY_DSN,
+   environment: ENVIRONMENT,
+   release: RELEASE,
+   sampleRate: 1.0,
+   tracesSampleRate: ENVIRONMENT === 'production' ? 0.1 : 1.0,
+   sendDefaultPii: false,
+   maxBreadcrumbs: 200,
+   beforeSend,
+   /** Ruído não acionável: cliente que desconecta, rota inexistente varrida por bot. */
+   ignoreErrors: [
+      'NEXT_NOT_FOUND',
+      'NEXT_REDIRECT',
+      'AbortError',
+      'ResizeObserver loop limit exceeded',
+   ] as (string | RegExp)[],
+};
