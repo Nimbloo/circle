@@ -1,6 +1,7 @@
 'use client';
 
 import { GroupedIssuesView } from '@/components/common/issues/grouped-issues-view';
+import { ListSkeleton } from '@/components/common/list-skeleton';
 import { InsightsPanel } from '@/components/common/issues/insights-panel';
 import ProjectsList from '@/components/common/projects/projects-list';
 import { ProjectGroup } from '@/components/common/projects/projects';
@@ -61,8 +62,17 @@ function ProjectViewBody({ view }: { view: View }) {
 /** Saved-view detail page: filtered issues (with insights) or projects. */
 export default function ViewDetails({ viewId }: { viewId: string }) {
    const view = useWorkspaceStore((s) => s.getViewById(viewId));
+   const loaded = useWorkspaceStore((s) => s.loaded);
 
    if (!view) {
+      // Hidratando → skeleton; not-found só como estado final (fim do flash no deep-link frio).
+      if (!loaded) {
+         return (
+            <div className="p-8">
+               <ListSkeleton rows={6} />
+            </div>
+         );
+      }
       return (
          <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">
             View not found

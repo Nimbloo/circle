@@ -157,15 +157,21 @@ export default function EmojisSettings() {
    const isAdmin = me?.admin ?? false;
 
    const [emojis, setEmojis] = useState<EmojiDto[]>([]);
-   const [loading, setLoading] = useState(false);
+   // true desde o 1º paint: evita o flash de "Nenhum emoji" antes do load resolver.
+   const [loading, setLoading] = useState(true);
    const [dialogOpen, setDialogOpen] = useState(false);
 
+   // Skeleton só na primeira carga; o reload pós-mutation (add/remove) é silencioso —
+   // a grade atual fica na tela até a lista nova chegar, sem piscar.
+   const loadedOnceRef = useRef(false);
    const load = useCallback(async () => {
-      setLoading(true);
+      if (!loadedOnceRef.current) setLoading(true);
       try {
          setEmojis(await api.emojis.list());
+         loadedOnceRef.current = true;
       } catch {
-         setEmojis([]);
+         // Falha de refetch não apaga o que já está na tela; só a 1ª carga zera.
+         if (!loadedOnceRef.current) setEmojis([]);
       } finally {
          setLoading(false);
       }

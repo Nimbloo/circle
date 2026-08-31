@@ -2,6 +2,7 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { ListSkeleton } from '@/components/common/list-skeleton';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
    Select,
@@ -173,6 +174,7 @@ export default function Views({ teamId }: { teamId?: string }) {
    const [tab, setTab] = useQueryState('tab', parseAsStringLiteral(TABS).withDefault('issues'));
    const { ordering } = useViewsDisplayStore();
    const views = useWorkspaceStore((s) => s.views);
+   const loaded = useWorkspaceStore((s) => s.loaded);
    const teams = useWorkspaceStore((s) => s.teams);
    const team = teamId ? teams.find((entry) => entry.id === teamId) : undefined;
    const favoriteItems = useFavoritesStore((s) => s.items);
@@ -243,11 +245,18 @@ export default function Views({ teamId }: { teamId?: string }) {
          {list.map((view) => (
             <ViewRow key={view.id} view={view} orgId={orgId} />
          ))}
-         {list.length === 0 && (
-            <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
-               No views yet
-            </div>
-         )}
+         {list.length === 0 &&
+            // Distingue "hidratando" de "vazio real" — sem isto o deep-link frio
+            // mostrava "No views yet" por segundos até o workspace chegar.
+            (loaded ? (
+               <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
+                  No views yet
+               </div>
+            ) : (
+               <div className="py-4">
+                  <ListSkeleton rows={4} />
+               </div>
+            ))}
       </div>
    );
 }

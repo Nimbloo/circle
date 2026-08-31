@@ -93,11 +93,16 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
    error: false,
 
    hydrate: async (opts?: IssueListOptions) => {
-      set({ loading: true, error: false });
+      // Preenchimento PROGRESSIVO só na primeira carga (store vazio): a 1ª página
+      // aparece rápido e as demais chegam em background. Num RE-hydrate (SSE de
+      // label, fallback do applyRemote) o store já tem dados — substituir página a
+      // página faria o board ENCOLHER pra 200 linhas e re-crescer (mini-refresh);
+      // nesse caso acumula tudo em silêncio e faz um set único no final.
+      const progressive = get().issues.length === 0;
+      set(progressive ? { loading: true, error: false } : { error: false });
       try {
          // Paginação KEYSET por rank (cursor = último rank): carrega TODAS as issues em
-         // páginas (fim do truncamento silencioso do cap de 500) e preenche o board
-         // PROGRESSIVAMENTE (a 1ª página aparece rápido; as demais chegam em background).
+         // páginas (fim do truncamento silencioso do cap de 500).
          // Só pagina na ordem default (rank); em outras ordens, uma página (cap do server).
          const PAGE = 200;
          const canPaginate = !opts?.orderBy || opts.orderBy === 'rank';
@@ -106,14 +111,16 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          for (let guard = 0; guard < 200; guard++) {
             const page = await api.issues.list({ ...opts, limit: PAGE, cursor });
             acc.push(...page);
-            const issues = sortByRank(adaptIssues(acc));
             const done = !canPaginate || page.length < PAGE;
-            set({
-               issues,
-               issuesByStatus: groupIssuesByStatus(issues),
-               loading: !done,
-               error: false,
-            });
+            if (progressive || done) {
+               const issues = sortByRank(adaptIssues(acc));
+               set({
+                  issues,
+                  issuesByStatus: groupIssuesByStatus(issues),
+                  loading: !done && progressive,
+                  error: false,
+               });
+            }
             if (done) break;
             cursor = page[page.length - 1].rank; // keyset: próximo `rank > cursor`
          }

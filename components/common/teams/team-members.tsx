@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { api } from '@/lib/client';
+import { ListSkeleton } from '@/components/common/list-skeleton';
 import type { JoinRequestDto } from '@/lib/api/teams';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Check, Plus, X } from 'lucide-react';
@@ -23,7 +24,9 @@ export default function TeamMembers() {
    const workspaceUsers = useWorkspaceStore((s) => s.users);
    const hydrate = useWorkspaceStore((s) => s.hydrate);
    const isAdmin = useWorkspaceStore((s) => s.me?.admin ?? false);
-   const team = teams.find((t) => t.id === teamId) ?? teams[0];
+   const loaded = useWorkspaceStore((s) => s.loaded);
+   // Sem fallback `?? teams[0]`: id inválido deve dar not-found, não o primeiro time.
+   const team = teams.find((t) => t.id === teamId);
 
    const [open, setOpen] = useState(false);
    const [email, setEmail] = useState('');
@@ -61,6 +64,14 @@ export default function TeamMembers() {
    };
 
    if (!team) {
+      // Hidratando → skeleton; not-found só como estado final (fim do flash no deep-link frio).
+      if (!loaded) {
+         return (
+            <div className="p-6">
+               <ListSkeleton rows={5} />
+            </div>
+         );
+      }
       return <div className="p-6 text-sm text-muted-foreground">Team not found.</div>;
    }
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { ListSkeleton } from '@/components/common/list-skeleton';
 import { useTeamsFilterStore } from '@/store/team-filter-store';
 import { useTeamsDisplayStore } from '@/store/teams-display-store';
 import { Users } from 'lucide-react';
@@ -12,6 +13,7 @@ import { NewTeamButton } from './new-team-button';
 
 export default function Teams() {
    const allTeams = useWorkspaceStore((s) => s.teams);
+   const loaded = useWorkspaceStore((s) => s.loaded);
    const { filters } = useTeamsFilterStore();
    const { ordering, displayProperties } = useTeamsDisplayStore();
 
@@ -77,7 +79,12 @@ export default function Teams() {
          </div>
 
          <div className="w-full">
-            {displayed.length === 0 ? (
+            {displayed.length === 0 && !loaded ? (
+               // Hidratando → skeleton; "No teams yet" só depois do workspace chegar.
+               <div className="py-4">
+                  <ListSkeleton rows={4} />
+               </div>
+            ) : displayed.length === 0 ? (
                <div className="flex flex-col items-center justify-center gap-4 py-24 text-center">
                   <div className="flex size-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
                      <Users className="size-6" />
