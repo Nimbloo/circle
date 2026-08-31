@@ -1,5 +1,9 @@
 # Gate de qualidade: typecheck + lint + testes. Roda em PRs pra develop/main e em
 # pushes na develop. Os testes usam PGlite (Postgres em memória) — sem serviço externo.
+#
+# pnpm via corepack (built-in do Node, versão pinada no packageManager do
+# package.json) — a org restringe actions de terceiros (allowed: selected) e o
+# pnpm/action-setup derrubava o workflow em startup_failure antes de rodar.
 name: ci
 
 on:
@@ -18,9 +22,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - name: Enable pnpm (corepack)
+        run: corepack enable
 
       - uses: actions/setup-node@v4
         with:

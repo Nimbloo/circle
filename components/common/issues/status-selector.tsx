@@ -20,9 +20,11 @@ import { renderStatusIcon } from '@/lib/status-utils';
 interface StatusSelectorProps {
    status: Status;
    issueId: string;
+   /** Exibe o nome do status dentro do trigger (linha inteira clicável — padrão Linear). */
+   showName?: boolean;
 }
 
-export function StatusSelector({ status, issueId }: StatusSelectorProps) {
+export function StatusSelector({ status, issueId, showName = false }: StatusSelectorProps) {
    const id = useId();
    const [open, setOpen] = useState<boolean>(false);
    // Deriva do prop (store) — sem estado local otimista, reverte junto com o rollback.
@@ -49,14 +51,19 @@ export function StatusSelector({ status, issueId }: StatusSelectorProps) {
             <PopoverTrigger asChild>
                <Button
                   id={id}
-                  className="size-7 flex items-center justify-center"
-                  size="icon"
+                  className={
+                     showName
+                        ? 'h-7 gap-2 px-1.5 justify-start'
+                        : 'size-7 flex items-center justify-center'
+                  }
+                  size={showName ? 'sm' : 'icon'}
                   variant="ghost"
                   role="combobox"
                   aria-expanded={open}
                   aria-label="Set status"
                >
                   {renderStatusIcon(value)}
+                  {showName && <span className="text-sm font-normal">{status.name}</span>}
                </Button>
             </PopoverTrigger>
             <PopoverContent

@@ -236,13 +236,11 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
 
          <Section title="Properties">
             <div className="flex flex-col gap-1.5">
-               <div className="flex items-center gap-1.5 -ml-1.5">
-                  <StatusSelector status={issue.status} issueId={issue.id} />
-                  <span className="text-sm">{issue.status.name}</span>
+               <div className="flex items-center -ml-1.5">
+                  <StatusSelector status={issue.status} issueId={issue.id} showName />
                </div>
-               <div className="flex items-center gap-1.5 -ml-1.5">
-                  <PrioritySelector priority={issue.priority} issueId={issue.id} />
-                  <span className="text-sm">{issue.priority.name}</span>
+               <div className="flex items-center -ml-1.5">
+                  <PrioritySelector priority={issue.priority} issueId={issue.id} showName />
                </div>
                <div className="flex items-center gap-1.5 -ml-0.5 mt-0.5">
                   <AssigneeSelector

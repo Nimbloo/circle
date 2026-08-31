@@ -1,3 +1,12 @@
+/**
+ * Roles válidas de membro. Vive aqui (módulo PURO, sem imports) porque é usada
+ * tanto pelo server (lib/api/members) quanto por componentes client (RoleControl)
+ * — importar de lib/api/members no client arrastava drizzle/pg pro bundle e
+ * quebrava o build da rota /profiles.
+ */
+export const MEMBER_ROLES = ['Member', 'Admin', 'Guest', 'Application'] as const;
+export type MemberRole = (typeof MEMBER_ROLES)[number];
+
 export interface User {
    id: string;
    name: string;

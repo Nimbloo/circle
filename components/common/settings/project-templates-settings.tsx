@@ -34,7 +34,7 @@ import type { ProjectTemplateDto } from '@/lib/api/project-templates';
 import { useStatuses, usePriorities, useHealthStates } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { FolderKanban, Pencil, Plus, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { SettingsShell } from './shared';
 
@@ -212,13 +212,19 @@ export default function ProjectTemplatesSettings() {
       if (!teamId && teams.length > 0) setTeamId(teams[0].id);
    }, [teams, teamId]);
 
+   // Skeleton só quando carrega um time DIFERENTE do exibido (1ª carga ou troca de
+   // time — senão mostraria templates do time errado); o reload pós-mutation do
+   // mesmo time é silencioso, sem piscar a lista.
+   const loadedTeamRef = useRef<string | null>(null);
    const load = useCallback(async () => {
       if (!teamId) return;
-      setLoading(true);
+      if (loadedTeamRef.current !== teamId) setLoading(true);
       try {
          setTemplates(await api.teams.projectTemplates(teamId));
+         loadedTeamRef.current = teamId;
       } catch {
-         setTemplates([]);
+         // Falha de refetch do MESMO time não apaga a lista exibida.
+         if (loadedTeamRef.current !== teamId) setTemplates([]);
       } finally {
          setLoading(false);
       }

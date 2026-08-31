@@ -2,6 +2,7 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { ListSkeleton } from '@/components/common/list-skeleton';
 import {
    Command,
    CommandEmpty,
@@ -419,6 +420,7 @@ export default function Initiatives() {
    const { grouping, ordering, displayProperties } = useInitiativesDisplayStore();
    const [showPanel, setShowPanel] = useState(true);
    const allInitiatives = useWorkspaceStore((s) => s.initiatives);
+   const loaded = useWorkspaceStore((s) => s.loaded);
    const creating = useInlineInitiativeStore((s) => s.creating);
    const startCreate = useInlineInitiativeStore((s) => s.start);
 
@@ -519,7 +521,13 @@ export default function Initiatives() {
             {/* Criação INLINE (padrão Linear): linha editável no topo da lista, sem modal. */}
             {creating && <InlineNewInitiative defaultStatus={tab as InitiativeStatus} />}
 
-            {displayed.length === 0 && !creating ? (
+            {displayed.length === 0 && !creating && !loaded ? (
+               // Hidratando → skeleton; o empty state "No initiatives yet" só depois
+               // que o workspace chegou (fim do flash no deep-link frio).
+               <div className="py-4">
+                  <ListSkeleton rows={5} />
+               </div>
+            ) : displayed.length === 0 && !creating ? (
                <div className="flex flex-col items-center justify-center gap-4 py-24 text-center">
                   <div className="flex size-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
                      <Goal className="size-6" />

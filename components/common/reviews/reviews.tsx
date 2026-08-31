@@ -8,7 +8,7 @@ import { Review, ReviewList, ReviewStatus } from '@/data/reviews';
 import { ListFilter, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useRef, useState } from 'react';
 import { ReviewDetail, ReviewSection } from './review-detail';
 import { toast } from 'sonner';
 import { PrIcon } from './review-shared';
@@ -133,19 +133,24 @@ export default function Reviews({
    const [syncing, setSyncing] = useState(false);
    const [reloadKey, setReloadKey] = useState(0);
 
+   // Skeleton só na PRIMEIRA carga; o refetch do reloadKey (pós-sync) é silencioso —
+   // a lista atual permanece na tela até a nova chegar (padrão stale-while-revalidate,
+   // mesmo do issue-details). Falha de refetch também não derruba dados já exibidos.
+   const loadedOnceRef = useRef(false);
    useEffect(() => {
       let active = true;
-      setLoading(true);
+      if (!loadedOnceRef.current) setLoading(true);
       setError(false);
       fetchReviews({ limit: PAGE_SIZE, offset: 0 })
          .then((page) => {
             if (active) {
+               loadedOnceRef.current = true;
                setReviews(page.reviews);
                setTotal(page.total);
             }
          })
          .catch(() => {
-            if (active) {
+            if (active && !loadedOnceRef.current) {
                setReviews([]);
                setTotal(0);
                setError(true);
@@ -166,7 +171,9 @@ export default function Reviews({
          setReviews((prev) => [...prev, ...page.reviews]);
          setTotal(page.total);
       } catch {
-         setError(true);
+         // NÃO setError: o estado de erro troca a LISTA inteira pela mensagem —
+         // falha do "carregar mais" não pode apagar o que já está na tela.
+         toast.error('Não deu pra carregar mais reviews');
       } finally {
          setLoadingMore(false);
       }

@@ -1,6 +1,7 @@
 'use client';
 
 import MemberLine from './member-line';
+import { ListSkeleton } from '@/components/common/list-skeleton';
 import { useMembersFilterStore } from '@/store/members-filter-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { ArrowDown, Users } from 'lucide-react';
@@ -9,6 +10,7 @@ import { useMemo } from 'react';
 export default function Members() {
    const { filters, sort } = useMembersFilterStore();
    const allUsers = useWorkspaceStore((s) => s.users);
+   const loaded = useWorkspaceStore((s) => s.loaded);
 
    const displayed = useMemo(() => {
       let list = allUsers.slice();
@@ -57,7 +59,12 @@ export default function Members() {
          </div>
 
          <div className="w-full">
-            {displayed.length === 0 ? (
+            {displayed.length === 0 && !loaded ? (
+               // Hidratando → skeleton; "No members yet" só depois do workspace chegar.
+               <div className="py-4">
+                  <ListSkeleton rows={5} />
+               </div>
+            ) : displayed.length === 0 ? (
                <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
                   <div className="flex size-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
                      <Users className="size-6" />
