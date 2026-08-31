@@ -481,22 +481,28 @@ function Activity({ initiativeId }: { initiativeId: string }) {
 /** Initiative detail page: Overview / Activity / Projects tabs. */
 export default function InitiativeDetails({ initiativeId }: { initiativeId: string }) {
    const [tab] = useQueryState('tab', parseAsStringLiteral(TABS).withDefault('overview'));
-   const getInitiativeById = useWorkspaceStore((s) => s.getInitiativeById);
-   const getInitiativeProjects = useWorkspaceStore((s) => s.getInitiativeProjects);
+   // A chamada vai DENTRO do seletor: assinar `s.getInitiativeById` assinaria a
+   // função (referência estável), e a tela nunca re-renderizaria depois de um
+   // update — salvava no store e continuava mostrando o valor antigo.
+   const initiative = useWorkspaceStore((s) => s.getInitiativeById(initiativeId));
+   // Derivado do array assinado (não do helper do store, que devolve referência nova a
+   // cada chamada e não pode ir dentro do seletor): assim o memo reage tanto à troca da
+   // iniciativa quanto à mudança nos projetos.
+   const allProjects = useWorkspaceStore((s) => s.projects);
    const loaded = useWorkspaceStore((s) => s.loaded);
-   const initiative = getInitiativeById(initiativeId);
 
    const timelineGroups = useMemo<ProjectGroup[]>(() => {
       if (!initiative) return [];
+      const linked = new Set(initiative.projectIds);
       return [
          {
             id: initiative.id,
             name: initiative.name,
             icon: initiative.icon,
-            projects: getInitiativeProjects(initiative.id),
+            projects: allProjects.filter((p) => linked.has(p.id)),
          },
       ];
-   }, [initiative, getInitiativeProjects]);
+   }, [initiative, allProjects]);
 
    if (!initiative) {
       // Hidratando → skeleton; not-found só como estado final (fim do flash no deep-link frio).
