@@ -8,7 +8,7 @@ import {
    SelectValue,
 } from '@/components/ui/select';
 import { api } from '@/lib/client';
-import { MEMBER_ROLES } from '@/lib/api/members';
+import { MEMBER_ROLES } from '@/data/users';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useState } from 'react';
 import { toast } from 'sonner';
