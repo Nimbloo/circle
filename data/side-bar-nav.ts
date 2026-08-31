@@ -1,4 +1,4 @@
-import { Bot, GitPullRequestArrow, Inbox, FolderKanban } from 'lucide-react';
+import { GitPullRequestArrow, Inbox, FolderKanban } from 'lucide-react';
 
 export const inboxItems = [
    {
@@ -15,10 +15,5 @@ export const inboxItems = [
       name: 'My issues',
       url: '/my-issues',
       icon: FolderKanban,
-   },
-   {
-      name: 'Agent',
-      url: '/agent',
-      icon: Bot,
    },
 ];
