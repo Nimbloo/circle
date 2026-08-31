@@ -30,7 +30,6 @@ export function CreateNewIssue() {
    const [createMore, setCreateMore] = useState<boolean>(false);
    const { isOpen, defaultStatus, openModal, closeModal } = useCreateIssueStore();
    const addIssue = useIssuesStore((s) => s.addIssue);
-   const getAllIssues = useIssuesStore((s) => s.getAllIssues);
    const status = useStatuses();
    const priorities = usePriorities();
    const params = useParams<{ teamId?: string }>();
@@ -39,7 +38,9 @@ export function CreateNewIssue() {
    const teamId = params?.teamId ?? teams[0]?.id ?? '';
 
    const generateUniqueIdentifier = useCallback(() => {
-      const identifiers = getAllIssues().map((issue) => issue.identifier);
+      // Leitura imperativa (fora do render): quer o valor FRESCO no momento do clique,
+      // e nao precisa assinar o store para isso.
+      const identifiers = useIssuesStore.getState().issues.map((issue) => issue.identifier);
       let identifier = Math.floor(Math.random() * 999)
          .toString()
          .padStart(3, '0');
@@ -49,7 +50,7 @@ export function CreateNewIssue() {
             .padStart(3, '0');
       }
       return identifier;
-   }, [getAllIssues]);
+   }, []);
 
    const createDefaultData = useCallback(() => {
       const identifier = generateUniqueIdentifier();

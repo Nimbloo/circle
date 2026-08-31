@@ -1,6 +1,6 @@
 {
    "name": "circle",
-   "version": "0.19.0",
+   "version": "0.19.1",
    "private": true,
    "packageManager": "pnpm@9.15.9",
    "scripts": {
@@ -43,7 +43,6 @@
       "@radix-ui/react-tooltip": "^1.1.8",
       "@sentry/nextjs": "^10.73.0",
       "@tanstack/react-virtual": "^3.14.10",
-      "bcryptjs": "^3.0.3",
       "class-variance-authority": "^0.7.1",
       "client-only": "^0.0.1",
       "clsx": "^2.1.1",
@@ -79,7 +78,6 @@
       "@electric-sql/pglite": "^0.5.5",
       "@eslint/eslintrc": "^3",
       "@tailwindcss/postcss": "^4",
-      "@types/bcryptjs": "^3.0.0",
       "@types/node": "^20",
       "@types/pg": "^8.23.1",
       "@types/react": "^19",

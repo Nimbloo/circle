@@ -16,8 +16,10 @@ interface TeamLineProps {
 export default function TeamLine({ team }: TeamLineProps) {
    const { orgId } = useParams<{ orgId: string }>();
    const { displayProperties } = useTeamsDisplayStore();
-   const getCyclesByTeam = useWorkspaceStore((s) => s.getCyclesByTeam);
-   const cycles = getCyclesByTeam(team.id);
+   // Deriva da fatia assinada: `getCyclesByTeam` devolve array NOVO a cada leitura,
+   // entao nao pode ir dentro do seletor (referencia nova = re-render infinito).
+   const allCycles = useWorkspaceStore((s) => s.cycles);
+   const cycles = allCycles.filter((c) => c.teamId === team.id);
    const uniqueProjects = new Set(team.projects.map((project) => project.id)).size;
    const owner = team.members[0];
 

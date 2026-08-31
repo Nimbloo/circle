@@ -32,8 +32,6 @@ interface IssuesState {
    /** Carrega as issues da API (opcionalmente escopadas) e substitui o estado. */
    hydrate: (opts?: IssueListOptions) => Promise<void>;
 
-   getAllIssues: () => Issue[];
-
    addIssue: (issue: Issue) => Promise<void>;
    updateIssue: (id: string, updatedIssue: Partial<Issue>) => Promise<void>;
    deleteIssue: (id: string) => Promise<void>;
@@ -129,8 +127,6 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          set({ loading: false, error: true });
       }
    },
-
-   getAllIssues: () => get().issues,
 
    addIssue: (issue: Issue) => {
       set((state) => {

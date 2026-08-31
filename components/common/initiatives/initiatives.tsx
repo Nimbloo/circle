@@ -291,9 +291,12 @@ const ACTIVE_DOT_COLORS: Record<string, string> = {
 };
 
 function ActiveProjectDots({ initiative }: { initiative: Initiative }) {
-   const getInitiativeProjects = useWorkspaceStore((s) => s.getInitiativeProjects);
-   const started = getInitiativeProjects(initiative.id).filter(
-      (project) => project.status.category === 'started'
+   // Deriva da fatia assinada: o getter devolve array NOVO a cada leitura, entao nao
+   // pode ir dentro do seletor (referencia nova = re-render infinito).
+   const allProjects = useWorkspaceStore((s) => s.projects);
+   const linked = new Set(initiative.projectIds);
+   const started = allProjects.filter(
+      (project) => linked.has(project.id) && project.status.category === 'started'
    );
    const byHealth = new Map<string, number>();
    for (const project of started) {
@@ -324,9 +327,12 @@ function InitiativeRow({
    showStatus: boolean;
 }) {
    const { displayProperties } = useInitiativesDisplayStore();
-   const getInitiativeProjects = useWorkspaceStore((s) => s.getInitiativeProjects);
+   // Deriva da fatia assinada: o getter devolve array NOVO a cada leitura, entao nao
+   // pode ir dentro do seletor (referencia nova = re-render infinito).
+   const allProjects = useWorkspaceStore((s) => s.projects);
    const countCompletedProjects = useWorkspaceStore((s) => s.countCompletedProjects);
-   const projects = getInitiativeProjects(initiative.id);
+   const linkedIds = new Set(initiative.projectIds);
+   const projects = allProjects.filter((p) => linkedIds.has(p.id));
    const { completed } = countCompletedProjects(initiative.id);
 
    return (

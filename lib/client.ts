@@ -39,6 +39,7 @@ import type {
    InitiativeActivityDto,
 } from '@/lib/api/initiatives';
 import type { ViewDto, CreateViewInput, UpdateViewInput } from '@/lib/api/views';
+import type { WorkspaceBootstrap } from '@/lib/api/workspace';
 import type { NotificationDto } from '@/lib/api/notifications';
 import type { ReviewDto } from '@/lib/api/reviews';
 import type { FolderDto, DocumentDto } from '@/lib/api/documents';
@@ -130,10 +131,17 @@ const me = Object.assign(() => get<MeDto>('/me'), {
 export const api = {
    me,
 
+   /**
+    * Bootstrap do workspace num GET só (me, catálogos, teams, projects, members,
+    * cycles, initiatives, views). `rollover: false` pula o auto-rollover de cycles
+    * (escrita) — usado no refetch disparado por SSE, onde só o boot da página deve
+    * fazer a escrita.
+    */
+   workspace: (opts?: { rollover?: boolean }) =>
+      get<WorkspaceBootstrap>(`/workspace${opts?.rollover === false ? '?rollover=0' : ''}`),
+
    /** Agent com IA real (Bedrock/Claude via IRSA) + contexto do workspace. */
    agent: {
-      chat: (messages: { role: 'user' | 'assistant'; content: string }[]) =>
-         post<{ reply: string }>('/agent/chat', { messages }),
       /** Conversas persistidas (#23). */
       chats: () => get<{ id: string; title: string; updatedAt: string }[]>('/agent/chats'),
       getChat: (id: string) =>
@@ -216,7 +224,6 @@ export const api = {
       unsubscribe: (id: string) =>
          del<{ id: string; subscribed: boolean }>(`/issues/${id}/subscription`),
       activity: (id: string) => get<ActivityItem[]>(`/issues/${id}/activity`),
-      comments: (id: string) => get<CommentDto[]>(`/issues/${id}/comments`),
       addComment: (id: string, body: string, parentId?: string | null) =>
          post<CommentDto>(`/issues/${id}/comments`, { body, parentId: parentId ?? null }),
       aggregate: (team?: string) =>

@@ -153,7 +153,9 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
    const teams = useWorkspaceStore((s) => s.teams);
    const me = useWorkspaceStore((s) => s.me);
    const hydrate = useWorkspaceStore((s) => s.hydrate);
-   const getCyclesByTeam = useWorkspaceStore((s) => s.getCyclesByTeam);
+   // Deriva da fatia assinada: `getCyclesByTeam` devolve array NOVO a cada leitura,
+   // entao nao pode ir dentro do seletor (referencia nova = re-render infinito).
+   const allCycles = useWorkspaceStore((s) => s.cycles);
    const status = useStatuses();
    const labels = useLabels();
    const team = teams.find((candidate) => candidate.id === teamId);
@@ -173,7 +175,7 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
       );
    }
 
-   const cycles = getCyclesByTeam(team.id);
+   const cycles = allCycles.filter((c) => c.teamId === team.id);
 
    const leaveTeam = async () => {
       if (busy) return;
