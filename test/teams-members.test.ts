@@ -81,21 +81,41 @@ describe('teams', () => {
       await expect(createTeam(db, { id: '1bad', name: 'x' })).rejects.toThrow();
    });
 
-   it('adds a member by email (provisioning) and removes it', async () => {
+   it('adds an EXISTING user to the team and removes it', async () => {
       const { db } = await workspace();
-      await addTeamMember(db, 'DESIGN', 'carol@nimbloo.ai');
+      const email = 'bob@nimbloo.ai'; // já existe (logou via SSO) e ainda não está no DESIGN
+      await addTeamMember(db, 'DESIGN', email);
       let members = await listTeamMembers(db, 'DESIGN');
-      expect(members.some((m) => m.email === 'carol@nimbloo.ai')).toBe(true);
+      expect(members.some((m) => m.email === email)).toBe(true);
 
       // idempotente
-      await addTeamMember(db, 'DESIGN', 'carol@nimbloo.ai');
+      await addTeamMember(db, 'DESIGN', email);
       members = await listTeamMembers(db, 'DESIGN');
-      expect(members.filter((m) => m.email === 'carol@nimbloo.ai')).toHaveLength(1);
+      expect(members.filter((m) => m.email === email)).toHaveLength(1);
 
-      const carol = members.find((m) => m.email === 'carol@nimbloo.ai')!;
-      await removeTeamMember(db, 'DESIGN', carol.id);
+      const lia = members.find((m) => m.email === email)!;
+      await removeTeamMember(db, 'DESIGN', lia.id);
       members = await listTeamMembers(db, 'DESIGN');
-      expect(members.some((m) => m.email === 'carol@nimbloo.ai')).toBe(false);
+      expect(members.some((m) => m.email === email)).toBe(false);
+   });
+
+   /**
+    * Antes, `addTeamMember` chamava `getOrCreateUser` e criava linha em `app_user` para
+    * QUALQUER e-mail. Como o login é 100% Keycloak (grupo `app-circle`), essa linha não
+    * dava acesso nenhum: virava membro fantasma na lista e nos seletores de assignee,
+    * e a pessoa ainda recebia e-mail de boas-vindas para um app onde não consegue entrar.
+    */
+   it('recusa e-mail que ainda não é usuário (sem criar membro fantasma)', async () => {
+      const { db } = await workspace();
+      const ghost = 'ninguem@nimbloo.ai';
+
+      await expect(addTeamMember(db, 'DESIGN', ghost)).rejects.toThrow(/não é usuário do Circle/i);
+
+      const members = await listTeamMembers(db, 'DESIGN');
+      expect(members.some((m) => m.email === ghost)).toBe(false);
+      // e nada foi provisionado no workspace
+      const all = await listMembers(db, {});
+      expect(all.some((m) => m.email === ghost)).toBe(false);
    });
 
    it('rejects adding a member to a non-existent team', async () => {

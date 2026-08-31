@@ -14,8 +14,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 /**
- * Team Home — "Members" tab: membros do time, com adicionar (por e-mail,
- * provisiona o usuário) e remover. Persiste via api.teams e re-hidrata o
+ * Team Home — "Members" tab: membros do time, com adicionar e remover. Só entra no
+ * picker quem JÁ é usuário do Circle (acesso concedido no Orbis + primeiro login por
+ * SSO) — não há convite por e-mail aqui. Persiste via api.teams e re-hidrata o
  * workspace.
  */
 export default function TeamMembers() {
@@ -29,7 +30,6 @@ export default function TeamMembers() {
    const team = teams.find((t) => t.id === teamId);
 
    const [open, setOpen] = useState(false);
-   const [email, setEmail] = useState('');
    const [busy, setBusy] = useState(false);
    const [pick, setPick] = useState(''); // busca do picker de membros existentes
 
@@ -77,14 +77,14 @@ export default function TeamMembers() {
 
    const members = [...team.members].sort((a, b) => a.name.localeCompare(b.name));
 
-   const addMember = async (explicitEmail?: string) => {
-      const value = (explicitEmail ?? email).trim().toLowerCase();
+   /** O e-mail vem sempre do picker — só usuários que já existem podem entrar no time. */
+   const addMember = async (memberEmail: string) => {
+      const value = memberEmail.trim().toLowerCase();
       if (!value || busy) return;
       setBusy(true);
       try {
          await api.teams.addMember(team.id, value);
          await hydrate();
-         setEmail('');
          setPick('');
          setOpen(false);
          toast.success(`${value} adicionado ao time ${team.name}`);
@@ -170,27 +170,17 @@ export default function TeamMembers() {
                               ))
                            )}
                         </div>
-                        {/* Convidar alguém NOVO por e-mail (recebe link de acesso) */}
-                        <div className="p-2 border-t">
-                           <p className="text-[11px] text-muted-foreground mb-1.5">
-                              Convidar alguém novo por e-mail (recebe link de acesso):
-                           </p>
-                           <div className="flex items-center gap-1.5">
-                              <Input
-                                 type="email"
-                                 placeholder="nome@empresa.com"
-                                 value={email}
-                                 onChange={(e) => setEmail(e.target.value)}
-                                 onKeyDown={(e) => {
-                                    if (e.key === 'Enter') void addMember();
-                                 }}
-                                 className="h-8"
-                              />
-                              <Button size="xs" onClick={() => void addMember()} disabled={busy}>
-                                 Convidar
-                              </Button>
-                           </div>
-                        </div>
+                        {/*
+                           Não há convite por e-mail aqui de propósito: o acesso ao Circle
+                           é concedido no Orbis (grupo Keycloak `app-circle`). Digitar um
+                           e-mail novo só criaria um membro fantasma — sem acesso, mas
+                           ocupando a lista e os seletores de assignee.
+                        */}
+                        <p className="p-2 border-t text-[11px] text-muted-foreground">
+                           Só aparece aqui quem já tem acesso ao Circle. Para alguém novo, conceda o
+                           acesso no Orbis; após o primeiro login por SSO a pessoa entra nesta
+                           lista.
+                        </p>
                      </PopoverContent>
                   </Popover>
                )}
