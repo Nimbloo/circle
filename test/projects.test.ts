@@ -11,6 +11,7 @@ import {
    updateProject,
    deleteProject,
 } from '@/lib/api/projects';
+import { getProjectDetail } from '@/lib/api/project-detail';
 
 async function setup() {
    const db = await makeTestDb();
@@ -140,5 +141,25 @@ describe('projects', () => {
       await expect(
          createProject(db, { name: 'X', statusId: 'nope', ...base })
       ).rejects.toMatchObject({ status: 400 });
+   });
+   /**
+    * O feed de atividade do projeto nunca tinha teste — e como `updateProject`
+    * consultava `db` de dentro da transação para resolver o ator, exercitá-lo travava
+    * (PGlite tem conexão única). O ator agora é resolvido antes da tx.
+    */
+   it('grava o feed de atividade quando o ator e conhecido', async () => {
+      const { db } = await setup();
+      const p = await createProject(db, { name: 'P', statusId: 'proj-in-progress', ...base });
+
+      await updateProject(db, p.id, { name: 'P2', statusId: 'proj-completed' }, 'lia@nimbloo.ai');
+      const detail = await getProjectDetail(db, p.id);
+      expect(detail?.activity).toHaveLength(1);
+      expect(detail?.activity[0].text).toContain('name');
+      expect(detail?.activity[0].text).toContain('status');
+      expect(detail?.activity[0].user?.email).toBe('lia@nimbloo.ai');
+
+      // sem ator, nao loga
+      await updateProject(db, p.id, { name: 'P3' });
+      expect((await getProjectDetail(db, p.id))?.activity).toHaveLength(1);
    });
 });

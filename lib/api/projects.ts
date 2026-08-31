@@ -316,6 +316,15 @@ export async function updateProject(
       .where(eq(projectT.id, id))
       .limit(1);
    if (existing.length === 0) return null;
+
+   // Resolvido ANTES da transação: o ator exige consulta própria, e consultar `db` de
+   // dentro da `tx` trava quando a conexão é única (é o caso do PGlite nos testes).
+   const changed = (Object.keys(patch) as (keyof UpdateProjectInput)[])
+      .filter((k) => patch[k] !== undefined && PROJECT_FIELD_LABELS[k])
+      .map((k) => PROJECT_FIELD_LABELS[k]);
+   const actorId =
+      actorEmail && changed.length > 0 ? (await getOrCreateUser(db, actorEmail)).id : null;
+
    const set: Record<string, unknown> = { updatedAt: new Date() };
    for (const k of [
       'name',
@@ -348,20 +357,14 @@ export async function updateProject(
 
       // Feed de atividade (Linear loga toda mudança). Uma linha por update, resumindo
       // os campos alterados. Sem actor conhecido, não loga.
-      if (actorEmail) {
-         const changed = (Object.keys(patch) as (keyof UpdateProjectInput)[])
-            .filter((k) => patch[k] !== undefined && PROJECT_FIELD_LABELS[k])
-            .map((k) => PROJECT_FIELD_LABELS[k]);
-         if (changed.length > 0) {
-            const actor = await getOrCreateUser(db, actorEmail);
-            await tx.insert(projectActivity).values({
-               id: randomUUID(),
-               projectId: id,
-               userId: actor.id,
-               text: `changed ${changed.join(', ')}`,
-               createdAt: new Date(),
-            });
-         }
+      if (actorId) {
+         await tx.insert(projectActivity).values({
+            id: randomUUID(),
+            projectId: id,
+            userId: actorId,
+            text: `changed ${changed.join(', ')}`,
+            createdAt: new Date(),
+         });
       }
    });
    publish({ entity: 'project', action: 'updated', id });

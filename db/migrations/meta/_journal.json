@@ -211,6 +211,13 @@
          "when": 1787885960321,
          "tag": "0029_slack_config",
          "breakpoints": true
+      },
+      {
+         "idx": 30,
+         "version": "7",
+         "when": 1788208152311,
+         "tag": "0030_nappy_king_cobra",
+         "breakpoints": true
       }
    ]
 }

@@ -188,7 +188,15 @@ export async function createTeam(
    return (await getTeam(db, id, creatorId))!;
 }
 
-/** Adiciona (idempotente) um membro ao time pelo e-mail — provisiona o usuário se novo. */
+/**
+ * Adiciona (idempotente) ao time um usuário que JÁ EXISTE, pelo e-mail.
+ *
+ * NÃO provisiona. O acesso ao Circle é 100% SSO Keycloak (grupo `app-circle`), então
+ * criar `app_user` aqui não daria acesso nenhum — só produziria um membro fantasma:
+ * aparece na lista e nos seletores de assignee, recebe o e-mail de boas-vindas e não
+ * consegue entrar. Quem ainda não é usuário precisa primeiro ganhar acesso (Orbis) e
+ * logar uma vez; o `signIn` de `auth.ts` provisiona nesse momento.
+ */
 export async function addTeamMember(db: Db, teamId: string, email: string): Promise<void> {
    const t = await db
       .select({ id: teamT.id, name: teamT.name })
@@ -196,7 +204,16 @@ export async function addTeamMember(db: Db, teamId: string, email: string): Prom
       .where(eq(teamT.id, teamId))
       .limit(1);
    if (!t.length) throw new ApiError(404, `Team '${teamId}' não existe`);
-   const user = await getOrCreateUser(db, email);
+   const normalized = email.trim().toLowerCase();
+   const found = await db.select().from(appUser).where(eq(appUser.email, normalized)).limit(1);
+   if (!found.length) {
+      throw new ApiError(
+         404,
+         `'${normalized}' ainda não é usuário do Circle. Peça acesso pelo Orbis; ` +
+            `depois do primeiro login por SSO ele aparece aqui.`
+      );
+   }
+   const user = found[0];
    const inserted = await db
       .insert(teamMember)
       .values({ teamId, userId: user.id, joined: true })
