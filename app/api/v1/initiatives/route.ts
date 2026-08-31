@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
    return handle(async () => {
+      await requireEmail(req);
       const sp = new URL(req.url).searchParams;
       return ok(
          await listInitiatives(db, {

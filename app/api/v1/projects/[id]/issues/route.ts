@@ -1,6 +1,6 @@
 import { db } from '@/db';
 import { ok } from '@/lib/api/response';
-import { handle, parseIssueListOptions } from '@/lib/api/http';
+import { handle, parseIssueListOptions, requireEmail } from '@/lib/api/http';
 import { emailFromRequest } from '@/lib/api/auth';
 import { listIssues } from '@/lib/api/issues';
 
@@ -11,6 +11,7 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
+      await requireEmail(req);
       const { id } = await params;
       const sp = new URL(req.url).searchParams;
       const meEmail = (await emailFromRequest(req)) ?? undefined;

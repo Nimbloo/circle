@@ -12,6 +12,7 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
+      await requireEmail(req);
       const { id } = await params;
       return ok(await listComments(db, id, (await emailFromRequest(req)) ?? undefined));
    });

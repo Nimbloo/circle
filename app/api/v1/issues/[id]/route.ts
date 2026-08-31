@@ -13,8 +13,9 @@ type Params = { params: Promise<{ id: string }> };
 // permite abrir /issue/ENG-42 direto sem precisar do store hidratado (elimina o waterfall).
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
+      await requireEmail(req);
       const { id } = await params;
       const dto = UUID_RE.test(id) ? await getIssue(db, id) : await getIssueByIdentifier(db, id);
       return dto ? ok(dto) : notFound(`Issue '${id}' não encontrada`);
