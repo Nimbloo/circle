@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { withSentryConfig } from '@sentry/nextjs/config';
 
 // Headers de segurança em toda resposta (defesa em profundidade além do gateway Istio).
 // CSP permite o mínimo do Next (styles inline do runtime; imagens data:/blob: pro avatar
@@ -14,7 +15,9 @@ const CSP = [
    "style-src 'self' 'unsafe-inline'",
    `img-src 'self' data: blob: ${CDN}`,
    "font-src 'self' data:",
-   "connect-src 'self'",
+   // O ingest do Sentry precisa ser liberado explicitamente: com `connect-src 'self'`
+   // sozinho o browser bloqueia o envio dos eventos e o error tracking fica mudo.
+   "connect-src 'self' https://*.ingest.us.sentry.io",
    "frame-ancestors 'none'",
    "base-uri 'self'",
    "form-action 'self'",
@@ -35,6 +38,8 @@ const nextConfig: NextConfig = {
    /* config options here */
    output: 'standalone',
    devIndicators: false,
+   // Vira o `release` do Sentry (`circle@X.Y.Z`), ligando o erro à versão da imagem.
+   env: { NEXT_PUBLIC_APP_VERSION: process.env.npm_package_version ?? 'dev' },
    // Tree-shake barrels grandes (ícones/UI/charts) — só o que é usado entra no chunk.
    experimental: {
       optimizePackageImports: ['lucide-react', 'react-icons', 'recharts', '@radix-ui/react-icons'],
@@ -123,4 +128,15 @@ const nextConfig: NextConfig = {
    },
 };
 
-export default nextConfig;
+/**
+ * O wrapper do Sentry só instrumenta o build; sem DSN o SDK fica inerte em runtime.
+ * O upload de source maps depende de `SENTRY_AUTH_TOKEN` — desligado quando o token
+ * não existe para o build local e o CI não quebrarem por falta de credencial.
+ */
+export default withSentryConfig(nextConfig, {
+   org: 'nimbloo',
+   project: 'circle',
+   silent: true,
+   webpack: { treeshake: { removeDebugLogging: true }, automaticVercelMonitors: false },
+   sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
+});

@@ -1,10 +1,18 @@
+import * as Sentry from '@sentry/nextjs';
+
 /**
- * Hook de startup do Next.js: aplica as migrations e semeia os catálogos no boot
- * (idempotente; drizzle rastreia migrations aplicadas). A imagem standalone tem
- * drizzle-orm + pg (deps de prod) — não precisa de drizzle-kit/tsx em runtime.
+ * Hook de startup do Next.js: inicializa o Sentry do runtime correspondente e, no
+ * Node, aplica as migrations e semeia os catálogos no boot (idempotente; drizzle
+ * rastreia migrations aplicadas). A imagem standalone tem drizzle-orm + pg (deps de
+ * prod) — não precisa de drizzle-kit/tsx em runtime.
  * Seed demo NÃO roda aqui (só via `pnpm db:seed` com CIRCLE_SEED_DEMO em dev/hml).
  */
 export async function register() {
+   // Antes de qualquer early return abaixo: sem isto o Sentry do server só ligaria
+   // quando as migrations rodassem, e o do Edge nunca ligaria.
+   if (process.env.NEXT_RUNTIME === 'nodejs') await import('./sentry.server.config');
+   if (process.env.NEXT_RUNTIME === 'edge') await import('./sentry.edge.config');
+
    if (process.env.NEXT_RUNTIME !== 'nodejs') return;
    if (process.env.CIRCLE_SKIP_MIGRATE === 'true') return;
    if (!process.env.DATABASE_URL) {
@@ -70,3 +78,9 @@ export async function register() {
       await lockClient.end().catch(() => {});
    }
 }
+
+/**
+ * Captura erros de renderização/handler do servidor (App Router, Next 15+) — o que
+ * o `register()` sozinho não vê.
+ */
+export const onRequestError = Sentry.captureRequestError;

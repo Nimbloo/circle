@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
    return handle(async () => {
+      await requireEmail(req);
       const sp = new URL(req.url).searchParams;
       const [sort, dir] = (sp.get('sort') ?? 'title-asc').split('-') as [
          ProjectSort,

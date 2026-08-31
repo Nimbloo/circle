@@ -1,6 +1,6 @@
 import { db } from '@/db';
 import { notFound } from '@/lib/api/response';
-import { handle } from '@/lib/api/http';
+import { handle, requireEmail } from '@/lib/api/http';
 import { getAvatar } from '@/lib/api/avatar';
 
 export const runtime = 'nodejs';
@@ -10,11 +10,12 @@ type Params = { params: Promise<{ id: string }> };
 
 /**
  * GET /users/{id}/avatar — serve os bytes da foto de perfil (decodifica o base64).
- * 404 (problem+json) se o usuário não tiver foto. Autenticação é garantida pelo
- * middleware default-deny de `/api` (o browser manda o cookie de sessão no <img>).
+ * 404 (problem+json) se o usuário não tiver foto. Exige sessão no próprio handler
+ * (o browser manda o cookie no `<img>`), além do gate do middleware.
  */
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
+      await requireEmail(req);
       const { id } = await params;
       const avatar = await getAvatar(db, id);
       if (!avatar) return notFound('Avatar não encontrado');
