@@ -33,14 +33,15 @@ export default function CycleIssues({ cycleView }: CycleIssuesProps) {
    const { filters } = useFilterStore();
    const issues = useIssuesStore((s) => s.issues);
    const { openPanel } = useRightPanelStore();
-   const getCurrentCycle = useWorkspaceStore((s) => s.getCurrentCycle);
-   const getUpcomingCycle = useWorkspaceStore((s) => s.getUpcomingCycle);
+   // Chamada DENTRO do seletor: assinar a funcao nao re-renderiza (referencia estavel).
+   const currentCycle = useWorkspaceStore((s) => s.getCurrentCycle(teamId));
+   const upcomingCycle = useWorkspaceStore((s) => s.getUpcomingCycle(teamId));
    const displayOrderedStatus = useDisplayOrderedStatuses();
 
    // Escopa pelo time da rota — senão pega o ciclo current/upcoming de QUALQUER time
    // (em workspace multi-time, /team/B/cycle/active mostrava o ciclo do time A).
    const { teamId } = useParams<{ teamId?: string }>();
-   const cycle = cycleView === 'active' ? getCurrentCycle(teamId) : getUpcomingCycle(teamId);
+   const cycle = cycleView === 'active' ? currentCycle : upcomingCycle;
 
    const isSearching = isSearchOpen && searchQuery.trim() !== '';
    const isViewTypeGrid = viewType === 'grid';

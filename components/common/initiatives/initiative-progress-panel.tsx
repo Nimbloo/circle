@@ -14,12 +14,14 @@ const PROGRESS_COLORS = { scope: '#95a2b3', started: '#f2c94c', completed: '#5e6
 /** Progress snapshot + Health/Status/Teams/Leads breakdown of an initiative. */
 export function InitiativeProgressPanel({ initiative }: { initiative: Initiative }) {
    const [tab, setTab] = useState<BreakdownTab>('teams');
-   const getInitiativeProjects = useWorkspaceStore((s) => s.getInitiativeProjects);
+   // Deriva da fatia assinada: o getter devolve array NOVO a cada leitura, entao nao
+   // pode ir dentro do seletor (referencia nova = re-render infinito).
+   const allProjects = useWorkspaceStore((s) => s.projects);
    const teams = useWorkspaceStore((s) => s.teams);
-   const projects = useMemo(
-      () => getInitiativeProjects(initiative.id),
-      [initiative, getInitiativeProjects]
-   );
+   const projects = useMemo(() => {
+      const linked = new Set(initiative.projectIds);
+      return allProjects.filter((p) => linked.has(p.id));
+   }, [initiative, allProjects]);
 
    const progress = useMemo(() => {
       const total = projects.length;
