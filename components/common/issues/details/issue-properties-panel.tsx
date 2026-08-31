@@ -35,13 +35,14 @@ import { RelationEditor } from './relation-editor';
 /** Selector de ciclo do time da issue (reusa updateIssue({cycleId}) do store). */
 function CycleSelector({ issue }: { issue: Issue }) {
    const [open, setOpen] = useState(false);
-   const getCyclesByTeam = useWorkspaceStore((s) => s.getCyclesByTeam);
-   const getCycleById = useWorkspaceStore((s) => s.getCycleById);
+   // Deriva da fatia assinada: `getCyclesByTeam` devolve array NOVO a cada leitura,
+   // entao nao pode ir dentro do seletor (referencia nova = re-render infinito).
+   const allCycles = useWorkspaceStore((s) => s.cycles);
    const updateIssue = useIssuesStore((s) => s.updateIssue);
 
    const teamId = issue.identifier.split('-')[0];
-   const cycles = getCyclesByTeam(teamId);
-   const current = issue.cycleId ? getCycleById(issue.cycleId) : undefined;
+   const cycles = allCycles.filter((c) => c.teamId === teamId);
+   const current = issue.cycleId ? allCycles.find((c) => c.id === issue.cycleId) : undefined;
 
    const select = (cycleId: string) => {
       setOpen(false);

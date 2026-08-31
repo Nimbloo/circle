@@ -2,21 +2,12 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { ok } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
-import { emailFromRequest } from '@/lib/api/auth';
-import { listComments, addComment } from '@/lib/api/issue-detail';
+import { addComment } from '@/lib/api/issue-detail';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 type Params = { params: Promise<{ id: string }> };
-
-export async function GET(req: Request, { params }: Params) {
-   return handle(async () => {
-      await requireEmail(req);
-      const { id } = await params;
-      return ok(await listComments(db, id, (await emailFromRequest(req)) ?? undefined));
-   });
-}
 
 const CommentSchema = z.object({
    body: z.string().min(1).max(10000),

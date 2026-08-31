@@ -13,8 +13,14 @@ async function main() {
 
    if (process.env.CIRCLE_SEED_DEMO === 'true') {
       console.log('Seeding demo data (mock-data)...');
-      await seedDemo(db);
-      console.log('Demo data seeded.');
+      // O log segue o que REALMENTE aconteceu: o mock-data vem zerado por padrao
+      // (o app e API-driven), e anunciar sucesso sem inserir nada e enganoso.
+      const seeded = await seedDemo(db);
+      console.log(
+         seeded
+            ? 'Demo data seeded.'
+            : 'Demo data: nada a semear (mock-data vazio em `data/`) — nenhuma linha inserida.'
+      );
    }
    process.exit(0);
 }

@@ -52,7 +52,9 @@ interface IssueContextMenuProps {
 export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
    const users = useWorkspaceStore((s) => s.users);
    const projects = useWorkspaceStore((s) => s.projects);
-   const getCyclesByTeam = useWorkspaceStore((s) => s.getCyclesByTeam);
+   // Deriva da fatia assinada: `getCyclesByTeam` devolve array NOVO a cada leitura,
+   // entao nao pode ir dentro do seletor (referencia nova = re-render infinito).
+   const allCycles = useWorkspaceStore((s) => s.cycles);
    const status = useStatuses();
    const priorities = usePriorities();
    const labels = useLabels();
@@ -212,7 +214,7 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
 
    // Cycles do time da issue (Linear lista os cycles do time da própria issue).
    const issue = issueId ? getIssueById(issueId) : undefined;
-   const teamCycles = issue?.teamId ? getCyclesByTeam(issue.teamId) : [];
+   const teamCycles = issue?.teamId ? allCycles.filter((c) => c.teamId === issue.teamId) : [];
 
    return (
       <>

@@ -68,10 +68,10 @@ const GROUP_ORDER: { key: string; label: string; match: (project: Project) => bo
 
 function ProjectsSection({ initiative }: { initiative: Initiative }) {
    const { orgId } = useParams<{ orgId: string }>();
-   const getInitiativeProjects = useWorkspaceStore((s) => s.getInitiativeProjects);
    const allProjects = useWorkspaceStore((s) => s.projects);
    const hydrate = useWorkspaceStore((s) => s.hydrate);
-   const projects = getInitiativeProjects(initiative.id);
+   const linked = new Set(initiative.projectIds);
+   const projects = allProjects.filter((p) => linked.has(p.id));
    const groups = GROUP_ORDER.map((group) => ({
       ...group,
       projects: projects.filter(group.match),

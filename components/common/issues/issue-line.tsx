@@ -27,8 +27,11 @@ function IssueLineComponent({ issue, layoutId = false }: { issue: Issue; layoutI
    // Selector estreito: assina só displayProperties (não o store inteiro) — senão toda
    // linha memoizada re-renderiza a qualquer mudança do display-store (ex.: showSubIssues).
    const displayProperties = useDisplaySettingsStore((s) => s.displayProperties);
-   const getCycleById = useWorkspaceStore((s) => s.getCycleById);
-   const cycle = displayProperties.cycle && issue.cycleId ? getCycleById(issue.cycleId) : undefined;
+   // Chamada DENTRO do seletor (referencia estavel: `find`), senao a linha nao
+   // acorda quando o ciclo muda.
+   const cycle = useWorkspaceStore((s) =>
+      displayProperties.cycle && issue.cycleId ? s.getCycleById(issue.cycleId) : undefined
+   );
    const team = useWorkspaceStore((s) => (issue.teamId ? s.getTeamById(issue.teamId) : undefined));
    const selected = useBulkSelectionStore((s) => s.selected.has(issue.id));
    const anySelected = useBulkSelectionStore((s) => s.selected.size > 0);

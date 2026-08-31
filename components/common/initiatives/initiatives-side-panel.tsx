@@ -22,7 +22,9 @@ interface BreakdownRow {
 /** Right side panel of the Initiatives page: counts by owner / team / health. */
 export function InitiativesSidePanel({ initiatives }: { initiatives: Initiative[] }) {
    const [tab, setTab] = useState<PanelTab>('owner');
-   const getInitiativeProjects = useWorkspaceStore((s) => s.getInitiativeProjects);
+   // Deriva da fatia assinada: o getter devolve array NOVO a cada leitura, entao nao
+   // pode ir dentro do seletor (referencia nova = re-render infinito).
+   const allProjects = useWorkspaceStore((s) => s.projects);
    const teams = useWorkspaceStore((s) => s.teams);
 
    const rows = useMemo<BreakdownRow[]>(() => {
@@ -46,7 +48,9 @@ export function InitiativesSidePanel({ initiatives }: { initiatives: Initiative[
          const byTeam = new Map<string, BreakdownRow>();
          for (const initiative of initiatives) {
             const teamIds = new Set(
-               getInitiativeProjects(initiative.id).map((project) => project.teamId)
+               allProjects
+                  .filter((p) => initiative.projectIds.includes(p.id))
+                  .map((project) => project.teamId)
             );
             for (const teamId of teamIds) {
                const team = teams.find((entry) => entry.id === teamId);
@@ -68,7 +72,7 @@ export function InitiativesSidePanel({ initiatives }: { initiatives: Initiative[
          }))
          .filter((row) => row.count > 0)
          .sort((a, b) => b.count - a.count);
-   }, [tab, initiatives, getInitiativeProjects, teams]);
+   }, [tab, initiatives, allProjects, teams]);
 
    return (
       <aside className="hidden lg:flex flex-col w-72 shrink-0 border-l h-full overflow-y-auto bg-container p-4 gap-4">

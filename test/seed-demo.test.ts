@@ -16,7 +16,8 @@ async function count(db: Db, table: any): Promise<number> {
 describe('demo seed', () => {
    it('is a safe no-op when mock-data is empty (app is API-driven, mocks zeroed)', async () => {
       const db = await makeTestDb();
-      await expect(seedDemo(db)).resolves.toBeUndefined();
+      // `false` = nao havia o que semear; o script usa isso para nao logar sucesso falso.
+      await expect(seedDemo(db)).resolves.toBe(false);
       expect(await count(db, appUser)).toBe(0);
       expect(await count(db, team)).toBe(0);
       expect(await count(db, project)).toBe(0);

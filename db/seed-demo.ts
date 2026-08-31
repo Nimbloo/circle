@@ -36,10 +36,13 @@ function ts(dateish: string | undefined): Date {
    return isNaN(d.getTime()) ? new Date('2026-01-01') : d;
 }
 
-export async function seedDemo(db: Db): Promise<void> {
-   // Sem dados demo (mock-data zerado por padrão) -> no-op seguro. O app é API-driven;
-   // seedDemo só popula algo quando os mock-data são reintroduzidos manualmente (dev).
-   if (users.length === 0) return;
+/**
+ * Semeia os dados de exemplo. Devolve `false` quando NÃO havia o que semear — o
+ * mock-data vem zerado por padrão (o app é API-driven), e o chamador precisa saber
+ * disso para não anunciar um sucesso que não aconteceu.
+ */
+export async function seedDemo(db: Db): Promise<boolean> {
+   if (users.length === 0) return false;
 
    const defaultTeam = teams[0]?.id ?? 'CORE';
    const projectIds = new Set(projects.map((p) => p.id));
@@ -297,6 +300,8 @@ export async function seedDemo(db: Db): Promise<void> {
       createdAt: ts(i.createdAt),
    }));
    if (notifRows.length) await db.insert(notification).values(notifRows).onConflictDoNothing();
+
+   return true;
 }
 
 function dedupPairs<T>(rows: T[], keyOf: (r: T) => string): T[] {
