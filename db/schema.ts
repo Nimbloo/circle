@@ -548,6 +548,27 @@ export const initiativeUpdate = pgTable(
    (t) => [index('idx_initiative_update_initiative').on(t.initiativeId)]
 );
 
+/**
+ * Feed de alterações da iniciativa — espelha `project_activity`. Uma linha por update,
+ * resumindo os campos que mudaram (o "changed status, owner" do Linear). Distinto de
+ * `initiative_update`, que é o post editorial de health escrito à mão.
+ */
+export const initiativeActivity = pgTable(
+   'initiative_activity',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      initiativeId: varchar('initiative_id', { length: 36 })
+         .notNull()
+         .references(() => initiative.id),
+      userId: varchar('user_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      text: varchar('text', { length: 1024 }).notNull(),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_initiative_activity_initiative').on(t.initiativeId, t.createdAt)]
+);
+
 export const projectActivity = pgTable(
    'project_activity',
    {

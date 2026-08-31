@@ -4,7 +4,8 @@ import ProjectsTimeline from '@/components/common/projects/projects-timeline';
 import { ListSkeleton } from '@/components/common/list-skeleton';
 import { ProjectGroup } from '@/components/common/projects/projects';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Initiative, INITIATIVE_STATUS_META } from '@/data/initiatives';
+import { Initiative, INITIATIVE_STATUS_META, type InitiativeStatus } from '@/data/initiatives';
+import { usePriorities } from '@/store/catalog-store';
 import { Project } from '@/data/projects';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { api } from '@/lib/client';
@@ -17,7 +18,7 @@ import {
    CommandList,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarRange, ChevronDown, Plus, Tag, UserRound, X } from 'lucide-react';
+import { CalendarRange, ChevronDown, Plus, UserRound, X } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
@@ -26,6 +27,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import type { InitiativeUpdateDto } from '@/lib/api/initiative-detail';
+import type { InitiativeActivityDto } from '@/lib/api/initiatives';
 import { InitiativeProgressPanel } from './initiative-progress-panel';
 import { InitiativeStatusIcon } from './initiative-status-icon';
 import { InitiativeActions } from './initiative-actions';
@@ -218,11 +220,222 @@ function PropertyRow({ label, children }: { label: string; children: React.React
    );
 }
 
-function Overview({ initiative }: { initiative: Initiative }) {
+/** Botão discreto que abre o popover de edição de uma propriedade. */
+function PropertyButton({ children }: { children: React.ReactNode }) {
+   return (
+      <button
+         type="button"
+         className="inline-flex items-center gap-1.5 rounded px-1 -mx-1 py-0.5 hover:bg-accent transition-colors text-left"
+      >
+         {children}
+      </button>
+   );
+}
+
+const STATUS_IDS = Object.keys(INITIATIVE_STATUS_META) as InitiativeStatus[];
+
+/**
+ * Painel de propriedades EDITÁVEL. Antes eram `<span>` estáticos — o backend já
+ * aceitava status/priority/owner/target, mas nada na tela os enviava, então a página
+ * de detalhe era read-only e só a lista (via context menu) editava.
+ */
+function PropertiesPanel({ initiative }: { initiative: Initiative }) {
+   const applyInitiative = useWorkspaceStore((s) => s.applyInitiative);
+   const users = useWorkspaceStore((s) => s.users);
+   const priorities = usePriorities();
    const countCompletedProjects = useWorkspaceStore((s) => s.countCompletedProjects);
    const { completed } = countCompletedProjects(initiative.id);
-   const total = initiative.projectIds.length;
 
+   const patch = async (body: Parameters<typeof api.initiatives.update>[1], msg: string) => {
+      try {
+         const dto = await api.initiatives.update(initiative.id, body);
+         applyInitiative(dto);
+         toast.success(msg);
+      } catch {
+         toast.error('Não foi possível atualizar a initiative');
+      }
+   };
+
+   return (
+      <div className="flex flex-col gap-3">
+         <span className="text-sm font-medium">Properties</span>
+
+         <PropertyRow label="Status">
+            <Popover>
+               <PopoverTrigger asChild>
+                  <PropertyButton>
+                     <InitiativeStatusIcon status={initiative.status} />
+                     {INITIATIVE_STATUS_META[initiative.status].label}
+                  </PropertyButton>
+               </PopoverTrigger>
+               <PopoverContent align="start" className="w-52 p-1">
+                  {STATUS_IDS.map((s) => (
+                     <button
+                        key={s}
+                        type="button"
+                        onClick={() =>
+                           void patch({ status: s }, `Status → ${INITIATIVE_STATUS_META[s].label}`)
+                        }
+                        className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-accent"
+                     >
+                        <InitiativeStatusIcon status={s} />
+                        {INITIATIVE_STATUS_META[s].label}
+                     </button>
+                  ))}
+               </PopoverContent>
+            </Popover>
+         </PropertyRow>
+
+         <PropertyRow label="Priority">
+            <Popover>
+               <PopoverTrigger asChild>
+                  <PropertyButton>
+                     <initiative.priority.icon className="size-4 text-muted-foreground" />
+                     <span className="text-muted-foreground">{initiative.priority.name}</span>
+                  </PropertyButton>
+               </PopoverTrigger>
+               <PopoverContent align="start" className="w-52 p-1">
+                  {priorities.map((p) => (
+                     <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => void patch({ priorityId: p.id }, `Prioridade → ${p.name}`)}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-accent"
+                     >
+                        <p.icon className="size-4 text-muted-foreground" />
+                        {p.name}
+                     </button>
+                  ))}
+               </PopoverContent>
+            </Popover>
+         </PropertyRow>
+
+         <PropertyRow label="Owner">
+            <Popover>
+               <PopoverTrigger asChild>
+                  <PropertyButton>
+                     {initiative.owner ? (
+                        <>
+                           <Avatar className="size-4">
+                              <AvatarImage
+                                 src={initiative.owner.avatarUrl || undefined}
+                                 alt={initiative.owner.name}
+                              />
+                              <AvatarFallback className="text-[8px]">
+                                 {initiative.owner.name[0]}
+                              </AvatarFallback>
+                           </Avatar>
+                           {initiative.owner.name}
+                        </>
+                     ) : (
+                        <span className="text-muted-foreground inline-flex items-center gap-1.5">
+                           <UserRound className="size-4" /> Add owner
+                        </span>
+                     )}
+                  </PropertyButton>
+               </PopoverTrigger>
+               <PopoverContent align="start" className="w-60 p-0">
+                  <Command>
+                     <CommandInput placeholder="Buscar pessoa…" />
+                     <CommandList>
+                        <CommandEmpty>Ninguém encontrado.</CommandEmpty>
+                        <CommandGroup>
+                           {initiative.owner && (
+                              <CommandItem
+                                 value="__none__"
+                                 onSelect={() => void patch({ ownerId: null }, 'Owner removido')}
+                              >
+                                 <X className="size-4 text-muted-foreground" />
+                                 Sem owner
+                              </CommandItem>
+                           )}
+                           {users.map((u) => (
+                              <CommandItem
+                                 key={u.id}
+                                 value={u.name}
+                                 onSelect={() => void patch({ ownerId: u.id }, `Owner → ${u.name}`)}
+                              >
+                                 <Avatar className="size-4">
+                                    <AvatarImage src={u.avatarUrl || undefined} alt={u.name} />
+                                    <AvatarFallback className="text-[8px]">
+                                       {u.name[0]}
+                                    </AvatarFallback>
+                                 </Avatar>
+                                 <span className="truncate">{u.name}</span>
+                              </CommandItem>
+                           ))}
+                        </CommandGroup>
+                     </CommandList>
+                  </Command>
+               </PopoverContent>
+            </Popover>
+         </PropertyRow>
+
+         <PropertyRow label="Target">
+            <TargetEditor initiative={initiative} onSave={patch} />
+         </PropertyRow>
+
+         <PropertyRow label="Projects">
+            <span className="text-muted-foreground text-xs">
+               {completed} / {initiative.projectIds.length} completed
+            </span>
+         </PropertyRow>
+      </div>
+   );
+}
+
+/**
+ * `target` é varchar livre no schema (texto tipo "Q3 2026"), não uma data — por isso
+ * é um input de texto e não um date picker. Datas reais exigiriam colunas novas.
+ */
+function TargetEditor({
+   initiative,
+   onSave,
+}: {
+   initiative: Initiative;
+   onSave: (body: { target: string | null }, msg: string) => Promise<void>;
+}) {
+   const [open, setOpen] = useState(false);
+   const [value, setValue] = useState(initiative.target ?? '');
+
+   useEffect(() => setValue(initiative.target ?? ''), [initiative.target]);
+
+   const commit = () => {
+      const next = value.trim();
+      setOpen(false);
+      if (next === (initiative.target ?? '')) return;
+      void onSave({ target: next || null }, next ? `Target → ${next}` : 'Target removido');
+   };
+
+   return (
+      <Popover open={open} onOpenChange={setOpen}>
+         <PopoverTrigger asChild>
+            <PropertyButton>
+               <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                  <CalendarRange className="size-4" />
+                  {initiative.target ?? 'Add target'}
+               </span>
+            </PropertyButton>
+         </PopoverTrigger>
+         <PopoverContent align="start" className="w-60 p-2">
+            <input
+               autoFocus
+               value={value}
+               onChange={(e) => setValue(e.target.value)}
+               onKeyDown={(e) => {
+                  if (e.key === 'Enter') commit();
+                  if (e.key === 'Escape') setOpen(false);
+               }}
+               onBlur={commit}
+               placeholder="Ex.: Q3 2026"
+               className="w-full bg-transparent text-sm outline-none border rounded px-2 py-1"
+            />
+         </PopoverContent>
+      </Popover>
+   );
+}
+
+function Overview({ initiative }: { initiative: Initiative }) {
    return (
       <div className="w-full h-full flex overflow-hidden">
          <div className="flex-1 min-w-0 overflow-y-auto">
@@ -293,65 +506,69 @@ function Overview({ initiative }: { initiative: Initiative }) {
          </div>
 
          <aside className="hidden lg:flex flex-col w-80 shrink-0 border-l h-full overflow-y-auto p-5 gap-6 bg-container">
-            <div className="flex flex-col gap-3">
-               <span className="text-sm font-medium">Properties</span>
-               <PropertyRow label="Status">
-                  <span className="inline-flex items-center gap-1.5">
-                     <InitiativeStatusIcon status={initiative.status} />
-                     {INITIATIVE_STATUS_META[initiative.status].label}
-                  </span>
-               </PropertyRow>
-               <PropertyRow label="Priority">
-                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                     <initiative.priority.icon className="size-4" />
-                     {initiative.priority.name}
-                  </span>
-               </PropertyRow>
-               <PropertyRow label="Owner">
-                  {initiative.owner ? (
-                     <span className="inline-flex items-center gap-1.5">
-                        <Avatar className="size-4">
-                           <AvatarImage
-                              src={initiative.owner.avatarUrl || undefined}
-                              alt={initiative.owner.name}
-                           />
-                           <AvatarFallback className="text-[8px]">
-                              {initiative.owner.name[0]}
-                           </AvatarFallback>
-                        </Avatar>
-                        {initiative.owner.name}
-                     </span>
-                  ) : (
-                     <span className="text-muted-foreground inline-flex items-center gap-1.5">
-                        <UserRound className="size-4" /> Add owner
-                     </span>
-                  )}
-               </PropertyRow>
-               <PropertyRow label="Target date">
-                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                     <CalendarRange className="size-4" />
-                     {initiative.target ?? 'Add target date'}
-                  </span>
-               </PropertyRow>
-               <PropertyRow label="Labels">
-                  <span className="text-muted-foreground inline-flex items-center gap-1.5">
-                     <Tag className="size-4" /> Add label
-                  </span>
-               </PropertyRow>
-               <PropertyRow label="Projects">
-                  <span className="text-muted-foreground text-xs">
-                     {completed} / {total} completed
-                  </span>
-               </PropertyRow>
-            </div>
+            <PropertiesPanel initiative={initiative} />
 
             <InitiativeProgressPanel initiative={initiative} />
 
-            <div className="flex flex-col gap-3">
-               <span className="text-sm font-medium">Activity</span>
-               <p className="text-xs text-muted-foreground">No activity recorded yet.</p>
-            </div>
+            <ActivityFeed initiativeId={initiative.id} />
          </aside>
+      </div>
+   );
+}
+
+/**
+ * Feed de alterações da iniciativa (o "changed status, owner" do Linear). Busca sob
+ * demanda: é lateral à página, não vale segurar a hidratação do workspace por ele.
+ */
+function ActivityFeed({ initiativeId }: { initiativeId: string }) {
+   const [entries, setEntries] = useState<InitiativeActivityDto[] | null>(null);
+
+   useEffect(() => {
+      let active = true;
+      api.initiatives
+         .activity(initiativeId)
+         .then((rows) => {
+            if (active) setEntries(rows);
+         })
+         .catch(() => {
+            if (active) setEntries([]);
+         });
+      return () => {
+         active = false;
+      };
+   }, [initiativeId]);
+
+   return (
+      <div className="flex flex-col gap-3">
+         <span className="text-sm font-medium">Activity</span>
+         {entries === null ? (
+            <p className="text-xs text-muted-foreground">Carregando…</p>
+         ) : entries.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No activity recorded yet.</p>
+         ) : (
+            <ul className="flex flex-col gap-2.5">
+               {entries.map((e) => (
+                  <li key={e.id} className="flex items-start gap-2 text-xs">
+                     <Avatar className="size-5 shrink-0 mt-0.5">
+                        <AvatarImage
+                           src={e.user?.avatarUrl || undefined}
+                           alt={e.user?.name ?? ''}
+                        />
+                        <AvatarFallback>{e.user?.name?.[0] ?? '?'}</AvatarFallback>
+                     </Avatar>
+                     <span className="text-muted-foreground leading-snug">
+                        <span className="text-foreground font-medium">
+                           {e.user?.name ?? 'Alguém'}
+                        </span>{' '}
+                        {e.text}
+                        <span className="block text-[11px] opacity-70">
+                           {new Date(e.createdAt).toLocaleDateString()}
+                        </span>
+                     </span>
+                  </li>
+               ))}
+            </ul>
+         )}
       </div>
    );
 }
@@ -481,22 +698,28 @@ function Activity({ initiativeId }: { initiativeId: string }) {
 /** Initiative detail page: Overview / Activity / Projects tabs. */
 export default function InitiativeDetails({ initiativeId }: { initiativeId: string }) {
    const [tab] = useQueryState('tab', parseAsStringLiteral(TABS).withDefault('overview'));
-   const getInitiativeById = useWorkspaceStore((s) => s.getInitiativeById);
-   const getInitiativeProjects = useWorkspaceStore((s) => s.getInitiativeProjects);
+   // A chamada vai DENTRO do seletor: assinar `s.getInitiativeById` assinaria a
+   // função (referência estável), e a tela nunca re-renderizaria depois de um
+   // update — salvava no store e continuava mostrando o valor antigo.
+   const initiative = useWorkspaceStore((s) => s.getInitiativeById(initiativeId));
+   // Derivado do array assinado (não do helper do store, que devolve referência nova a
+   // cada chamada e não pode ir dentro do seletor): assim o memo reage tanto à troca da
+   // iniciativa quanto à mudança nos projetos.
+   const allProjects = useWorkspaceStore((s) => s.projects);
    const loaded = useWorkspaceStore((s) => s.loaded);
-   const initiative = getInitiativeById(initiativeId);
 
    const timelineGroups = useMemo<ProjectGroup[]>(() => {
       if (!initiative) return [];
+      const linked = new Set(initiative.projectIds);
       return [
          {
             id: initiative.id,
             name: initiative.name,
             icon: initiative.icon,
-            projects: getInitiativeProjects(initiative.id),
+            projects: allProjects.filter((p) => linked.has(p.id)),
          },
       ];
-   }, [initiative, getInitiativeProjects]);
+   }, [initiative, allProjects]);
 
    if (!initiative) {
       // Hidratando → skeleton; not-found só como estado final (fim do flash no deep-link frio).

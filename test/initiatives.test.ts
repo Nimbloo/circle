@@ -9,6 +9,7 @@ import {
    getInitiative,
    updateInitiative,
    deleteInitiative,
+   listInitiativeActivity,
 } from '@/lib/api/initiatives';
 
 async function setup() {
@@ -158,5 +159,45 @@ describe('initiatives', () => {
       const proj = await getProject(db, p.id);
       expect(proj).not.toBeNull(); // projeto preservado
       expect(proj?.initiativeId).toBeNull(); // vínculo direto nulificado
+   });
+   /**
+    * Paridade com project: toda alteração vira uma linha no feed, resumindo os campos
+    * mudados. Sem ator conhecido não loga (mesma regra do updateProject).
+    */
+   it('grava o feed de alteracoes no update e lista mais recente primeiro', async () => {
+      const db = await setup();
+      const actor = 'ana@nimbloo.ai';
+      const init = await createInitiative(db, {
+         slug: 'obs',
+         name: 'Observabilidade',
+         priorityId: 'high',
+         healthId: 'on-track',
+      });
+
+      await updateInitiative(db, init.id, { status: 'completed', ownerId: null }, actor);
+      await updateInitiative(db, init.id, { name: 'Observabilidade v2' }, actor);
+
+      const feed = await listInitiativeActivity(db, init.id);
+      expect(feed).toHaveLength(2);
+      expect(feed[0].text).toContain('name'); // mais recente primeiro
+      expect(feed[1].text).toContain('status');
+      expect(feed[0].user?.email).toBe(actor);
+   });
+
+   it('nao grava feed sem ator, nem para campo que nao e rastreado', async () => {
+      const db = await setup();
+      const init = await createInitiative(db, {
+         slug: 'x',
+         name: 'X',
+         priorityId: 'high',
+         healthId: 'on-track',
+      });
+
+      await updateInitiative(db, init.id, { name: 'Y' }); // sem actorEmail
+      expect(await listInitiativeActivity(db, init.id)).toHaveLength(0);
+
+      // `description` nao entra no feed (ruido) — igual project
+      await updateInitiative(db, init.id, { description: 'texto' }, 'ana@nimbloo.ai');
+      expect(await listInitiativeActivity(db, init.id)).toHaveLength(0);
    });
 });
