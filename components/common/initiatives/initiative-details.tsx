@@ -26,6 +26,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import type { InitiativeUpdateDto } from '@/lib/api/initiative-detail';
+import type { InitiativeActivityDto } from '@/lib/api/initiatives';
 import { InitiativeProgressPanel } from './initiative-progress-panel';
 import { InitiativeStatusIcon } from './initiative-status-icon';
 import { InitiativeActions } from './initiative-actions';
@@ -347,11 +348,65 @@ function Overview({ initiative }: { initiative: Initiative }) {
 
             <InitiativeProgressPanel initiative={initiative} />
 
-            <div className="flex flex-col gap-3">
-               <span className="text-sm font-medium">Activity</span>
-               <p className="text-xs text-muted-foreground">No activity recorded yet.</p>
-            </div>
+            <ActivityFeed initiativeId={initiative.id} />
          </aside>
+      </div>
+   );
+}
+
+/**
+ * Feed de alterações da iniciativa (o "changed status, owner" do Linear). Busca sob
+ * demanda: é lateral à página, não vale segurar a hidratação do workspace por ele.
+ */
+function ActivityFeed({ initiativeId }: { initiativeId: string }) {
+   const [entries, setEntries] = useState<InitiativeActivityDto[] | null>(null);
+
+   useEffect(() => {
+      let active = true;
+      api.initiatives
+         .activity(initiativeId)
+         .then((rows) => {
+            if (active) setEntries(rows);
+         })
+         .catch(() => {
+            if (active) setEntries([]);
+         });
+      return () => {
+         active = false;
+      };
+   }, [initiativeId]);
+
+   return (
+      <div className="flex flex-col gap-3">
+         <span className="text-sm font-medium">Activity</span>
+         {entries === null ? (
+            <p className="text-xs text-muted-foreground">Carregando…</p>
+         ) : entries.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No activity recorded yet.</p>
+         ) : (
+            <ul className="flex flex-col gap-2.5">
+               {entries.map((e) => (
+                  <li key={e.id} className="flex items-start gap-2 text-xs">
+                     <Avatar className="size-5 shrink-0 mt-0.5">
+                        <AvatarImage
+                           src={e.user?.avatarUrl || undefined}
+                           alt={e.user?.name ?? ''}
+                        />
+                        <AvatarFallback>{e.user?.name?.[0] ?? '?'}</AvatarFallback>
+                     </Avatar>
+                     <span className="text-muted-foreground leading-snug">
+                        <span className="text-foreground font-medium">
+                           {e.user?.name ?? 'Alguém'}
+                        </span>{' '}
+                        {e.text}
+                        <span className="block text-[11px] opacity-70">
+                           {new Date(e.createdAt).toLocaleDateString()}
+                        </span>
+                     </span>
+                  </li>
+               ))}
+            </ul>
+         )}
       </div>
    );
 }

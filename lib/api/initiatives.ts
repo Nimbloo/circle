@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    initiative as initT,
+   initiativeActivity,
    initiativeProject,
    project as projectT,
    priority as priorityT,
@@ -12,6 +13,7 @@ import {
 } from '@/db/schema';
 import { ApiError } from './errors';
 import { publish } from './events';
+import { getOrCreateUser } from './users';
 import type { UserRef } from './issues';
 
 type InitiativeRow = typeof initT.$inferSelect;
@@ -232,13 +234,34 @@ export interface UpdateInitiativeInput {
    projectIds?: string[];
 }
 
+/** Rótulos legíveis dos campos, para o feed de alterações (espelha o de project). */
+const INITIATIVE_FIELD_LABELS: Partial<Record<keyof UpdateInitiativeInput, string>> = {
+   name: 'name',
+   status: 'status',
+   priorityId: 'priority',
+   healthId: 'health',
+   ownerId: 'owner',
+   target: 'target',
+   projectIds: 'projects',
+};
+
 export async function updateInitiative(
    db: Db,
    id: string,
-   patch: UpdateInitiativeInput
+   patch: UpdateInitiativeInput,
+   actorEmail?: string
 ): Promise<InitiativeDto | null> {
    const existing = await db.select({ id: initT.id }).from(initT).where(eq(initT.id, id)).limit(1);
    if (existing.length === 0) return null;
+
+   // Campos alterados que entram no feed, resolvidos ANTES da transação: o ator precisa
+   // de uma consulta própria, e consultar `db` de dentro da `tx` trava (a conexão é uma só).
+   const changed = (Object.keys(patch) as (keyof UpdateInitiativeInput)[])
+      .filter((k) => patch[k] !== undefined && INITIATIVE_FIELD_LABELS[k])
+      .map((k) => INITIATIVE_FIELD_LABELS[k]);
+   const actorId =
+      actorEmail && changed.length > 0 ? (await getOrCreateUser(db, actorEmail)).id : null;
+
    const set: Record<string, unknown> = {};
    for (const k of [
       'name',
@@ -281,9 +304,57 @@ export async function updateInitiative(
                .where(inArray(projectT.id, patch.projectIds));
          }
       }
+
+      // Feed de alterações: uma linha por update, resumindo os campos mudados.
+      // Sem ator conhecido, não loga (mesma regra do updateProject).
+      if (actorId) {
+         await tx.insert(initiativeActivity).values({
+            id: randomUUID(),
+            initiativeId: id,
+            userId: actorId,
+            text: `changed ${changed.join(', ')}`,
+            createdAt: new Date(),
+         });
+      }
    });
    publish({ entity: 'initiative', action: 'updated', id });
    return getInitiative(db, id);
+}
+
+export interface InitiativeActivityDto {
+   id: string;
+   user: UserRef | null;
+   text: string;
+   createdAt: string;
+}
+
+/** Feed de alterações da iniciativa, mais recente primeiro (espelha o de project). */
+export async function listInitiativeActivity(
+   db: Db,
+   initiativeId: string
+): Promise<InitiativeActivityDto[]> {
+   const rows = await db
+      .select()
+      .from(initiativeActivity)
+      .where(eq(initiativeActivity.initiativeId, initiativeId))
+      .orderBy(desc(initiativeActivity.createdAt));
+   if (rows.length === 0) return [];
+
+   const userIds = [...new Set(rows.map((r) => r.userId))];
+   const users = await db.select().from(appUser).where(inArray(appUser.id, userIds));
+   const byId = new Map(users.map((u) => [u.id, u]));
+
+   return rows.map((r) => {
+      const u = byId.get(r.userId);
+      return {
+         id: r.id,
+         user: u
+            ? { id: u.id, slug: u.slug, name: u.name, email: u.email, avatarUrl: u.avatarUrl }
+            : null,
+         text: r.text,
+         createdAt: r.createdAt.toISOString(),
+      };
+   });
 }
 
 export async function deleteInitiative(db: Db, id: string): Promise<boolean> {

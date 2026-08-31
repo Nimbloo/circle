@@ -33,9 +33,10 @@ const UpdateSchema = z.object({
 export async function PATCH(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      await requireEmail(req);
+      // O e-mail vai adiante: é o ator do feed de alterações (igual à rota de project).
+      const actor = await requireEmail(req);
       const patch = UpdateSchema.parse(await req.json());
-      const dto = await updateInitiative(db, id, patch);
+      const dto = await updateInitiative(db, id, patch, actor);
       return dto ? ok(dto) : notFound(`Initiative '${id}' não encontrada`);
    });
 }

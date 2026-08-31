@@ -36,6 +36,7 @@ import type {
    InitiativeDto,
    CreateInitiativeInput,
    UpdateInitiativeInput,
+   InitiativeActivityDto,
 } from '@/lib/api/initiatives';
 import type { ViewDto, CreateViewInput, UpdateViewInput } from '@/lib/api/views';
 import type { NotificationDto } from '@/lib/api/notifications';
@@ -368,6 +369,8 @@ export const api = {
       updates: (id: string) => get<InitiativeUpdateDto[]>(`/initiatives/${id}/updates`),
       postUpdate: (id: string, body: PostInitiativeUpdateInput) =>
          post<InitiativeUpdateDto>(`/initiatives/${id}/updates`, body),
+      /** Feed de alterações (campos mudados) — não confundir com `updates`. */
+      activity: (id: string) => get<InitiativeActivityDto[]>(`/initiatives/${id}/activity`),
    },
 
    views: {
