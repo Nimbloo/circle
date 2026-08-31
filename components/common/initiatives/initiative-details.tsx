@@ -1,6 +1,7 @@
 'use client';
 
 import ProjectsTimeline from '@/components/common/projects/projects-timeline';
+import { ListSkeleton } from '@/components/common/list-skeleton';
 import { ProjectGroup } from '@/components/common/projects/projects';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Initiative, INITIATIVE_STATUS_META } from '@/data/initiatives';
@@ -482,6 +483,7 @@ export default function InitiativeDetails({ initiativeId }: { initiativeId: stri
    const [tab] = useQueryState('tab', parseAsStringLiteral(TABS).withDefault('overview'));
    const getInitiativeById = useWorkspaceStore((s) => s.getInitiativeById);
    const getInitiativeProjects = useWorkspaceStore((s) => s.getInitiativeProjects);
+   const loaded = useWorkspaceStore((s) => s.loaded);
    const initiative = getInitiativeById(initiativeId);
 
    const timelineGroups = useMemo<ProjectGroup[]>(() => {
@@ -497,6 +499,14 @@ export default function InitiativeDetails({ initiativeId }: { initiativeId: stri
    }, [initiative, getInitiativeProjects]);
 
    if (!initiative) {
+      // Hidratando → skeleton; not-found só como estado final (fim do flash no deep-link frio).
+      if (!loaded) {
+         return (
+            <div className="p-8">
+               <ListSkeleton rows={6} />
+            </div>
+         );
+      }
       return (
          <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">
             Initiative not found

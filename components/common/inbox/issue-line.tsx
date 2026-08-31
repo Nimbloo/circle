@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { motion } from 'motion/react';
 import { renderStatusIcon } from '@/lib/status-utils';
 import { getNotificationIcon } from '@/lib/notification-utils';
+import { useIssuesStore } from '@/store/issues-store';
 import { Clock, RotateCcw } from 'lucide-react';
 import {
    DropdownMenu,
@@ -33,6 +34,12 @@ const SNOOZE_OPTIONS: { label: string; hours: number }[] = [
    { label: 'Próxima semana', hours: 168 },
 ];
 
+/**
+ * Linha de notificação — espelho do inbox do Linear: avatar 32px com badge do tipo
+ * (ícone muted num chip da cor do fundo, canto inferior direito), linha 1 com
+ * identifier + título em 13px (título branco quando não lida, muted quando lida) e
+ * ícone de status à direita, linha 2 com o contexto em 12px + timestamp à direita.
+ */
 export default function IssueLine({
    notification,
    layoutId = false,
@@ -43,19 +50,30 @@ export default function IssueLine({
    showId = true,
    showStatusIcon = true,
 }: IssueLineProps) {
+   // Status VIVO da issue (store) com fallback pro snapshot da notificação — o ícone
+   // na linha acompanha mudanças de status em tempo real (padrão Linear).
+   const liveStatusId = useIssuesStore(
+      (s) => s.issues.find((i) => i.identifier === notification.identifier)?.status.id
+   );
+   const statusId = liveStatusId ?? notification.status.id;
    return (
       <motion.div
          {...(layoutId && { layoutId: `notification-line-${notification.id}` })}
          onClick={onClick}
-         className="w-full px-0.75 py-0.25"
+         className="w-full px-2"
       >
-         <div
-            className={cn(
-               'group/inbox-line w-full flex items-center gap-3 px-3 py-2.5 hover:bg-sidebar/80 dark:hover:bg-sidebar/50 transition-colors cursor-pointer rounded-lg',
-               isSelected && 'bg-accent/80 dark:bg-accent/50'
-            )}
-         >
-            <div className="relative flex-shrink-0">
+         <div className="group/inbox-line relative flex w-full cursor-pointer items-center gap-3 rounded-lg py-2.5 pl-2.5 pr-2">
+            {/* Realce que DISSIPA nas pontas (Linear): camada de fundo com máscara de
+                gradiente horizontal — o fill some suavemente nas bordas laterais. */}
+            <div
+               className={cn(
+                  'pointer-events-none absolute inset-0 rounded-lg transition-opacity duration-150 [mask-image:linear-gradient(to_right,transparent,black_7%,black_93%,transparent)]',
+                  isSelected
+                     ? 'bg-accent/80 opacity-100 dark:bg-accent/60'
+                     : 'bg-sidebar/80 opacity-0 group-hover/inbox-line:opacity-100 dark:bg-sidebar/50'
+               )}
+            />
+            <div className="relative shrink-0">
                <Avatar className="size-8">
                   <AvatarImage
                      src={notification.user.avatarUrl || undefined}
@@ -68,32 +86,25 @@ export default function IssueLine({
                         .join('')}
                   </AvatarFallback>
                </Avatar>
-
-               <div className="absolute -bottom-1 -right-1 size-5 rounded-full bg-accent border-2 border-background flex items-center justify-center">
-                  {getNotificationIcon(notification.type, 'size-3')}
+               {/* Badge do tipo — chip da cor do fundo com o ícone em muted (Linear). */}
+               <div className="absolute -bottom-1 -right-1 flex size-4 items-center justify-center rounded-full bg-background">
+                  {getNotificationIcon(notification.type, 'size-3 text-muted-foreground')}
                </div>
             </div>
 
-            <div className="w-full">
+            {/* relative: pinta acima da camada de realce (positioned > estático). */}
+            <div className="relative min-w-0 flex-1">
                <div className="flex items-center gap-1.5">
-                  {!notification.read && (
-                     <div className="size-2 bg-blue-500 rounded-full flex-shrink-0" />
-                  )}
                   {showId && (
-                     <span
-                        className={cn(
-                           'text-sm font-medium text-muted-foreground shrink-0',
-                           notification.read && 'opacity-50'
-                        )}
-                     >
+                     <span className="shrink-0 text-[13px] text-muted-foreground">
                         {notification.identifier}
                      </span>
                   )}
 
                   <h4
                      className={cn(
-                        'text-sm font-medium text-foreground line-clamp-1 flex-grow',
-                        notification.read && 'opacity-50'
+                        'min-w-0 flex-1 truncate text-[13px] font-medium',
+                        notification.read ? 'text-muted-foreground' : 'text-foreground'
                      )}
                   >
                      {notification.title}
@@ -107,7 +118,7 @@ export default function IssueLine({
                            e.stopPropagation();
                            onUnsnooze();
                         }}
-                        className="shrink-0 inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-xs text-muted-foreground opacity-0 group-hover/inbox-line:opacity-100 hover:bg-accent focus:opacity-100 transition-opacity"
+                        className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground opacity-0 transition-opacity hover:bg-accent focus:opacity-100 group-hover/inbox-line:opacity-100"
                      >
                         <RotateCcw className="size-3.5" />
                         Restaurar
@@ -120,7 +131,7 @@ export default function IssueLine({
                               type="button"
                               aria-label="Adiar notificação"
                               onClick={(e) => e.stopPropagation()}
-                              className="shrink-0 size-6 rounded-md flex items-center justify-center text-muted-foreground opacity-0 group-hover/inbox-line:opacity-100 hover:bg-accent focus:opacity-100 transition-opacity"
+                              className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-accent focus:opacity-100 group-hover/inbox-line:opacity-100"
                            >
                               <Clock className="size-3.5" />
                            </button>
@@ -143,20 +154,15 @@ export default function IssueLine({
                   )}
 
                   {showStatusIcon && (
-                     <div className="shrink-0">{renderStatusIcon(notification.status.id)}</div>
+                     <div className="flex shrink-0 items-center">{renderStatusIcon(statusId)}</div>
                   )}
                </div>
 
-               <div
-                  className={cn(
-                     'flex items-center justify-between gap-1.5 transition-opacity duration-200',
-                     notification.read && 'opacity-50'
-                  )}
-               >
-                  <p className="text-sm text-muted-foreground line-clamp-1">
+               <div className="mt-[3px] flex items-center gap-1.5">
+                  <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                      {notification.content}
                   </p>
-                  <span className="text-xs text-muted-foreground shrink-0">
+                  <span className="shrink-0 text-xs text-muted-foreground">
                      {notification.timestamp}
                   </span>
                </div>

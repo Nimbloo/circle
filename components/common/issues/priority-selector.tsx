@@ -19,9 +19,11 @@ import { useId, useState } from 'react';
 interface PrioritySelectorProps {
    priority: Priority;
    issueId?: string;
+   /** Exibe o nome da prioridade dentro do trigger (linha inteira clicável — padrão Linear). */
+   showName?: boolean;
 }
 
-export function PrioritySelector({ priority, issueId }: PrioritySelectorProps) {
+export function PrioritySelector({ priority, issueId, showName = false }: PrioritySelectorProps) {
    const id = useId();
    const [open, setOpen] = useState<boolean>(false);
    // Deriva do prop (store) — sem estado local otimista, reverte junto com o rollback.
@@ -48,8 +50,12 @@ export function PrioritySelector({ priority, issueId }: PrioritySelectorProps) {
             <PopoverTrigger asChild>
                <Button
                   id={id}
-                  className="size-7 flex items-center justify-center"
-                  size="icon"
+                  className={
+                     showName
+                        ? 'h-7 gap-2 px-1.5 justify-start'
+                        : 'size-7 flex items-center justify-center'
+                  }
+                  size={showName ? 'sm' : 'icon'}
                   variant="ghost"
                   role="combobox"
                   aria-expanded={open}
@@ -62,6 +68,7 @@ export function PrioritySelector({ priority, issueId }: PrioritySelectorProps) {
                      }
                      return null;
                   })()}
+                  {showName && <span className="text-sm font-normal">{priority.name}</span>}
                </Button>
             </PopoverTrigger>
             <PopoverContent

@@ -12,19 +12,22 @@ import {
    DropdownMenuTrigger,
    DropdownMenuLabel,
    DropdownMenuCheckboxItem,
+   DropdownMenuSub,
+   DropdownMenuSubTrigger,
+   DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import {
    SlidersHorizontal,
    CheckCheck,
-   ArrowUpDown,
    InboxIcon,
-   Clock,
    ListFilter,
+   MoreHorizontal,
+   Bell,
 } from 'lucide-react';
+import { getNotificationIcon } from '@/lib/notification-utils';
 import type { NotificationType } from '@/data/inbox';
-import { cn } from '@/lib/utils';
 import NotificationPreview from './issue-preview';
 import IssueLine from './issue-line';
 import { SidebarTrigger } from '@/components/ui/sidebar';
@@ -60,7 +63,9 @@ export default function Inbox() {
    } = useNotificationsStore();
 
    const isMobile = useIsMobile();
-   const [tab, setTab] = useState<'inbox' | 'snoozed'>('inbox');
+   // Snoozed deixou de ser aba: vira o toggle "Show snoozed" do Display options
+   // (paridade Linear) — as adiadas entram na própria lista, com o botão Restaurar.
+   const [showSnoozed, setShowSnoozed] = useState(false);
    const [showRead, setShowRead] = useState(true);
    const [showUnreadFirst, setShowUnreadFirst] = useState(false);
    const [ordering, setOrdering] = useState('newest');
@@ -77,77 +82,68 @@ export default function Inbox() {
          return next;
       });
 
-   // Ao entrar na aba Snoozed, carrega as adiadas.
+   // Ao ligar "Show snoozed", carrega as adiadas.
    useEffect(() => {
-      if (tab === 'snoozed') void hydrateSnoozed();
-   }, [tab, hydrateSnoozed]);
+      if (showSnoozed) void hydrateSnoozed();
+   }, [showSnoozed, hydrateSnoozed]);
 
    // Filter and sort notifications based on settings (memoizado: era recomputado — array
    // novo + re-sort — a cada render, re-renderizando toda a lista de notificações).
-   const filteredNotifications = useMemo(
-      () =>
-         notifications
-            .filter((notification) => {
-               if (!showRead && notification.read) return false;
-               if (typeFilter.size > 0 && !typeFilter.has(notification.type)) return false;
-               return true;
-            })
-            .sort((a, b) => {
-               if (showUnreadFirst) {
-                  if (!a.read && b.read) return -1;
-                  if (a.read && !b.read) return 1;
-               }
-               // Ordena pelo ISO cru (sortAt); timestamp é string relativa só p/ exibir.
-               return ordering === 'newest'
-                  ? new Date(b.sortAt).getTime() - new Date(a.sortAt).getTime()
-                  : new Date(a.sortAt).getTime() - new Date(b.sortAt).getTime();
-            }),
-      [notifications, showRead, showUnreadFirst, ordering, typeFilter]
-   );
+   // Com "Show snoozed" ligado, as adiadas entram na mesma lista (flag isSnoozed) e
+   // participam da mesma ordenação — padrão Linear, sem aba separada.
+   const filteredNotifications = useMemo(() => {
+      const matches = (notification: (typeof notifications)[number]) => {
+         if (!showRead && notification.read) return false;
+         if (typeFilter.size > 0 && !typeFilter.has(notification.type)) return false;
+         return true;
+      };
+      const merged = [
+         ...notifications.filter(matches).map((item) => ({ item, isSnoozed: false })),
+         ...(showSnoozed ? snoozed.filter(matches).map((item) => ({ item, isSnoozed: true })) : []),
+      ];
+      return merged.sort((a, b) => {
+         if (showUnreadFirst) {
+            if (!a.item.read && b.item.read) return -1;
+            if (a.item.read && !b.item.read) return 1;
+         }
+         // Ordena pelo ISO cru (sortAt); timestamp é string relativa só p/ exibir.
+         return ordering === 'newest'
+            ? new Date(b.item.sortAt).getTime() - new Date(a.item.sortAt).getTime()
+            : new Date(a.item.sortAt).getTime() - new Date(b.item.sortAt).getTime();
+      });
+   }, [notifications, snoozed, showSnoozed, showRead, showUnreadFirst, ordering, typeFilter]);
 
    const listPane = (
       <>
-         <div className="flex items-center justify-between px-4 h-10 border-b border-border">
-            <div className="flex items-center gap-3">
+         {/* Header — espelho do Linear: "Inbox" 13px/500 + menu "..." de ações à esquerda;
+             Add filter (funil) e Display options (sliders) à direita. */}
+         <div className="flex items-center justify-between pl-4 pr-2.5 h-10 border-b border-border">
+            <div className="flex items-center gap-1.5">
                <SidebarTrigger className="inline-flex lg:hidden" />
-               <button
-                  type="button"
-                  onClick={() => setTab('inbox')}
-                  className={cn(
-                     'text-lg font-semibold transition-colors',
-                     tab === 'inbox'
-                        ? 'text-foreground'
-                        : 'text-muted-foreground hover:text-foreground'
-                  )}
-               >
-                  Inbox
-               </button>
-               <button
-                  type="button"
-                  onClick={() => setTab('snoozed')}
-                  className={cn(
-                     'inline-flex items-center gap-1 text-lg font-semibold transition-colors',
-                     tab === 'snoozed'
-                        ? 'text-foreground'
-                        : 'text-muted-foreground hover:text-foreground'
-                  )}
-               >
-                  <Clock className="size-4" />
-                  Snoozed
-               </button>
-            </div>
-
-            <div className="flex items-center gap-2">
+               <span className="text-[13px] font-medium">Inbox</span>
                <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                     <Button
-                        variant="ghost"
-                        size="xs"
-                        className="relative"
-                        disabled={tab !== 'inbox'}
-                        aria-label="Filter by type"
+                     <Button variant="ghost" size="xs" aria-label="Notification actions">
+                        <MoreHorizontal className="size-4 text-muted-foreground" />
+                     </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-52">
+                     <DropdownMenuItem
+                        onClick={markAllAsRead}
+                        disabled={getUnreadNotifications().length === 0}
                      >
-                        <ListFilter className="w-4 h-4" />
+                        <CheckCheck className="size-4 text-muted-foreground" />
+                        Mark all as read
+                     </DropdownMenuItem>
+                  </DropdownMenuContent>
+               </DropdownMenu>
+            </div>
+
+            <div className="flex items-center gap-0.5">
+               <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                     <Button variant="ghost" size="xs" className="relative" aria-label="Add filter">
+                        <ListFilter className="size-4 text-muted-foreground" />
                         {typeFilter.size > 0 && (
                            <span className="absolute -right-0.5 -top-0.5 flex size-3.5 items-center justify-center rounded-full bg-primary text-[9px] font-medium text-primary-foreground">
                               {typeFilter.size}
@@ -155,66 +151,92 @@ export default function Inbox() {
                         )}
                      </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-52">
-                     <DropdownMenuLabel>Filter by type</DropdownMenuLabel>
-                     {TYPE_LABELS.map((type) => (
-                        <DropdownMenuCheckboxItem
-                           key={type.value}
-                           checked={typeFilter.has(type.value)}
-                           onCheckedChange={() => toggleType(type.value)}
-                           onSelect={(event) => event.preventDefault()}
-                        >
-                           {type.label}
-                        </DropdownMenuCheckboxItem>
-                     ))}
+                  <DropdownMenuContent align="end" className="w-56">
+                     <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                        Add filter…
+                     </DropdownMenuLabel>
+                     <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                           <Bell className="mr-2 size-4 text-muted-foreground" />
+                           Notification type
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="w-52">
+                           {TYPE_LABELS.map((type) => (
+                              <DropdownMenuCheckboxItem
+                                 key={type.value}
+                                 checked={typeFilter.has(type.value)}
+                                 onCheckedChange={() => toggleType(type.value)}
+                                 onSelect={(event) => event.preventDefault()}
+                              >
+                                 <span className="mr-0.5 inline-flex">
+                                    {getNotificationIcon(
+                                       type.value,
+                                       'size-3.5 text-muted-foreground'
+                                    )}
+                                 </span>
+                                 {type.label}
+                              </DropdownMenuCheckboxItem>
+                           ))}
+                        </DropdownMenuSubContent>
+                     </DropdownMenuSub>
                      {typeFilter.size > 0 && (
                         <>
                            <DropdownMenuSeparator />
                            <DropdownMenuItem onClick={() => setTypeFilter(new Set())}>
-                              Clear filter
+                              Clear filters
                            </DropdownMenuItem>
                         </>
                      )}
                   </DropdownMenuContent>
                </DropdownMenu>
-               <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={markAllAsRead}
-                  disabled={tab !== 'inbox' || getUnreadNotifications().length === 0}
-                  aria-label="Mark all as read"
-               >
-                  <CheckCheck className="w-4 h-4" />
-               </Button>
                <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                     <Button variant="ghost" size="xs" aria-label="Inbox options">
-                        <SlidersHorizontal className="w-4 h-4" />
+                     <Button variant="ghost" size="xs" aria-label="Display options">
+                        <SlidersHorizontal className="size-4 text-muted-foreground" />
                      </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-64">
-                     <DropdownMenuLabel className="flex items-center gap-2">
-                        <ArrowUpDown className="w-4 h-4" />
-                        Ordering
-                     </DropdownMenuLabel>
-                     <DropdownMenuCheckboxItem
-                        checked={ordering === 'newest'}
-                        onCheckedChange={() => setOrdering('newest')}
-                     >
-                        Newest
-                     </DropdownMenuCheckboxItem>
-                     <DropdownMenuCheckboxItem
-                        checked={ordering === 'oldest'}
-                        onCheckedChange={() => setOrdering('oldest')}
-                     >
-                        Oldest
-                     </DropdownMenuCheckboxItem>
+                     {/* Ordering + toggles — mesma composição do popover do Linear. */}
+                     <div className="flex items-center justify-between px-2 py-1.5">
+                        <span className="text-sm text-muted-foreground">Ordering</span>
+                        <DropdownMenu>
+                           <DropdownMenuTrigger asChild>
+                              <Button variant="secondary" size="xs" className="h-6 px-2 text-xs">
+                                 {ordering === 'newest' ? 'Newest' : 'Oldest'}
+                              </Button>
+                           </DropdownMenuTrigger>
+                           <DropdownMenuContent align="end" className="w-32">
+                              <DropdownMenuCheckboxItem
+                                 checked={ordering === 'newest'}
+                                 onCheckedChange={() => setOrdering('newest')}
+                              >
+                                 Newest
+                              </DropdownMenuCheckboxItem>
+                              <DropdownMenuCheckboxItem
+                                 checked={ordering === 'oldest'}
+                                 onCheckedChange={() => setOrdering('oldest')}
+                              >
+                                 Oldest
+                              </DropdownMenuCheckboxItem>
+                           </DropdownMenuContent>
+                        </DropdownMenu>
+                     </div>
 
                      <DropdownMenuSeparator />
 
                      <div className="p-2 space-y-3">
                         <div className="flex items-center justify-between">
-                           <Label htmlFor="show-read" className="text-sm">
+                           <Label htmlFor="show-snoozed" className="text-sm font-normal">
+                              Show snoozed
+                           </Label>
+                           <Switch
+                              id="show-snoozed"
+                              checked={showSnoozed}
+                              onCheckedChange={setShowSnoozed}
+                           />
+                        </div>
+                        <div className="flex items-center justify-between">
+                           <Label htmlFor="show-read" className="text-sm font-normal">
                               Show read
                            </Label>
                            <Switch
@@ -224,7 +246,7 @@ export default function Inbox() {
                            />
                         </div>
                         <div className="flex items-center justify-between">
-                           <Label htmlFor="show-unread-first" className="text-sm">
+                           <Label htmlFor="show-unread-first" className="text-sm font-normal">
                               Show unread first
                            </Label>
                            <Switch
@@ -237,16 +259,18 @@ export default function Inbox() {
 
                      <DropdownMenuSeparator />
 
-                     <DropdownMenuLabel>Display properties</DropdownMenuLabel>
+                     <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                        Display properties
+                     </DropdownMenuLabel>
                      <div className="p-2 space-y-3">
                         <div className="flex items-center justify-between">
-                           <Label htmlFor="show-id" className="text-sm">
+                           <Label htmlFor="show-id" className="text-sm font-normal">
                               ID
                            </Label>
                            <Switch id="show-id" checked={showId} onCheckedChange={setShowId} />
                         </div>
                         <div className="flex items-center justify-between">
-                           <Label htmlFor="show-status-icon" className="text-sm">
+                           <Label htmlFor="show-status-icon" className="text-sm font-normal">
                               Status and icon
                            </Label>
                            <Switch
@@ -260,32 +284,8 @@ export default function Inbox() {
                </DropdownMenu>
             </div>
          </div>
-         <div className="w-full flex flex-col items-center justify-start overflow-y-scroll h-[calc(100%-40px)] pb-0.25">
-            {tab === 'snoozed' ? (
-               snoozed.length === 0 ? (
-                  <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-24 text-center">
-                     <div className="flex size-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
-                        <Clock className="size-6" />
-                     </div>
-                     <div className="flex flex-col gap-1">
-                        <p className="text-sm font-medium">Nada adiado</p>
-                        <p className="max-w-xs text-sm text-muted-foreground">
-                           Notificações adiadas aparecem aqui até a hora agendada.
-                        </p>
-                     </div>
-                  </div>
-               ) : (
-                  snoozed.map((notification) => (
-                     <IssueLine
-                        key={notification.id}
-                        notification={notification}
-                        onUnsnooze={() => unsnooze(notification.id)}
-                        showId={showId}
-                        showStatusIcon={showStatusIcon}
-                     />
-                  ))
-               )
-            ) : filteredNotifications.length === 0 ? (
+         <div className="w-full flex flex-col items-center justify-start overflow-y-auto h-[calc(100%-40px)] py-1">
+            {filteredNotifications.length === 0 ? (
                <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-24 text-center">
                   <div className="flex size-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
                      <InboxIcon className="size-6" />
@@ -299,21 +299,31 @@ export default function Inbox() {
                   </div>
                </div>
             ) : (
-               filteredNotifications.map((notification) => (
-                  <IssueLine
-                     key={notification.id}
-                     notification={notification}
-                     isSelected={selectedNotification?.id === notification.id}
-                     onClick={() => {
-                        setSelectedNotification(notification);
-                        // Padrão Linear: abrir a notificação já a marca como lida.
-                        if (!notification.read) markAsRead(notification.id);
-                     }}
-                     onSnooze={(hours) => snooze(notification.id, hours)}
-                     showId={showId}
-                     showStatusIcon={showStatusIcon}
-                  />
-               ))
+               filteredNotifications.map(({ item: notification, isSnoozed }) =>
+                  isSnoozed ? (
+                     <IssueLine
+                        key={notification.id}
+                        notification={notification}
+                        onUnsnooze={() => unsnooze(notification.id)}
+                        showId={showId}
+                        showStatusIcon={showStatusIcon}
+                     />
+                  ) : (
+                     <IssueLine
+                        key={notification.id}
+                        notification={notification}
+                        isSelected={selectedNotification?.id === notification.id}
+                        onClick={() => {
+                           setSelectedNotification(notification);
+                           // Padrão Linear: abrir a notificação já a marca como lida.
+                           if (!notification.read) markAsRead(notification.id);
+                        }}
+                        onSnooze={(hours) => snooze(notification.id, hours)}
+                        showId={showId}
+                        showStatusIcon={showStatusIcon}
+                     />
+                  )
+               )
             )}
          </div>
       </>
@@ -351,7 +361,9 @@ export default function Inbox() {
          <ResizablePanel defaultSize={350} maxSize={500}>
             {listPane}
          </ResizablePanel>
-         <ResizableHandle withHandle />
+         {/* Divisor estilo Linear: linha fina, sem grip — só o cursor col-resize
+             e o realce sutil no hover/drag denunciam o resize. */}
+         <ResizableHandle />
          <ResizablePanel defaultSize={350} maxSize={500}>
             <NotificationPreview
                notification={selectedNotification}

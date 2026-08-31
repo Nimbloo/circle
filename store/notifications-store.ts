@@ -106,7 +106,17 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
          const items = dtos
             .map((dto) => adaptNotification(dto, issueById))
             .filter((item): item is InboxNotification => item !== null);
-         set({ notifications: items, unreadCount: countRes.count });
+         set((state) => ({
+            notifications: items,
+            unreadCount: countRes.count,
+            // Reconcilia a seleção com a versão fresca (read/content/timestamp podem
+            // ter mudado no servidor); se sumiu da lista, mantém o snapshot atual
+            // para o preview aberto não desaparecer no meio da leitura.
+            selectedNotification: state.selectedNotification
+               ? (items.find((item) => item.id === state.selectedNotification!.id) ??
+                 state.selectedNotification)
+               : undefined,
+         }));
       } catch {
          // Degradação graciosa — mantém o estado atual se a API falhar.
       }

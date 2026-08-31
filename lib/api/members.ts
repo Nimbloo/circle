@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { appUser, teamMember } from '@/db/schema';
+import { MEMBER_ROLES, type MemberRole } from '@/data/users';
 import { ApiError } from './errors';
 import { publish } from './events';
 
@@ -89,8 +90,9 @@ export async function getMember(db: Db, id: string): Promise<MemberDto | null> {
    return toDto(rows[0], memberships.get(id) ?? []);
 }
 
-export const MEMBER_ROLES = ['Member', 'Admin', 'Guest', 'Application'] as const;
-export type MemberRole = (typeof MEMBER_ROLES)[number];
+// Fonte única em data/users (módulo puro, compartilhado com o client);
+// o re-export mantém o contrato deste módulo para as rotas da API.
+export { MEMBER_ROLES, type MemberRole };
 
 /** Atualiza a role do membro (valida o enum). Retorna o MemberDto ou null se não existir. */
 export async function updateMemberRole(

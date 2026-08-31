@@ -2,6 +2,7 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { adaptFolders } from '@/lib/adapters-documents';
+import { ListSkeleton } from '@/components/common/list-skeleton';
 import { api } from '@/lib/client';
 import type { TeamDocument } from '@/data/documents';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -18,7 +19,10 @@ import { useEffect, useState } from 'react';
 export default function TeamOverview() {
    const { orgId, teamId } = useParams<{ orgId: string; teamId: string }>();
    const teams = useWorkspaceStore((s) => s.teams);
-   const team = teams.find((t) => t.id === teamId) ?? teams[0];
+   const loaded = useWorkspaceStore((s) => s.loaded);
+   // Sem fallback `?? teams[0]`: com id inválido, mostrar o PRIMEIRO time era pior
+   // que um not-found honesto (a URL dizia um time e a tela mostrava outro).
+   const team = teams.find((t) => t.id === teamId);
 
    const [pinnedDocuments, setPinnedDocuments] = useState<TeamDocument[]>([]);
 
@@ -45,6 +49,15 @@ export default function TeamOverview() {
    }, [teamId]);
 
    if (!team) {
+      // Workspace ainda hidratando → skeleton; "not found" só é estado FINAL
+      // (antes, deep-link frio mostrava "Team not found." por segundos até o hydrate).
+      if (!loaded) {
+         return (
+            <div className="p-8">
+               <ListSkeleton rows={5} />
+            </div>
+         );
+      }
       return <div className="p-8 text-sm text-muted-foreground">Team not found.</div>;
    }
 

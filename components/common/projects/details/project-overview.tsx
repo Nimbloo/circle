@@ -41,7 +41,9 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
       try {
          setDetail(adaptProjectDetail(await api.projects.detail(projectId)));
       } catch {
-         setDetail(emptyProjectDetail(projectId));
+         // Falha de REFETCH não apaga o detail já exibido (antes zerava a tela
+         // com emptyProjectDetail num erro transitório); a 1ª carga tem o próprio
+         // catch no useEffect abaixo.
       }
    }, [projectId]);
    useEffect(() => {
