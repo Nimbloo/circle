@@ -2,6 +2,7 @@
    "name": "circle",
    "version": "0.16.1",
    "private": true,
+   "packageManager": "pnpm@9.15.9",
    "scripts": {
       "dev": "next dev --turbopack",
       "build": "next build",
