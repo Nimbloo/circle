@@ -2,14 +2,14 @@
 
 import type { Issue } from '@/data/issues';
 import type { IssueDetail } from '@/data/issue-details';
-import { adaptIssueDetail } from '@/lib/adapters-issue-detail';
+import { adaptIssueDetail, textToBlocks } from '@/lib/adapters-issue-detail';
 import { adaptIssues } from '@/lib/adapters';
 import { api } from '@/lib/client';
 import { ISSUE_CHANGED_EVENT } from '@/lib/use-live-sync';
 import { useIssuesStore } from '@/store/issues-store';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { AssigneeUser } from '../assignee-user';
 import { ActivityFeed } from './activity-feed';
@@ -19,25 +19,26 @@ import { IssueDetailSkeleton } from './issue-detail-skeleton';
 import { RelationEditor } from './relation-editor';
 import { SubIssueCreate } from './sub-issue-create';
 
-/**
- * Issue detail page: rich description, sub-issues, activity feed and a
- * properties sidebar — Linear-style.
- */
-export default function IssueDetails() {
-   const { orgId, issueId } = useParams<{ orgId: string; issueId: string }>();
-   const issues = useIssuesStore((s) => s.issues);
+interface IssueDetailViewProps {
+   issue: Issue;
+   /** Conteúdo extra no topo da coluna principal (ex.: contexto da notificação no inbox). */
+   banner?: ReactNode;
+}
 
-   // Issue do store (se já hidratado) — reusa sem request.
-   const storeIssue = useMemo(
-      () => issues.find((candidate) => candidate.identifier === issueId),
-      [issues, issueId]
-   );
-   // Fallback: se o deep-link foi aberto direto (store ainda vazio), busca a issue por
-   // identifier na API — sem esperar o board inteiro hidratar (fim do waterfall de ~500).
-   // undefined = ainda buscando; null = buscou e não existe; Issue = encontrada.
-   const [fetchedIssue, setFetchedIssue] = useState<Issue | null | undefined>(undefined);
-   const issue = storeIssue ?? fetchedIssue ?? undefined;
-   const resolvingIssue = !storeIssue && fetchedIssue === undefined;
+/**
+ * Corpo COMPLETO da issue (padrão Linear): título e descrição editáveis inline,
+ * sub-issues, activity feed com composer e a sidebar de properties. Reutilizado
+ * pela página da issue e pelo preview do inbox — no Linear, selecionar uma
+ * notificação abre a issue inteira, não um resumo read-only.
+ *
+ * A sidebar responde à largura do CONTAINER (não do viewport): no preview do
+ * inbox o pane redimensionável pode ser estreito com o viewport largo — em
+ * ≥48rem de pane ela aparece compacta (w-64) e em ≥64rem, larga (w-80).
+ */
+export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
+   const { orgId } = useParams<{ orgId: string }>();
+   const issues = useIssuesStore((s) => s.issues);
+   const inStore = useIssuesStore((s) => s.issues.some((i) => i.id === issue.id));
 
    const [detail, setDetail] = useState<IssueDetail | null>(null);
    const [loading, setLoading] = useState(true);
@@ -50,31 +51,28 @@ export default function IssueDetails() {
    const [editingDesc, setEditingDesc] = useState(false);
    const [descDraft, setDescDraft] = useState('');
    const [rawDescription, setRawDescription] = useState('');
+   // Override local do título para issue FORA do store (deep-link frio): o objeto vem
+   // do pai e não flui de volta — o override exibe o valor salvo até o store assumir.
+   const [localTitle, setLocalTitle] = useState<string | null>(null);
 
+   // Ao trocar DE issue, volta ao skeleton. Depende do id (não do objeto): o splice do
+   // SSE (applyRemote) troca a referência da issue no store e antes disparava um
+   // refetch + skeleton em tela cheia a cada update — o "refresh completo" da página.
+   const detailIssueId = issue.id;
    useEffect(() => {
-      if (storeIssue) return; // já temos a issue no store
-      let active = true;
-      // Reset ao trocar de issueId (navegação entre deep-links) → volta a "Carregando…"
-      // em vez de mostrar a issue anterior sob a nova URL enquanto o GET não resolve.
-      setFetchedIssue(undefined);
-      api.issues
-         .get(issueId)
-         .then((dto) => {
-            if (active) setFetchedIssue(adaptIssues([dto])[0]);
-         })
-         .catch(() => {
-            if (active) setFetchedIssue(null);
-         });
-      return () => {
-         active = false;
-      };
-   }, [issueId, storeIssue]);
-
-   useEffect(() => {
-      if (!issue) return;
-      let active = true;
+      setDetail(null);
       setLoading(true);
-      Promise.all([api.issues.detail(issue.id), api.issues.activity(issue.id)])
+      setLocalTitle(null);
+      setEditingTitle(false);
+      setEditingDesc(false);
+   }, [detailIssueId]);
+
+   useEffect(() => {
+      if (!detailIssueId) return;
+      let active = true;
+      // Refetch silencioso (stale-while-revalidate): o conteúdo atual permanece na tela
+      // enquanto o novo detail chega — skeleton só na primeira carga (detail === null).
+      Promise.all([api.issues.detail(detailIssueId), api.issues.activity(detailIssueId)])
          .then(([detailDto, activity]) => {
             if (active) {
                setDetail(adaptIssueDetail(detailDto, activity));
@@ -82,7 +80,7 @@ export default function IssueDetails() {
             }
          })
          .catch(() => {
-            if (active) setDetail(null);
+            // mantém o conteúdo atual se já havia (erro só derruba a primeira carga)
          })
          .finally(() => {
             if (active) setLoading(false);
@@ -90,32 +88,20 @@ export default function IssueDetails() {
       return () => {
          active = false;
       };
-   }, [issue, reloadKey]);
+   }, [detailIssueId, reloadKey]);
 
    // Realtime: quando o SSE avisa que esta issue mudou (comment/reaction/relation de
    // OUTRO usuário), refaz o fetch do detail/feed. Sem isso, o painel aberto fica stale.
    useEffect(() => {
-      if (!issue) return;
       const onChanged = (e: Event) => {
          const id = (e as CustomEvent<{ id?: string }>).detail?.id;
-         if (!id || id === issue.id) setReloadKey((k) => k + 1);
+         if (!id || id === detailIssueId) setReloadKey((k) => k + 1);
       };
       window.addEventListener(ISSUE_CHANGED_EVENT, onChanged);
       return () => window.removeEventListener(ISSUE_CHANGED_EVENT, onChanged);
-   }, [issue]);
+   }, [detailIssueId]);
 
-   if (!issue) {
-      // Ainda resolvendo o deep-link → skeleton (não "not found" prematuro).
-      if (resolvingIssue) return <IssueDetailSkeleton />;
-      return (
-         <div className="flex flex-col items-center justify-center h-full gap-2 text-sm text-muted-foreground">
-            <p>Issue {issueId} not found.</p>
-            <Link href={`/${orgId ?? 'nimbloo'}`} className="underline">
-               Back to issues
-            </Link>
-         </div>
-      );
-   }
+   const displayTitle = inStore ? issue.title : (localTitle ?? issue.title);
 
    if (loading || !detail) {
       // Loading → skeleton; erro real (não-loading, sem detail) → mensagem.
@@ -132,19 +118,19 @@ export default function IssueDetails() {
       .filter((candidate) => candidate !== undefined);
 
    // Persiste o título: pelo store (optimistic+rollback) quando a issue está no board,
-   // ou direto na API + estado local quando é deep-link frio (fora do store).
+   // ou direto na API + override local quando é deep-link frio (fora do store).
    const applyTitle = async () => {
       const next = titleDraft.trim();
       setEditingTitle(false);
-      if (!next || next === issue.title) return;
-      if (storeIssue) {
+      if (!next || next === displayTitle) return;
+      if (inStore) {
          useIssuesStore.getState().updateIssue(issue.id, { title: next });
       } else {
-         setFetchedIssue((prev) => (prev ? { ...prev, title: next } : prev));
+         setLocalTitle(next);
          try {
             await api.issues.update(issue.id, { title: next });
          } catch {
-            setFetchedIssue((prev) => (prev ? { ...prev, title: issue.title } : prev));
+            setLocalTitle(null);
             toast.error('Falha ao salvar o título');
          }
       }
@@ -155,21 +141,27 @@ export default function IssueDetails() {
       setEditingDesc(false);
       if (next.trim() === rawDescription.trim()) return;
       const prev = rawDescription;
+      const prevBlocks = detail.description;
+      // Otimista nos DOIS estados (texto cru + blocks renderizados) — a tela troca na
+      // hora, sem refetch; o reload silencioso abaixo só reconcilia o activity feed.
       setRawDescription(next);
+      setDetail((d) => (d ? { ...d, description: textToBlocks(next) } : d));
       try {
          await api.issues.updateDetail(issue.id, { description: next.trim() || null });
          setReloadKey((k) => k + 1);
       } catch {
          setRawDescription(prev);
+         setDetail((d) => (d ? { ...d, description: prevBlocks } : d));
          toast.error('Falha ao salvar a descrição');
       }
    };
 
    return (
-      <div className="w-full h-full flex overflow-hidden">
+      <div className="@container w-full h-full flex overflow-hidden">
          {/* Main column */}
          <div className="flex-1 min-w-0 h-full overflow-y-auto">
             <div className="max-w-3xl mx-auto px-8 py-10">
+               {banner}
                {editingTitle ? (
                   <textarea
                      autoFocus
@@ -191,11 +183,11 @@ export default function IssueDetails() {
                   <h1
                      className="text-3xl font-semibold leading-tight text-balance cursor-text hover:bg-accent/20 rounded-md -mx-1 px-1 transition-colors"
                      onClick={() => {
-                        setTitleDraft(issue.title);
+                        setTitleDraft(displayTitle);
                         setEditingTitle(true);
                      }}
                   >
-                     {issue.title}
+                     {displayTitle}
                   </h1>
                )}
 
@@ -297,8 +289,9 @@ export default function IssueDetails() {
             </div>
          </div>
 
-         {/* Properties sidebar */}
-         <aside className="hidden lg:block w-80 shrink-0 border-l h-full overflow-y-auto bg-container px-5 py-6">
+         {/* Properties sidebar — por container query: compacta em pane ≥48rem,
+             larga em ≥64rem, oculta abaixo (pane estreito/mobile). */}
+         <aside className="hidden @3xl:block w-64 @5xl:w-80 shrink-0 border-l h-full overflow-y-auto bg-container px-4 py-5 @5xl:px-5 @5xl:py-6">
             <IssuePropertiesPanel
                issue={issue}
                detail={detail}
@@ -307,4 +300,59 @@ export default function IssueDetails() {
          </aside>
       </div>
    );
+}
+
+/**
+ * Issue detail page (rota /issue/[issueId]): resolve a issue pelo identifier
+ * (store ou API no deep-link frio) e renderiza o corpo completo.
+ */
+export default function IssueDetails() {
+   const { orgId, issueId } = useParams<{ orgId: string; issueId: string }>();
+   const issues = useIssuesStore((s) => s.issues);
+
+   // Issue do store (se já hidratado) — reusa sem request.
+   const storeIssue = useMemo(
+      () => issues.find((candidate) => candidate.identifier === issueId),
+      [issues, issueId]
+   );
+   // Fallback: se o deep-link foi aberto direto (store ainda vazio), busca a issue por
+   // identifier na API — sem esperar o board inteiro hidratar (fim do waterfall de ~500).
+   // undefined = ainda buscando; null = buscou e não existe; Issue = encontrada.
+   const [fetchedIssue, setFetchedIssue] = useState<Issue | null | undefined>(undefined);
+   const issue = storeIssue ?? fetchedIssue ?? undefined;
+   const resolvingIssue = !storeIssue && fetchedIssue === undefined;
+
+   useEffect(() => {
+      if (storeIssue) return; // já temos a issue no store
+      let active = true;
+      // Reset ao trocar de issueId (navegação entre deep-links) → volta a "Carregando…"
+      // em vez de mostrar a issue anterior sob a nova URL enquanto o GET não resolve.
+      setFetchedIssue(undefined);
+      api.issues
+         .get(issueId)
+         .then((dto) => {
+            if (active) setFetchedIssue(adaptIssues([dto])[0]);
+         })
+         .catch(() => {
+            if (active) setFetchedIssue(null);
+         });
+      return () => {
+         active = false;
+      };
+   }, [issueId, storeIssue]);
+
+   if (!issue) {
+      // Ainda resolvendo o deep-link → skeleton (não "not found" prematuro).
+      if (resolvingIssue) return <IssueDetailSkeleton />;
+      return (
+         <div className="flex flex-col items-center justify-center h-full gap-2 text-sm text-muted-foreground">
+            <p>Issue {issueId} not found.</p>
+            <Link href={`/${orgId ?? 'nimbloo'}`} className="underline">
+               Back to issues
+            </Link>
+         </div>
+      );
+   }
+
+   return <IssueDetailView issue={issue} />;
 }

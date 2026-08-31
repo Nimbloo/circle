@@ -1,22 +1,16 @@
 'use client';
 
-import { ContentBlocks } from '@/components/common/issues/details/content-blocks';
-import { IssuePropertiesPanel } from '@/components/common/issues/details/issue-properties-panel';
-import { LabelBadge } from '@/components/common/issues/label-badge';
+import { IssueDetailView } from '@/components/common/issues/details/issue-details';
+import { IssueDetailSkeleton } from '@/components/common/issues/details/issue-detail-skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { getNotificationIcon } from '@/lib/notification-utils';
-import type { IssueDetail } from '@/data/issue-details';
-import { adaptIssueDetail } from '@/lib/adapters-issue-detail';
-import { api } from '@/lib/client';
-import { ISSUE_CHANGED_EVENT } from '@/lib/use-live-sync';
 import { InboxItem } from '@/data/inbox';
 import { useIssuesStore } from '@/store/issues-store';
 import { useNotificationsStore } from '@/store/notifications-store';
 import { ArrowUpRight, Check } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
 import { NotificationBox } from './icons/motification-box';
 
 interface IssuePreviewProps {
@@ -25,10 +19,35 @@ interface IssuePreviewProps {
    onMarkAsUnread?: (id: string) => void;
 }
 
+/** Contexto da notificação (quem/quando/o quê) exibido acima da issue. */
+function NotificationContext({ notification }: { notification: InboxItem }) {
+   return (
+      <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg mb-8">
+         <div className="relative shrink-0">
+            <Avatar className="size-7">
+               <AvatarImage
+                  src={notification.user.avatarUrl || undefined}
+                  alt={notification.user.name}
+               />
+               <AvatarFallback className="text-xs">{notification.user.name[0]}</AvatarFallback>
+            </Avatar>
+            <div className="absolute -bottom-1 -right-1 size-4 rounded-full bg-accent border border-background flex items-center justify-center">
+               {getNotificationIcon(notification.type, 'size-2.5')}
+            </div>
+         </div>
+         <div className="min-w-0 text-sm">
+            <span className="font-medium">{notification.user.name}</span>{' '}
+            <span className="text-muted-foreground">· {notification.timestamp}</span>
+            <p className="text-foreground/90 mt-0.5">{notification.content}</p>
+         </div>
+      </div>
+   );
+}
+
 /**
- * Inbox preview pane: shows the REAL issue behind the selected
- * notification (live status/assignee from the store, rich description
- * from issue-details) plus the notification context.
+ * Inbox preview pane — paridade Linear: selecionar uma notificação abre a ISSUE
+ * COMPLETA (título/descrição editáveis, sub-issues, feed com composer e a sidebar
+ * de properties), com o contexto da notificação como banner no topo.
  */
 export default function IssuePreview({
    notification,
@@ -39,42 +58,10 @@ export default function IssuePreview({
    const { getUnreadCount } = useNotificationsStore();
    const issues = useIssuesStore((s) => s.issues);
 
-   // Issue viva atrás da notificação (para status/assignee/labels em tempo real).
+   // Issue viva atrás da notificação (o IssueDetailView precisa da issue do store).
    const issue = notification
       ? issues.find((candidate) => candidate.identifier === notification.identifier)
       : undefined;
-   const issueDetailId = issue?.id;
-
-   const [detail, setDetail] = useState<IssueDetail | null>(null);
-   const [reloadKey, setReloadKey] = useState(0);
-   useEffect(() => {
-      if (!issueDetailId) {
-         setDetail(null);
-         return;
-      }
-      let active = true;
-      Promise.all([api.issues.detail(issueDetailId), api.issues.activity(issueDetailId)])
-         .then(([detailDto, activity]) => {
-            if (active) setDetail(adaptIssueDetail(detailDto, activity));
-         })
-         .catch(() => {
-            if (active) setDetail(null);
-         });
-      return () => {
-         active = false;
-      };
-   }, [issueDetailId, reloadKey]);
-
-   // Realtime: refaz o fetch quando o SSE avisa que esta issue mudou (cross-usuário).
-   useEffect(() => {
-      if (!issueDetailId) return;
-      const onChanged = (e: Event) => {
-         const id = (e as CustomEvent<{ id?: string }>).detail?.id;
-         if (!id || id === issueDetailId) setReloadKey((k) => k + 1);
-      };
-      window.addEventListener(ISSUE_CHANGED_EVENT, onChanged);
-      return () => window.removeEventListener(ISSUE_CHANGED_EVENT, onChanged);
-   }, [issueDetailId]);
 
    if (!notification) {
       const unreadCount = getUnreadCount();
@@ -92,7 +79,7 @@ export default function IssuePreview({
       );
    }
 
-   // Live issue from the store (falls back to the notification snapshot).
+   // Fallback pro header enquanto a issue não chegou no store (hidratando).
    const displayIssue = issue ?? notification;
 
    return (
@@ -135,75 +122,16 @@ export default function IssuePreview({
             </div>
          </div>
 
-         {/* Real issue preview + properties column (Linear-style) */}
-         <div className="flex-1 min-h-0 flex overflow-hidden">
-            <div className="flex-1 min-w-0 overflow-y-auto">
-               <div className="pt-8 pb-6 px-6 w-full max-w-3xl mx-auto">
-                  {/* Notification context */}
-                  <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg mb-8">
-                     <div className="relative shrink-0">
-                        <Avatar className="size-7">
-                           <AvatarImage
-                              src={notification.user.avatarUrl || undefined}
-                              alt={notification.user.name}
-                           />
-                           <AvatarFallback className="text-xs">
-                              {notification.user.name[0]}
-                           </AvatarFallback>
-                        </Avatar>
-                        <div className="absolute -bottom-1 -right-1 size-4 rounded-full bg-accent border border-background flex items-center justify-center">
-                           {getNotificationIcon(notification.type, 'size-2.5')}
-                        </div>
-                     </div>
-                     <div className="min-w-0 text-sm">
-                        <span className="font-medium">{notification.user.name}</span>{' '}
-                        <span className="text-muted-foreground">· {notification.timestamp}</span>
-                        <p className="text-foreground/90 mt-0.5">{notification.content}</p>
-                     </div>
-                  </div>
-
-                  <h3 className="text-2xl font-semibold text-foreground text-balance">
-                     {displayIssue.title}
-                  </h3>
-
-                  {/* Properties row */}
-                  <div className="flex items-center flex-wrap gap-x-4 gap-y-2 mt-4 text-sm xl:hidden">
-                     <span className="flex items-center gap-1.5">
-                        <displayIssue.status.icon />
-                        {displayIssue.status.name}
-                     </span>
-                     <span className="flex items-center gap-1.5 text-muted-foreground">
-                        <displayIssue.priority.icon className="size-3.5" />
-                        {displayIssue.priority.name}
-                     </span>
-                     {displayIssue.assignee && (
-                        <span className="flex items-center gap-1.5">
-                           <Avatar className="size-4">
-                              <AvatarImage
-                                 src={displayIssue.assignee.avatarUrl || undefined}
-                                 alt={displayIssue.assignee.name}
-                              />
-                              <AvatarFallback className="text-[9px]">
-                                 {displayIssue.assignee.name[0]}
-                              </AvatarFallback>
-                           </Avatar>
-                           {displayIssue.assignee.name}
-                        </span>
-                     )}
-                     <LabelBadge label={displayIssue.labels} />
-                  </div>
-
-                  {/* Real description */}
-                  <div className="mt-6">
-                     <ContentBlocks blocks={detail?.description ?? []} />
-                  </div>
-               </div>
-            </div>
-
-            {issue && detail && (
-               <aside className="hidden xl:block w-64 shrink-0 border-l overflow-y-auto bg-container px-4 py-5">
-                  <IssuePropertiesPanel issue={issue} detail={detail} />
-               </aside>
+         {/* Issue completa (padrão Linear) com o contexto da notificação no topo. */}
+         <div className="flex-1 min-h-0 overflow-hidden">
+            {issue ? (
+               <IssueDetailView
+                  issue={issue}
+                  banner={<NotificationContext notification={notification} />}
+               />
+            ) : (
+               // Issue ainda não hidratada no store → skeleton (resolve em instantes).
+               <IssueDetailSkeleton />
             )}
          </div>
       </div>
