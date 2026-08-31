@@ -11,8 +11,9 @@ export const dynamic = 'force-dynamic';
 
 type Params = { params: Promise<{ teamKey: string }> };
 
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
+      await requireEmail(req);
       const { teamKey } = await params;
       // Auto-rollover lazy (#24): fecha cycles vencidos e carrega incompletas antes de listar.
       await rolloverCyclesForTeam(db, teamKey);

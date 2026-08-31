@@ -1,6 +1,6 @@
 import { db } from '@/db';
 import { ok } from '@/lib/api/response';
-import { handle } from '@/lib/api/http';
+import { handle, requireEmail } from '@/lib/api/http';
 import { listReviews } from '@/lib/api/reviews';
 
 export const runtime = 'nodejs';
@@ -15,6 +15,7 @@ function intParam(raw: string | null, def: number, min: number, max: number): nu
 
 export async function GET(req: Request) {
    return handle(async () => {
+      await requireEmail(req);
       const sp = new URL(req.url).searchParams;
       const limit = intParam(sp.get('limit'), 50, 1, 200);
       const offset = intParam(sp.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);

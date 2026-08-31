@@ -1,5 +1,6 @@
 import NextAuth from 'next-auth';
 import { authConfig } from '@/auth.config';
+import { isPublicApiPath } from '@/lib/api/public-routes';
 
 // Instância EDGE-SAFE (só a authConfig, sem Credentials/db) — evita puxar pg/bcrypt/
 // node:crypto pro bundle Edge do middleware.
@@ -12,27 +13,14 @@ const { auth } = NextAuth(authConfig);
  *    (`/api/auth/*` = fluxo NextAuth; `/api/healthz` e `/api/readyz` = probes do
  *    kubelet, que não têm sessão — redirecionar/401 mataria o pod).
  *  - páginas: sem sessão → redirect `/login` (exceto `/login` e `/signup`).
- * Fecha por padrão: uma rota nova sob `/api/v1` já nasce protegida, sem depender de
- * o handler lembrar do `requireEmail` (defesa em profundidade).
+ *
+ * Fecha por padrão: uma rota nova sob `/api/v1` já nasce protegida. É a PRIMEIRA de
+ * duas camadas — os handlers repetem a checagem com `requireEmail` (garantido pelo
+ * `test/route-auth-guard.test.ts`), porque um bypass do middleware do Next chegaria
+ * direto no handler. A allowlist pública vive em `lib/api/public-routes.ts`, lida
+ * também pelo teste-guarda, para as duas camadas nunca divergirem.
  */
 const PUBLIC_PAGE_PREFIXES = ['/login', '/signup'];
-// Probes do kubelet (sem sessão) + os 4 paths EXATOS do Sentry. Sentry usa esses
-// endpoints (webhooks/UI-components) autenticados por HMAC (Sentry-App/Hook-Signature),
-// não por sessão. EXATO (não prefixo): assim uma rota NOVA sob …/sentry/ NÃO nasce
-// pública por acidente — quem adicionar tem que liberar explicitamente aqui.
-const PUBLIC_API_EXACT = new Set([
-   '/api/healthz',
-   '/api/readyz',
-   '/api/metrics',
-   '/api/v1/integrations/sentry/issues/create',
-   '/api/v1/integrations/sentry/issues/link',
-   '/api/v1/integrations/sentry/webhook',
-   '/api/v1/integrations/sentry/teams/options',
-   // Webhook do GitHub: autenticado por HMAC (X-Hub-Signature-256), não por sessão.
-   '/api/v1/integrations/github/webhook',
-]);
-// Só o NextAuth precisa do subtree inteiro (/api/auth/*).
-const PUBLIC_API_PREFIXES = ['/api/auth'];
 
 function unauthorized(): Response {
    return new Response(JSON.stringify({ title: 'Unauthorized', status: 401 }), {
@@ -45,10 +33,7 @@ export default auth(async (req) => {
    const { pathname } = req.nextUrl;
 
    if (pathname.startsWith('/api')) {
-      const isPublicApi =
-         PUBLIC_API_EXACT.has(pathname) ||
-         PUBLIC_API_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-      if (isPublicApi) return;
+      if (isPublicApiPath(pathname)) return;
       if (req.auth) return; // sessão de humano (cookie NextAuth)
       // Auth de MÁQUINA: Bearer JWT do Keycloak (service accounts). Valida no gate
       // (Edge-safe, Web Crypto) — senão rotas sem `requireEmail` ficariam expostas.

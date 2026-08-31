@@ -10,8 +10,11 @@ import { ApiError } from '@/lib/api/errors';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
-   return handle(async () => ok(await listStatuses(db)));
+export async function GET(req: Request) {
+   return handle(async () => {
+      await requireEmail(req);
+      return ok(await listStatuses(db));
+   });
 }
 
 const CreateSchema = z.object({

@@ -13,8 +13,9 @@ export const dynamic = 'force-dynamic';
 
 type Params = { params: Promise<{ id: string }> };
 
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
+      await requireEmail(req);
       const { id } = await params;
       const dto = await getMember(db, id);
       return dto ? ok(dto) : notFound(`Membro '${id}' não encontrado`);

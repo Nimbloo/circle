@@ -13,6 +13,10 @@ beforeEach(async () => {
 });
 afterEach(() => __setTestDb(null));
 
+function get(url: string, email = 'dev@nimbloo.ai') {
+   return new Request(url, { headers: { 'x-forwarded-email': email } });
+}
+
 function post(body: unknown, email = 'dev@nimbloo.ai') {
    return new Request('http://x/api/v1/issues', {
       method: 'POST',
@@ -31,7 +35,7 @@ describe('issues routes (end-to-end via handlers)', () => {
       expect(cjson.data.identifier).toBe('CORE-1');
       expect(cjson.data.createdBy.email).toBe('dev@nimbloo.ai');
 
-      const listed = await listIssues(new Request('http://x/api/v1/issues'));
+      const listed = await listIssues(get('http://x/api/v1/issues'));
       const ljson = await listed.json();
       expect(ljson.data).toHaveLength(1);
       expect(ljson.data[0].title).toBe('Rota');
@@ -54,6 +58,12 @@ describe('issues routes (end-to-end via handlers)', () => {
       expect(res.headers.get('content-type')).toContain('application/problem+json');
    });
 
+   it('GET without auth header returns 401 (leitura não é pública)', async () => {
+      const res = await listIssues(new Request('http://x/api/v1/issues'));
+      expect(res.status).toBe(401);
+      expect(res.headers.get('content-type')).toContain('application/problem+json');
+   });
+
    it('POST with invalid payload returns 400', async () => {
       const res = await createIssue(post({ teamId: 'CORE' })); // faltam campos obrigatórios
       expect(res.status).toBe(400);
@@ -64,7 +74,7 @@ describe('issues routes (end-to-end via handlers)', () => {
          post({ teamId: 'CORE', title: 'A', statusId: 'in-progress', priorityId: 'low' })
       );
       await createIssue(post({ teamId: 'CORE', title: 'B', statusId: 'to-do', priorityId: 'low' }));
-      const res = await listIssues(new Request('http://x/api/v1/issues?status=in-progress'));
+      const res = await listIssues(get('http://x/api/v1/issues?status=in-progress'));
       const json = await res.json();
       expect(json.data).toHaveLength(1);
       expect(json.data[0].status.id).toBe('in-progress');
