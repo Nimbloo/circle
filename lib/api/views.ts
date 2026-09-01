@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, isNotNull, or } from 'drizzle-orm';
 import type { Db } from '@/db';
-import { savedView } from '@/db/schema';
+import { savedView, team as teamT } from '@/db/schema';
 import { getOrCreateUser } from './users';
 import { isAdmin } from './auth';
 import { listIssues, type IssueDto } from './issues';
@@ -125,6 +125,11 @@ export async function createView(
 
 export interface UpdateViewInput {
    name?: string;
+   /**
+    * COMPARTILHAMENTO: time que passa a enxergar a view; `null` a torna pessoal.
+    * O modelo já existia (`teamId` nulo = só o dono), faltava poder mudar depois.
+    */
+   teamId?: string | null;
    description?: string | null;
    icon?: string | null;
    filter?: ViewFilter;
@@ -156,6 +161,19 @@ export async function updateView(
    if (patch.description !== undefined) set.description = patch.description;
    if (patch.icon !== undefined) set.icon = patch.icon;
    if (patch.filter !== undefined) set.filter = JSON.stringify(patch.filter);
+   if (patch.teamId !== undefined) {
+      // Valida o time: sem isto, um id errado deixaria a view órfã — invisível para
+      // o dono (deixou de ser pessoal) e para todo mundo (o time não existe).
+      if (patch.teamId) {
+         const t = await db
+            .select({ id: teamT.id })
+            .from(teamT)
+            .where(eq(teamT.id, patch.teamId))
+            .limit(1);
+         if (!t.length) throw new ApiError(404, `Team '${patch.teamId}' não existe`);
+      }
+      set.teamId = patch.teamId;
+   }
    await db.update(savedView).set(set).where(eq(savedView.id, id));
    publish({ entity: 'view', action: 'updated', id, actorEmail });
    return getView(db, id);
@@ -190,8 +208,12 @@ export async function resolveView(
       return { type: 'issue', issues };
    }
 
-   // project view: aplica o que mapeia (status/priority/labels)
+   // project view: aplica o que mapeia (categoria/status/priority/labels)
    let projects = await listProjects(db, {});
+   // statusCategories era aplicado SÓ no cliente (`data/views.ts`), então uma project
+   // view filtrada por categoria devolvia conjuntos diferentes na API e na tela.
+   if (f.statusCategories?.length)
+      projects = projects.filter((p) => f.statusCategories!.includes(p.status.category));
    if (f.statusIds?.length) projects = projects.filter((p) => f.statusIds!.includes(p.status.id));
    if (f.priorityIds?.length)
       projects = projects.filter((p) => f.priorityIds!.includes(p.priority.id));

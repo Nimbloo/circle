@@ -14,10 +14,10 @@ import {
 } from 'recharts';
 
 const COLORS = {
-   scope: '#8f9299',
-   started: '#facc15',
-   completed: '#6771c5',
-   ideal: '#6771c5',
+   scope: 'var(--muted-foreground)',
+   started: 'var(--cycle-started)',
+   completed: 'var(--primary)',
+   ideal: 'var(--primary)',
 };
 
 interface CycleBurnupChartProps {
@@ -135,7 +135,7 @@ export function CycleProgressLegend({ cycle }: { cycle: Cycle }) {
             cycle.scopeDelta !== 0
                ? `${cycle.scopeDelta > 0 ? '+' : ''}${cycle.scopeDelta}%`
                : undefined,
-         extraClass: 'text-red-500',
+         extraClass: 'text-destructive',
       },
       {
          key: 'started',
@@ -156,18 +156,20 @@ export function CycleProgressLegend({ cycle }: { cycle: Cycle }) {
    ];
 
    return (
-      <div className="flex flex-col divide-y divide-border/60 min-w-[200px]">
+      <div className="flex w-full flex-col divide-y divide-border/60">
          {rows.map((row) => (
-            <div key={row.key} className="flex items-center justify-between gap-6 py-2.5">
-               <div className="flex items-center gap-2">
+            <div key={row.key} className="flex items-center justify-between gap-6 py-3.5">
+               <div className="flex items-center gap-3">
                   <span
                      className="size-2 rounded-[2px]"
                      style={{ backgroundColor: row.swatch }}
                      aria-hidden="true"
                   />
-                  <span className="text-sm text-muted-foreground">{row.label}</span>
+                  <span className="text-[13px] font-[450] leading-4 text-muted-foreground">
+                     {row.label}
+                  </span>
                </div>
-               <div className="flex items-center gap-1.5 text-sm">
+               <div className="flex items-center gap-1.5 text-xs">
                   <span className="font-medium">{row.value}</span>
                   {row.extra && <span className={`text-xs ${row.extraClass}`}>• {row.extra}</span>}
                </div>

@@ -7,7 +7,7 @@ export function ProjectBadge({ project }: { project: Project }) {
       <Link href={`/nimbloo/projects/all`} className="flex items-center justify-center gap-.5">
          <Badge
             variant="outline"
-            className="gap-1.5 rounded-full text-muted-foreground bg-background"
+            className="h-6 gap-1.5 rounded-full bg-background px-2 py-0 text-muted-foreground"
          >
             <project.icon size={16} />
             {project.name}

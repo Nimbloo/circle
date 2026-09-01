@@ -1,12 +1,16 @@
-import { db } from './index';
 import { seedCatalogs } from './seed-catalogs';
 import { seedDemo } from './seed-demo';
+import { loadLocalDatabaseEnv } from './load-local-env';
+
+loadLocalDatabaseEnv();
 
 /**
  * Seed: catálogos (sempre) + dados de exemplo (só se CIRCLE_SEED_DEMO=true, dev/hml).
  * Idempotente. Rodar via `pnpm db:seed`.
  */
 async function main() {
+   const { db } = await import('./index');
+
    console.log('Seeding catalogs...');
    await seedCatalogs(db);
    console.log('Catalogs seeded.');

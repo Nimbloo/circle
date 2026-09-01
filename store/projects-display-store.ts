@@ -86,7 +86,9 @@ export const useProjectsDisplayStore = create<ProjectsDisplayState>()(
          ...DEFAULTS,
 
          setViewType: (tab, viewType) =>
-            set((state) => ({ viewTypes: { ...state.viewTypes, [tab]: viewType } })),
+            set((state) => ({
+               viewTypes: { ...state.viewTypes, [tab]: viewType },
+            })),
          setGrouping: (grouping) => set({ grouping }),
          setOrdering: (ordering) => set({ ordering }),
          setClosedProjects: (closedProjects) => set({ closedProjects }),

@@ -21,16 +21,25 @@ interface PrioritySelectorProps {
    issueId?: string;
    /** Exibe o nome da prioridade dentro do trigger (linha inteira clicável — padrão Linear). */
    showName?: boolean;
+   /** Trigger de 24px usado na linha de propriedades dos cards do board. */
+   compact?: boolean;
 }
 
-export function PrioritySelector({ priority, issueId, showName = false }: PrioritySelectorProps) {
+export function PrioritySelector({
+   priority,
+   issueId,
+   showName = false,
+   compact = false,
+}: PrioritySelectorProps) {
    const id = useId();
    const [open, setOpen] = useState<boolean>(false);
    // Deriva do prop (store) — sem estado local otimista, reverte junto com o rollback.
    const value = priority.id;
 
    const priorities = usePriorities();
-   const filterByPriority = useIssuesStore((s) => s.filterByPriority);
+   // Conta derivada da fatia assinada: assinar `filterByPriority` (funcao, referencia
+   // estavel) deixaria o contador do dropdown parado quando as issues mudam.
+   const allIssues = useIssuesStore((s) => s.issues);
    const updateIssuePriority = useIssuesStore((s) => s.updateIssuePriority);
 
    const handlePriorityChange = (priorityId: string) => {
@@ -45,7 +54,7 @@ export function PrioritySelector({ priority, issueId, showName = false }: Priori
    };
 
    return (
-      <div className="*:not-first:mt-2">
+      <div className={compact ? 'h-6 leading-none' : '*:not-first:mt-2'}>
          <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
                <Button
@@ -53,7 +62,9 @@ export function PrioritySelector({ priority, issueId, showName = false }: Priori
                   className={
                      showName
                         ? 'h-7 gap-2 px-1.5 justify-start'
-                        : 'size-7 flex items-center justify-center'
+                        : compact
+                          ? 'h-6 w-[25px] px-[4.5px]'
+                          : 'size-7 flex items-center justify-center'
                   }
                   size={showName ? 'sm' : 'icon'}
                   variant="ghost"
@@ -93,7 +104,7 @@ export function PrioritySelector({ priority, issueId, showName = false }: Priori
                               </div>
                               {value === item.id && <CheckIcon size={16} className="ml-auto" />}
                               <span className="text-muted-foreground text-xs">
-                                 {filterByPriority(item.id).length}
+                                 {allIssues.filter((i) => i.priority.id === item.id).length}
                               </span>
                            </CommandItem>
                         ))}

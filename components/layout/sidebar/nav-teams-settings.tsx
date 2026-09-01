@@ -11,7 +11,6 @@ import {
    SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { Button } from '@/components/ui/button';
 import { useParams } from 'next/navigation';
 
 export function NavTeamsSettings() {
@@ -26,8 +25,8 @@ export function NavTeamsSettings() {
                <SidebarMenuItem key={team.id}>
                   <SidebarMenuButton asChild>
                      <Link href={`/${orgId}/settings/teams/${team.id}`}>
-                        <div className="inline-flex size-6 bg-muted/50 items-center justify-center rounded shrink-0">
-                           <div className="text-sm">{team.icon}</div>
+                        <div className="inline-flex size-4 shrink-0 items-center justify-center rounded bg-muted/50">
+                           <div className="text-[10px]">{team.icon}</div>
                         </div>
                         <span>{team.name}</span>
                      </Link>
@@ -36,12 +35,10 @@ export function NavTeamsSettings() {
             ))}
             <SidebarMenuItem>
                <SidebarMenuButton asChild>
-                  <Button variant="ghost" className="w-full justify-start gap-2 px-2" asChild>
-                     <Link href={`/${orgId}/settings/teams/new`}>
-                        <PlusIcon className="size-4" />
-                        <span>Join or create a team</span>
-                     </Link>
-                  </Button>
+                  <Link href={`/${orgId}/settings/teams/new`}>
+                     <PlusIcon className="size-3.5" />
+                     <span>Join or create a team</span>
+                  </Link>
                </SidebarMenuButton>
             </SidebarMenuItem>
          </SidebarMenu>

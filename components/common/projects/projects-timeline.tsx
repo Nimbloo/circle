@@ -9,6 +9,7 @@ import {
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { isValidProjectDate, projectDateRangeLabel } from '@/lib/project-dates';
 import { Project } from '@/data/projects';
 import { useProjectsDisplayStore } from '@/store/projects-display-store';
 import { format, parseISO } from 'date-fns';
@@ -25,23 +26,26 @@ interface ProjectsTimelineProps {
 const RANGE_START = Date.UTC(2020, 0, 1);
 const RANGE_END = Date.UTC(2032, 11, 31);
 /** Width of the sticky project list column. */
-const LIST_WIDTH = 224;
+const LIST_WIDTH = 312;
 
 /** Zoom levels for the scale dropdown (month column width in px). */
 const ZOOM_LEVELS = [
-   { id: 'year', label: 'Year', shortcut: 'Y', monthWidth: 120 },
-   { id: 'quarter', label: 'Quarter', shortcut: 'Q', monthWidth: 240 },
-   { id: 'month', label: 'Month', shortcut: 'M', monthWidth: 480 },
-   { id: 'week', label: 'Week', shortcut: 'W', monthWidth: 960 },
+   { id: 'year', label: 'Year', shortcut: 'Y', monthWidth: 76 },
+   { id: 'quarter', label: 'Quarter', shortcut: 'Q', monthWidth: 152 },
+   { id: 'month', label: 'Month', shortcut: 'M', monthWidth: 304 },
+   { id: 'week', label: 'Week', shortcut: 'W', monthWidth: 608 },
 ] as const;
 type TimelineZoom = (typeof ZOOM_LEVELS)[number]['id'];
 
 const monthWidthOf = (zoom: TimelineZoom) =>
    ZOOM_LEVELS.find((level) => level.id === zoom)!.monthWidth;
+const dayWidthOf = (monthWidth: number) => monthWidth / 30.4;
+const DAY_MS = 86_400_000;
 
 interface MonthCell {
    key: string;
    label: string;
+   days: number;
 }
 
 const MONTHS: MonthCell[] = [];
@@ -50,6 +54,7 @@ for (let index = 0; ; index++) {
    if (date.getTime() > RANGE_END) break;
    MONTHS.push({
       key: date.toISOString().slice(0, 7),
+      days: (Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1) - date.getTime()) / DAY_MS,
       label:
          date.getUTCMonth() === 0
             ? `${date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })} ${date.getUTCFullYear()}`
@@ -57,11 +62,11 @@ for (let index = 0; ; index++) {
    });
 }
 
-const totalWidthOf = (monthWidth: number) => MONTHS.length * monthWidth;
+const totalWidthOf = (monthWidth: number) =>
+   ((RANGE_END - RANGE_START) / DAY_MS + 1) * dayWidthOf(monthWidth);
 
 /* --------------------------- Scale date labels --------------------------- */
 
-const DAY_MS = 86_400_000;
 /** First Monday inside the range (Jan 6, 2020). */
 const FIRST_MONDAY = Date.UTC(2020, 0, 6);
 
@@ -93,7 +98,7 @@ for (let time = FIRST_MONDAY; time <= RANGE_END; time += 7 * DAY_MS) {
 const BIWEEKLY_DATES: ScaleDate[] = WEEKLY_DATES.filter((_, index) => index % 2 === 0);
 
 const offsetForTime = (time: number, monthWidth: number): number =>
-   ((time - RANGE_START) / (RANGE_END - RANGE_START)) * totalWidthOf(monthWidth);
+   ((time - RANGE_START) / DAY_MS) * dayWidthOf(monthWidth);
 
 const offsetFor = (iso: string, monthWidth: number): number => {
    const time = Date.UTC(
@@ -102,22 +107,19 @@ const offsetFor = (iso: string, monthWidth: number): number => {
       Number(iso.slice(8, 10))
    );
    const clamped = Math.min(Math.max(time, RANGE_START), RANGE_END);
-   return ((clamped - RANGE_START) / (RANGE_END - RANGE_START)) * totalWidthOf(monthWidth);
+   return ((clamped - RANGE_START) / DAY_MS) * dayWidthOf(monthWidth);
 };
 
 const barBounds = (project: Project, monthWidth: number) => {
    const left = offsetFor(project.startDate, monthWidth);
    const right = Math.max(
-      offsetFor(project.targetDate ?? project.startDate, monthWidth),
+      offsetFor(
+         isValidProjectDate(project.targetDate) ? project.targetDate : project.startDate,
+         monthWidth
+      ),
       left + 130
    );
    return { left, right };
-};
-
-const dateRangeLabel = (project: Project) => {
-   const startLabel = format(parseISO(project.startDate), 'MMM d');
-   if (!project.targetDate || project.targetDate === project.startDate) return startLabel;
-   return `${startLabel} - ${format(parseISO(project.targetDate), 'MMM d')}`;
 };
 
 interface Viewport {
@@ -150,7 +152,8 @@ function OutOfViewIndicator({
    if (right >= visibleLeft + 4 && left <= visibleRight - 4) return null;
 
    const isPast = right < visibleLeft + 4;
-   const label = dateRangeLabel(project);
+   const label = projectDateRangeLabel(project.startDate, project.targetDate);
+   if (label === null) return null;
 
    return (
       <button
@@ -182,7 +185,10 @@ function TimelineBar({
 }) {
    const { displayProperties } = useProjectsDisplayStore();
    const left = offsetFor(project.startDate, monthWidth);
-   const right = offsetFor(project.targetDate ?? project.startDate, monthWidth);
+   const right = offsetFor(
+      isValidProjectDate(project.targetDate) ? project.targetDate : project.startDate,
+      monthWidth
+   );
    const width = Math.max(right - left, 130);
 
    return (
@@ -191,7 +197,7 @@ function TimelineBar({
             type="button"
             onClick={() => onSelect(project.id)}
             className={cn(
-               'absolute top-1 h-7 flex items-center gap-1.5 rounded-md border bg-accent/40 hover:bg-accent px-2.5 text-xs transition-colors overflow-hidden',
+               'absolute top-5 h-8 flex items-center gap-1.5 rounded-lg border bg-accent/40 hover:bg-accent px-2.5 text-xs transition-colors overflow-hidden',
                selected && 'border-dashed border-violet-500 bg-accent'
             )}
             style={{ left, width }}
@@ -253,12 +259,12 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
    useEffect(() => {
       const iso = new Date().toISOString().slice(0, 10);
       setTodayIso(iso);
-      // Bring today into view on mount (a third from the left edge, but always
+      // Bring today into view on mount (centered, but always
       // clear of the sticky project list so the line stays visible).
       if (scrollRef.current) {
          const offset = offsetFor(iso, monthWidthOf('year'));
          const listWidth = useProjectsDisplayStore.getState().showProjectList ? LIST_WIDTH : 0;
-         const anchor = Math.max(scrollRef.current.clientWidth / 3, listWidth + 80);
+         const anchor = Math.max(scrollRef.current.clientWidth / 2, listWidth + 80);
          scrollRef.current.scrollLeft = Math.max(0, offset - anchor);
       }
       syncViewport();
@@ -311,7 +317,7 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
    const jumpTo = useCallback(
       (contentX: number) => {
          if (!scrollRef.current) return;
-         const anchor = Math.max(scrollRef.current.clientWidth / 3, listOffset + 80);
+         const anchor = Math.max(scrollRef.current.clientWidth / 2, listOffset + 80);
          scrollRef.current.scrollTo({
             left: Math.max(0, contentX - anchor),
             behavior: 'smooth',
@@ -324,7 +330,7 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
       if (scrollRef.current && todayOffset !== null) {
          // Land today clear of the sticky project list, so on small screens
          // the line never ends up hidden behind it.
-         const anchor = Math.max(scrollRef.current.clientWidth / 3, listOffset + 80);
+         const anchor = Math.max(scrollRef.current.clientWidth / 2, listOffset + 80);
          scrollRef.current.scrollTo({
             left: Math.max(0, todayOffset - anchor),
             behavior: 'smooth',
@@ -338,16 +344,16 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
             <ProjectPeekPanel projectId={peekProjectId} onClose={() => setPeekProjectId(null)} />
          )}
          {/* Floating scale controls (Linear-style) */}
-         <div className="absolute top-1 right-4 z-30 flex items-center gap-1.5">
+         <div className="absolute top-[5px] right-[10px] z-30 flex items-center gap-1">
             <button
                type="button"
                onClick={scrollToToday}
-               className="h-7 px-2.5 rounded-md border bg-container text-xs font-medium hover:bg-accent transition-colors shadow-xs"
+               className="h-6 px-2 rounded-full border border-transparent bg-secondary text-xs font-medium hover:bg-accent transition-colors"
             >
                Today
             </button>
             <DropdownMenu>
-               <DropdownMenuTrigger className="h-7 px-2.5 rounded-md border bg-container text-xs font-medium hover:bg-accent transition-colors shadow-xs inline-flex items-center gap-1 outline-none">
+               <DropdownMenuTrigger className="h-6 px-2 rounded-full border border-transparent bg-secondary text-xs font-medium hover:bg-accent transition-colors inline-flex items-center gap-0.5 outline-none">
                   {ZOOM_LEVELS.find((level) => level.id === zoom)!.label}
                   <ChevronDown className="size-3 text-muted-foreground" />
                </DropdownMenuTrigger>
@@ -370,13 +376,13 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
          <div ref={scrollRef} onScroll={handleScroll} className="w-full h-full overflow-auto">
             <div style={{ width: totalWidth }} className="relative min-h-full">
                {/* Month scale: month names, weekly ticks and date labels */}
-               <div className="sticky top-0 z-20 border-b bg-container select-none">
-                  <div className="relative flex">
+               <div className="sticky top-0 z-20 bg-container select-none">
+                  <div className="relative flex h-4">
                      {MONTHS.map((month) => (
                         <div
                            key={month.key}
-                           style={{ width: monthWidth }}
-                           className="shrink-0 px-2 pt-1.5 pb-0.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wide whitespace-nowrap overflow-hidden"
+                           style={{ width: month.days * dayWidthOf(monthWidth) }}
+                           className="h-4 shrink-0 text-xs leading-4 font-medium text-muted-foreground uppercase whitespace-nowrap overflow-hidden"
                         >
                            {month.label}
                         </div>
@@ -393,7 +399,7 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
                      </div>
                   </div>
                   {/* Date labels (every other Monday at the Year zoom, weekly beyond) */}
-                  <div className="relative h-5">
+                  <div className="relative h-4">
                      {scaleDates.map((date) => {
                         const left = offsetForTime(date.time, monthWidth);
                         if (todayOffset !== null && Math.abs(left - todayOffset) < 30) return null;
@@ -410,7 +416,7 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
                      {/* Today pill, pinned to the scale */}
                      {todayOffset !== null && (
                         <span
-                           className="absolute -top-0.5 -translate-x-1/2 text-[10px] font-semibold bg-violet-500 text-white rounded-full px-1.5 py-px uppercase whitespace-nowrap pointer-events-none z-10"
+                           className="absolute -top-0.5 -translate-x-1/2 text-[10px] font-semibold bg-primary text-primary-foreground rounded-full px-1.5 py-px uppercase whitespace-nowrap pointer-events-none z-10"
                            style={{ left: todayOffset }}
                         >
                            {todayLabel}
@@ -420,11 +426,11 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
                </div>
 
                {/* Month grid lines */}
-               <div className="absolute inset-0 top-7 flex pointer-events-none">
+               <div className="absolute inset-0 top-8 flex pointer-events-none">
                   {MONTHS.map((month) => (
                      <div
                         key={month.key}
-                        style={{ width: monthWidth }}
+                        style={{ width: month.days * dayWidthOf(monthWidth) }}
                         className="shrink-0 border-r border-border/25 h-full"
                      />
                   ))}
@@ -433,7 +439,7 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
                {/* Today marker (hidden while it overlaps the sticky project list) */}
                {todayOffset !== null && !todayOverlapsList && (
                   <div
-                     className="absolute top-7 bottom-0 w-px bg-violet-500 z-10"
+                     className="absolute top-8 bottom-0 w-px bg-primary z-10"
                      style={{ left: todayOffset }}
                   />
                )}
@@ -442,30 +448,34 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
                <div className="relative z-[5] pb-8">
                   {groups.map((group) => (
                      <div key={group.id}>
-                        <div className="sticky left-0 flex items-center gap-2 px-4 h-9 text-sm font-medium bg-[color-mix(in_oklab,var(--accent)_30%,var(--container))] border-y border-border/40 w-screen max-w-full">
-                           {group.icon && <span>{group.icon}</span>}
-                           {group.name}
-                           <span className="text-xs text-muted-foreground">
-                              {group.projects.length}
-                           </span>
-                        </div>
-                        <div className="py-1">
+                        {group.id !== 'all' && (
+                           <div className="sticky left-0 flex items-center gap-2 px-4 h-9 text-sm font-medium bg-[color-mix(in_oklab,var(--accent)_30%,var(--container))] border-y border-border/40 w-screen max-w-full">
+                              {group.icon && <span>{group.icon}</span>}
+                              {group.name}
+                              <span className="text-xs text-muted-foreground">
+                                 {group.projects.length}
+                              </span>
+                           </div>
+                        )}
+                        <div className={cn(group.id !== 'all' && 'py-1')}>
                            {group.projects.map((project) => (
-                              <div key={project.id} className="relative h-9 flex items-center">
-                                 <TimelineBar
-                                    project={project}
-                                    monthWidth={monthWidth}
-                                    selected={peekProjectId === project.id}
-                                    onSelect={(projectId) =>
-                                       setPeekProjectId((current) =>
-                                          current === projectId ? null : projectId
-                                       )
-                                    }
-                                 />
+                              <div key={project.id} className="relative h-[72px] flex items-center">
+                                 {isValidProjectDate(project.startDate) && (
+                                    <TimelineBar
+                                       project={project}
+                                       monthWidth={monthWidth}
+                                       selected={peekProjectId === project.id}
+                                       onSelect={(projectId) =>
+                                          setPeekProjectId((current) =>
+                                             current === projectId ? null : projectId
+                                          )
+                                       }
+                                    />
+                                 )}
                                  {showProjectList && (
-                                    <div className="sticky left-0 z-10 flex items-center gap-1.5 w-56 shrink-0 px-4 h-9 bg-container/95 backdrop-blur-sm text-xs border-r border-border/40">
-                                       <span className="inline-flex size-5 bg-muted/50 items-center justify-center rounded shrink-0">
-                                          <project.icon className="size-3" />
+                                    <div className="sticky left-0 z-10 flex h-[72px] w-[312px] shrink-0 items-center gap-1 px-[13px] pr-[10px] bg-container/95 backdrop-blur-sm text-[13px] leading-4 font-medium border-r border-border/40">
+                                       <span className="inline-flex size-7 items-center justify-center rounded-md shrink-0">
+                                          <project.icon className="size-4" />
                                        </span>
                                        <span className="truncate flex-1">{project.name}</span>
                                        {displayProperties.health && (
@@ -477,7 +487,7 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
                                        {displayProperties.status && (
                                           <CapacityRing
                                              value={project.percentComplete}
-                                             color="#6771c5"
+                                             color="var(--primary)"
                                           />
                                        )}
                                        {displayProperties.priority && (
@@ -496,7 +506,7 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
                                        )}
                                     </div>
                                  )}
-                                 {viewport && (
+                                 {viewport && isValidProjectDate(project.startDate) && (
                                     <OutOfViewIndicator
                                        project={project}
                                        viewport={viewport}

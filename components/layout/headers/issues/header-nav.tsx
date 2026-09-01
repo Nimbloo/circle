@@ -2,10 +2,16 @@
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { SidebarTrigger } from '@/components/ui/sidebar';
+import {
+   HeaderActions,
+   HeaderGroup,
+   HeaderTitle,
+   LocationBar,
+} from '@/components/layout/header-primitives';
 import { cn } from '@/lib/utils';
 import { useSearchStore } from '@/store/search-store';
-import { SearchIcon } from 'lucide-react';
+import { useWorkspaceStore } from '@/store/workspace-store';
+import { ChevronRight, SearchIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, usePathname } from 'next/navigation';
 import { useEffect, useRef } from 'react';
@@ -17,7 +23,7 @@ const ISSUE_VIEW_TABS = [
    { label: 'All issues', segment: 'all' },
 ];
 
-function IssueViewTabs() {
+export function IssueViewTabs() {
    const { orgId, teamId } = useParams<{ orgId: string; teamId: string }>();
    const pathname = usePathname();
 
@@ -51,6 +57,9 @@ export default function HeaderNav() {
    const searchInputRef = useRef<HTMLInputElement>(null);
    const searchContainerRef = useRef<HTMLDivElement>(null);
    const previousValueRef = useRef<string>('');
+   const { orgId, teamId } = useParams<{ orgId: string; teamId: string }>();
+   const teams = useWorkspaceStore((state) => state.teams);
+   const team = teams.find((item) => item.id === teamId) ?? teams[0];
 
    useEffect(() => {
       if (isSearchOpen && searchInputRef.current) {
@@ -78,13 +87,26 @@ export default function HeaderNav() {
    }, [isSearchOpen, closeSearch, searchQuery]);
 
    return (
-      <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">
-         <div className="flex items-center gap-3">
-            <SidebarTrigger className="" />
-            <IssueViewTabs />
-         </div>
+      <LocationBar>
+         <HeaderGroup>
+            {team && (
+               <>
+                  <Link
+                     href={`/${orgId}/team/${team.id}/overview`}
+                     className="flex min-w-0 items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                     <span className="inline-flex size-5 shrink-0 items-center justify-center rounded bg-muted text-xs">
+                        {team.icon}
+                     </span>
+                     <span className="truncate text-[13px]">{team.name}</span>
+                  </Link>
+                  <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+               </>
+            )}
+            <HeaderTitle>Issues</HeaderTitle>
+         </HeaderGroup>
 
-         <div className="flex items-center gap-2">
+         <HeaderActions>
             {isSearchOpen ? (
                <div
                   ref={searchContainerRef}
@@ -129,7 +151,7 @@ export default function HeaderNav() {
                      variant="ghost"
                      size="icon"
                      onClick={toggleSearch}
-                     className="h-8 w-8"
+                     className="size-7"
                      aria-label="Search"
                   >
                      <SearchIcon className="h-4 w-4" />
@@ -137,7 +159,7 @@ export default function HeaderNav() {
                   <Notifications />
                </>
             )}
-         </div>
-      </div>
+         </HeaderActions>
+      </LocationBar>
    );
 }

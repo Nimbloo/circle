@@ -39,7 +39,15 @@ function slugify(v: string): string {
  * Cria uma saved view via api.views.create e re-hidrata o workspace.
  * Campos obrigatórios da rota: slug, name, type, filter (começa vazio).
  */
-export function CreateViewButton({ teamId }: { teamId?: string } = {}) {
+export function CreateViewButton({
+   teamId,
+   label,
+   variant = 'ghost',
+}: {
+   teamId?: string;
+   label?: string;
+   variant?: 'default' | 'ghost';
+} = {}) {
    const hydrate = useWorkspaceStore((s) => s.hydrate);
 
    const [open, setOpen] = useState(false);
@@ -80,8 +88,14 @@ export function CreateViewButton({ teamId }: { teamId?: string } = {}) {
    return (
       <Dialog open={open} onOpenChange={setOpen}>
          <DialogTrigger asChild>
-            <Button size="xs" variant="ghost" aria-label="New view">
+            <Button
+               size="xs"
+               variant={variant}
+               aria-label={label ?? 'New view'}
+               className={label ? 'px-[9px] text-xs has-[>svg]:px-[9px]' : 'size-7 p-0'}
+            >
                <Plus className="size-4" />
+               {label}
             </Button>
          </DialogTrigger>
          <DialogContent>

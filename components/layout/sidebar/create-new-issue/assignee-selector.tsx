@@ -27,7 +27,9 @@ export function AssigneeSelector({ assignee, onChange }: AssigneeSelectorProps) 
    const [open, setOpen] = useState<boolean>(false);
    const [value, setValue] = useState<string | null>(assignee?.id || null);
 
-   const filterByAssignee = useIssuesStore((s) => s.filterByAssignee);
+   // Conta derivada da fatia assinada: assinar `filterByAssignee` (funcao, referencia
+   // estavel) deixaria o contador do dropdown parado quando as issues mudam.
+   const allIssues = useIssuesStore((s) => s.issues);
    const users = useWorkspaceStore((s) => s.users);
 
    useEffect(() => {
@@ -104,7 +106,7 @@ export function AssigneeSelector({ assignee, onChange }: AssigneeSelectorProps) 
                            </div>
                            {value === null && <CheckIcon size={16} className="ml-auto" />}
                            <span className="text-muted-foreground text-xs">
-                              {filterByAssignee(null).length}
+                              {allIssues.filter((i) => i.assignee === null).length}
                            </span>
                         </CommandItem>
                         {users.map((user) => (
@@ -126,7 +128,7 @@ export function AssigneeSelector({ assignee, onChange }: AssigneeSelectorProps) 
                               </div>
                               {value === user.id && <CheckIcon size={16} className="ml-auto" />}
                               <span className="text-muted-foreground text-xs">
-                                 {filterByAssignee(user.id).length}
+                                 {allIssues.filter((i) => i.assignee?.id === user.id).length}
                               </span>
                            </CommandItem>
                         ))}

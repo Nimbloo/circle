@@ -36,6 +36,8 @@ interface Agg {
    scope: number;
    started: number;
    completed: number;
+   /** Marcos por issue — matéria-prima da curva de burn-up (ver `buildBurnup`). */
+   items: { points: number; startedAt: Date | null; completedAt: Date | null }[];
 }
 
 /**
@@ -49,13 +51,19 @@ async function aggregatesByCycle(db: Db, cycleIds: string[]): Promise<Map<string
    if (cycleIds.length === 0) return result;
    const [issues, statuses] = await Promise.all([
       db
-         .select({ cycleId: issueT.cycleId, statusId: issueT.statusId, estimate: issueT.estimate })
+         .select({
+            cycleId: issueT.cycleId,
+            statusId: issueT.statusId,
+            estimate: issueT.estimate,
+            startedAt: issueT.startedAt,
+            completedAt: issueT.completedAt,
+         })
          .from(issueT)
          .where(inArray(issueT.cycleId, cycleIds)),
       db.select().from(statusT),
    ]);
    const catById = new Map(statuses.map((s) => [s.id, s.category]));
-   for (const cid of cycleIds) result.set(cid, { scope: 0, started: 0, completed: 0 });
+   for (const cid of cycleIds) result.set(cid, { scope: 0, started: 0, completed: 0, items: [] });
    for (const i of issues) {
       if (!i.cycleId) continue;
       const agg = result.get(i.cycleId);
@@ -65,27 +73,67 @@ async function aggregatesByCycle(db: Db, cycleIds: string[]): Promise<Map<string
       const cat = catById.get(i.statusId);
       if (cat === 'started') agg.started += points;
       else if (cat === 'completed') agg.completed += points;
+      agg.items.push({ points, startedAt: i.startedAt, completedAt: i.completedAt });
    }
    return result;
 }
 
+/** Dias (ISO `YYYY-MM-DD`) de `from` até `to`, inclusive. Cap de 120 por segurança. */
+function daysBetween(from: string, to: string): string[] {
+   const out: string[] = [];
+   const cur = new Date(`${from}T00:00:00Z`);
+   const end = new Date(`${to}T00:00:00Z`);
+   while (cur <= end && out.length < 120) {
+      out.push(cur.toISOString().slice(0, 10));
+      cur.setUTCDate(cur.getUTCDate() + 1);
+   }
+   return out;
+}
+
 /**
- * Burn-up simplificado (2 pontos: início→hoje) a partir dos agregados atuais.
- * Série histórica real exigiria snapshots diários (fase futura); aqui aproximamos
- * sem inventar dados intermediários.
+ * Curva de burn-up DIÁRIA, reconstruída de `issue.startedAt`/`completedAt` — que o app
+ * já grava. Antes eram dois pontos sintéticos (início→hoje), o que não é burn-up: é uma
+ * reta ligando o começo ao estado atual.
+ *
+ * LIMITAÇÃO HONESTA — a linha de `scope` é PLANA. Não existe registro de quando a issue
+ * entrou neste ciclo (o auto-add em `updateIssue` e o carry-over do rollover reescrevem
+ * `cycleId` sem deixar rastro), então projetamos o escopo atual para trás. Por isso
+ * `scopeDelta` continua 0: variação de escopo exige histórico que ainda não é gravado.
+ * As curvas de `started` e `completed` são reais.
+ *
+ * Enviesada por sobrevivência em ciclos passados: issue que saiu do ciclo já não aponta
+ * para ele e some da série. Aceitável para leitura de tendência, não para auditoria.
  */
 function buildBurnup(row: CycleRow, agg: Agg): BurnupPoint[] | null {
    if (row.status !== 'current' && row.status !== 'completed') return null;
-   return [
-      { date: row.startDate, scope: agg.scope, started: 0, completed: 0, ideal: 0 },
-      {
-         date: row.endDate,
+
+   const today = new Date().toISOString().slice(0, 10);
+   // Ciclo em andamento para de desenhar em hoje: dia futuro viraria linha reta no zero.
+   const last = row.status === 'current' && today < row.endDate ? today : row.endDate;
+   const days = daysBetween(row.startDate, last);
+   if (days.length === 0) return null;
+
+   const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
+   const span = days.length - 1;
+
+   return days.map((date, idx) => {
+      let started = 0;
+      let completed = 0;
+      for (const it of agg.items) {
+         const s = iso(it.startedAt);
+         const c = iso(it.completedAt);
+         // Cumulativo: conta quem já tinha atingido o marco ATÉ este dia.
+         if (c && c <= date) completed += it.points;
+         else if (s && s <= date) started += it.points;
+      }
+      return {
+         date,
          scope: agg.scope,
-         started: agg.started,
-         completed: agg.completed,
-         ideal: agg.scope,
-      },
-   ];
+         started,
+         completed,
+         ideal: span === 0 ? agg.scope : Math.round((agg.scope * idx) / span),
+      };
+   });
 }
 
 function toDto(row: CycleRow, agg: Agg): CycleDto {
@@ -165,7 +213,7 @@ export async function listCyclesByTeam(db: Db, teamId: string): Promise<CycleDto
       rows.map((r) => r.id)
    );
    return rows
-      .map((r) => toDto(r, aggs.get(r.id) ?? { scope: 0, started: 0, completed: 0 }))
+      .map((r) => toDto(r, aggs.get(r.id) ?? { scope: 0, started: 0, completed: 0, items: [] }))
       .sort((a, b) => b.number - a.number);
 }
 
@@ -182,7 +230,7 @@ export async function listCyclesForTeams(db: Db, teamIds: string[]): Promise<Cyc
       rows.map((r) => r.id)
    );
    return rows
-      .map((r) => toDto(r, aggs.get(r.id) ?? { scope: 0, started: 0, completed: 0 }))
+      .map((r) => toDto(r, aggs.get(r.id) ?? { scope: 0, started: 0, completed: 0, items: [] }))
       .sort((a, b) => b.number - a.number);
 }
 
@@ -190,7 +238,7 @@ export async function getCycle(db: Db, id: string): Promise<CycleDto | null> {
    const rows = await db.select().from(cycleT).where(eq(cycleT.id, id)).limit(1);
    if (rows.length === 0) return null;
    const aggs = await aggregatesByCycle(db, [id]);
-   return toDto(rows[0], aggs.get(id) ?? { scope: 0, started: 0, completed: 0 });
+   return toDto(rows[0], aggs.get(id) ?? { scope: 0, started: 0, completed: 0, items: [] });
 }
 
 export async function getCycleByStatus(
@@ -209,7 +257,7 @@ export async function getCycleByStatus(
    if (rows.length === 0) return null;
    const match = rows[0];
    const aggs = await aggregatesByCycle(db, [match.id]);
-   return toDto(match, aggs.get(match.id) ?? { scope: 0, started: 0, completed: 0 });
+   return toDto(match, aggs.get(match.id) ?? { scope: 0, started: 0, completed: 0, items: [] });
 }
 
 // ── Mutações ─────────────────────────────────────────────────────────

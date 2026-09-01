@@ -1,19 +1,28 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { SidebarTrigger } from '@/components/ui/sidebar';
+import {
+   HeaderActions,
+   HeaderGroup,
+   HeaderTitle,
+   LocationBar,
+   ViewBar,
+} from '@/components/layout/header-primitives';
+import { ViewActions } from '@/components/common/views/view-actions';
 import { filterIssuesForView, filterProjectsForView } from '@/data/views';
 import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useFavoritesStore } from '@/store/favorites-store';
 import { cn } from '@/lib/utils';
-import { BarChart3, MoreHorizontal, Star } from 'lucide-react';
+import { BarChart3, ChevronRight, Star } from 'lucide-react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
 export default function Header() {
-   const { viewId } = useParams<{ orgId: string; viewId: string }>();
+   const { orgId, viewId } = useParams<{ orgId: string; viewId: string }>();
    const view = useWorkspaceStore((s) => s.getViewById(viewId));
+   const teams = useWorkspaceStore((s) => s.teams);
    const liveIssues = useIssuesStore((s) => s.issues);
    const liveProjects = useWorkspaceStore((s) => s.projects);
    const { openPanel, togglePanel } = useRightPanelStore();
@@ -22,6 +31,8 @@ export default function Header() {
 
    if (!view) return null;
 
+   const team = view.teamId ? teams.find((candidate) => candidate.id === view.teamId) : undefined;
+
    // Conta contra os stores vivos (hidratados da API), não os mocks.
    const count =
       view.type === 'issue'
@@ -29,14 +40,46 @@ export default function Header() {
          : filterProjectsForView(view, liveProjects).length;
 
    return (
-      <div className="w-full flex flex-col">
-         <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">
-            <div className="flex items-center gap-2 min-w-0">
-               <SidebarTrigger />
-               <span className="inline-flex size-5 items-center justify-center rounded bg-muted/50 text-xs shrink-0">
+      <>
+         <LocationBar>
+            <HeaderGroup className="pl-2.5">
+               {team ? (
+                  <>
+                     <Link
+                        href={`/${orgId}/team/${team.id}/overview`}
+                        className="flex min-w-0 shrink-0 items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground"
+                     >
+                        <span className="inline-flex size-4 items-center justify-center rounded bg-muted/50 text-[10px]">
+                           {team.icon}
+                        </span>
+                        <span className="max-w-36 truncate text-[13px] font-medium">
+                           {team.name}
+                        </span>
+                     </Link>
+                     <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+                     <Link
+                        href={`/${orgId}/team/${team.id}/views`}
+                        className="shrink-0 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+                     >
+                        Views
+                     </Link>
+                     <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+                  </>
+               ) : (
+                  <>
+                     <Link
+                        href={`/${orgId}/views`}
+                        className="shrink-0 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+                     >
+                        Views
+                     </Link>
+                     <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+                  </>
+               )}
+               <span className="inline-flex size-4 shrink-0 items-center justify-center rounded bg-muted/50 text-[10px]">
                   {view.icon}
                </span>
-               <span className="text-sm font-medium truncate">{view.name}</span>
+               <HeaderTitle>{view.name}</HeaderTitle>
                <button
                   type="button"
                   onClick={() => void toggleFavorite('view', viewId)}
@@ -52,24 +95,26 @@ export default function Header() {
                      )}
                   />
                </button>
-               <MoreHorizontal className="size-3.5 text-muted-foreground shrink-0" />
-            </div>
-         </div>
-         <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">
-            <span className="text-xs text-muted-foreground">
+               <ViewActions view={view} />
+            </HeaderGroup>
+         </LocationBar>
+         <ViewBar className="pl-[18px] pr-2.5">
+            <span className="translate-y-[0.5px] text-xs font-[450] leading-[normal] text-muted-foreground">
                {count} {view.type === 'issue' ? 'issues' : 'projects'}
             </span>
             {view.type === 'issue' && (
-               <Button
-                  size="xs"
-                  variant={openPanel === 'insights' ? 'secondary' : 'ghost'}
-                  onClick={() => togglePanel('insights')}
-                  aria-label="Toggle insights"
-               >
-                  <BarChart3 className="size-4" />
-               </Button>
+               <HeaderActions className="pr-0">
+                  <Button
+                     size="xs"
+                     variant={openPanel === 'insights' ? 'secondary' : 'ghost'}
+                     onClick={() => togglePanel('insights')}
+                     aria-label="Toggle insights"
+                  >
+                     <BarChart3 className="size-4" />
+                  </Button>
+               </HeaderActions>
             )}
-         </div>
-      </div>
+         </ViewBar>
+      </>
    );
 }

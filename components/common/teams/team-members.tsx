@@ -2,13 +2,11 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { api } from '@/lib/client';
 import { ListSkeleton } from '@/components/common/list-skeleton';
 import type { JoinRequestDto } from '@/lib/api/teams';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { Check, Plus, X } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -22,16 +20,13 @@ import { toast } from 'sonner';
 export default function TeamMembers() {
    const { teamId } = useParams<{ orgId: string; teamId: string }>();
    const teams = useWorkspaceStore((s) => s.teams);
-   const workspaceUsers = useWorkspaceStore((s) => s.users);
    const hydrate = useWorkspaceStore((s) => s.hydrate);
    const isAdmin = useWorkspaceStore((s) => s.me?.admin ?? false);
    const loaded = useWorkspaceStore((s) => s.loaded);
    // Sem fallback `?? teams[0]`: id inválido deve dar not-found, não o primeiro time.
    const team = teams.find((t) => t.id === teamId);
 
-   const [open, setOpen] = useState(false);
    const [busy, setBusy] = useState(false);
-   const [pick, setPick] = useState(''); // busca do picker de membros existentes
 
    // Solicitações de entrada pendentes (só admin enxerga/decide).
    const [requests, setRequests] = useState<JoinRequestDto[]>([]);
@@ -77,33 +72,6 @@ export default function TeamMembers() {
 
    const members = [...team.members].sort((a, b) => a.name.localeCompare(b.name));
 
-   /** O e-mail vem sempre do picker — só usuários que já existem podem entrar no time. */
-   const addMember = async (memberEmail: string) => {
-      const value = memberEmail.trim().toLowerCase();
-      if (!value || busy) return;
-      setBusy(true);
-      try {
-         await api.teams.addMember(team.id, value);
-         await hydrate();
-         setPick('');
-         setOpen(false);
-         toast.success(`${value} adicionado ao time ${team.name}`);
-      } catch {
-         toast.error('Não deu pra adicionar o membro');
-      } finally {
-         setBusy(false);
-      }
-   };
-
-   // Usuários do workspace que ainda NÃO estão no time (o picker "estilo Linear").
-   const nonMembers = workspaceUsers
-      .filter((u) => !team.members.some((m) => m.id === u.id))
-      .filter((u) => {
-         const q = pick.trim().toLowerCase();
-         return !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
-      })
-      .slice(0, 8);
-
    const removeMember = async (id: string, name: string) => {
       setBusy(true);
       try {
@@ -119,74 +87,6 @@ export default function TeamMembers() {
 
    return (
       <div className="w-full">
-         <div className="flex items-center justify-between px-6 py-3">
-            <span className="text-sm text-muted-foreground font-medium">Name ↓</span>
-            <div className="flex items-center gap-2">
-               {isAdmin && (
-                  <Popover open={open} onOpenChange={setOpen}>
-                     <PopoverTrigger asChild>
-                        <Button size="xs" variant="secondary">
-                           <Plus className="size-4 mr-1" />
-                           Add a member
-                        </Button>
-                     </PopoverTrigger>
-                     <PopoverContent align="end" className="w-80 p-0">
-                        {/* Picker de membros JÁ na plataforma (estilo Linear) */}
-                        <div className="p-2 border-b">
-                           <Input
-                              placeholder="Buscar membro do workspace…"
-                              value={pick}
-                              onChange={(e) => setPick(e.target.value)}
-                              className="h-8"
-                           />
-                        </div>
-                        <div className="max-h-56 overflow-auto py-1">
-                           {nonMembers.length === 0 ? (
-                              <p className="px-3 py-2 text-xs text-muted-foreground">
-                                 {pick
-                                    ? 'Ninguém encontrado.'
-                                    : 'Todos os membros do workspace já estão no time.'}
-                              </p>
-                           ) : (
-                              nonMembers.map((u) => (
-                                 <button
-                                    key={u.id}
-                                    type="button"
-                                    disabled={busy}
-                                    onClick={() => void addMember(u.email)}
-                                    className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50"
-                                 >
-                                    <Avatar className="size-6 shrink-0">
-                                       <AvatarImage src={u.avatarUrl || undefined} alt={u.name} />
-                                       <AvatarFallback>{u.name[0]}</AvatarFallback>
-                                    </Avatar>
-                                    <span className="flex flex-col min-w-0">
-                                       <span className="font-medium truncate">{u.name}</span>
-                                       <span className="text-xs text-muted-foreground truncate">
-                                          {u.email}
-                                       </span>
-                                    </span>
-                                 </button>
-                              ))
-                           )}
-                        </div>
-                        {/*
-                           Não há convite por e-mail aqui de propósito: o acesso ao Circle
-                           é concedido no Orbis (grupo Keycloak `app-circle`). Digitar um
-                           e-mail novo só criaria um membro fantasma — sem acesso, mas
-                           ocupando a lista e os seletores de assignee.
-                        */}
-                        <p className="p-2 border-t text-[11px] text-muted-foreground">
-                           Só aparece aqui quem já tem acesso ao Circle. Para alguém novo, conceda o
-                           acesso no Orbis; após o primeiro login por SSO a pessoa entra nesta
-                           lista.
-                        </p>
-                     </PopoverContent>
-                  </Popover>
-               )}
-            </div>
-         </div>
-
          {isAdmin && requests.length > 0 && (
             <div className="mx-6 mb-3 rounded-lg border border-amber-500/30 bg-amber-500/5">
                <div className="px-4 py-2 text-xs font-medium text-amber-600 dark:text-amber-400 border-b border-amber-500/20">
@@ -230,37 +130,39 @@ export default function TeamMembers() {
             </div>
          )}
 
-         <div className="bg-container px-6 py-1.5 text-sm flex items-center text-muted-foreground border-b sticky top-0 z-10">
-            <div className="w-[55%] md:w-[45%]">Name</div>
-            <div className="hidden md:block md:w-[35%]">Email</div>
-            <div className="w-[45%] md:w-[20%]">Role</div>
+         <div className="sticky top-0 z-10 flex h-8 pl-[18px] pr-[34px] items-center gap-1.5 border-b bg-container text-xs font-[450] leading-[normal] text-muted-foreground [&>*]:translate-y-[0.5px]">
+            <div className="min-w-0 flex-1">Name</div>
+            <div className="hidden w-[220px] md:block">Email</div>
+            <div className="w-[174px]">Role</div>
          </div>
 
          {members.map((member) => (
             <div
                key={member.id}
-               className="group w-full flex items-center px-6 h-12 hover:bg-sidebar/50 border-b border-border/30 text-sm"
+               className="group flex h-[50px] pl-[18px] pr-[34px] w-full items-center gap-1.5 border-b border-border/30 text-sm hover:bg-accent/40"
             >
-               <div className="w-[55%] md:w-[45%] flex items-center gap-2.5 min-w-0">
+               <div className="flex min-w-0 flex-1 items-center gap-2.5">
                   <Avatar className="size-6 shrink-0">
                      <AvatarImage src={member.avatarUrl || undefined} alt={member.name} />
                      <AvatarFallback>{member.name[0]}</AvatarFallback>
                   </Avatar>
-                  <div className="flex flex-col min-w-0">
-                     <span className="font-medium truncate">{member.name}</span>
-                     <span className="text-xs text-muted-foreground truncate">
+                  <div className="flex min-w-0 flex-col">
+                     <span className="truncate text-[13px] font-medium leading-4">
+                        {member.name}
+                     </span>
+                     <span className="truncate text-xs font-medium leading-[15px] text-muted-foreground">
                         {member.name.split('.')[0]}
                      </span>
                   </div>
                </div>
-               <div className="hidden md:block md:w-[35%] text-muted-foreground truncate">
+               <div className="hidden w-[220px] truncate text-xs font-[450] leading-[normal] text-muted-foreground md:block">
                   {member.email}
                </div>
-               <div className="w-[45%] md:w-[20%] flex items-center justify-between">
+               <div className="flex w-[174px] items-center justify-between">
                   {/* Role é workspace-level e só editável na página Members — editar aqui
                       mudava a role GLOBAL do usuário (escalonamento silencioso). Aqui só
                       exibe a role atual (read-only). */}
-                  <span className="text-xs px-2 py-1 rounded-md bg-accent text-muted-foreground">
+                  <span className="rounded-md bg-accent px-2 py-1 text-xs text-muted-foreground">
                      {member.role}
                   </span>
                   {isAdmin && (

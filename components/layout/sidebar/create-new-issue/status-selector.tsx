@@ -27,7 +27,9 @@ export function StatusSelector({ status, onChange }: StatusSelectorProps) {
    const [value, setValue] = useState<string>(status.id);
 
    const allStatus = useStatuses();
-   const filterByStatus = useIssuesStore((s) => s.filterByStatus);
+   // Conta derivada da fatia assinada: assinar `filterByStatus` (funcao, referencia
+   // estavel) deixaria o contador do dropdown parado quando as issues mudam.
+   const allIssues = useIssuesStore((s) => s.issues);
 
    useEffect(() => {
       setValue(status.id);
@@ -88,7 +90,7 @@ export function StatusSelector({ status, onChange }: StatusSelectorProps) {
                               </div>
                               {value === item.id && <CheckIcon size={16} className="ml-auto" />}
                               <span className="text-muted-foreground text-xs">
-                                 {filterByStatus(item.id).length}
+                                 {allIssues.filter((i) => i.status.id === item.id).length}
                               </span>
                            </CommandItem>
                         ))}

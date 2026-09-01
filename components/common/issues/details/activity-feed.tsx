@@ -180,7 +180,7 @@ function CommentCard({
                         onClick={() => void remove()}
                         disabled={busy}
                         aria-label="Delete comment"
-                        className="text-muted-foreground hover:text-red-500 disabled:opacity-40"
+                        className="text-muted-foreground hover:text-destructive disabled:opacity-40"
                      >
                         <Trash2 className="size-3.5" />
                      </button>

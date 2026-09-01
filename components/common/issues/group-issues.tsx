@@ -22,7 +22,6 @@ import { IssueLine } from './issue-line';
 export interface IssueGroupDescriptor {
    id: string;
    name: string;
-   color: string;
    icon: ReactNode;
    /** Set when grouping by status: enables board drop + "+" default status. */
    status?: Status;
@@ -33,65 +32,6 @@ interface GroupIssuesProps {
    /** Issues of the group, already sorted upstream. */
    issues: Issue[];
    count: number;
-}
-
-export function GroupIssues({ group, issues, count }: GroupIssuesProps) {
-   const { viewType } = useViewStore();
-   const isViewTypeGrid = viewType === 'grid';
-   const { openModal } = useCreateIssueStore();
-
-   return (
-      <div
-         className={cn(
-            isViewTypeGrid
-               ? 'overflow-hidden rounded-md h-full flex-shrink-0 w-[348px] flex flex-col'
-               : ''
-         )}
-      >
-         <div
-            className={cn(
-               'sticky top-0 z-10 bg-container w-full',
-               isViewTypeGrid ? 'h-[50px]' : 'h-10'
-            )}
-         >
-            {/* Header neutro (padrão Linear): só o ícone de status é colorido, sem tinta de fundo. */}
-            <div
-               className={cn(
-                  'w-full h-full flex items-center justify-between',
-                  isViewTypeGrid ? 'px-3' : 'px-6'
-               )}
-            >
-               <div className="flex items-center gap-2">
-                  {group.icon}
-                  <span className="text-sm font-medium">{group.name}</span>
-                  <span className="text-sm text-muted-foreground">{count}</span>
-               </div>
-
-               <Button
-                  className="size-6"
-                  size="icon"
-                  variant="ghost"
-                  onClick={(e) => {
-                     e.stopPropagation();
-                     openModal(group.status);
-                  }}
-               >
-                  <Plus className="size-4" />
-               </Button>
-            </div>
-         </div>
-
-         {viewType === 'list' ? (
-            <div className="space-y-0">
-               {issues.map((issue) => (
-                  <IssueLine key={issue.id} issue={issue} layoutId={true} />
-               ))}
-            </div>
-         ) : (
-            <IssueGridList issues={issues} status={group.status} />
-         )}
-      </div>
-   );
 }
 
 /**
@@ -134,7 +74,7 @@ const IssueGridList: FC<{ issues: Issue[]; status?: Status }> = ({ issues, statu
    return (
       <div
          ref={ref}
-         className="flex-1 h-full overflow-y-auto p-2 bg-zinc-50/50 dark:bg-zinc-900/50 relative"
+         className="relative h-full flex-1 overflow-y-auto pb-3 pl-[13px] pr-4 pt-[9px]"
       >
          <AnimatePresence>
             {isOver && (
@@ -150,7 +90,7 @@ const IssueGridList: FC<{ issues: Issue[]; status?: Status }> = ({ issues, statu
                      transform: `translate(${ref.current?.getBoundingClientRect().left || 0}px, ${ref.current?.getBoundingClientRect().top || 0}px)`,
                   }}
                >
-                  <div className="bg-background border border-border rounded-md p-3 shadow-md max-w-[90%]">
+                  <div className="max-w-[90%] rounded-lg border border-border bg-card p-3 shadow-md">
                      <p className="text-sm font-medium text-center">Drop to update status</p>
                   </div>
                </motion.div>
@@ -181,3 +121,61 @@ const IssueGridList: FC<{ issues: Issue[]; status?: Status }> = ({ issues, statu
       </div>
    );
 };
+
+export function GroupIssues({ group, issues, count }: GroupIssuesProps) {
+   const { viewType } = useViewStore();
+   const isViewTypeGrid = viewType === 'grid';
+   const { openModal } = useCreateIssueStore();
+
+   return (
+      <div
+         className={cn(
+            isViewTypeGrid ? 'flex h-full w-[348px] flex-shrink-0 flex-col overflow-hidden' : ''
+         )}
+      >
+         <div
+            className={cn(
+               'sticky top-0 z-10 w-full',
+               isViewTypeGrid ? 'h-[50px] px-1 pt-1' : 'h-9 px-2'
+            )}
+         >
+            {/* Header neutro (padrão Linear): só o ícone de status é colorido, sem tinta de fundo. */}
+            <div
+               className={cn(
+                  'flex h-full w-full items-center justify-between',
+                  isViewTypeGrid ? 'h-[46px] rounded-t-md bg-background/40 px-3.5' : ''
+               )}
+            >
+               <div className="flex items-center gap-2">
+                  {group.icon}
+                  <span className="text-[13px] font-medium">{group.name}</span>
+                  <span className="text-xs tabular-nums text-muted-foreground">{count}</span>
+               </div>
+
+               <Button
+                  className="size-6"
+                  size="icon"
+                  variant="ghost"
+                  aria-label={`Create issue in ${group.name}`}
+                  onClick={(e) => {
+                     e.stopPropagation();
+                     openModal(group.status);
+                  }}
+               >
+                  <Plus className="size-4" />
+               </Button>
+            </div>
+         </div>
+
+         {viewType === 'list' ? (
+            <div className="space-y-0">
+               {issues.map((issue) => (
+                  <IssueLine key={issue.id} issue={issue} layoutId={true} />
+               ))}
+            </div>
+         ) : (
+            <IssueGridList issues={issues} status={group.status} />
+         )}
+      </div>
+   );
+}

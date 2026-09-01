@@ -53,6 +53,7 @@ export default function AiAgents() {
                   description="Improve AI functionality by sharing usage feedback. Never used to train models"
                   trailing={
                      <Switch
+                        aria-label="Enable usage feedback"
                         checked={usageFeedback}
                         onCheckedChange={(v) => setPref('aiUsageFeedback', v)}
                      />

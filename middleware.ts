@@ -20,7 +20,9 @@ const { auth } = NextAuth(authConfig);
  * direto no handler. A allowlist pública vive em `lib/api/public-routes.ts`, lida
  * também pelo teste-guarda, para as duas camadas nunca divergirem.
  */
-const PUBLIC_PAGE_PREFIXES = ['/login', '/signup'];
+// `/invite/<token>`: landing do magic link — quem chega ainda nao tem sessao (e o
+// ponto). A pagina nao autoriza nada; quem autoriza e o `signIn` (ver auth.ts).
+const PUBLIC_PAGE_PREFIXES = ['/login', '/signup', '/invite'];
 
 function unauthorized(): Response {
    return new Response(JSON.stringify({ title: 'Unauthorized', status: 401 }), {

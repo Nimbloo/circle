@@ -73,11 +73,11 @@ function ImagePlaceholder({
 
 function VideoPlaceholder({ title, duration }: { title: string; duration?: string }) {
    return (
-      <div className="my-4 w-full aspect-video rounded-lg border border-border/60 bg-zinc-950/90 dark:bg-zinc-900/80 relative flex items-center justify-center">
-         <div className="size-12 rounded-full bg-white/10 backdrop-blur flex items-center justify-center">
-            <Play className="size-5 text-white fill-white ml-0.5" />
+      <div className="relative my-4 flex aspect-video w-full items-center justify-center rounded-lg border border-border/60 bg-media-overlay-background">
+         <div className="flex size-12 items-center justify-center rounded-full bg-media-overlay-foreground/10 backdrop-blur">
+            <Play className="ml-0.5 size-5 fill-media-overlay-foreground text-media-overlay-foreground" />
          </div>
-         <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-xs text-white/80">
+         <div className="absolute right-3 bottom-3 left-3 flex items-center justify-between text-xs text-media-overlay-foreground/80">
             <span className="truncate">{title}</span>
             {duration && <span className="shrink-0 ml-2 font-mono">{duration}</span>}
          </div>
@@ -114,7 +114,7 @@ function IssueRef({ identifier, note }: { identifier: string; note?: string }) {
  */
 export function ContentBlocks({ blocks }: { blocks: ContentBlock[] }) {
    return (
-      <div className="text-[15px] leading-7">
+      <div className="text-[15px] leading-6">
          {blocks.map((block, index) => {
             switch (block.type) {
                case 'heading':
@@ -170,11 +170,13 @@ export function ContentBlocks({ blocks }: { blocks: ContentBlock[] }) {
                                  className={cn(
                                     'mt-1 size-4 rounded border flex items-center justify-center shrink-0',
                                     item.checked
-                                       ? 'bg-indigo-500 border-indigo-500'
+                                       ? 'border-primary bg-primary'
                                        : 'border-muted-foreground/40'
                                  )}
                               >
-                                 {item.checked && <Check className="size-3 text-white" />}
+                                 {item.checked && (
+                                    <Check className="size-3 text-primary-foreground" />
+                                 )}
                               </span>
                               <span
                                  className={cn(
@@ -213,7 +215,7 @@ export function ContentBlocks({ blocks }: { blocks: ContentBlock[] }) {
                   return (
                      <blockquote
                         key={index}
-                        className="my-4 border-l-2 border-indigo-400/60 pl-4 text-muted-foreground italic"
+                        className="my-4 border-l-2 border-primary/60 pl-4 text-muted-foreground italic"
                      >
                         <InlineText text={block.text} />
                         {block.author && (

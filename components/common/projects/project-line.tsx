@@ -37,11 +37,15 @@ import { ProjectContextMenu } from './project-context-menu';
 
 interface ProjectLineProps {
    project: Project;
+   showTeam?: boolean;
 }
 
-export default function ProjectLine({ project }: ProjectLineProps) {
+export default function ProjectLine({ project, showTeam = false }: ProjectLineProps) {
    const { orgId } = useParams<{ orgId: string }>();
    const displayProperties = useProjectsDisplayStore((s) => s.displayProperties);
+   const team = useWorkspaceStore((state) =>
+      showTeam ? state.teams.find((item) => item.id === project.teamId) : undefined
+   );
    const applyProject = useWorkspaceStore((s) => s.applyProject);
    const removeProjectLocal = useWorkspaceStore((s) => s.removeProjectLocal);
    const [confirmOpen, setConfirmOpen] = useState(false);
@@ -81,21 +85,22 @@ export default function ProjectLine({ project }: ProjectLineProps) {
 
    return (
       <ProjectContextMenu project={project}>
-         <div className="w-full flex items-center py-3 px-6 border-b hover:bg-sidebar/50 border-muted-foreground/5 text-sm">
-            <div className="flex-1 min-w-0 flex items-center gap-2">
-               <div className="relative">
-                  <div className="inline-flex size-6 bg-muted/50 items-center justify-center rounded shrink-0">
-                     <project.icon className="size-4" />
-                  </div>
-               </div>
-               <div className="flex flex-col items-start overflow-hidden">
-                  <Link
-                     href={`/${orgId}/project/${project.id}/overview`}
-                     className="font-medium truncate w-full hover:underline underline-offset-2"
-                  >
-                     {project.name}
-                  </Link>
-               </div>
+         <div className="group/project flex h-12 w-full items-center text-xs hover:bg-accent/40">
+            <div className="w-[38px] shrink-0" />
+            <div className="flex min-w-0 flex-1 items-center gap-3 px-1.5">
+               <project.icon className="size-4 shrink-0" />
+               <Link
+                  href={`/${orgId}/project/${project.id}/overview`}
+                  className="truncate text-[13px] font-medium leading-4 hover:underline hover:underline-offset-2"
+               >
+                  {project.name}
+               </Link>
+               {showTeam && team && (
+                  <span className="hidden min-w-0 items-center gap-1 text-xs text-muted-foreground lg:inline-flex">
+                     <span className="shrink-0">{team.icon}</span>
+                     <span className="truncate">{team.name}</span>
+                  </span>
+               )}
                {displayProperties.labels &&
                   project.labels.map((label) => (
                      <span
@@ -112,7 +117,7 @@ export default function ProjectLine({ project }: ProjectLineProps) {
             </div>
 
             {displayProperties.health && (
-               <div className="hidden sm:block w-[120px] shrink-0">
+               <div className="hidden w-[136px] shrink-0 px-3 sm:block">
                   <HealthPopover
                      project={project}
                      onHealthChange={(healthId) => patchProject({ healthId }, 'Health updated')}
@@ -120,7 +125,7 @@ export default function ProjectLine({ project }: ProjectLineProps) {
                </div>
             )}
             {displayProperties.priority && (
-               <div className="hidden md:block w-[70px] shrink-0">
+               <div className="hidden w-[68px] shrink-0 px-3 md:block">
                   <PrioritySelector
                      priority={project.priority}
                      onPriorityChange={(priorityId) =>
@@ -130,7 +135,7 @@ export default function ProjectLine({ project }: ProjectLineProps) {
                </div>
             )}
             {displayProperties.lead && (
-               <div className="hidden xl:block w-[130px] shrink-0">
+               <div className="hidden w-[132px] shrink-0 px-3 xl:block">
                   <LeadSelector
                      lead={project.lead}
                      onLeadChange={(userId) => patchProject({ leadId: userId }, 'Lead updated')}
@@ -138,7 +143,7 @@ export default function ProjectLine({ project }: ProjectLineProps) {
                </div>
             )}
             {displayProperties.targetDate && (
-               <div className="hidden xl:block w-[110px] shrink-0">
+               <div className="hidden w-[92px] shrink-0 px-3 xl:block">
                   <DatePicker
                      date={project.targetDate ? new Date(project.targetDate) : undefined}
                      onDateChange={(date) =>
@@ -151,12 +156,12 @@ export default function ProjectLine({ project }: ProjectLineProps) {
                </div>
             )}
             {displayProperties.issues && (
-               <div className="hidden xl:block w-[60px] shrink-0 text-muted-foreground text-xs pl-2.5">
+               <div className="hidden w-[60px] shrink-0 px-3 text-xs text-muted-foreground xl:block">
                   {issueCount}
                </div>
             )}
             {displayProperties.status && (
-               <div className="w-[90px] shrink-0">
+               <div className="w-[92px] shrink-0 px-3">
                   <StatusWithPercent
                      status={project.status}
                      percentComplete={percentComplete}
@@ -165,13 +170,13 @@ export default function ProjectLine({ project }: ProjectLineProps) {
                </div>
             )}
 
-            <div className="w-8 shrink-0 flex justify-end">
+            <div className="flex w-12 shrink-0 justify-center">
                <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                      <Button
                         size="icon"
                         variant="ghost"
-                        className="size-7"
+                        className="size-7 opacity-0 transition-opacity group-hover/project:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
                         aria-label="Project actions"
                      >
                         <MoreHorizontal className="size-4 text-muted-foreground" />

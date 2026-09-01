@@ -195,7 +195,7 @@ export function CycleActions({ cycle }: { cycle: Cycle }) {
       <>
          <DropdownMenu>
             <DropdownMenuTrigger asChild>
-               <Button size="icon" variant="ghost" className="size-7" aria-label="Cycle actions">
+               <Button size="icon" variant="ghost" className="size-8" aria-label="Cycle actions">
                   <MoreHorizontal className="size-4 text-muted-foreground" />
                </Button>
             </DropdownMenuTrigger>

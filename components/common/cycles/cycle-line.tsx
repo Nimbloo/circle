@@ -14,7 +14,7 @@ export function CyclePlayIcon({ className }: { className?: string }) {
          height="16"
          viewBox="0 0 16 16"
          fill="none"
-         className={cn('text-muted-foreground shrink-0', className)}
+         className={cn('shrink-0 text-muted-foreground', className)}
          role="img"
          focusable="false"
       >
@@ -28,14 +28,9 @@ interface CycleLineProps {
    cycle: Cycle;
 }
 
-/**
- * One row of the cycles timeline. Current / upcoming cycles link to their
- * dedicated issue views ("/cycle/active" and "/cycle/upcoming").
- */
+/** One row of the cycles timeline. */
 export default function CycleLine({ cycle }: CycleLineProps) {
    const { orgId } = useParams<{ orgId: string }>();
-
-   // Usa o time REAL do cycle (não o da URL) — robusto se a lista misturar times.
    const href =
       cycle.status === 'current'
          ? `/${orgId}/team/${cycle.teamId}/cycle/active`
@@ -44,56 +39,62 @@ export default function CycleLine({ cycle }: CycleLineProps) {
            : undefined;
 
    const content = (
-      <div className="w-full flex items-center justify-between gap-4 px-6 h-12 hover:bg-sidebar/50 rounded-md">
-         <div className="flex items-center gap-3 min-w-0">
+      <>
+         <div className="flex min-w-0 items-center gap-4">
             <CyclePlayIcon />
-            <span className="text-sm font-medium truncate">{cycle.name}</span>
+            <span className="truncate text-[13px] font-medium leading-4">{cycle.name}</span>
          </div>
+         <span className="hidden whitespace-nowrap pl-1.5 text-[13px] font-[450] leading-4 text-muted-foreground sm:block">
+            {cycleStatusLabel[cycle.status]}
+         </span>
 
-         <div className="flex items-center gap-3 sm:gap-6 shrink-0">
-            <span className="text-xs px-2 py-1 rounded-md bg-accent text-muted-foreground whitespace-nowrap">
-               {cycleStatusLabel[cycle.status]}
-            </span>
-
-            {cycle.status === 'completed' ? (
-               <>
-                  <div className="hidden sm:flex items-center gap-2 w-28 justify-end">
-                     <CapacityRing value={cycle.successRate ?? 0} color="#6771c5" />
-                     <span className="text-sm">
-                        {cycle.successRate ?? 0}%{' '}
-                        <span className="text-muted-foreground">success</span>
-                     </span>
-                  </div>
-                  <span className="hidden md:inline-block text-sm w-28 text-right">
-                     {cycle.completed} <span className="text-muted-foreground">completed</span>
-                  </span>
-               </>
-            ) : (
-               <div className="hidden sm:flex items-center gap-2 w-36 justify-end whitespace-nowrap">
-                  <CapacityRing value={cycle.capacity} color="#6771c5" />
-                  <span className="text-sm">
-                     {cycle.capacity}% <span className="text-muted-foreground">of capacity</span>
-                  </span>
+         {cycle.status === 'completed' ? (
+            <>
+               <div className="hidden items-center gap-2 whitespace-nowrap text-[13px] leading-4 xl:flex">
+                  <CapacityRing value={cycle.successRate ?? 0} />
+                  <span className="font-medium">{cycle.successRate ?? 0}%</span>
+                  <span className="text-muted-foreground">success</span>
                </div>
-            )}
+               <div className="hidden items-center gap-1 whitespace-nowrap text-[13px] leading-4 xl:flex">
+                  <span className="font-medium">{cycle.completed}</span>
+                  <span className="text-muted-foreground">completed</span>
+               </div>
+            </>
+         ) : (
+            <div className="hidden items-center gap-2 whitespace-nowrap text-[13px] leading-4 xl:flex">
+               <CapacityRing value={cycle.capacity} />
+               <span className="font-medium">{cycle.capacity}%</span>
+               <span className="text-muted-foreground">of capacity</span>
+            </div>
+         )}
 
-            <span className="text-sm w-14 sm:w-20 text-right whitespace-nowrap">
-               {cycle.scope} <span className="text-muted-foreground">scope</span>
-            </span>
-         </div>
-      </div>
+         <span className="hidden items-center gap-1 whitespace-nowrap text-[13px] leading-4 sm:flex">
+            <span className="font-medium">{cycle.scope}</span>
+            <span className="text-muted-foreground">scope</span>
+         </span>
+      </>
    );
 
    return (
-      <div className="w-full flex items-center pr-2">
-         {href ? (
-            <Link href={href} className="block flex-1 min-w-0">
-               {content}
-            </Link>
-         ) : (
-            <div className="flex-1 min-w-0">{content}</div>
+      <div
+         className={cn(
+            'relative grid h-[70px] w-full grid-cols-[minmax(0,1fr)_44px] items-center gap-x-3 transition-colors hover:bg-sidebar/50 sm:grid-cols-[minmax(0,1fr)_75px_60px_44px]',
+            cycle.status === 'completed'
+               ? 'xl:grid-cols-[minmax(0,1fr)_80px_110px_84px_60px_44px]'
+               : 'xl:grid-cols-[minmax(0,1fr)_75px_142px_60px_44px]'
          )}
-         <CycleActions cycle={cycle} />
+      >
+         {href && (
+            <Link
+               href={href}
+               aria-label={`Open ${cycle.name}`}
+               className="absolute inset-y-0 left-0 right-14 rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+         )}
+         {content}
+         <div className="relative z-10 flex size-11 items-center justify-center">
+            <CycleActions cycle={cycle} />
+         </div>
       </div>
    );
 }

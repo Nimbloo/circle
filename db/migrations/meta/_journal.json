@@ -218,6 +218,20 @@
          "when": 1788208152311,
          "tag": "0030_nappy_king_cobra",
          "breakpoints": true
+      },
+      {
+         "idx": 31,
+         "version": "7",
+         "when": 1788228193134,
+         "tag": "0031_flimsy_bedlam",
+         "breakpoints": true
+      },
+      {
+         "idx": 32,
+         "version": "7",
+         "when": 1788265876945,
+         "tag": "0032_powerful_shinobi_shaw",
+         "breakpoints": true
       }
    ]
 }

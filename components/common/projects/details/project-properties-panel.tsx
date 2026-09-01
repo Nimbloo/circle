@@ -90,7 +90,7 @@ function BreakdownList({
                      <span className="text-sm truncate">{row.label}</span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0 text-sm text-muted-foreground">
-                     <CapacityRing value={row.completedPercent} color="#6771c5" />
+                     <CapacityRing value={row.completedPercent} color="var(--primary)" />
                      <span className="whitespace-nowrap">
                         {row.completedPercent}% of {row.total}
                      </span>
@@ -105,8 +105,8 @@ function BreakdownList({
 function PropertyRow({ label, children }: { label: string; children: React.ReactNode }) {
    return (
       <div className="flex items-center justify-between gap-4 min-h-7">
-         <span className="text-sm text-muted-foreground shrink-0">{label}</span>
-         <div className="flex items-center gap-1.5 text-sm min-w-0">{children}</div>
+         <span className="shrink-0 text-[13px] text-muted-foreground">{label}</span>
+         <div className="flex min-w-0 items-center gap-1.5 text-[13px]">{children}</div>
       </div>
    );
 }
@@ -228,7 +228,9 @@ export function ProjectPropertiesPanel({
                leading: (
                   <span
                      className="size-2.5 rounded-full shrink-0"
-                     style={{ backgroundColor: sample.labels[0]?.color ?? 'gray' }}
+                     style={{
+                        backgroundColor: sample.labels[0]?.color ?? 'var(--muted-foreground)',
+                     }}
                   />
                ),
                target: { columnId: 'labels', value: String(key) },
@@ -254,10 +256,10 @@ export function ProjectPropertiesPanel({
    );
 
    return (
-      <div className="flex flex-col h-full w-full overflow-y-auto">
+      <div className="flex h-full w-full flex-col gap-2 overflow-y-auto">
          {/* Properties */}
-         <div className="px-5 pt-4 pb-4 border-b">
-            <h3 className="text-sm font-medium mb-2.5">Properties</h3>
+         <div className="rounded-[10px] border bg-card p-3">
+            <h3 className="mb-2.5 text-[13px] font-medium leading-4">Properties</h3>
             <div className="flex flex-col gap-1">
                <PropertyRow label="Status">
                   <project.status.icon />
@@ -364,9 +366,9 @@ export function ProjectPropertiesPanel({
          </div>
 
          {/* Milestones */}
-         <div className="px-5 py-4 border-b">
+         <div className="rounded-[10px] border bg-card p-3">
             <div className="flex items-center justify-between mb-2">
-               <h3 className="text-sm font-medium">Milestones</h3>
+               <h3 className="text-[13px] font-medium leading-4">Milestones</h3>
                {canEditMilestones && (
                   <button
                      type="button"
@@ -398,12 +400,14 @@ export function ProjectPropertiesPanel({
                               }
                               className={cn(
                                  milestone.completed
-                                    ? 'size-4 rounded-full bg-violet-500 flex items-center justify-center shrink-0'
+                                    ? 'size-4 rounded-full bg-primary flex items-center justify-center shrink-0'
                                     : 'size-4 rounded-full border border-muted-foreground/40 shrink-0',
                                  canEditMilestones && 'cursor-pointer'
                               )}
                            >
-                              {milestone.completed && <Check className="size-2.5 text-white" />}
+                              {milestone.completed && (
+                                 <Check className="size-2.5 text-primary-foreground" />
+                              )}
                            </button>
                            <span
                               className={
@@ -424,7 +428,7 @@ export function ProjectPropertiesPanel({
                                  type="button"
                                  onClick={() => handleDeleteMilestone(milestone.id)}
                                  aria-label="Delete milestone"
-                                 className="opacity-0 group-hover/ms:opacity-100 text-muted-foreground hover:text-red-500 transition-opacity"
+                                 className="text-muted-foreground opacity-0 transition-opacity group-hover/ms:opacity-100 hover:text-destructive"
                               >
                                  <Trash2 className="size-3.5" />
                               </button>
@@ -466,68 +470,70 @@ export function ProjectPropertiesPanel({
          </div>
 
          {/* Progress */}
-         <div className="px-5 py-4 border-b">
-            <h3 className="text-sm font-medium mb-3">Progress</h3>
-            <div className="grid grid-cols-3 gap-2 mb-2">
-               <div className="flex flex-col gap-0.5">
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                     <span className="size-2 rounded-[2px] bg-[#8f9299]" />
-                     Scope
+         {issues.length > 0 && (
+            <div className="rounded-[10px] border bg-card p-3">
+               <h3 className="mb-3 text-[13px] font-medium leading-4">Progress</h3>
+               <div className="grid grid-cols-3 gap-2 mb-2">
+                  <div className="flex flex-col gap-0.5">
+                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="size-2 rounded-[2px] bg-muted-foreground" />
+                        Scope
+                     </div>
+                     <span className="text-sm font-medium">{issues.length}</span>
                   </div>
-                  <span className="text-sm font-medium">{issues.length}</span>
-               </div>
-               <div className="flex flex-col gap-0.5">
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                     <span className="size-2 rounded-[2px] bg-[#facc15]" />
-                     Started
+                  <div className="flex flex-col gap-0.5">
+                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="size-2 rounded-[2px] bg-chart-4" />
+                        Started
+                     </div>
+                     <span className="text-sm font-medium">{started}</span>
                   </div>
-                  <span className="text-sm font-medium">{started}</span>
-               </div>
-               <div className="flex flex-col gap-0.5">
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                     <span className="size-2 rounded-[2px] bg-[#6771c5]" />
-                     Completed
+                  <div className="flex flex-col gap-0.5">
+                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="size-2 rounded-[2px] bg-primary" />
+                        Completed
+                     </div>
+                     <span className="text-sm font-medium">{completed}</span>
                   </div>
-                  <span className="text-sm font-medium">{completed}</span>
                </div>
+               <div className="mb-3">
+                  <ProjectProgressChart
+                     startDate={project.startDate}
+                     endDate={project.targetDate ?? project.startDate}
+                     scope={issues.length}
+                     started={started}
+                     completed={completed}
+                  />
+               </div>
+               <Tabs defaultValue="assignees">
+                  <TabsList className="h-8 bg-transparent gap-1 p-0">
+                     <TabsTrigger value="assignees" className="text-xs px-2.5 rounded-full">
+                        Assignees
+                     </TabsTrigger>
+                     <TabsTrigger value="labels" className="text-xs px-2.5 rounded-full">
+                        Labels
+                     </TabsTrigger>
+                     <TabsTrigger value="cycles" className="text-xs px-2.5 rounded-full">
+                        Cycles
+                     </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="assignees">
+                     <BreakdownList rows={assigneeRows} panelFilter={panelFilter} />
+                  </TabsContent>
+                  <TabsContent value="labels">
+                     <BreakdownList rows={labelRows} panelFilter={panelFilter} />
+                  </TabsContent>
+                  <TabsContent value="cycles">
+                     <BreakdownList rows={cycleRows} panelFilter={panelFilter} />
+                  </TabsContent>
+               </Tabs>
             </div>
-            <div className="mb-3">
-               <ProjectProgressChart
-                  startDate={project.startDate}
-                  endDate={project.targetDate ?? project.startDate}
-                  scope={issues.length}
-                  started={started}
-                  completed={completed}
-               />
-            </div>
-            <Tabs defaultValue="assignees">
-               <TabsList className="h-8 bg-transparent gap-1 p-0">
-                  <TabsTrigger value="assignees" className="text-xs px-2.5 rounded-full">
-                     Assignees
-                  </TabsTrigger>
-                  <TabsTrigger value="labels" className="text-xs px-2.5 rounded-full">
-                     Labels
-                  </TabsTrigger>
-                  <TabsTrigger value="cycles" className="text-xs px-2.5 rounded-full">
-                     Cycles
-                  </TabsTrigger>
-               </TabsList>
-               <TabsContent value="assignees">
-                  <BreakdownList rows={assigneeRows} panelFilter={panelFilter} />
-               </TabsContent>
-               <TabsContent value="labels">
-                  <BreakdownList rows={labelRows} panelFilter={panelFilter} />
-               </TabsContent>
-               <TabsContent value="cycles">
-                  <BreakdownList rows={cycleRows} panelFilter={panelFilter} />
-               </TabsContent>
-            </Tabs>
-         </div>
+         )}
 
          {/* Activity */}
-         <div className="px-5 py-4">
+         <div className="rounded-[10px] border bg-card p-3">
             <div className="flex items-center justify-between mb-2">
-               <h3 className="text-sm font-medium">Activity</h3>
+               <h3 className="text-[13px] font-medium leading-4">Activity</h3>
             </div>
             <div className="flex flex-col gap-3">
                {detail.activity.map((event) => (

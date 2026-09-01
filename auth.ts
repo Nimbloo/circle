@@ -9,7 +9,7 @@
  * no runtime Node dos route handlers).
  */
 import NextAuth from 'next-auth';
-import { authConfig, isAllowedKeycloakProfile } from './auth.config';
+import { authConfig, hasNimblooIdentity } from './auth.config';
 
 function normalizeEmail(email: unknown): string | null {
    if (typeof email !== 'string') return null;
@@ -22,15 +22,37 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
    callbacks: {
       async signIn({ account, profile }) {
          if (account?.provider !== 'keycloak') return true;
-         // Gate único: domínio + e-mail verificado + grupo `app-circle` (ver
-         // `isAllowedKeycloakProfile` em auth.config.ts para o porquê e a dependência
-         // do claim `groups` no ID token).
-         if (!isAllowedKeycloakProfile(profile)) return false;
+
+         // PISO — identidade Nimbloo verificada (domínio + email_verified). Nem convite
+         // dispensa isto: o convite libera a AUTORIZAÇÃO, nunca a autenticação.
+         if (!hasNimblooIdentity(profile)) return false;
          const email = normalizeEmail((profile as { email?: unknown } | null | undefined)?.email);
          if (!email) return false;
+
          const { getDb } = await import('@/db');
+         const db = getDb();
+
+         // A regra vive em `lib/api/login-gate.ts` (grupo OU convite), testada direto em
+         // `test/login-gate.test.ts` — aqui dentro do callback ela só seria exercitável
+         // através do NextAuth. Uma cópia da regra aqui divergiria em silêncio.
+         const { decideKeycloakLogin } = await import('@/lib/api/login-gate');
+         const decision = await decideKeycloakLogin(db, profile, email);
+         if (!decision.allowed) return false;
+
          const { getOrCreateUser } = await import('@/lib/api/users');
-         await getOrCreateUser(getDb(), email);
+         const user = await getOrCreateUser(db, email);
+
+         if (decision.via === 'invite') {
+            // Entrada por convite é evento de segurança: fica no audit log.
+            const { recordAudit } = await import('@/lib/api/audit');
+            await recordAudit(db, {
+               actorId: user.id,
+               action: 'invite.accept',
+               targetType: 'user',
+               targetId: user.id,
+               meta: { email },
+            });
+         }
          return true;
       },
       async jwt({ token, user }) {

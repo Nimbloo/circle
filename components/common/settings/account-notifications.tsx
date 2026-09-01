@@ -21,6 +21,7 @@ export default function AccountNotifications() {
                   description="Recebe um e-mail quando algo importante acontece nas suas issues"
                   trailing={
                      <Switch
+                        aria-label="Email notifications"
                         checked={prefs.emailNotifications}
                         onCheckedChange={(v) => prefs.setPref('emailNotifications', v)}
                      />
@@ -32,6 +33,7 @@ export default function AccountNotifications() {
                   description="Envia as notificações para o canal do Slack conectado ao workspace"
                   trailing={
                      <Switch
+                        aria-label="Slack notifications"
                         checked={prefs.slackNotifications}
                         onCheckedChange={(v) => prefs.setPref('slackNotifications', v)}
                      />
@@ -63,6 +65,7 @@ export default function AccountNotifications() {
                   description="Highlight new features and improvements in the app sidebar"
                   trailing={
                      <Switch
+                        aria-label="Show updates in sidebar"
                         checked={prefs.showUpdatesInSidebar}
                         onCheckedChange={(v) => prefs.setPref('showUpdatesInSidebar', v)}
                      />
@@ -73,6 +76,7 @@ export default function AccountNotifications() {
                   description="Receive an email twice a month highlighting new features and improvements"
                   trailing={
                      <Switch
+                        aria-label="Changelog newsletter"
                         checked={prefs.changelogNewsletter}
                         onCheckedChange={(v) => prefs.setPref('changelogNewsletter', v)}
                      />
@@ -87,6 +91,7 @@ export default function AccountNotifications() {
                   description="Occasional updates to help you get the most out of Nimbloo"
                   trailing={
                      <Switch
+                        aria-label="Marketing and onboarding"
                         checked={prefs.marketing}
                         onCheckedChange={(v) => prefs.setPref('marketing', v)}
                      />
@@ -101,6 +106,7 @@ export default function AccountNotifications() {
                   description="Receive an email when an invite you sent is accepted"
                   trailing={
                      <Switch
+                        aria-label="Invite accepted"
                         checked={prefs.inviteAccepted}
                         onCheckedChange={(v) => prefs.setPref('inviteAccepted', v)}
                      />
@@ -111,6 +117,7 @@ export default function AccountNotifications() {
                   description="Important updates about terms of service or privacy policy changes"
                   trailing={
                      <Switch
+                        aria-label="Privacy and legal updates"
                         checked={prefs.privacyLegal}
                         onCheckedChange={(v) => prefs.setPref('privacyLegal', v)}
                      />

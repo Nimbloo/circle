@@ -34,25 +34,31 @@ type IssueGridProps = {
 // Custom DragLayer component to render the drag preview
 function IssueDragPreview({ issue }: { issue: Issue }) {
    return (
-      <div className="w-full p-3 bg-background rounded-md border border-border/50 overflow-hidden">
-         <div className="flex items-center justify-between gap-2 mb-2 min-h-5">
-            <span className="text-xs text-muted-foreground font-medium">{issue.identifier}</span>
-            <AssigneeUser user={issue.assignee} issueId={issue.id} />
+      <div className="w-full overflow-hidden rounded-lg bg-card p-2 shadow-[var(--card-shadow)]">
+         <div className="relative mb-2.5 h-[37px]">
+            <div className="flex h-[37px] flex-col pl-1 pr-[34px]">
+               <span className="text-xs font-medium tabular-nums text-muted-foreground">
+                  {issue.identifier}
+               </span>
+               <div className="mt-1.5 flex h-4 items-center gap-1.5">
+                  <StatusSelector compact status={issue.status} issueId={issue.id} />
+                  <h3 className="line-clamp-2 text-[13px] font-medium leading-4">{issue.title}</h3>
+               </div>
+            </div>
+            <div className="absolute right-0 top-0">
+               <AssigneeUser compact user={issue.assignee} issueId={issue.id} />
+            </div>
          </div>
-         <div className="flex items-start gap-1.5 mb-2">
-            <span className="mt-px shrink-0">
-               <StatusSelector status={issue.status} issueId={issue.id} />
-            </span>
-            <h3 className="text-sm font-medium leading-snug line-clamp-2">{issue.title}</h3>
-         </div>
-         <div className="flex items-center flex-wrap gap-1.5 mb-2">
-            <PrioritySelector priority={issue.priority} issueId={issue.id} />
+         <div className="flex min-h-6 flex-wrap items-center gap-1">
+            <PrioritySelector compact priority={issue.priority} issueId={issue.id} />
             <LabelBadge label={issue.labels} />
             {issue.project && <ProjectBadge project={issue.project} />}
          </div>
-         <span className="text-xs text-muted-foreground">
-            Created {format(new Date(issue.createdAt), 'MMM d')}
-         </span>
+         <div className="mt-1.5 flex min-h-6 items-center">
+            <span className="text-xs tabular-nums text-muted-foreground">
+               Created {format(new Date(issue.createdAt), 'MMM d')}
+            </span>
+         </div>
       </div>
    );
 }
@@ -147,56 +153,57 @@ export function IssueGrid({ issue, orderedIssues, layout = true }: IssueGridProp
          <ContextMenuTrigger asChild>
             <motion.div
                ref={ref}
-               className="w-full p-3 bg-background rounded-md shadow-xs border border-border/50 cursor-default"
+               className="w-full cursor-default rounded-lg bg-card p-2 shadow-[var(--card-shadow)]"
                layoutId={layout ? `issue-grid-${issue.identifier}` : undefined}
                style={{
                   opacity: isDragging ? 0.5 : 1,
                   cursor: isDragging ? 'grabbing' : 'default',
                }}
             >
-               {/* Row 1: id (esq) + assignee (dir) — padrão Linear */}
-               <div className="flex items-center justify-between gap-2 mb-2 min-h-5">
-                  {displayProperties.id ? (
-                     <span className="text-xs text-muted-foreground font-medium">
-                        {issue.identifier}
-                     </span>
-                  ) : (
-                     <span />
-                  )}
+               {/* Bloco superior: conteúdo à esquerda e assignee fixo no canto. */}
+               <div className="relative mb-2.5 h-[37px]">
+                  <div className="flex h-[37px] flex-col pl-1 pr-[34px]">
+                     {displayProperties.id ? (
+                        <span className="text-xs font-medium tabular-nums text-muted-foreground">
+                           {issue.identifier}
+                        </span>
+                     ) : (
+                        <span />
+                     )}
+                     <div className="mt-1.5 flex h-4 items-center gap-1.5">
+                        {displayProperties.status && (
+                           <StatusSelector compact status={issue.status} issueId={issue.id} />
+                        )}
+                        <Link
+                           href={`/${orgId ?? 'nimbloo'}/issue/${issue.identifier}`}
+                           className="min-w-0"
+                        >
+                           <h3 className="line-clamp-2 text-[13px] font-medium leading-4">
+                              {issue.title}
+                           </h3>
+                        </Link>
+                     </div>
+                  </div>
                   {displayProperties.assignee && (
-                     <AssigneeUser user={issue.assignee} issueId={issue.id} />
+                     <div className="absolute right-0 top-0">
+                        <AssigneeUser compact user={issue.assignee} issueId={issue.id} />
+                     </div>
                   )}
                </div>
-               {/* Row 2: status inline com o título */}
-               <div className="flex items-start gap-1.5 mb-2">
-                  {displayProperties.status && (
-                     <span className="mt-px shrink-0">
-                        <StatusSelector status={issue.status} issueId={issue.id} />
-                     </span>
-                  )}
-                  <Link
-                     href={`/${orgId ?? 'nimbloo'}/issue/${issue.identifier}`}
-                     className="min-w-0"
-                  >
-                     <h3 className="text-sm font-medium leading-snug line-clamp-2">
-                        {issue.title}
-                     </h3>
-                  </Link>
-               </div>
-               {/* Row 3: prioridade + labels + projeto */}
-               <div className="flex items-center flex-wrap gap-1.5 mb-2">
+               {/* Propriedades */}
+               <div className="flex min-h-6 flex-wrap items-center gap-1">
                   {displayProperties.priority && (
-                     <PrioritySelector priority={issue.priority} issueId={issue.id} />
+                     <PrioritySelector compact priority={issue.priority} issueId={issue.id} />
                   )}
                   {displayProperties.labels && <LabelBadge label={issue.labels} />}
                   {displayProperties.project && issue.project && (
                      <ProjectBadge project={issue.project} />
                   )}
                </div>
-               {/* Row 4: created (esq) + rollup de sub-issues (dir) */}
-               <div className="flex items-center justify-between gap-2">
+               {/* Rodapé */}
+               <div className="mt-1.5 flex min-h-6 items-center justify-between gap-2">
                   {displayProperties.created ? (
-                     <span className="text-xs text-muted-foreground">
+                     <span className="text-xs tabular-nums text-muted-foreground">
                         Created {format(new Date(issue.createdAt), 'MMM d')}
                      </span>
                   ) : (

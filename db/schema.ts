@@ -67,6 +67,9 @@ export const appUser = pgTable('app_user', {
    passwordHash: varchar('password_hash', { length: 255 }), // nullable — login por credenciais (bcrypt); null = só SSO/convite pendente
    inviteToken: varchar('invite_token', { length: 64 }), // nullable — token single-use do convite; null = SSO ou já resgatado
    avatarUrl: varchar('avatar_url', { length: 512 }),
+   // Handle do GitHub. Sem isto nao ha como ligar um PR (que guarda o LOGIN do GitHub)
+   // ao usuario do Circle — era o bloqueio de "For you"/"Created" em Reviews.
+   githubLogin: varchar('github_login', { length: 128 }),
    role: varchar('role', { length: 16 }).notNull().default('Member'), // Member|Admin|Guest|Application
    presence: varchar('presence', { length: 16 }).notNull().default('offline'),
    timezone: varchar('timezone', { length: 64 }),
@@ -553,6 +556,35 @@ export const initiativeUpdate = pgTable(
  * resumindo os campos que mudaram (o "changed status, owner" do Linear). Distinto de
  * `initiative_update`, que é o post editorial de health escrito à mão.
  */
+/**
+ * Convite de acesso ao Circle. Existe porque o acesso normal vem do grupo Keycloak
+ * `app-circle` (concedido no Orbis), e havia dois buracos: quem foi concedido mas ainda
+ * nao logou nao aparece em lugar nenhum, e quem nao foi concedido nao tem caminho.
+ *
+ * Um convite valido e uma EXCECAO ao grupo no `signIn` (ver `auth.ts`) — dispensa a
+ * associacao ao grupo, NUNCA a autenticacao: a pessoa ainda precisa logar no Keycloak
+ * como usuario @nimbloo.ai real. Single-use (`acceptedAt`) e com validade.
+ *
+ * Tabela separada de propositalmente NAO ser `app_user`: criar linha de usuario para
+ * quem nunca logou foi o que gerou "membro fantasma" na lista e nos seletores.
+ */
+export const invite = pgTable(
+   'invite',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      // Normalizado (trim + lowercase) na escrita; unico para nao acumular convite
+      // duplicado do mesmo e-mail — reconvidar renova o token e a validade.
+      email: varchar('email', { length: 255 }).notNull().unique(),
+      token: varchar('token', { length: 64 }).notNull().unique(),
+      invitedById: varchar('invited_by_id', { length: 36 }).references(() => appUser.id),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+      expiresAt: timestamp('expires_at').notNull(),
+      acceptedAt: timestamp('accepted_at'),
+   },
+   // Lookup por token (magic link) e por email (gate do signIn, a cada login).
+   (t) => [index('idx_invite_token').on(t.token), index('idx_invite_email').on(t.email)]
+);
+
 export const initiativeActivity = pgTable(
    'initiative_activity',
    {
@@ -645,6 +677,9 @@ export const review = pgTable(
       sourceBranch: varchar('source_branch', { length: 196 }),
       additions: integer('additions').notNull().default(0),
       deletions: integer('deletions').notNull().default(0),
+      // Logins do GitHub solicitados como reviewer, em CSV. Lista curta e so lida por
+      // igualdade — nao justifica tabela filha.
+      requestedReviewers: varchar('requested_reviewers', { length: 512 }),
       resolvesIdentifier: varchar('resolves_identifier', { length: 32 }),
       resolvesTitle: varchar('resolves_title', { length: 512 }),
       checksPassed: integer('checks_passed').notNull().default(0),

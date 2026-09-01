@@ -10,6 +10,7 @@ import { Filter } from '@/components/layout/headers/teams/filter';
 import TeamLine from './team-line';
 import { TeamsDisplayOptions } from './teams-display-options';
 import { NewTeamButton } from './new-team-button';
+import { ViewBar } from '@/components/layout/header-primitives';
 
 export default function Teams() {
    const allTeams = useWorkspaceStore((s) => s.teams);
@@ -48,33 +49,33 @@ export default function Teams() {
    return (
       <div className="w-full">
          {/* Count + view controls (Linear-style) */}
-         <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10 sticky top-0 bg-container z-20">
-            <span className="text-sm text-muted-foreground">
+         <ViewBar className="pl-2 pr-2.5">
+            <span className="translate-y-[0.5px] pl-2.5 text-[13px] font-medium leading-[normal] text-muted-foreground">
                {displayed.length} {displayed.length === 1 ? 'team' : 'teams'}
             </span>
             {/* "New team" vive no header da página (headers/teams/header-nav) — não duplicar
                 aqui no toolbar da lista (era o 2º botão idêntico que o usuário via). */}
-            <div className="flex items-center gap-1">
+            <div className="flex translate-y-[0.5px] items-center gap-1.5">
                <Filter />
                <TeamsDisplayOptions />
             </div>
-         </div>
+         </ViewBar>
 
          {/* Column headers */}
-         <div className="bg-container px-6 py-1.5 text-sm flex items-center text-muted-foreground border-b sticky top-10 z-10">
+         <div className="h-8 pl-[18px] pr-[34px] flex items-center border-b border-border/40 text-xs font-[450] leading-[normal] text-[var(--table-header-foreground)]">
             <div className="flex-1 min-w-0">Name</div>
             {displayProperties.membership && (
-               <div className="hidden sm:block w-[110px] shrink-0">Membership</div>
+               <div className="hidden w-[96px] shrink-0 sm:block">Membership</div>
             )}
             {displayProperties.owners && (
                <div className="hidden lg:block w-[70px] shrink-0">Owners</div>
             )}
-            {displayProperties.members && <div className="w-[150px] shrink-0">Members</div>}
+            {displayProperties.members && <div className="w-[126px] shrink-0">Members</div>}
             {displayProperties.cycle && (
-               <div className="hidden md:block w-[80px] shrink-0">Cycle</div>
+               <div className="hidden w-[88px] shrink-0 md:block">Cycle</div>
             )}
             {displayProperties.projects && (
-               <div className="hidden sm:block w-[80px] shrink-0">Projects</div>
+               <div className="hidden w-[154px] shrink-0 sm:block">Projects</div>
             )}
          </div>
 

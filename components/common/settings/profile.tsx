@@ -45,6 +45,7 @@ export default function Profile() {
    const me = useWorkspaceStore((s) => s.me);
    const hydrate = useWorkspaceStore((s) => s.hydrate);
    const [name, setName] = useState(me?.name ?? '');
+   const [gh, setGh] = useState(me?.githubLogin ?? '');
    const [saving, setSaving] = useState(false);
    const [uploading, setUploading] = useState(false);
    const [preview, setPreview] = useState<string | null>(null);
@@ -54,6 +55,31 @@ export default function Profile() {
    useEffect(() => {
       if (me?.name) setName(me.name);
    }, [me?.name]);
+
+   useEffect(() => {
+      setGh(me?.githubLogin ?? '');
+   }, [me?.githubLogin]);
+
+   /**
+    * Handle do GitHub — é o que liga um PR (que guarda o login) a este usuário, e o que
+    * faz as abas "For you"/"Created" de Reviews filtrarem de verdade. Sem ele, as duas
+    * ficam vazias em vez de mostrar tudo.
+    */
+   const saveGithub = async () => {
+      const next = gh.trim();
+      if (!me || saving || next === (me.githubLogin ?? '')) return;
+      setSaving(true);
+      try {
+         await api.me.update({ githubLogin: next || null });
+         await hydrate();
+         toast.success(next ? 'GitHub handle updated' : 'GitHub handle removed');
+      } catch {
+         toast.error('Could not update your GitHub handle');
+         setGh(me.githubLogin ?? '');
+      } finally {
+         setSaving(false);
+      }
+   };
 
    const saveName = async () => {
       const next = name.trim();
@@ -136,7 +162,7 @@ export default function Profile() {
                   description="PNG, JPEG or WebP. Resized to a square."
                   trailing={
                      <div className="flex items-center gap-3">
-                        <Avatar className="size-9">
+                        <Avatar className="size-8">
                            <AvatarImage src={avatarSrc || undefined} alt={me.name} />
                            <AvatarFallback>{me.name[0]}</AvatarFallback>
                         </Avatar>
@@ -183,14 +209,31 @@ export default function Profile() {
                            if (e.key === 'Enter') e.currentTarget.blur();
                         }}
                         disabled={saving}
-                        className="h-8 w-44"
+                        className="h-8 w-[180px]"
+                     />
+                  }
+               />
+               <SettingsRow
+                  title="GitHub"
+                  description="Seu usuário no GitHub — é o que liga os PRs a você em Reviews"
+                  trailing={
+                     <Input
+                        value={gh}
+                        placeholder="seu-usuario"
+                        onChange={(e) => setGh(e.target.value)}
+                        onBlur={() => void saveGithub()}
+                        onKeyDown={(e) => {
+                           if (e.key === 'Enter') e.currentTarget.blur();
+                        }}
+                        disabled={saving}
+                        className="h-8 w-[180px]"
                      />
                   }
                />
                <SettingsRow
                   title="Username"
                   description="One word, like a nickname or first name"
-                  trailing={<Input defaultValue={me.slug} disabled className="h-8 w-44" />}
+                  trailing={<Input defaultValue={me.slug} disabled className="h-8 w-[180px]" />}
                />
             </SettingsCard>
          </SettingsSection>

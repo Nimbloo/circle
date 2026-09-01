@@ -22,9 +22,16 @@ interface StatusSelectorProps {
    issueId: string;
    /** Exibe o nome do status dentro do trigger (linha inteira clicável — padrão Linear). */
    showName?: boolean;
+   /** Trigger de 16px usado dentro dos cards compactos do board. */
+   compact?: boolean;
 }
 
-export function StatusSelector({ status, issueId, showName = false }: StatusSelectorProps) {
+export function StatusSelector({
+   status,
+   issueId,
+   showName = false,
+   compact = false,
+}: StatusSelectorProps) {
    const id = useId();
    const [open, setOpen] = useState<boolean>(false);
    // Deriva do prop (store) — sem estado local otimista, reverte junto com o rollback.
@@ -32,7 +39,9 @@ export function StatusSelector({ status, issueId, showName = false }: StatusSele
 
    const allStatus = useStatuses();
    const updateIssueStatus = useIssuesStore((s) => s.updateIssueStatus);
-   const filterByStatus = useIssuesStore((s) => s.filterByStatus);
+   // Conta derivada da fatia assinada: assinar `filterByStatus` (funcao, referencia
+   // estavel) deixaria o contador do dropdown parado quando as issues mudam.
+   const allIssues = useIssuesStore((s) => s.issues);
 
    const handleStatusChange = (statusId: string) => {
       setOpen(false);
@@ -46,7 +55,7 @@ export function StatusSelector({ status, issueId, showName = false }: StatusSele
    };
 
    return (
-      <div className="*:not-first:mt-2">
+      <div className={compact ? 'h-3.5 leading-none' : '*:not-first:mt-2'}>
          <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
                <Button
@@ -54,7 +63,9 @@ export function StatusSelector({ status, issueId, showName = false }: StatusSele
                   className={
                      showName
                         ? 'h-7 gap-2 px-1.5 justify-start'
-                        : 'size-7 flex items-center justify-center'
+                        : compact
+                          ? 'size-3.5 p-0'
+                          : 'size-7 flex items-center justify-center'
                   }
                   size={showName ? 'sm' : 'icon'}
                   variant="ghost"
@@ -88,7 +99,7 @@ export function StatusSelector({ status, issueId, showName = false }: StatusSele
                               </div>
                               {value === item.id && <CheckIcon size={16} className="ml-auto" />}
                               <span className="text-muted-foreground text-xs">
-                                 {filterByStatus(item.id).length}
+                                 {allIssues.filter((i) => i.status.id === item.id).length}
                               </span>
                            </CommandItem>
                         ))}

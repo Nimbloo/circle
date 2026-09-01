@@ -11,13 +11,13 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 import { api } from '@/lib/client';
 import type { EmojiDto } from '@/lib/api/emojis';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Plus, Smile, Trash2, Upload } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { SettingsShell } from './shared';
 
 /** Lê um File como { dataUrl, contentType }. */
 function readFile(file: File): Promise<{ dataUrl: string; contentType: string }> {
@@ -160,6 +160,7 @@ export default function EmojisSettings() {
    // true desde o 1º paint: evita o flash de "Nenhum emoji" antes do load resolver.
    const [loading, setLoading] = useState(true);
    const [dialogOpen, setDialogOpen] = useState(false);
+   const [query, setQuery] = useState('');
 
    // Skeleton só na primeira carga; o reload pós-mutation (add/remove) é silencioso —
    // a grade atual fica na tela até a lista nova chegar, sem piscar.
@@ -191,61 +192,74 @@ export default function EmojisSettings() {
       }
    };
 
+   const visibleEmojis = useMemo(() => {
+      const needle = query.trim().toLowerCase();
+      return needle
+         ? emojis.filter((emoji) => emoji.shortcode.toLowerCase().includes(needle))
+         : emojis;
+   }, [emojis, query]);
+
    return (
-      <SettingsShell
-         title="Emojis"
-         description="Emojis customizados do workspace, usados em reações a comentários. As imagens são servidas via CDN."
-      >
-         <div className="flex justify-end mb-4">
-            {isAdmin && (
-               <Button size="sm" onClick={() => setDialogOpen(true)} className="gap-1">
-                  <Plus className="size-4" />
-                  Adicionar emoji
-               </Button>
+      <div className="h-full w-full overflow-y-auto">
+         <div className="px-14 py-16 pb-20 max-md:px-5 max-md:py-8">
+            <div className="mb-3 flex items-center gap-1.5">
+               <SidebarTrigger className="-ml-1 md:hidden" />
+               <h1 className="text-2xl font-medium leading-8">Emojis</h1>
+            </div>
+            <div className="mb-6 flex items-center justify-between gap-3">
+               <Input
+                  placeholder="Filter by name..."
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  className="h-8 w-[300px] max-w-full"
+               />
+               {isAdmin && (
+                  <Button onClick={() => setDialogOpen(true)} className="gap-1">
+                     <Plus className="size-4" />
+                     Adicionar emoji
+                  </Button>
+               )}
+            </div>
+
+            {loading ? (
+               <ListSkeleton rows={4} />
+            ) : visibleEmojis.length === 0 ? (
+               <div className="flex h-[calc(100vh-262px)] min-h-[360px] flex-col items-center justify-center gap-2 text-center">
+                  <Smile className="size-12 text-muted-foreground/40" />
+                  <p className="text-[13px] text-muted-foreground">
+                     {query ? 'Nenhum emoji encontrado' : 'Nenhum emoji customizado'}
+                  </p>
+               </div>
+            ) : (
+               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+                  {visibleEmojis.map((e) => (
+                     <div
+                        key={e.id}
+                        className="group relative flex flex-col items-center gap-2 rounded-[10px] border bg-card p-4"
+                     >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={e.url} alt={e.shortcode} className="size-10 object-contain" />
+                        <span className="max-w-full truncate text-xs text-muted-foreground">
+                           :{e.shortcode}:
+                        </span>
+                        {isAdmin && (
+                           <Button
+                              size="icon"
+                              variant="ghost"
+                              className="absolute right-1 top-1 size-6 text-destructive opacity-0 hover:text-destructive group-hover:opacity-100"
+                              aria-label="Remover emoji"
+                              onClick={() => void remove(e)}
+                           >
+                              <Trash2 className="size-3.5" />
+                           </Button>
+                        )}
+                     </div>
+                  ))}
+               </div>
             )}
+
+            <UploadDialog open={dialogOpen} onOpenChange={setDialogOpen} onSaved={load} />
          </div>
-
-         {loading ? (
-            <ListSkeleton rows={4} />
-         ) : emojis.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 rounded-lg border bg-container px-4 py-10 text-center">
-               <Smile className="size-8 text-muted-foreground/40" />
-               <p className="text-sm font-medium">Nenhum emoji customizado</p>
-               <p className="text-xs text-muted-foreground">
-                  {isAdmin
-                     ? 'Adicione emojis para o time usar nas reações.'
-                     : 'Peça a um administrador para adicionar emojis.'}
-               </p>
-            </div>
-         ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-               {emojis.map((e) => (
-                  <div
-                     key={e.id}
-                     className="group relative flex flex-col items-center gap-2 rounded-lg border bg-container p-4"
-                  >
-                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                     <img src={e.url} alt={e.shortcode} className="size-10 object-contain" />
-                     <span className="text-xs text-muted-foreground truncate max-w-full">
-                        :{e.shortcode}:
-                     </span>
-                     {isAdmin && (
-                        <Button
-                           size="icon"
-                           variant="ghost"
-                           className="absolute top-1 right-1 size-6 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive"
-                           aria-label="Remover emoji"
-                           onClick={() => void remove(e)}
-                        >
-                           <Trash2 className="size-3.5" />
-                        </Button>
-                     )}
-                  </div>
-               ))}
-            </div>
-         )}
-
-         <UploadDialog open={dialogOpen} onOpenChange={setDialogOpen} onSaved={load} />
-      </SettingsShell>
+      </div>
    );
 }

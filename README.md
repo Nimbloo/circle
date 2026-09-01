@@ -58,7 +58,9 @@ UI (components/) ──chama──▶ lib/client.ts (fetch tipado)
 - **`middleware.ts`** — gate de auth: valida a sessão (ou Bearer JWT de máquina) antes de
   liberar `/api/*`.
 
-Aprofundamento por área: `docs/`.
+Aprofundamento por área: `docs/`. O que está pendente e por quê — incluindo bloqueios
+que vivem em outro repositório e decisões em aberto — em [`docs/PENDENCIAS.md`](docs/PENDENCIAS.md)
+(as issues seguem sendo a fonte da verdade sobre escopo).
 
 ---
 
@@ -97,7 +99,9 @@ pnpm dev            # http://localhost:3000
 ```
 
 > As migrations também rodam **sozinhas no boot** (via `instrumentation.ts`); `pnpm db:migrate`
-> é útil para aplicar sem subir o servidor.
+> é útil para aplicar sem subir o servidor. `pnpm db:migrate` e `pnpm db:seed` carregam o
+> `.env.local` quando `DATABASE_URL` não foi injetada no processo; uma variável de ambiente
+> explícita sempre tem precedência.
 
 ### Scripts
 

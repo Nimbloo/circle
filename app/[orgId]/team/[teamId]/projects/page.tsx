@@ -9,7 +9,7 @@ export default async function TeamProjectsPage({
 }) {
    const { teamId } = await params;
    return (
-      <MainLayout header={<Header />} headersNumber={1}>
+      <MainLayout header={<Header />}>
          <TeamProjects teamId={teamId} />
       </MainLayout>
    );

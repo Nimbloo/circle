@@ -14,6 +14,9 @@ import {
    DropdownMenu,
    DropdownMenuContent,
    DropdownMenuItem,
+   DropdownMenuSub,
+   DropdownMenuSubContent,
+   DropdownMenuSubTrigger,
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -30,7 +33,8 @@ import { api, ApiError } from '@/lib/client';
 import { View } from '@/data/views';
 import type { ViewFilter } from '@/lib/api/views';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { useParams } from 'next/navigation';
+import { Link2, MoreHorizontal, Pencil, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ViewFilterEditor } from './view-filter-editor';
@@ -113,6 +117,27 @@ function RenameViewDialog({
 /** Dropdown de ações (renomear / deletar) de uma saved view. */
 export function ViewActions({ view }: { view: View }) {
    const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const teams = useWorkspaceStore((s) => s.teams);
+   const { orgId } = useParams<{ orgId: string }>();
+
+   /**
+    * Compartilhar = atribuir um time à view. O modelo já era esse (`teamId` nulo = só
+    * o dono enxerga); faltava poder mudar depois de criada.
+    */
+   const share = async (teamId: string | null, msg: string) => {
+      try {
+         await api.views.update(view.id, { teamId });
+         await hydrate();
+         toast.success(msg);
+      } catch (e) {
+         toast.error(errMsg(e, 'Não foi possível alterar o compartilhamento'));
+      }
+   };
+
+   const copyLink = () => {
+      const url = `${window.location.origin}/${orgId}/view/${view.id}`;
+      void navigator.clipboard.writeText(url).then(() => toast.success('Link copiado'));
+   };
    const [editOpen, setEditOpen] = useState(false);
    const [confirmOpen, setConfirmOpen] = useState(false);
    const [busy, setBusy] = useState(false);
@@ -150,6 +175,39 @@ export function ViewActions({ view }: { view: View }) {
                   <Pencil className="size-4" />
                   Edit
                </DropdownMenuItem>
+               <DropdownMenuItem onSelect={copyLink}>
+                  <Link2 className="size-4" />
+                  Copiar link
+               </DropdownMenuItem>
+
+               {view.teamId ? (
+                  <DropdownMenuItem onSelect={() => void share(null, 'View agora é pessoal')}>
+                     <Users className="size-4" />
+                     Tornar pessoal
+                  </DropdownMenuItem>
+               ) : (
+                  <DropdownMenuSub>
+                     <DropdownMenuSubTrigger>
+                        <Users className="size-4" />
+                        Compartilhar com time
+                     </DropdownMenuSubTrigger>
+                     <DropdownMenuSubContent className="w-48">
+                        {teams.length === 0 ? (
+                           <DropdownMenuItem disabled>Nenhum time</DropdownMenuItem>
+                        ) : (
+                           teams.map((t) => (
+                              <DropdownMenuItem
+                                 key={t.id}
+                                 onSelect={() => void share(t.id, `Compartilhada com ${t.name}`)}
+                              >
+                                 {t.name}
+                              </DropdownMenuItem>
+                           ))
+                        )}
+                     </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+               )}
+
                <DropdownMenuItem
                   variant="destructive"
                   onSelect={(e) => {

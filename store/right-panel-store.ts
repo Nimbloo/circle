@@ -8,7 +8,12 @@ import { create } from 'zustand';
  * - 'hidden': used by pages whose default panel is visible (project pages)
  *   to collapse the side panel entirely
  */
-export type RightPanelType = 'insights' | 'cycle-details' | 'breakdown' | 'hidden';
+export type RightPanelType =
+   | 'insights'
+   | 'cycle-details'
+   | 'breakdown'
+   | 'initiatives-breakdown'
+   | 'hidden';
 
 interface RightPanelState {
    openPanel: RightPanelType | null;

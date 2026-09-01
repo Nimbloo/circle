@@ -27,6 +27,7 @@ export default function Preferences() {
                   description="Select which view to display when launching the app"
                   trailing={
                      <SelectMenu
+                        ariaLabel="Default home view"
                         options={['Agent (default)', 'Inbox', 'My issues']}
                         value={prefs.defaultHomeView}
                         onChange={(v) => prefs.setPref('defaultHomeView', v)}
@@ -38,6 +39,7 @@ export default function Preferences() {
                   description="Select how names are displayed in the interface"
                   trailing={
                      <SelectMenu
+                        ariaLabel="Display names"
                         options={['Username', 'Full name']}
                         value={prefs.displayNames}
                         onChange={(v) => prefs.setPref('displayNames', v)}
@@ -49,6 +51,7 @@ export default function Preferences() {
                   description="Used for date pickers"
                   trailing={
                      <SelectMenu
+                        ariaLabel="First day of the week"
                         options={['Monday', 'Sunday', 'Saturday']}
                         value={prefs.firstDayOfWeek}
                         onChange={(v) => prefs.setPref('firstDayOfWeek', v)}
@@ -60,6 +63,7 @@ export default function Preferences() {
                   description="Strings like :) will be converted to 🙂"
                   trailing={
                      <Switch
+                        aria-label="Convert text emoticons into emojis"
                         checked={prefs.convertEmoticons}
                         onCheckedChange={(v) => prefs.setPref('convertEmoticons', v)}
                      />
@@ -70,6 +74,7 @@ export default function Preferences() {
                   description="Choose which key press is used to submit comments"
                   trailing={
                      <SelectMenu
+                        ariaLabel="Send comments on"
                         options={['⌘+Enter', 'Enter']}
                         value={prefs.sendCommentsOn}
                         onChange={(v) => prefs.setPref('sendCommentsOn', v)}
@@ -95,6 +100,7 @@ export default function Preferences() {
                   description="Adjust the size of text across the app"
                   trailing={
                      <SelectMenu
+                        ariaLabel="Font size"
                         options={['Default', 'Small', 'Large']}
                         value={prefs.fontSize}
                         onChange={(v) => prefs.setPref('fontSize', v)}
@@ -106,6 +112,7 @@ export default function Preferences() {
                   description="Change the cursor to a pointer when hovering over any interactive elements"
                   trailing={
                      <Switch
+                        aria-label="Use pointer cursors"
                         checked={prefs.pointerCursors}
                         onCheckedChange={(v) => prefs.setPref('pointerCursors', v)}
                      />
@@ -116,6 +123,7 @@ export default function Preferences() {
                   description="Always underline links in text content"
                   trailing={
                      <Switch
+                        aria-label="Underline links"
                         checked={prefs.underlineLinks}
                         onCheckedChange={(v) => prefs.setPref('underlineLinks', v)}
                      />
@@ -147,6 +155,7 @@ export default function Preferences() {
                   description="When creating new issues, always assign them to yourself by default"
                   trailing={
                      <Switch
+                        aria-label="Auto-assign to self"
                         checked={prefs.autoAssignSelf}
                         onCheckedChange={(v) => prefs.setPref('autoAssignSelf', v)}
                      />
@@ -157,6 +166,7 @@ export default function Preferences() {
                   description="When you move an unassigned issue to started, it will be automatically assigned to you"
                   trailing={
                      <Switch
+                        aria-label="On move to started status, assign to yourself"
                         checked={prefs.assignSelfOnStart}
                         onCheckedChange={(v) => prefs.setPref('assignSelfOnStart', v)}
                      />

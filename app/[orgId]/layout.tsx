@@ -19,7 +19,7 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
          <DeferredChrome />
          <KeyboardShortcuts />
          <AppSidebar />
-         <div className="h-svh overflow-hidden lg:p-2 w-full">{children}</div>
+         <div className="h-svh w-full overflow-hidden lg:py-2 lg:pr-2">{children}</div>
       </SidebarProvider>
    );
 }

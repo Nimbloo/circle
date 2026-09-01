@@ -235,7 +235,6 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                         group: {
                            id: key,
                            name: assignee?.name ?? 'No assignee',
-                           color: '#8f9299',
                            icon: assignee ? (
                               <Avatar className="size-4">
                                  <AvatarImage
@@ -258,7 +257,6 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                   group: {
                      id: priority.id,
                      name: priority.name,
-                     color: '#8f9299',
                      icon: <priority.icon className="size-4 text-muted-foreground" />,
                   },
                   issues: visibleIssues.filter((issue) => issue.priority.id === priority.id),
@@ -278,7 +276,6 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                         group: {
                            id: key,
                            name: project?.name ?? 'No project',
-                           color: '#8f9299',
                            icon: <Icon className="size-4 text-muted-foreground" />,
                         },
                         issues: visible.get(key) ?? [],
@@ -292,7 +289,6 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                   group: {
                      id: label.id,
                      name: label.name,
-                     color: '#8f9299',
                      icon: (
                         <span
                            className="size-2.5 rounded-full"
@@ -310,7 +306,6 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                   group: {
                      id: 'no-label',
                      name: 'No label',
-                     color: '#8f9299',
                      icon: <Tag className="size-4 text-muted-foreground" />,
                   },
                   issues: visibleIssues.filter((issue) => issue.labels.length === 0),
@@ -324,7 +319,6 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                      group: {
                         id: 'all',
                         name: 'All issues',
-                        color: '#8f9299',
                         icon: <Box className="size-4 text-muted-foreground" />,
                      },
                      issues: visibleIssues,
@@ -338,7 +332,6 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                   group: {
                      id: statusItem.id,
                      name: statusItem.name,
-                     color: statusItem.color,
                      icon: <statusItem.icon />,
                      status: statusItem,
                   },
@@ -383,7 +376,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
             <BulkActionsBar />
             <div className="h-full flex flex-col">
                <div className="flex-1 min-h-0 overflow-x-auto">
-                  <div className="flex h-full gap-3 px-2 py-2 min-w-max">
+                  <div className="flex h-full min-w-max gap-0 px-1">
                      {boardGroups.map((entry) => (
                         <GroupIssues
                            key={entry.group.id}

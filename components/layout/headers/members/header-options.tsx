@@ -1,11 +1,12 @@
 'use client';
 
 import { Filter } from './filter';
+import { ViewBar } from '@/components/layout/header-primitives';
 
 export default function HeaderOptions() {
    return (
-      <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">
+      <ViewBar>
          <Filter />
-      </div>
+      </ViewBar>
    );
 }
