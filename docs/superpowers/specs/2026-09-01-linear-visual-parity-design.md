@@ -52,7 +52,7 @@ decisão volta ao usuário antes de qualquer alteração.
 ## Diagnóstico do estado atual
 
 O Circle já possui boa parte da base necessária: sidebar de 244 px, inset do conteúdo,
-tema por tokens, Radix/shadcn, Lucide, linhas de issue com 40 px e stores separados por
+tema por tokens, Radix/shadcn, Lucide, linhas de issue compactas e stores separados por
 domínio. A atualização deve evoluir essa base, não substituí-la.
 
 As divergências mais relevantes encontradas são estruturais:
@@ -88,8 +88,11 @@ Alvos observados no benchmark desktop:
 - inset externo do conteúdo: 8 px;
 - raio da superfície principal: 12 px;
 - navegação primária: linhas de 28 px com raio de 8 px;
-- cabeçalhos e toolbars: 40 px por faixa;
-- linhas de issue: 40 px;
+- location bar: 44 px;
+- view bar: 43 px;
+- linhas de issue: 44 px;
+- cabeçalhos de grupo: 36 px, raio de 8 px;
+- linhas da Inbox: 55 px; painel da lista com 284 px úteis no benchmark;
 - tipografia de navegação: aproximadamente 13 px, peso 500;
 - marca: manter `#5e6ad2`, aplicada somente pelos tokens semânticos;
 - dark base: próxima de `#0e0f11`, com superfícies elevadas pouco contrastantes;
@@ -154,7 +157,7 @@ flexível. Sem seleção, apenas o painel de detalhe mostra o estado vazio domin
 ciclos anteriores ficam resumidos. O gráfico existente será estilizado, não recalculado.
 
 **Settings:** sidebar própria com retorno simples ao app e busca; conteúdo central com
-largura aproximada de 640 px; seções agrupadas por cartões sutis. O header global de
+largura de 640 px; seções agrupadas por cartões de raio 10 px. O header global de
 Settings deixa de competir com o título da página.
 
 ### 6. Overlays e feedback
