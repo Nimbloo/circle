@@ -67,6 +67,9 @@ export const appUser = pgTable('app_user', {
    passwordHash: varchar('password_hash', { length: 255 }), // nullable — login por credenciais (bcrypt); null = só SSO/convite pendente
    inviteToken: varchar('invite_token', { length: 64 }), // nullable — token single-use do convite; null = SSO ou já resgatado
    avatarUrl: varchar('avatar_url', { length: 512 }),
+   // Handle do GitHub. Sem isto nao ha como ligar um PR (que guarda o LOGIN do GitHub)
+   // ao usuario do Circle — era o bloqueio de "For you"/"Created" em Reviews.
+   githubLogin: varchar('github_login', { length: 128 }),
    role: varchar('role', { length: 16 }).notNull().default('Member'), // Member|Admin|Guest|Application
    presence: varchar('presence', { length: 16 }).notNull().default('offline'),
    timezone: varchar('timezone', { length: 64 }),
@@ -674,6 +677,9 @@ export const review = pgTable(
       sourceBranch: varchar('source_branch', { length: 196 }),
       additions: integer('additions').notNull().default(0),
       deletions: integer('deletions').notNull().default(0),
+      // Logins do GitHub solicitados como reviewer, em CSV. Lista curta e so lida por
+      // igualdade — nao justifica tabela filha.
+      requestedReviewers: varchar('requested_reviewers', { length: 512 }),
       resolvesIdentifier: varchar('resolves_identifier', { length: 32 }),
       resolvesTitle: varchar('resolves_title', { length: 512 }),
       checksPassed: integer('checks_passed').notNull().default(0),

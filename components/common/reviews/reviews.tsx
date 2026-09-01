@@ -141,7 +141,7 @@ export default function Reviews({
       let active = true;
       if (!loadedOnceRef.current) setLoading(true);
       setError(false);
-      fetchReviews({ limit: PAGE_SIZE, offset: 0 })
+      fetchReviews({ limit: PAGE_SIZE, offset: 0, list: listTab })
          .then((page) => {
             if (active) {
                loadedOnceRef.current = true;
@@ -162,12 +162,18 @@ export default function Reviews({
       return () => {
          active = false;
       };
-   }, [reloadKey]);
+      // `listTab` entra nas deps: o recorte agora é feito no servidor, então trocar
+      // de aba precisa refazer a busca — antes as duas abas liam o mesmo conjunto.
+   }, [reloadKey, listTab]);
 
    async function handleLoadMore() {
       setLoadingMore(true);
       try {
-         const page = await fetchReviews({ limit: PAGE_SIZE, offset: reviews.length });
+         const page = await fetchReviews({
+            limit: PAGE_SIZE,
+            offset: reviews.length,
+            list: listTab,
+         });
          setReviews((prev) => [...prev, ...page.reviews]);
          setTotal(page.total);
       } catch {
@@ -194,8 +200,10 @@ export default function Reviews({
       }
    }
 
-   // O backend não modela For you / Created (PRs crus do GitHub); ambas as abas
-   // refletem o mesmo conjunto sincronizado.
+   // O recorte é feito no SERVIDOR (`?list=`), pelo handle do GitHub do perfil:
+   // 'created' = PRs que abri, 'for-you' = PRs em que fui pedido como reviewer.
+   // Sem handle configurado a lista vem vazia — antes as duas abas mostravam o
+   // mesmo conjunto e nada indicava que não filtravam.
    const source = reviews;
 
    const groups = (['open', 'merged', 'closed'] as ReviewStatus[])

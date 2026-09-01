@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { and, count, desc, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { review, issue as issueT, issuePrLink, status as statusT } from '@/db/schema';
 import { ApiError } from './errors';
@@ -56,6 +56,15 @@ export interface ListReviewsOptions {
    status?: string;
    limit?: number;
    offset?: number;
+   /**
+    * Recorte por pessoa. Exige `viewerLogin` — sem o handle do GitHub no perfil não há
+    * como ligar o PR (que guarda o login) ao usuário do Circle, e a lista volta vazia
+    * em vez de fingir que é 'tudo'.
+    *  - `created`: PRs abertos por mim.
+    *  - `for-you`: PRs em que fui solicitado como reviewer.
+    */
+   list?: 'created' | 'for-you';
+   viewerLogin?: string | null;
 }
 
 export interface ReviewPage {
@@ -67,10 +76,34 @@ export interface ReviewPage {
  * Lista PRs sincronizados, paginado (limit/offset, default limit=50) + total do
  * conjunto (respeitando o filtro de status), pra a UI mostrar "X de Y" e o load-more.
  */
+/** Logins solicitados como reviewer, em CSV. Null quando o payload não os traz. */
+function reviewersCsv(pr: { requested_reviewers?: { login?: string }[] | null }): string | null {
+   const logins = (pr.requested_reviewers ?? [])
+      .map((r) => r?.login)
+      .filter((l): l is string => Boolean(l));
+   return logins.length ? clip(logins.join(','), 512) : null;
+}
+
 export async function listReviews(db: Db, opts: ListReviewsOptions = {}): Promise<ReviewPage> {
    const limit = opts.limit ?? 50;
    const offset = opts.offset ?? 0;
-   const where = opts.status ? eq(review.status, opts.status) : undefined;
+   const login = opts.viewerLogin?.trim();
+   const clauses = [];
+   if (opts.status) clauses.push(eq(review.status, opts.status));
+   if (opts.list === 'created') {
+      // Sem handle configurado, a clausula falsa devolve lista vazia — honesto. Antes as
+      // duas abas mostravam o mesmo conjunto e ninguém percebia que não filtravam.
+      clauses.push(login ? eq(review.author, login) : sql`false`);
+   } else if (opts.list === 'for-you') {
+      // CSV com vírgulas nas bordas: casa o login inteiro, sem pegar `ana` dentro de
+      // `ana-maria`.
+      clauses.push(
+         login
+            ? sql`(',' || ${review.requestedReviewers} || ',') like ${'%,' + login + ',%'}`
+            : sql`false`
+      );
+   }
+   const where = clauses.length ? and(...clauses) : undefined;
 
    const rows = where
       ? await db
@@ -104,6 +137,7 @@ interface GitHubPr {
    html_url: string;
    created_at: string;
    user?: { login: string };
+   requested_reviewers?: { login?: string }[] | null;
    body?: string | null;
    base?: { ref: string };
    head?: { ref: string };
@@ -272,6 +306,7 @@ async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike)
          prNumber: pr.number,
          url: clip(pr.html_url ?? null, 512),
          author: clip(pr.user?.login ?? null, 128),
+         requestedReviewers: reviewersCsv(pr),
          targetBranch: clip(pr.base?.ref ?? null, 196),
          sourceBranch: clip(pr.head?.ref ?? null, 196),
          additions: detail?.additions ?? pr.additions ?? 0,
@@ -292,6 +327,7 @@ async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike)
          title: row.title,
          status: row.status,
          author: row.author,
+         requestedReviewers: row.requestedReviewers,
          targetBranch: row.targetBranch,
          sourceBranch: row.sourceBranch,
          url: row.url,
@@ -423,6 +459,7 @@ export async function handlePullRequestEvent(
       prNumber: pr.number,
       url: clip(pr.html_url ?? null, 512),
       author: clip(pr.user?.login ?? null, 128),
+      requestedReviewers: reviewersCsv(pr),
       targetBranch: clip(pr.base?.ref ?? null, 196),
       sourceBranch: clip(pr.head?.ref ?? null, 196),
       additions: pr.additions ?? 0,
@@ -438,6 +475,7 @@ export async function handlePullRequestEvent(
       title: row.title,
       status: row.status,
       author: row.author,
+      requestedReviewers: row.requestedReviewers,
       targetBranch: row.targetBranch,
       sourceBranch: row.sourceBranch,
       url: row.url,

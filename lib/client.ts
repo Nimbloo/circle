@@ -122,7 +122,8 @@ function issueQuery(opts: IssueListOptions = {}): string {
  * `.uploadAvatar/.removeAvatar` gerenciam a foto de perfil (retornam o MeDto novo).
  */
 const me = Object.assign(() => get<MeDto>('/me'), {
-   update: (body: { name?: string; timezone?: string | null }) => patch<MeDto>('/me', body),
+   update: (body: { name?: string; timezone?: string | null; githubLogin?: string | null }) =>
+      patch<MeDto>('/me', body),
    uploadAvatar: (dataUrl: string, contentType: string) =>
       post<MeDto>('/me/avatar', { dataUrl, contentType }),
    removeAvatar: () => del<MeDto>('/me/avatar'),
@@ -420,10 +421,13 @@ export const api = {
    },
 
    reviews: {
-      list: async (opts: { limit?: number; offset?: number } = {}) => {
+      list: async (
+         opts: { limit?: number; offset?: number; list?: 'created' | 'for-you' } = {}
+      ) => {
          const sp = new URLSearchParams();
          if (opts.limit != null) sp.set('limit', String(opts.limit));
          if (opts.offset != null) sp.set('offset', String(opts.offset));
+         if (opts.list) sp.set('list', opts.list);
          const qs = sp.toString();
          const { data, meta } = await requestEnvelope<ReviewDto[]>(`/reviews${qs ? `?${qs}` : ''}`);
          const m = (meta ?? {}) as { total?: number; limit?: number; offset?: number };

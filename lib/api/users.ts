@@ -17,6 +17,8 @@ export interface MeDto {
    admin: boolean;
    teamIds: string[];
    subscribedIssueIds: string[];
+   /** Handle do GitHub — liga o PR (que guarda o login) a este usuário. */
+   githubLogin: string | null;
 }
 
 /** Usuário corrente (do e-mail da sessão) + times + flag admin. */
@@ -40,6 +42,7 @@ export async function getMe(db: Db, email: string): Promise<MeDto> {
       admin: await isAdmin(user.email, db),
       teamIds: teams.map((t) => t.teamId),
       subscribedIssueIds: subscriptions.map((s) => s.issueId),
+      githubLogin: user.githubLogin,
    };
 }
 
@@ -131,11 +134,12 @@ export async function getOrCreateUser(db: Db, email: string): Promise<UserRow> {
 export interface UpdateProfileInput {
    name?: string;
    timezone?: string | null;
+   githubLogin?: string | null;
 }
 
 /**
  * Atualiza o perfil do usuário corrente (pelo e-mail da sessão). Campos opcionais:
- * `name` e `timezone`. Provisiona o usuário se ainda não existir. Retorna o MeDto.
+ * `name`, `timezone` e `githubLogin`. Provisiona o usuário se ainda não existir.
  */
 export async function updateProfile(
    db: Db,
@@ -150,6 +154,14 @@ export async function updateProfile(
       set.name = name;
    }
    if (patch.timezone !== undefined) set.timezone = patch.timezone?.trim() || null;
+   if (patch.githubLogin !== undefined) {
+      // Aceita colado da URL do perfil (github.com/fulano) ou com @ na frente.
+      const raw = patch.githubLogin
+         ?.trim()
+         .replace(/^@/, '')
+         .replace(/^https?:\/\/github\.com\//i, '');
+      set.githubLogin = raw ? raw.replace(/\/.*$/, '') : null;
+   }
    if (Object.keys(set).length > 0) {
       await db
          .update(appUser)
