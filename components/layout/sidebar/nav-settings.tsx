@@ -18,6 +18,7 @@ import {
    Smile,
    Sparkles,
    Tag,
+   ScrollText,
    Target,
    UserRound,
    Zap,
@@ -71,6 +72,10 @@ export const settingsNav: SettingsNavGroup[] = [
          { name: 'Emojis', url: '/settings/emojis', icon: Smile },
          { name: 'Integrations', url: '/settings/integrations', icon: Blocks },
       ],
+   },
+   {
+      label: 'Workspace',
+      items: [{ name: 'Audit log', url: '/settings/audit-log', icon: ScrollText }],
    },
 ];
 
