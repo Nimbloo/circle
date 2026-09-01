@@ -1,6 +1,5 @@
 'use client';
 
-import { SidebarTrigger } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { fetchReviews, syncReviews } from '@/lib/adapters-reviews';
@@ -52,8 +51,8 @@ function ReviewRow({
       <Link
          href={`/${orgId}/review/${review.id}`}
          className={cn(
-            'flex items-center gap-2 px-4 py-2 text-sm border-b border-border/40 transition-colors',
-            selected ? 'bg-accent/60' : 'hover:bg-sidebar/50'
+            'h-11 px-[18px] text-[13px] flex items-center gap-2 transition-colors',
+            selected ? 'bg-accent/60' : 'hover:bg-accent/40'
          )}
       >
          <PrIcon status={review.status} />
@@ -80,7 +79,7 @@ function ReviewGroup({
             type="button"
             onClick={() => setOpen((value) => !value)}
             aria-expanded={open}
-            className="w-full flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium bg-[color-mix(in_oklab,var(--accent)_30%,var(--container))] border-b border-border/40 cursor-pointer select-none"
+            className="h-8 w-full flex items-center gap-1.5 px-[18px] text-xs font-medium bg-[color-mix(in_oklab,var(--accent)_30%,var(--container))] border-b border-border/40 cursor-pointer select-none"
          >
             {label}
             <svg
@@ -216,23 +215,22 @@ export default function Reviews({
    return (
       <div className="w-full h-full flex overflow-hidden">
          <div className="w-[420px] max-w-[45%] shrink-0 border-r h-full flex flex-col bg-container">
-            <div className="flex items-center justify-between px-4 py-1.5 h-10 border-b shrink-0">
-               <div className="flex items-center gap-2">
-                  <SidebarTrigger />
-                  <span className="text-sm font-medium">Reviews</span>
+            <div className="h-11 px-[18px] flex shrink-0 items-center justify-between border-b border-border/60">
+               <div className="flex items-center">
+                  <span className="text-[13px] font-medium leading-[normal]">Reviews</span>
                </div>
-               <div className="flex items-center gap-2 text-muted-foreground">
+               <div className="flex translate-y-[0.5px] items-center gap-3 text-muted-foreground">
                   <ListFilter className="size-4" />
                   <SlidersHorizontal className="size-4" />
                </div>
             </div>
-            <div className="flex items-center gap-1.5 px-4 py-2 shrink-0">
+            <div className="h-[43px] px-2 flex shrink-0 translate-y-[0.5px] items-center gap-1.5 border-b border-border/40">
                <Link
                   href={`/${orgId}/reviews`}
                   className={cn(
-                     'px-2.5 py-1 rounded-md border text-xs font-medium transition-colors',
+                     'h-7 rounded-full border border-transparent px-2.5 inline-flex items-center text-xs font-medium leading-[normal] transition-colors',
                      listTab === 'for-you'
-                        ? 'bg-accent border-transparent'
+                        ? 'bg-accent text-foreground'
                         : 'text-muted-foreground hover:bg-accent/50'
                   )}
                >
@@ -241,9 +239,9 @@ export default function Reviews({
                <Link
                   href={`/${orgId}/reviews/created`}
                   className={cn(
-                     'px-2.5 py-1 rounded-md border text-xs font-medium transition-colors',
+                     'h-7 rounded-full border border-transparent px-2.5 inline-flex items-center text-xs font-medium leading-[normal] transition-colors',
                      listTab === 'created'
-                        ? 'bg-accent border-transparent'
+                        ? 'bg-accent text-foreground'
                         : 'text-muted-foreground hover:bg-accent/50'
                   )}
                >
@@ -254,7 +252,7 @@ export default function Reviews({
                {loading ? (
                   <div className="flex flex-col divide-y divide-border/50">
                      {Array.from({ length: 8 }).map((_, i) => (
-                        <div key={i} className="flex items-center gap-3 px-4 py-3">
+                        <div key={i} className="flex h-11 items-center gap-3 px-[18px]">
                            <Skeleton className="size-4 rounded-full shrink-0" />
                            <Skeleton className="h-4 flex-1 max-w-md" />
                            <Skeleton className="h-4 w-16 shrink-0" />
@@ -262,11 +260,13 @@ export default function Reviews({
                      ))}
                   </div>
                ) : error ? (
-                  <div className="px-4 py-6 text-sm text-muted-foreground">
+                  <div className="px-[18px] py-6 text-[13px] text-muted-foreground">
                      Could not load reviews.
                   </div>
                ) : groups.length === 0 ? (
-                  <div className="px-4 py-6 text-sm text-muted-foreground">No reviews yet.</div>
+                  <div className="px-[18px] py-6 text-[13px] text-muted-foreground">
+                     No reviews yet.
+                  </div>
                ) : (
                   <>
                      {groups.map((group) => (
@@ -308,6 +308,37 @@ export default function Reviews({
          <div className="flex-1 min-w-0 h-full overflow-hidden">
             {selectedReviewId ? (
                <ReviewDetail reviewId={selectedReviewId} section={section} />
+            ) : !loading && !error && total === 0 ? (
+               <div className="flex h-full items-center justify-center text-muted-foreground">
+                  <div className="flex w-[540px] flex-col gap-6">
+                     <EmptySketch />
+                     <div className="flex flex-col gap-2">
+                        <h3 className="text-[15px] font-semibold leading-[23px] text-foreground">
+                           Review diffs in Circle
+                        </h3>
+                        <p className="text-[13px] font-[450] leading-[18.2px]">
+                           Pull requests and coding session diffs are available directly in your
+                           workspace.
+                        </p>
+                        <ul className="ml-5 list-disc space-y-2 text-[13px] font-[450] leading-[18.2px]">
+                           <li>Review changes in digestible, focused sections</li>
+                           <li>Track review follow-ups alongside issues and projects</li>
+                           <li>Keep review activity connected to your workspace</li>
+                        </ul>
+                     </div>
+                     {isAdmin && (
+                        <button
+                           type="button"
+                           onClick={handleSync}
+                           disabled={syncing}
+                           className="inline-flex h-7 self-start items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+                        >
+                           <RefreshCw className={cn('size-3.5', syncing && 'animate-spin')} />
+                           {syncing ? 'Syncing…' : 'Sync from GitHub'}
+                        </button>
+                     )}
+                  </div>
+               </div>
             ) : (
                <div className="h-full flex flex-col items-center justify-center gap-4 text-muted-foreground">
                   <EmptySketch />

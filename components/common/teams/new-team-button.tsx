@@ -38,8 +38,8 @@ export function NewTeamButton() {
    return (
       <Popover open={open} onOpenChange={setOpen}>
          <PopoverTrigger asChild>
-            <Button size="xs" variant="secondary">
-               <Plus className="size-4 mr-1" />
+            <Button size="xs" variant="ghost" className="px-[9px] text-xs has-[>svg]:px-[9px]">
+               <Plus className="size-4" />
                New team
             </Button>
          </PopoverTrigger>

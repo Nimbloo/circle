@@ -1,12 +1,13 @@
 import HeaderNav from './header-nav';
-import { HeaderTitle, ViewBar } from '@/components/layout/header-primitives';
+import { ViewBar } from '@/components/layout/header-primitives';
+import { ProjectsViewControls } from './projects-view-controls';
 
 export default function Header() {
    return (
       <>
          <HeaderNav />
          <ViewBar>
-            <HeaderTitle>All projects</HeaderTitle>
+            <ProjectsViewControls />
          </ViewBar>
       </>
    );

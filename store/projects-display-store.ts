@@ -71,7 +71,7 @@ interface ProjectsDisplayState {
 
 const DEFAULTS = {
    viewTypes: { all: 'list', active: 'timeline' } as Record<ProjectsTab, ProjectsViewType>,
-   grouping: 'team' as ProjectsGrouping,
+   grouping: 'none' as ProjectsGrouping,
    ordering: 'start-date' as ProjectsOrdering,
    closedProjects: 'all' as ClosedProjectsFilter,
    showEmptyGroups: false,
@@ -86,7 +86,10 @@ export const useProjectsDisplayStore = create<ProjectsDisplayState>()(
          ...DEFAULTS,
 
          setViewType: (tab, viewType) =>
-            set((state) => ({ viewTypes: { ...state.viewTypes, [tab]: viewType } })),
+            set((state) => ({
+               viewTypes: { ...state.viewTypes, [tab]: viewType },
+               ...(viewType === 'board' ? { showEmptyGroups: true } : {}),
+            })),
          setGrouping: (grouping) => set({ grouping }),
          setOrdering: (ordering) => set({ ordering }),
          setClosedProjects: (closedProjects) => set({ closedProjects }),

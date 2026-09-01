@@ -32,7 +32,12 @@ export function HeaderGroup({ className, ...props }: ComponentProps<'div'>) {
 }
 
 export function HeaderTitle({ className, ...props }: ComponentProps<'h2'>) {
-   return <h2 className={cn('truncate text-[13px] font-medium', className)} {...props} />;
+   return (
+      <h2
+         className={cn('truncate text-[13px] font-medium leading-[normal]', className)}
+         {...props}
+      />
+   );
 }
 
 export function HeaderActions({ className, ...props }: ComponentProps<'div'>) {

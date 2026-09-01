@@ -1,7 +1,6 @@
 'use client';
 
 import { CreateViewButton } from '@/components/common/views/create-view-dialog';
-import { SidebarTrigger } from '@/components/ui/sidebar';
 import {
    HeaderActions,
    HeaderGroup,
@@ -12,12 +11,11 @@ import {
 export default function Header() {
    return (
       <LocationBar>
-         <HeaderGroup>
-            <SidebarTrigger />
+         <HeaderGroup className="pl-2.5">
             <HeaderTitle>Views</HeaderTitle>
          </HeaderGroup>
-         <HeaderActions>
-            <CreateViewButton />
+         <HeaderActions className="pr-0.5">
+            <CreateViewButton label="New view" />
          </HeaderActions>
       </LocationBar>
    );

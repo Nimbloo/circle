@@ -5,9 +5,9 @@ import { ReviewStatus } from '@/data/reviews';
 import { Fragment } from 'react';
 
 const PR_ICON_COLORS: Record<ReviewStatus, string> = {
-   open: '#1a7f37',
-   merged: '#8250df',
-   closed: '#d1242f',
+   open: 'var(--review-open)',
+   merged: 'var(--review-merged)',
+   closed: 'var(--review-closed)',
 };
 
 /** Colored pull-request icon (green open, purple merged, red closed). */
@@ -40,11 +40,11 @@ export function PrIcon({ status, className }: { status: ReviewStatus; className?
 export function IssueCheckIcon({ className }: { className?: string }) {
    return (
       <svg viewBox="0 0 16 16" className={cn('size-4 shrink-0', className)} aria-hidden>
-         <circle cx="8" cy="8" r="7" fill="#5e6ad2" />
+         <circle cx="8" cy="8" r="7" fill="var(--primary)" />
          <path
             d="M5 8.2 7.2 10.4 11 6.2"
             fill="none"
-            stroke="white"
+            stroke="var(--primary-foreground)"
             strokeWidth="1.6"
             strokeLinecap="round"
             strokeLinejoin="round"

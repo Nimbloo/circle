@@ -4,7 +4,7 @@
 
 @custom-variant dark (&:is(.dark *));
 
-@theme {
+@theme inline {
    --font-sans: var(--font-inter);
    --font-mono: var(--font-geist-mono);
 }
@@ -20,6 +20,11 @@
       rgb(0 0 0 / 0.12) 0 3px 8px, rgb(0 0 0 / 0.1) 0 2px 5px, rgb(0 0 0 / 0.08) 0 1px 1px;
    --segmented-control-active: #eceef1;
    --filter-bar: #f6f7f8;
+   --table-header-foreground: #777b82;
+   --online-indicator: #00a86b;
+   --review-open: #1a7f37;
+   --review-merged: #8250df;
+   --review-closed: #d1242f;
    /* Acento índigo do Linear (#5e6ad2) — botão primário, seleção, foco. */
    --primary: #5e6ad2;
    --primary-foreground: #ffffff;
@@ -67,6 +72,11 @@
       lch(0 0 0 / 0.125) 0 3px 8px, lch(0 0 0 / 0.125) 0 2px 5px, lch(0 0 0 / 0.125) 0 1px 1px;
    --segmented-control-active: lch(23.906 1.429 272);
    --filter-bar: lch(9.345 0.85 272);
+   --table-header-foreground: lch(61.803 1.2 272);
+   --online-indicator: #00cc66;
+   --review-open: #3fb950;
+   --review-merged: #a371f7;
+   --review-closed: #f85149;
    --primary: #5e6ad2;
    --primary-foreground: #ffffff;
    --secondary: lch(10.149 0.689 272);

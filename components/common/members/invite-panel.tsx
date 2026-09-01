@@ -94,96 +94,98 @@ export function InvitePanel() {
    const pending = (invites ?? []).filter((i) => !i.acceptedAt && !i.expired);
 
    return (
-      <div className="border-b bg-container/50">
-         <div className="flex items-center justify-between gap-3 px-6 py-3">
-            <div className="min-w-0">
-               <p className="text-sm font-medium">Convites</p>
-               <p className="text-xs text-muted-foreground">
-                  Para quem ainda não aparece aqui — inclusive quem nunca logou. O link vale 7 dias
-                  e libera o acesso no primeiro login.
+      <Popover open={open} onOpenChange={setOpen}>
+         <PopoverTrigger asChild>
+            <Button
+               size="xs"
+               variant="ghost"
+               className="px-[9px] text-xs has-[>svg]:px-[9px]"
+               aria-label="Invite members"
+            >
+               <Plus className="size-4" />
+               Invite members
+            </Button>
+         </PopoverTrigger>
+         <PopoverContent
+            align="end"
+            sideOffset={4}
+            className="w-[360px] rounded-xl border-[var(--popover-border)] bg-popover p-0"
+            style={{ boxShadow: 'var(--popover-shadow)' }}
+         >
+            <div className="p-3">
+               <p className="mb-2 text-xs text-muted-foreground">
+                  Enter a {DOMAIN} email. The invite link is copied automatically and expires in 7
+                  days.
                </p>
-            </div>
-            <Popover open={open} onOpenChange={setOpen}>
-               <PopoverTrigger asChild>
-                  <Button size="xs" variant="secondary" className="shrink-0">
-                     <Plus className="size-4 mr-1" />
-                     Convidar
+               <div className="flex items-center gap-1.5">
+                  <Input
+                     type="email"
+                     autoFocus
+                     placeholder={`name${DOMAIN}`}
+                     value={email}
+                     onChange={(e) => setEmail(e.target.value)}
+                     onKeyDown={(e) => {
+                        if (e.key === 'Enter') void invited();
+                     }}
+                     className="h-8"
+                  />
+                  <Button size="xs" onClick={() => void invited()} disabled={busy}>
+                     Invite
                   </Button>
-               </PopoverTrigger>
-               <PopoverContent align="end" className="w-80 p-3">
-                  <p className="text-xs text-muted-foreground mb-2">
-                     E-mail {DOMAIN} da pessoa. O link é copiado automaticamente.
-                  </p>
-                  <div className="flex items-center gap-1.5">
-                     <Input
-                        type="email"
-                        autoFocus
-                        placeholder={`nome${DOMAIN}`}
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        onKeyDown={(e) => {
-                           if (e.key === 'Enter') void invited();
-                        }}
-                        className="h-8"
-                     />
-                     <Button size="xs" onClick={() => void invited()} disabled={busy}>
-                        Convidar
-                     </Button>
-                  </div>
-               </PopoverContent>
-            </Popover>
-         </div>
-
-         {freshLink && (
-            <div className="mx-6 mb-3 flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2">
-               <Link2 className="size-3.5 shrink-0 text-primary" />
-               <span className="min-w-0 flex-1 truncate text-xs">
-                  Convite de <span className="font-medium">{freshLink.email}</span> —{' '}
-                  <span className="text-muted-foreground">{freshLink.url}</span>
-               </span>
-               <Button
-                  size="icon"
-                  variant="ghost"
-                  className="size-6 shrink-0"
-                  aria-label="Copiar link"
-                  onClick={() => void copy(freshLink.url)}
-               >
-                  {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-               </Button>
+               </div>
             </div>
-         )}
 
-         {pending.length > 0 && (
-            <div className="pb-2">
-               {pending.map((i) => (
-                  <div
-                     key={i.id}
-                     className="flex items-center gap-3 px-6 py-2 text-sm hover:bg-accent/40 transition-colors"
+            {freshLink && (
+               <div className="mx-3 mb-3 flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2">
+                  <Link2 className="size-3.5 shrink-0 text-primary" />
+                  <span className="min-w-0 flex-1 truncate text-xs">
+                     Invite for <span className="font-medium">{freshLink.email}</span> —{' '}
+                     <span className="text-muted-foreground">{freshLink.url}</span>
+                  </span>
+                  <Button
+                     size="icon"
+                     variant="ghost"
+                     className="size-6 shrink-0"
+                     aria-label="Copy invite link"
+                     onClick={() => void copy(freshLink.url)}
                   >
-                     <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-dashed text-[10px] text-muted-foreground">
-                        {i.email[0]?.toUpperCase()}
-                     </span>
-                     <span className="min-w-0 flex-1 truncate">{i.email}</span>
-                     <span className="hidden shrink-0 text-xs text-muted-foreground sm:block">
-                        convidado por {i.invitedBy?.name ?? 'alguém'}
-                     </span>
-                     <span className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                        pendente
-                     </span>
-                     <Button
-                        size="icon"
-                        variant="ghost"
-                        className="size-6 shrink-0"
-                        aria-label={`Revogar convite de ${i.email}`}
-                        disabled={busy}
-                        onClick={() => void revoke(i.id, i.email)}
+                     {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                  </Button>
+               </div>
+            )}
+
+            {pending.length > 0 && (
+               <div className="border-t py-1">
+                  <p className="px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                     Pending invites
+                  </p>
+                  {pending.map((i) => (
+                     <div
+                        key={i.id}
+                        className="flex h-10 items-center gap-2 px-3 text-[13px] transition-colors hover:bg-accent/40"
                      >
-                        <X className="size-3.5" />
-                     </Button>
-                  </div>
-               ))}
-            </div>
-         )}
-      </div>
+                        <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-dashed text-[10px] text-muted-foreground">
+                           {i.email[0]?.toUpperCase()}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate">{i.email}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                           {i.invitedBy?.name ?? 'Unknown'}
+                        </span>
+                        <Button
+                           size="icon"
+                           variant="ghost"
+                           className="size-6 shrink-0"
+                           aria-label={`Revoke invite for ${i.email}`}
+                           disabled={busy}
+                           onClick={() => void revoke(i.id, i.email)}
+                        >
+                           <X className="size-3.5" />
+                        </Button>
+                     </div>
+                  ))}
+               </div>
+            )}
+         </PopoverContent>
+      </Popover>
    );
 }

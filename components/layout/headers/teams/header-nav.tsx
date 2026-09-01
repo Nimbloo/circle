@@ -1,8 +1,6 @@
 'use client';
 
 import { NewTeamButton } from '@/components/common/teams/new-team-button';
-import { SidebarTrigger } from '@/components/ui/sidebar';
-import { useWorkspaceStore } from '@/store/workspace-store';
 import {
    HeaderActions,
    HeaderGroup,
@@ -11,19 +9,12 @@ import {
 } from '@/components/layout/header-primitives';
 
 export default function HeaderNav() {
-   const teams = useWorkspaceStore((s) => s.teams);
    return (
       <LocationBar>
-         <HeaderGroup>
-            <SidebarTrigger />
-            <div className="flex items-center gap-1">
-               <HeaderTitle>Teams</HeaderTitle>
-               <span className="rounded-md bg-accent px-1.5 py-0.5 text-xs text-muted-foreground">
-                  {teams.length}
-               </span>
-            </div>
+         <HeaderGroup className="pl-2.5">
+            <HeaderTitle>Teams</HeaderTitle>
          </HeaderGroup>
-         <HeaderActions>
+         <HeaderActions className="pr-0.5">
             <NewTeamButton />
          </HeaderActions>
       </LocationBar>

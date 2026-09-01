@@ -1,35 +1,22 @@
 'use client';
 
-import { SidebarTrigger } from '@/components/ui/sidebar';
-import { HeaderGroup, HeaderTitle, LocationBar } from '@/components/layout/header-primitives';
-import { useWorkspaceStore } from '@/store/workspace-store';
-import { ChevronRight, Star } from 'lucide-react';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { CreateViewButton } from '@/components/common/views/create-view-dialog';
+import {
+   HeaderActions,
+   HeaderGroup,
+   HeaderTitle,
+   LocationBar,
+} from '@/components/layout/header-primitives';
 
 export default function Header() {
-   const { orgId, teamId } = useParams<{ orgId: string; teamId: string }>();
-   const teams = useWorkspaceStore((s) => s.teams);
-   const team = teams.find((t) => t.id === teamId) ?? teams[0];
-   if (!team) return <LocationBar />;
-
    return (
       <LocationBar>
-         <HeaderGroup>
-            <SidebarTrigger />
-            <Link
-               href={`/${orgId}/team/${team.id}/overview`}
-               className="flex min-w-0 items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground"
-            >
-               <div className="inline-flex size-5 bg-muted/50 items-center justify-center rounded shrink-0 text-xs">
-                  {team.icon}
-               </div>
-               <span className="truncate text-[13px]">{team.name}</span>
-            </Link>
-            <ChevronRight className="size-3.5 text-muted-foreground shrink-0" />
+         <HeaderGroup className="pl-2.5">
             <HeaderTitle>Views</HeaderTitle>
-            <Star className="size-3.5 text-muted-foreground shrink-0 ml-1" />
          </HeaderGroup>
+         <HeaderActions className="pr-0.5">
+            <CreateViewButton label="New view" />
+         </HeaderActions>
       </LocationBar>
    );
 }

@@ -1,6 +1,5 @@
 'use client';
 
-import { SidebarTrigger } from '@/components/ui/sidebar';
 import {
    HeaderActions,
    HeaderGroup,
@@ -20,16 +19,15 @@ export default function HeaderNav() {
 
    return (
       <LocationBar>
-         <HeaderGroup>
-            <SidebarTrigger />
-            <div className="inline-flex size-5 bg-muted/50 items-center justify-center rounded shrink-0 text-xs">
+         <HeaderGroup className="pl-2.5">
+            <div className="inline-flex size-4 bg-muted/50 items-center justify-center rounded shrink-0 text-[10px]">
                {team.icon}
             </div>
             <HeaderTitle>{team.name}</HeaderTitle>
             <Star className="size-3.5 text-muted-foreground shrink-0 ml-1" />
             <MoreHorizontal className="size-3.5 text-muted-foreground shrink-0" />
          </HeaderGroup>
-         <HeaderActions>
+         <HeaderActions className="pr-0.5">
             <Link2 className="size-4 shrink-0 text-muted-foreground" />
          </HeaderActions>
       </LocationBar>

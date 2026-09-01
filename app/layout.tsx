@@ -47,7 +47,7 @@ export default function RootLayout({
             <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
          </head>
          <body
-            className={`${inter.variable} ${geistMono.variable} antialiased bg-background`}
+            className={`${inter.variable} ${geistMono.variable} font-sans antialiased bg-background`}
             suppressHydrationWarning
          >
             <NuqsAdapter>
