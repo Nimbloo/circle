@@ -173,7 +173,7 @@ describe('historico de escopo do ciclo', () => {
       await updateIssue(db, dto.id, { cycleId: 'c2' }, ME);
 
       const events = await db.select().from(activityEvent).where(eq(activityEvent.issueId, dto.id));
-      const moved = events.find((e) => e.event === 'cycle' && e.text.includes('changed cycle'));
+      const moved = events.find((e) => e.event === 'cycle' && e.text?.includes('changed cycle'));
       expect(moved?.text).toBe('changed cycle from c1 to c2');
    });
 });
