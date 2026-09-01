@@ -28,6 +28,7 @@ import {
    AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { api } from '@/lib/client';
+import { cn } from '@/lib/utils';
 import { ApiError } from '@/lib/api/errors';
 import type { StatusCategory } from '@/data/status';
 import { useStatuses } from '@/store/catalog-store';
@@ -165,6 +166,38 @@ export default function ProjectStatusesSettings() {
    const [dialogCategory, setDialogCategory] = useState<StatusCategory>('backlog');
    const [toDelete, setToDelete] = useState<EditStatus | null>(null);
    const [deleteBusy, setDeleteBusy] = useState(false);
+   /** Índice arrastado, escopado ao grupo — não se reordena entre categorias. */
+   const [drag, setDrag] = useState<{ group: string; index: number } | null>(null);
+   const [over, setOver] = useState<{ group: string; index: number } | null>(null);
+
+   const resetDrag = () => {
+      setDrag(null);
+      setOver(null);
+   };
+
+   /**
+    * Persiste a nova ordem. O PATCH grava `position` pelo índice do array, então
+    * mandamos a lista INTEIRA (todas as categorias) com o item movido de lugar —
+    * mandar só o grupo reescreveria as posições dos outros com índices repetidos.
+    */
+   const commitReorder = async (groupItems: EditStatus[], from: number, to: number) => {
+      if (from === to) return;
+      const moved = [...groupItems];
+      const [item] = moved.splice(from, 1);
+      moved.splice(to, 0, item);
+      const movedIds = moved.map((x) => x.id);
+      const groupIds = new Set(groupItems.map((x) => x.id));
+      // Reinsere o grupo reordenado nas MESMAS casas que ele ocupava na lista global.
+      let cursor = 0;
+      const ids = statuses.map((x) => (groupIds.has(x.id) ? movedIds[cursor++] : x.id));
+      try {
+         await api.statuses.reorder(ids);
+         await useWorkspaceStore.getState().hydrate();
+         toast.success('Ordem atualizada');
+      } catch {
+         toast.error('Não foi possível reordenar');
+      }
+   };
 
    const openCreate = (category: StatusCategory) => {
       setEditing(null);
@@ -223,8 +256,34 @@ export default function ProjectStatusesSettings() {
                      {items.length === 0 && (
                         <div className="px-4 py-3 text-xs text-muted-foreground">No statuses</div>
                      )}
-                     {items.map((s) => (
-                        <div key={s.id} className="flex items-center gap-3 px-4 py-3">
+                     {items.map((s, index) => (
+                        <div
+                           key={s.id}
+                           draggable={isAdmin}
+                           onDragStart={() => setDrag({ group: group.label, index })}
+                           onDragOver={(e) => {
+                              if (!drag || drag.group !== group.label) return;
+                              e.preventDefault();
+                              setOver({ group: group.label, index });
+                           }}
+                           onDrop={(e) => {
+                              e.preventDefault();
+                              if (drag && drag.group === group.label) {
+                                 void commitReorder(items, drag.index, index);
+                              }
+                              resetDrag();
+                           }}
+                           onDragEnd={resetDrag}
+                           className={cn(
+                              'flex items-center gap-3 px-4 py-3 transition-colors',
+                              isAdmin && 'cursor-grab active:cursor-grabbing',
+                              drag?.group === group.label && drag.index === index && 'opacity-40',
+                              over?.group === group.label &&
+                                 over.index === index &&
+                                 drag?.index !== index &&
+                                 'bg-accent/50'
+                           )}
+                        >
                            <span
                               className="inline-block size-3 rounded-full shrink-0"
                               style={{ backgroundColor: s.color }}
