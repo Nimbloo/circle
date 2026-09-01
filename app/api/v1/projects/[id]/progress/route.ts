@@ -14,5 +14,5 @@ export async function GET(req: Request, { params }: Params) {
       const { id } = await params;
       const res = await projectProgress(db, id);
       return res ? ok(res) : notFound(`Project '${id}' não encontrado`);
-   });
+   }, req);
 }

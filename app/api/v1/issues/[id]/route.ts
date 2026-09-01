@@ -19,7 +19,7 @@ export async function GET(req: Request, { params }: Params) {
       const { id } = await params;
       const dto = UUID_RE.test(id) ? await getIssue(db, id) : await getIssueByIdentifier(db, id);
       return dto ? ok(dto) : notFound(`Issue '${id}' não encontrada`);
-   });
+   }, req);
 }
 
 const UpdateSchema = z.object({
@@ -42,7 +42,7 @@ export async function PATCH(req: Request, { params }: Params) {
       const patch = UpdateSchema.parse(await req.json());
       const dto = await updateIssue(db, id, patch, email);
       return dto ? ok(dto) : notFound(`Issue '${id}' não encontrada`);
-   });
+   }, req);
 }
 
 export async function DELETE(req: Request, { params }: Params) {
@@ -51,5 +51,5 @@ export async function DELETE(req: Request, { params }: Params) {
       await requireEmail(req);
       const removed = await deleteIssue(db, id);
       return removed ? ok({ deleted: true }) : notFound(`Issue '${id}' não encontrada`);
-   });
+   }, req);
 }

@@ -103,15 +103,13 @@ export function useLiveSync(): void {
             if (entity === 'issue' && parsed.id) {
                if (parsed.action === 'deleted') useIssuesStore.getState().removeRemote(parsed.id);
                else void useIssuesStore.getState().applyRemote(parsed.id); // created|updated
-            } else if (
-               (entity === 'project' || entity === 'initiative') &&
-               parsed.id &&
-               parsed.action !== 'created'
-            ) {
+            } else if ((entity === 'project' || entity === 'initiative') && parsed.id) {
                // TARGETED p/ project/initiative (o caso QUENTE — toda edição de detalhe/
                // milestone publica project/updated): re-busca SÓ aquela entidade e faz
                // apply, em vez de re-hidratar o workspace INTEIRO (que ainda roda o
-               // rollover de cycles). `created` cai no full hydrate (precisa inserir a nova).
+               // rollover de cycles). `created` entra aqui também: `applyProject`/
+               // `applyInitiative` INSEREM quando o id ainda não está no store, então
+               // criar um projeto nao precisa custar um bootstrap inteiro por cliente.
                const ws = useWorkspaceStore.getState();
                const id = parsed.id;
                if (parsed.action === 'deleted') {

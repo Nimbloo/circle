@@ -19,7 +19,7 @@ export async function GET(req: Request, { params }: Params) {
       const { id } = await params;
       const dto = await getMember(db, id);
       return dto ? ok(dto) : notFound(`Membro '${id}' não encontrado`);
-   });
+   }, req);
 }
 
 const UpdateSchema = z.object({ role: z.enum(MEMBER_ROLES) });
@@ -42,5 +42,5 @@ export async function PATCH(req: Request, { params }: Params) {
          });
       }
       return dto ? ok(dto) : notFound(`Membro '${id}' não encontrado`);
-   });
+   }, req);
 }

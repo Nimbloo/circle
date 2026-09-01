@@ -14,7 +14,7 @@ export async function GET(req: Request) {
    return handle(async () => {
       await requireEmail(req);
       return ok(await listEmojis(db));
-   });
+   }, req);
 }
 
 const CreateSchema = z.object({

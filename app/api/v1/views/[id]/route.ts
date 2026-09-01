@@ -16,7 +16,7 @@ export async function GET(req: Request, { params }: Params) {
       const me = await getOrCreateUser(db, await requireEmail(req));
       const dto = await getView(db, id, me.id); // view pessoal só p/ o dono
       return dto ? ok(dto) : notFound(`View '${id}' não encontrada`);
-   });
+   }, req);
 }
 
 const UpdateSchema = z.object({
@@ -42,7 +42,7 @@ export async function PATCH(req: Request, { params }: Params) {
       const patch = UpdateSchema.parse(await req.json());
       const dto = await updateView(db, id, patch, email);
       return dto ? ok(dto) : notFound(`View '${id}' não encontrada`);
-   });
+   }, req);
 }
 
 export async function DELETE(req: Request, { params }: Params) {
@@ -51,5 +51,5 @@ export async function DELETE(req: Request, { params }: Params) {
       const email = await requireEmail(req);
       const removed = await deleteView(db, id, email);
       return removed ? ok({ deleted: true }) : notFound(`View '${id}' não encontrada`);
-   });
+   }, req);
 }

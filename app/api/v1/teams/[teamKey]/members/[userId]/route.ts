@@ -29,5 +29,5 @@ export async function DELETE(req: Request, { params }: Params) {
          meta: { userId },
       });
       return ok(await listTeamMembers(db, teamKey));
-   });
+   }, req);
 }

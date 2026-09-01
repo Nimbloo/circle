@@ -14,5 +14,5 @@ export async function GET(req: Request) {
       const email = await requireEmail(req);
       if (!(await isAdmin(email, db))) throw new ApiError(403, 'Apenas admin');
       return ok(await listAudit(db));
-   });
+   }, req);
 }

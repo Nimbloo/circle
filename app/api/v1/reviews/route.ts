@@ -25,5 +25,5 @@ export async function GET(req: Request) {
          offset,
       });
       return ok(items, { total, limit, offset });
-   });
+   }, req);
 }

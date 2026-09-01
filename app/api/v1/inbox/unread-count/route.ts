@@ -12,5 +12,5 @@ export async function GET(req: Request) {
       const email = await requireEmail(req);
       const me = await getOrCreateUser(db, email);
       return ok({ count: await unreadCount(db, me.id) });
-   });
+   }, req);
 }

@@ -21,5 +21,5 @@ export async function PATCH(req: Request, { params }: Params) {
       const { beforeId, afterId } = RankSchema.parse(await req.json());
       const dto = await reorderIssue(db, id, beforeId, afterId);
       return dto ? ok(dto) : notFound(`Issue '${id}' não encontrada`);
-   });
+   }, req);
 }

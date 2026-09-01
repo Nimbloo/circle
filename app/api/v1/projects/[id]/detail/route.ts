@@ -16,7 +16,7 @@ export async function GET(req: Request, { params }: Params) {
       const { id } = await params;
       const dto = await getProjectDetail(db, id);
       return dto ? ok(dto) : notFound(`Project '${id}' não encontrado`);
-   });
+   }, req);
 }
 
 const PatchSchema = z.object({
@@ -34,5 +34,5 @@ export async function PATCH(req: Request, { params }: Params) {
          description: patch.description as ContentBlock[] | null | undefined,
       });
       return dto ? ok(dto) : notFound(`Project '${id}' não encontrado`);
-   });
+   }, req);
 }

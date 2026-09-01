@@ -16,7 +16,7 @@ export async function GET(req: Request, { params }: Params) {
       await requireEmail(req);
       const { teamKey } = await params;
       return ok(await listTemplatesByTeam(db, teamKey));
-   });
+   }, req);
 }
 
 const CreateSchema = z.object({

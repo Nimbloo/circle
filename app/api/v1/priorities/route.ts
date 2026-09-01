@@ -10,5 +10,5 @@ export async function GET(req: Request) {
    return handle(async () => {
       await requireEmail(req);
       return ok(await listPriorities(db));
-   });
+   }, req);
 }

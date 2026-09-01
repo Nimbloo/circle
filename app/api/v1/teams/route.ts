@@ -17,7 +17,7 @@ export async function GET(req: Request) {
       const meId = email ? (await getOrCreateUser(db, email)).id : undefined;
       const [sort, dir] = (sp.get('sort') ?? 'name-asc').split('-') as [TeamSort, 'asc' | 'desc'];
       return ok(await listTeams(db, { membership: multi(sp, 'membership'), sort, dir }, meId));
-   });
+   }, req);
 }
 
 const CreateTeamSchema = z.object({
@@ -42,5 +42,5 @@ export async function POST(req: Request) {
          meta: { name: team.name },
       });
       return ok(team);
-   });
+   }, req);
 }

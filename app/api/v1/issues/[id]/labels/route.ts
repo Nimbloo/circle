@@ -18,5 +18,5 @@ export async function POST(req: Request, { params }: Params) {
       const { labelId } = AddLabelSchema.parse(await req.json());
       const dto = await addLabel(db, id, labelId, email);
       return dto ? ok(dto) : notFound(`Issue '${id}' não encontrada`);
-   });
+   }, req);
 }

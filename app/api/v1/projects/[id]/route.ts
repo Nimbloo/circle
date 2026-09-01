@@ -15,7 +15,7 @@ export async function GET(req: Request, { params }: Params) {
       const { id } = await params;
       const dto = await getProject(db, id);
       return dto ? ok(dto) : notFound(`Project '${id}' não encontrado`);
-   });
+   }, req);
 }
 
 const UpdateSchema = z.object({
@@ -38,7 +38,7 @@ export async function PATCH(req: Request, { params }: Params) {
       const patch = UpdateSchema.parse(await req.json());
       const dto = await updateProject(db, id, patch, email);
       return dto ? ok(dto) : notFound(`Project '${id}' não encontrado`);
-   });
+   }, req);
 }
 
 export async function DELETE(req: Request, { params }: Params) {
@@ -47,5 +47,5 @@ export async function DELETE(req: Request, { params }: Params) {
       await requireEmail(req);
       const removed = await deleteProject(db, id);
       return removed ? ok({ deleted: true }) : notFound(`Project '${id}' não encontrado`);
-   });
+   }, req);
 }

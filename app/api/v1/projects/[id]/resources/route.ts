@@ -14,7 +14,7 @@ export async function GET(req: Request, { params }: Params) {
       await requireEmail(req);
       const { id } = await params;
       return ok(await listResources(db, id));
-   });
+   }, req);
 }
 
 const CreateSchema = z.object({
@@ -28,5 +28,5 @@ export async function POST(req: Request, { params }: Params) {
       await requireEmail(req);
       const input = CreateSchema.parse(await req.json());
       return ok(await addResource(db, id, input));
-   });
+   }, req);
 }

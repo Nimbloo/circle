@@ -22,7 +22,7 @@ export async function PATCH(req: Request, { params }: Params) {
       const patch = PatchSchema.parse(await req.json());
       const dto = await updateMilestone(db, mid, patch);
       return dto ? ok(dto) : notFound(`Milestone '${mid}' não encontrado`);
-   });
+   }, req);
 }
 
 export async function DELETE(req: Request, { params }: Params) {
@@ -31,5 +31,5 @@ export async function DELETE(req: Request, { params }: Params) {
       await requireEmail(req);
       const removed = await deleteMilestone(db, mid);
       return removed ? ok({ deleted: true }) : notFound(`Milestone '${mid}' não encontrado`);
-   });
+   }, req);
 }
