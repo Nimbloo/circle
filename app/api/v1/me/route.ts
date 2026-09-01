@@ -17,9 +17,10 @@ export async function GET(req: Request) {
 const UpdateSchema = z.object({
    name: z.string().min(1).max(128).optional(),
    timezone: z.string().max(64).nullable().optional(),
+   githubLogin: z.string().max(128).nullable().optional(),
 });
 
-/** PATCH /me — atualiza o próprio perfil (name/timezone). */
+/** PATCH /me — atualiza o próprio perfil (name/timezone/githubLogin). */
 export async function PATCH(req: Request) {
    return handle(async () => {
       const email = await requireEmail(req);
