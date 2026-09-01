@@ -9,6 +9,7 @@ import { BarChart3, PanelRight } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { DisplayOptions } from '../display-options';
 import { CycleView } from '@/components/common/issues/cycle-issues';
+import { HeaderActions, ViewBar } from '@/components/layout/header-primitives';
 
 export default function HeaderOptions({ cycleView }: { cycleView: CycleView }) {
    const { openPanel, togglePanel } = useRightPanelStore();
@@ -21,14 +22,14 @@ export default function HeaderOptions({ cycleView }: { cycleView: CycleView }) {
    const count = issues.filter((issue) => issue.cycleId === cycle?.id).length;
 
    return (
-      <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">
+      <ViewBar>
          <div className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
                {count} {count === 1 ? 'issue' : 'issues'}
             </span>
          </div>
 
-         <div className="flex items-center gap-1">
+         <HeaderActions>
             <IssueFilterTrigger />
             <Button
                size="xs"
@@ -47,7 +48,7 @@ export default function HeaderOptions({ cycleView }: { cycleView: CycleView }) {
                <PanelRight className="size-4" />
             </Button>
             <DisplayOptions />
-         </div>
-      </div>
+         </HeaderActions>
+      </ViewBar>
    );
 }

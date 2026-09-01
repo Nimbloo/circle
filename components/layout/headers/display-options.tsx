@@ -78,11 +78,11 @@ export function DisplayOptions() {
    return (
       <Popover>
          <PopoverTrigger asChild>
-            <Button className="relative" size="xs" variant="secondary">
-               <SlidersHorizontal className="size-4 mr-1" />
+            <Button className="relative gap-1" size="xs" variant="secondary">
+               <SlidersHorizontal className="size-4" />
                Display
                {(!isDefault || viewType === 'grid') && (
-                  <span className="absolute right-0 top-0 w-2 h-2 bg-orange-500 rounded-full" />
+                  <span className="absolute right-0 top-0 size-2 rounded-full bg-primary" />
                )}
             </Button>
          </PopoverTrigger>

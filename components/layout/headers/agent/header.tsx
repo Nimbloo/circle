@@ -9,6 +9,7 @@ import {
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { SidebarTrigger } from '@/components/ui/sidebar';
+import { HeaderActions, HeaderGroup, LocationBar } from '@/components/layout/header-primitives';
 import { useAgentChatStore } from '@/store/agent-chat-store';
 import { ChevronDown, MessageSquare, Plus } from 'lucide-react';
 
@@ -17,9 +18,9 @@ export default function Header() {
    const activeChat = chats.find((chat) => chat.id === activeChatId);
 
    return (
-      <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">
-         <div className="flex items-center gap-2 min-w-0">
-            <SidebarTrigger className="" />
+      <LocationBar>
+         <HeaderGroup>
+            <SidebarTrigger />
             <DropdownMenu>
                <DropdownMenuTrigger className="flex items-center gap-1 text-sm font-medium outline-none hover:text-foreground min-w-0">
                   <span className="truncate max-w-64">{activeChat?.title ?? 'New chat'}</span>
@@ -39,10 +40,12 @@ export default function Header() {
                   ))}
                </DropdownMenuContent>
             </DropdownMenu>
-         </div>
-         <Button size="xs" variant="ghost" onClick={startNewChat} aria-label="Start a new chat">
-            <Plus className="size-4" />
-         </Button>
-      </div>
+         </HeaderGroup>
+         <HeaderActions>
+            <Button size="xs" variant="ghost" onClick={startNewChat} aria-label="Start a new chat">
+               <Plus className="size-4" />
+            </Button>
+         </HeaderActions>
+      </LocationBar>
    );
 }

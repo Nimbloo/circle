@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { ViewBar } from '@/components/layout/header-primitives';
 import Link from 'next/link';
 import { useParams, usePathname } from 'next/navigation';
 
@@ -15,7 +16,7 @@ export default function HeaderTabs() {
    const pathname = usePathname();
 
    return (
-      <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">
+      <ViewBar>
          <div className="flex items-center gap-1">
             {TEAM_TABS.map((tab) => {
                const href = `/${orgId}/team/${teamId}/${tab.segment}`;
@@ -36,6 +37,6 @@ export default function HeaderTabs() {
                );
             })}
          </div>
-      </div>
+      </ViewBar>
    );
 }

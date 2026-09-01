@@ -6,6 +6,8 @@ import { useRightPanelStore } from '@/store/right-panel-store';
 import { BarChart3, Download } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { DisplayOptions } from '../display-options';
+import { HeaderActions, ViewBar } from '@/components/layout/header-primitives';
+import { IssueViewTabs } from './header-nav';
 
 export default function HeaderOptions() {
    const { openPanel, togglePanel } = useRightPanelStore();
@@ -18,9 +20,9 @@ export default function HeaderOptions() {
    };
 
    return (
-      <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">
-         <div />
-         <div className="flex items-center gap-1">
+      <ViewBar>
+         <IssueViewTabs />
+         <HeaderActions>
             <IssueFilterTrigger />
             <Button size="xs" variant="ghost" onClick={exportCsv} aria-label="Export CSV">
                <Download className="size-4" />
@@ -34,7 +36,7 @@ export default function HeaderOptions() {
                <BarChart3 className="size-4" />
             </Button>
             <DisplayOptions />
-         </div>
-      </div>
+         </HeaderActions>
+      </ViewBar>
    );
 }

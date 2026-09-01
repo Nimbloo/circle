@@ -1,6 +1,13 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import {
+   HeaderActions,
+   HeaderGroup,
+   HeaderTitle,
+   LocationBar,
+   ViewBar,
+} from '@/components/layout/header-primitives';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 import { useRightPanelStore } from '@/store/right-panel-store';
@@ -20,7 +27,7 @@ function ProjectTabs({ projectId }: { projectId: string }) {
    const pathname = usePathname();
 
    return (
-      <div className="flex items-center gap-1">
+      <HeaderActions>
          {PROJECT_TABS.map((tab) => {
             const href = `/${orgId}/project/${projectId}/${tab.segment}`;
             const isActive = pathname === href;
@@ -40,7 +47,7 @@ function ProjectTabs({ projectId }: { projectId: string }) {
                </Link>
             );
          })}
-      </div>
+      </HeaderActions>
    );
 }
 
@@ -76,9 +83,9 @@ export default function Header({ projectId }: { projectId: string }) {
 
    return (
       <>
-         <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">
-            <div className="flex items-center gap-2 min-w-0">
-               <SidebarTrigger className="" />
+         <LocationBar>
+            <HeaderGroup>
+               <SidebarTrigger />
                <div className="flex items-center gap-1.5 text-sm min-w-0">
                   <Link
                      href={`/${orgId}/projects`}
@@ -90,14 +97,14 @@ export default function Header({ projectId }: { projectId: string }) {
                   <span className="inline-flex size-5 bg-muted/50 items-center justify-center rounded shrink-0">
                      <project.icon className="size-3.5" />
                   </span>
-                  <span className="font-medium truncate">{project.name}</span>
+                  <HeaderTitle>{project.name}</HeaderTitle>
                </div>
-            </div>
-         </div>
-         <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">
+            </HeaderGroup>
+         </LocationBar>
+         <ViewBar>
             <ProjectTabs projectId={project.id} />
             <PanelToggles />
-         </div>
+         </ViewBar>
       </>
    );
 }

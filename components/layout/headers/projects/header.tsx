@@ -1,9 +1,13 @@
 import HeaderNav from './header-nav';
+import { HeaderTitle, ViewBar } from '@/components/layout/header-primitives';
 
 export default function Header() {
    return (
-      <div className="w-full flex flex-col items-center">
+      <>
          <HeaderNav />
-      </div>
+         <ViewBar>
+            <HeaderTitle>All projects</HeaderTitle>
+         </ViewBar>
+      </>
    );
 }
