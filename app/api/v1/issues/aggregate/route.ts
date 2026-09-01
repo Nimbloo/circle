@@ -11,5 +11,5 @@ export async function GET(req: Request) {
       await requireEmail(req);
       const sp = new URL(req.url).searchParams;
       return ok(await issueMatrix(db, { team: sp.get('team') ?? undefined }));
-   });
+   }, req);
 }

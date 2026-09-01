@@ -37,5 +37,5 @@ export async function PATCH(req: Request, { params }: Params) {
          touched = (await setSnooze(db, id, until, me.id)) || touched;
       }
       return touched ? ok({ id, ...body }) : notFound(`Notificação '${id}' não encontrada`);
-   });
+   }, req);
 }

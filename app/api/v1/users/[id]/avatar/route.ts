@@ -32,5 +32,5 @@ export async function GET(req: Request, { params }: Params) {
             'cache-control': 'private, max-age=86400',
          },
       });
-   });
+   }, req);
 }

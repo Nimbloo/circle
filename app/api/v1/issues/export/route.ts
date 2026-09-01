@@ -66,5 +66,5 @@ export async function GET(req: Request) {
             'Content-Disposition': 'attachment; filename="issues.csv"',
          },
       });
-   });
+   }, req);
 }

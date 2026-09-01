@@ -18,7 +18,7 @@ export async function GET(req: Request, { params }: Params) {
       await requireEmail(req);
       const { teamKey } = await params;
       return ok(await listTeamMembers(db, teamKey));
-   });
+   }, req);
 }
 
 const AddMemberSchema = z.object({ email: z.string().email() });
@@ -40,5 +40,5 @@ export async function POST(req: Request, { params }: Params) {
          meta: { email },
       });
       return ok(await listTeamMembers(db, teamKey));
-   });
+   }, req);
 }

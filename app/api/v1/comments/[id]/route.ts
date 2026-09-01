@@ -19,7 +19,7 @@ export async function PATCH(req: Request, { params }: Params) {
       const updated = await updateComment(db, id, body, email);
       if (!updated) return notFound('Comentário não encontrado');
       return ok(updated);
-   });
+   }, req);
 }
 
 export async function DELETE(req: Request, { params }: Params) {
@@ -29,5 +29,5 @@ export async function DELETE(req: Request, { params }: Params) {
       const deleted = await deleteComment(db, id, email);
       if (!deleted) return notFound('Comentário não encontrado');
       return ok({ deleted: true });
-   });
+   }, req);
 }

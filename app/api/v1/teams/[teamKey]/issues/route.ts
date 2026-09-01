@@ -18,5 +18,5 @@ export async function GET(req: Request, { params }: Params) {
       const { opts } = parseIssueListOptions(sp, meEmail);
       opts.team = teamKey; // escopo por time
       return ok(await listIssues(db, opts));
-   });
+   }, req);
 }

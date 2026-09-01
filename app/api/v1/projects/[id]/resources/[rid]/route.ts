@@ -18,7 +18,7 @@ export async function PATCH(req: Request, { params }: Params) {
       const { label } = UpdateSchema.parse(await req.json());
       const updated = await updateResource(db, rid, { label });
       return updated ? ok({ id: rid }) : notFound(`Resource '${rid}' não encontrado`);
-   });
+   }, req);
 }
 
 export async function DELETE(req: Request, { params }: Params) {
@@ -27,5 +27,5 @@ export async function DELETE(req: Request, { params }: Params) {
       await requireEmail(req);
       const removed = await deleteResource(db, rid);
       return removed ? ok({ deleted: true }) : notFound(`Resource '${rid}' não encontrado`);
-   });
+   }, req);
 }

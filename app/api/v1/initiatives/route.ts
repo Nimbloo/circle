@@ -19,7 +19,7 @@ export async function GET(req: Request) {
             health: multi(sp, 'health'),
          })
       );
-   });
+   }, req);
 }
 
 const CreateSchema = z.object({
@@ -40,5 +40,5 @@ export async function POST(req: Request) {
       await requireEmail(req);
       const input = CreateSchema.parse(await req.json());
       return ok(await createInitiative(db, input));
-   });
+   }, req);
 }

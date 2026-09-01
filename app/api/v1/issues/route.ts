@@ -15,7 +15,7 @@ export async function GET(req: Request) {
       const meEmail = (await emailFromRequest(req)) ?? undefined;
       const { opts } = parseIssueListOptions(sp, meEmail);
       return ok(await listIssues(db, opts));
-   });
+   }, req);
 }
 
 const CreateSchema = z.object({
@@ -38,5 +38,5 @@ export async function POST(req: Request) {
       const input = CreateSchema.parse(await req.json());
       const dto = await createIssue(db, input, email);
       return ok(dto);
-   });
+   }, req);
 }

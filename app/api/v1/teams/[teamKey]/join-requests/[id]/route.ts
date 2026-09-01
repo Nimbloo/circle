@@ -24,5 +24,5 @@ export async function POST(req: Request, { params }: Params) {
       const me = await getOrCreateUser(db, actor);
       await decideJoinRequest(db, teamKey, id, decision, me.id);
       return ok(await listJoinRequests(db, teamKey));
-   });
+   }, req);
 }

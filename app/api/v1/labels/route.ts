@@ -13,7 +13,7 @@ export async function GET(req: Request) {
    return handle(async () => {
       await requireEmail(req);
       return ok(await listLabels(db));
-   });
+   }, req);
 }
 
 const CreateSchema = z.object({
@@ -29,5 +29,5 @@ export async function POST(req: Request) {
       const input = CreateSchema.parse(await req.json());
       const dto = await createLabel(db, input);
       return ok(dto);
-   });
+   }, req);
 }

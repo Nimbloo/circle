@@ -12,5 +12,5 @@ export async function GET(req: Request) {
       // `?rollover=0` (refetch de SSE) pula o auto-rollover de cycles (escrita).
       const rollover = new URL(req.url).searchParams.get('rollover') !== '0';
       return ok(await bootstrapWorkspace(db, email, { rollover }));
-   });
+   }, req);
 }

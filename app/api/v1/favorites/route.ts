@@ -16,7 +16,7 @@ export async function GET(req: Request) {
    return handle(async () => {
       const email = await requireEmail(req);
       return ok(await listFavorites(db, email));
-   });
+   }, req);
 }
 
 export async function POST(req: Request) {
@@ -24,7 +24,7 @@ export async function POST(req: Request) {
       const email = await requireEmail(req);
       const { entityType, entityId } = BodySchema.parse(await req.json());
       return ok(await addFavorite(db, email, entityType, entityId));
-   });
+   }, req);
 }
 
 export async function DELETE(req: Request) {
@@ -35,5 +35,5 @@ export async function DELETE(req: Request) {
       const entityId = url.searchParams.get('entityId') ?? '';
       if (!entityType || !entityId) return badRequest('entityType e entityId são obrigatórios');
       return ok(await removeFavorite(db, email, entityType, entityId));
-   });
+   }, req);
 }

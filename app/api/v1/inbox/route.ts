@@ -20,5 +20,5 @@ export async function GET(req: Request) {
             snoozed: sp.get('snoozed') === 'true',
          })
       );
-   });
+   }, req);
 }

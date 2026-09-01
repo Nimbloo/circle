@@ -20,7 +20,7 @@ export async function GET(req: Request, { params }: Params) {
       const meId = email ? (await getOrCreateUser(db, email)).id : undefined;
       const dto = await getTeam(db, teamKey, meId);
       return dto ? ok(dto) : notFound(`Team '${teamKey}' não encontrado`);
-   });
+   }, req);
 }
 
 const UpdateSchema = z.object({
@@ -38,7 +38,7 @@ export async function PATCH(req: Request, { params }: Params) {
       const patch = UpdateSchema.parse(await req.json());
       const dto = await updateTeam(db, teamKey, patch);
       return dto ? ok(dto) : notFound(`Team '${teamKey}' não encontrado`);
-   });
+   }, req);
 }
 
 export async function DELETE(req: Request, { params }: Params) {
@@ -57,5 +57,5 @@ export async function DELETE(req: Request, { params }: Params) {
          });
       }
       return removed ? ok({ deleted: true }) : notFound(`Team '${teamKey}' não encontrado`);
-   });
+   }, req);
 }

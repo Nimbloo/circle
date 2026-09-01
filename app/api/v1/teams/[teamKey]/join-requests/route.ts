@@ -17,7 +17,7 @@ export async function GET(req: Request, { params }: Params) {
       const actor = await requireEmail(req);
       if (!(await isAdmin(actor, db))) throw new ApiError(403, 'Apenas admin');
       return ok(await listJoinRequests(db, teamKey));
-   });
+   }, req);
 }
 
 /** POST /teams/{teamKey}/join-requests — o usuário atual SOLICITA entrada no time. */
@@ -26,5 +26,5 @@ export async function POST(req: Request, { params }: Params) {
       const { teamKey } = await params;
       const email = await requireEmail(req);
       return ok(await requestToJoin(db, teamKey, email));
-   });
+   }, req);
 }

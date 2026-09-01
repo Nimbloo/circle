@@ -16,7 +16,7 @@ export async function POST(req: Request, { params }: Params) {
       const me = await getOrCreateUser(db, await requireEmail(req));
       await subscribeToIssue(db, id, me.id);
       return ok({ id, subscribed: true });
-   });
+   }, req);
 }
 
 /** DELETE /issues/{id}/subscription — deixa de seguir a issue. */
@@ -26,5 +26,5 @@ export async function DELETE(req: Request, { params }: Params) {
       const me = await getOrCreateUser(db, await requireEmail(req));
       await unsubscribeFromIssue(db, id, me.id);
       return ok({ id, subscribed: false });
-   });
+   }, req);
 }
