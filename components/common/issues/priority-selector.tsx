@@ -30,7 +30,9 @@ export function PrioritySelector({ priority, issueId, showName = false }: Priori
    const value = priority.id;
 
    const priorities = usePriorities();
-   const filterByPriority = useIssuesStore((s) => s.filterByPriority);
+   // Conta derivada da fatia assinada: assinar `filterByPriority` (funcao, referencia
+   // estavel) deixaria o contador do dropdown parado quando as issues mudam.
+   const allIssues = useIssuesStore((s) => s.issues);
    const updateIssuePriority = useIssuesStore((s) => s.updateIssuePriority);
 
    const handlePriorityChange = (priorityId: string) => {
@@ -93,7 +95,7 @@ export function PrioritySelector({ priority, issueId, showName = false }: Priori
                               </div>
                               {value === item.id && <CheckIcon size={16} className="ml-auto" />}
                               <span className="text-muted-foreground text-xs">
-                                 {filterByPriority(item.id).length}
+                                 {allIssues.filter((i) => i.priority.id === item.id).length}
                               </span>
                            </CommandItem>
                         ))}

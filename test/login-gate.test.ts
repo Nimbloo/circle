@@ -85,6 +85,17 @@ describe('gate de login (grupo OU convite)', () => {
       expect(d).toEqual({ allowed: false, reason: 'identity' });
    });
 
+   it('convite NAO vale com email_verified AUSENTE (fail-closed)', async () => {
+      const db = await setup();
+      await createInvite(db, 'novo@nimbloo.ai', ADMIN);
+
+      // Claim ausente = mapper fora da config do realm. Antes isto passava (`!== false`),
+      // que era fail-open justo na barreira que o convite nao pode dispensar.
+      const semClaim = { email: 'novo@nimbloo.ai', groups: [] as string[] };
+      const d = await decideKeycloakLogin(db, semClaim, 'novo@nimbloo.ai');
+      expect(d).toEqual({ allowed: false, reason: 'identity' });
+   });
+
    it('convite NAO vale com e-mail nao verificado pelo Keycloak', async () => {
       const db = await setup();
       await createInvite(db, 'novo@nimbloo.ai', ADMIN);

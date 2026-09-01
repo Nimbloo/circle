@@ -45,3 +45,8 @@ next-env.d.ts
 
 # editors
 .idea/
+
+# Seam de dev local (regra de ouro nº1: nunca commitar). Ignorados de propósito para
+# que um `git add -A` distraído não os capture — ja aconteceu nesta base.
+/_devseed.ts
+/test/_tmp-*.test.ts

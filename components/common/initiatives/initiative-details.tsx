@@ -243,8 +243,13 @@ function PropertiesPanel({ initiative }: { initiative: Initiative }) {
    const applyInitiative = useWorkspaceStore((s) => s.applyInitiative);
    const users = useWorkspaceStore((s) => s.users);
    const priorities = usePriorities();
-   const countCompletedProjects = useWorkspaceStore((s) => s.countCompletedProjects);
-   const { completed } = countCompletedProjects(initiative.id);
+   // Deriva da fatia assinada: assinar `countCompletedProjects` (funcao, referencia
+   // estavel) nao acorda o painel quando um projeto e vinculado ou concluido.
+   const allProjects = useWorkspaceStore((s) => s.projects);
+   const linked = new Set(initiative.projectIds);
+   const completed = allProjects.filter(
+      (p) => linked.has(p.id) && (p.status.category === 'completed' || p.percentComplete >= 100)
+   ).length;
 
    const patch = async (body: Parameters<typeof api.initiatives.update>[1], msg: string) => {
       try {

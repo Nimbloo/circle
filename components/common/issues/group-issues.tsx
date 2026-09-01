@@ -35,65 +35,6 @@ interface GroupIssuesProps {
    count: number;
 }
 
-export function GroupIssues({ group, issues, count }: GroupIssuesProps) {
-   const { viewType } = useViewStore();
-   const isViewTypeGrid = viewType === 'grid';
-   const { openModal } = useCreateIssueStore();
-
-   return (
-      <div
-         className={cn(
-            isViewTypeGrid
-               ? 'overflow-hidden rounded-md h-full flex-shrink-0 w-[348px] flex flex-col'
-               : ''
-         )}
-      >
-         <div
-            className={cn(
-               'sticky top-0 z-10 bg-container w-full',
-               isViewTypeGrid ? 'h-[50px]' : 'h-10'
-            )}
-         >
-            {/* Header neutro (padrão Linear): só o ícone de status é colorido, sem tinta de fundo. */}
-            <div
-               className={cn(
-                  'w-full h-full flex items-center justify-between',
-                  isViewTypeGrid ? 'px-3' : 'px-6'
-               )}
-            >
-               <div className="flex items-center gap-2">
-                  {group.icon}
-                  <span className="text-sm font-medium">{group.name}</span>
-                  <span className="text-sm text-muted-foreground">{count}</span>
-               </div>
-
-               <Button
-                  className="size-6"
-                  size="icon"
-                  variant="ghost"
-                  onClick={(e) => {
-                     e.stopPropagation();
-                     openModal(group.status);
-                  }}
-               >
-                  <Plus className="size-4" />
-               </Button>
-            </div>
-         </div>
-
-         {viewType === 'list' ? (
-            <div className="space-y-0">
-               {issues.map((issue) => (
-                  <IssueLine key={issue.id} issue={issue} layoutId={true} />
-               ))}
-            </div>
-         ) : (
-            <IssueGridList issues={issues} status={group.status} />
-         )}
-      </div>
-   );
-}
-
 /**
  * Coluna do board VIRTUALIZADA (@tanstack/react-virtual): só os cards visíveis
  * (+ overscan) vão pro DOM — coluna com centenas de issues fica fluida e o DOM
@@ -181,3 +122,62 @@ const IssueGridList: FC<{ issues: Issue[]; status?: Status }> = ({ issues, statu
       </div>
    );
 };
+
+export function GroupIssues({ group, issues, count }: GroupIssuesProps) {
+   const { viewType } = useViewStore();
+   const isViewTypeGrid = viewType === 'grid';
+   const { openModal } = useCreateIssueStore();
+
+   return (
+      <div
+         className={cn(
+            isViewTypeGrid
+               ? 'overflow-hidden rounded-md h-full flex-shrink-0 w-[348px] flex flex-col'
+               : ''
+         )}
+      >
+         <div
+            className={cn(
+               'sticky top-0 z-10 bg-container w-full',
+               isViewTypeGrid ? 'h-[50px]' : 'h-10'
+            )}
+         >
+            {/* Header neutro (padrão Linear): só o ícone de status é colorido, sem tinta de fundo. */}
+            <div
+               className={cn(
+                  'w-full h-full flex items-center justify-between',
+                  isViewTypeGrid ? 'px-3' : 'px-6'
+               )}
+            >
+               <div className="flex items-center gap-2">
+                  {group.icon}
+                  <span className="text-sm font-medium">{group.name}</span>
+                  <span className="text-sm text-muted-foreground">{count}</span>
+               </div>
+
+               <Button
+                  className="size-6"
+                  size="icon"
+                  variant="ghost"
+                  onClick={(e) => {
+                     e.stopPropagation();
+                     openModal(group.status);
+                  }}
+               >
+                  <Plus className="size-4" />
+               </Button>
+            </div>
+         </div>
+
+         {viewType === 'list' ? (
+            <div className="space-y-0">
+               {issues.map((issue) => (
+                  <IssueLine key={issue.id} issue={issue} layoutId={true} />
+               ))}
+            </div>
+         ) : (
+            <IssueGridList issues={issues} status={group.status} />
+         )}
+      </div>
+   );
+}

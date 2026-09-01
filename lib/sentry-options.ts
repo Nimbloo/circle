@@ -31,12 +31,46 @@ function scrub<T>(obj: T): T {
    return obj;
 }
 
+/**
+ * Segredos que viajam no PATH da URL, não em query string. `/invite/<token>` é o caso:
+ * o token do magic link é a credencial inteira, e a URL vai no evento e nos spans de
+ * tracing. Mascarar a chave não bastava — aqui o segredo é o próprio valor.
+ */
+const SECRET_PATHS: [RegExp, string][] = [[/\/invite\/[^/?#]+/gi, '/invite/[Filtered]']];
+
+/** Aplica as máscaras de path a qualquer URL antes de sair da aplicação. */
+export function scrubUrl(url: string): string {
+   let out = url;
+   for (const [re, replacement] of SECRET_PATHS) out = out.replace(re, replacement);
+   return out;
+}
+
+function scrubEvent<T extends { request?: { url?: string }; transaction?: string }>(event: T): T {
+   if (event.request?.url) event.request.url = scrubUrl(event.request.url);
+   if (event.transaction) event.transaction = scrubUrl(event.transaction);
+   return event;
+}
+
 function beforeSend(event: ErrorEvent): ErrorEvent | null {
    if (event.request?.headers) scrub(event.request.headers);
    if (event.request?.cookies) event.request.cookies = { cookies: '[Filtered]' };
    if (event.extra) scrub(event.extra);
    if (event.contexts) scrub(event.contexts);
+   scrubEvent(event);
+   // Breadcrumb de navegação carrega `from`/`to` com a URL crua.
+   for (const b of event.breadcrumbs ?? []) {
+      if (typeof b.data?.from === 'string') b.data.from = scrubUrl(b.data.from);
+      if (typeof b.data?.to === 'string') b.data.to = scrubUrl(b.data.to);
+      if (typeof b.data?.url === 'string') b.data.url = scrubUrl(b.data.url);
+   }
    return event;
+}
+
+/** Spans de tracing carregam a mesma URL — o `beforeSend` não os cobre. */
+function beforeSendTransaction<T extends { request?: { url?: string }; transaction?: string }>(
+   event: T
+): T {
+   return scrubEvent(event);
 }
 
 /**
@@ -52,6 +86,7 @@ export const sentryBaseOptions = {
    sendDefaultPii: false,
    maxBreadcrumbs: 200,
    beforeSend,
+   beforeSendTransaction,
    /** Ruído não acionável: cliente que desconecta, rota inexistente varrida por bot. */
    ignoreErrors: [
       'NEXT_NOT_FOUND',
