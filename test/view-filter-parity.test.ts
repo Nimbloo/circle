@@ -54,6 +54,8 @@ describe('paridade do filtro de view (servidor x cliente)', () => {
       const filters = [
          { statusIds: ['in-progress'] },
          { priorityIds: ['high'] },
+         { statusCategories: ['started'] },
+         { statusCategories: ['started', 'completed'] },
          { statusIds: ['in-progress'], priorityIds: ['high'] },
          { unassigned: true },
          {},
@@ -101,6 +103,8 @@ describe('paridade do filtro de view (servidor x cliente)', () => {
       const filters = [
          { statusIds: ['proj-in-progress'] },
          { priorityIds: ['low'] },
+         { statusCategories: ['started'] },
+         { statusCategories: ['completed'] },
          { statusIds: ['proj-completed'], priorityIds: ['high'] },
          {},
       ];

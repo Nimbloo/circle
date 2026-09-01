@@ -586,6 +586,12 @@ export async function updateIssue(
       }
    }
 
+   // O auto-add acima é uma das MAIORES fontes de crescimento de escopo do ciclo, e
+   // era completamente invisível no histórico: o evento de `cycle` só é emitido quando
+   // `patch.cycleId` vem preenchido, e aqui ele vem `undefined`.
+   const autoAddedCycleId =
+      set.cycleId !== undefined && patch.cycleId === undefined ? (set.cycleId as string) : null;
+
    await db.update(issue).set(set).where(eq(issue.id, id));
 
    // eventos de atividade para transições relevantes
@@ -594,8 +600,18 @@ export async function updateIssue(
       events.push({ event: 'status', text: `changed status` });
    if (patch.priorityId !== undefined && patch.priorityId !== prev.priorityId)
       events.push({ event: 'priority', text: `changed priority` });
+   // De/para no texto: sem isso o histórico não permite reconstruir o escopo de um
+   // ciclo ao longo do tempo — foi o que bloqueou o `scopeDelta` real (#24).
    if (patch.cycleId !== undefined && (patch.cycleId || null) !== prev.cycleId)
-      events.push({ event: 'cycle', text: `changed cycle` });
+      events.push({
+         event: 'cycle',
+         text: `changed cycle from ${prev.cycleId ?? 'none'} to ${patch.cycleId ?? 'none'}`,
+      });
+   if (autoAddedCycleId)
+      events.push({
+         event: 'cycle',
+         text: `added to cycle ${autoAddedCycleId} on start`,
+      });
    if (patch.assigneeId !== undefined && (patch.assigneeId || null) !== prev.assigneeId)
       events.push({ event: 'assignee', text: `changed assignee` });
    if (patch.title !== undefined && patch.title !== prev.title)
@@ -603,7 +619,10 @@ export async function updateIssue(
    if (patch.projectId !== undefined && (patch.projectId || null) !== prev.projectId)
       events.push({ event: 'project', text: `changed project` });
    if (patch.estimate !== undefined && (patch.estimate ?? null) !== prev.estimate)
-      events.push({ event: 'estimate', text: `changed estimate` });
+      events.push({
+         event: 'estimate',
+         text: `changed estimate from ${prev.estimate ?? 'none'} to ${patch.estimate ?? 'none'}`,
+      });
    if (patch.dueDate !== undefined && (patch.dueDate ?? null) !== prev.dueDate)
       events.push({ event: 'dueDate', text: `changed due date` });
    if (events.length) {
