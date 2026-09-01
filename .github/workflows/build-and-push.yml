@@ -48,6 +48,13 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64
+          # NEXT_PUBLIC_* sao embutidos no bundle do browser em tempo de BUILD:
+          # defini-los so no chart (runtime) ativaria Sentry no server/edge e deixaria
+          # o cliente mudo. Variavel do repo (Settings > Variables); ausente = vazio =
+          # SDK inerte, sem quebrar o build.
+          build-args: |
+            NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
+            NEXT_PUBLIC_CIRCLE_ENV=production
           tags: |
             ${{ env.ECR_REPOSITORY }}:${{ steps.ver.outputs.version }}
             ${{ env.ECR_REPOSITORY }}:sha-${{ github.sha }}
