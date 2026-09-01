@@ -1,6 +1,5 @@
 'use client';
 
-import { SidebarTrigger } from '@/components/ui/sidebar';
 import {
    HeaderGroup,
    HeaderTitle,
@@ -9,15 +8,14 @@ import {
 } from '@/components/layout/header-primitives';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { ChevronRight, MoreHorizontal, Star } from 'lucide-react';
-import Link from 'next/link';
+import { MoreHorizontal, Star } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
 
 const TABS = ['overview', 'activity', 'projects'] as const;
 
 export default function Header() {
-   const { orgId, initiativeId } = useParams<{ orgId: string; initiativeId: string }>();
+   const { initiativeId } = useParams<{ initiativeId: string }>();
    const initiative = useWorkspaceStore((s) => s.getInitiativeById(initiativeId));
    const [tab, setTab] = useQueryState('tab', parseAsStringLiteral(TABS).withDefault('overview'));
 
@@ -27,14 +25,6 @@ export default function Header() {
       <>
          <LocationBar>
             <HeaderGroup>
-               <SidebarTrigger />
-               <Link
-                  href={`/${orgId}/initiatives`}
-                  className="shrink-0 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
-               >
-                  Initiatives
-               </Link>
-               <ChevronRight className="size-3.5 text-muted-foreground shrink-0" />
                <span className="inline-flex size-5 items-center justify-center rounded bg-muted/50 text-xs shrink-0">
                   {initiative.icon}
                </span>

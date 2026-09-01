@@ -16,7 +16,7 @@ import { useIssuesStore } from '@/store/issues-store';
 import { IssueDetail } from '@/data/issue-details';
 import { Issue } from '@/data/issues';
 import { LabelInterface } from '@/data/labels';
-import { Ban, Bell, BellOff, CheckIcon, GitPullRequestArrow } from 'lucide-react';
+import { Ban, CheckIcon, GitPullRequestArrow } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/client';
 import type { ProjectMilestoneDto } from '@/lib/api/project-detail';
@@ -99,7 +99,9 @@ interface IssuePropertiesPanelProps {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
    return (
       <div>
-         <h3 className="text-xs font-medium text-muted-foreground mb-2">{title}</h3>
+         <h3 className="mb-2 h-5 px-2 text-[13px] font-medium leading-5 text-muted-foreground">
+            {title}
+         </h3>
          {children}
       </div>
    );
@@ -205,11 +207,6 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
    const updateIssueAssignee = useIssuesStore((s) => s.updateIssueAssignee);
    const addIssueLabel = useIssuesStore((s) => s.addIssueLabel);
    const removeIssueLabel = useIssuesStore((s) => s.removeIssueLabel);
-   const subscribed = useWorkspaceStore(
-      (s) => s.me?.subscribedIssueIds.includes(issue.id) ?? false
-   );
-   const toggleSubscription = useWorkspaceStore((s) => s.toggleSubscription);
-
    // Diff entre a seleção do LabelSelector e as labels atuais → add/remove no store.
    const onLabelsChange = (next: LabelInterface[]) => {
       next
@@ -221,20 +218,7 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
    };
 
    return (
-      <div className="flex flex-col gap-7">
-         <button
-            type="button"
-            onClick={() => toggleSubscription(issue.id)}
-            aria-pressed={subscribed}
-            className={cn(
-               'flex items-center gap-2 h-8 px-2 -mx-2 rounded-md text-sm transition-colors hover:bg-accent/50',
-               subscribed ? 'text-foreground' : 'text-muted-foreground'
-            )}
-         >
-            {subscribed ? <Bell className="size-4" /> : <BellOff className="size-4" />}
-            {subscribed ? 'Subscribed' : 'Subscribe'}
-         </button>
-
+      <div className="flex flex-col gap-7 pl-1">
          <Section title="Properties">
             <div className="flex flex-col gap-1.5">
                <div className="flex items-center -ml-1.5">
@@ -322,7 +306,7 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
                   <div className="flex flex-col">
                      {detail.blockedByIds.map((identifier) => (
                         <div key={identifier} className="flex items-center gap-1.5 min-w-0">
-                           <Ban className="size-3.5 text-red-500 shrink-0" />
+                           <Ban className="size-3.5 shrink-0 text-destructive" />
                            <IssueRefRow identifier={identifier} />
                         </div>
                      ))}
@@ -337,7 +321,7 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
                <div className="flex flex-col">
                   {detail.blockingIds.map((identifier) => (
                      <div key={identifier} className="flex items-center gap-1.5 min-w-0">
-                        <Ban className="size-3.5 text-orange-500 shrink-0" />
+                        <Ban className="size-3.5 shrink-0 text-chart-5" />
                         <IssueRefRow identifier={identifier} />
                      </div>
                   ))}
@@ -397,10 +381,13 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
                   {detail.prLinks.map((pr) => (
                      <div key={pr.id} className="flex items-center gap-2 text-sm min-w-0">
                         <GitPullRequestArrow
-                           className={
-                              'size-3.5 shrink-0 ' +
-                              (pr.status === 'merged' ? 'text-purple-400' : 'text-green-500')
-                           }
+                           className="size-3.5 shrink-0"
+                           style={{
+                              color:
+                                 pr.status === 'merged'
+                                    ? 'var(--review-merged)'
+                                    : 'var(--review-open)',
+                           }}
                         />
                         <span className="text-muted-foreground shrink-0">{pr.id}</span>
                         <span className="truncate">{pr.title}</span>

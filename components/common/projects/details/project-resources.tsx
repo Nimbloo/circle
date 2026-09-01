@@ -91,8 +91,10 @@ export function ProjectResources({
    };
 
    return (
-      <div className="flex items-start gap-3">
-         <span className="w-24 text-muted-foreground shrink-0 mt-1">Resources</span>
+      <div className="flex min-h-7 items-start gap-3">
+         <h3 className="w-24 shrink-0 py-1.5 text-[13px] font-medium leading-4 text-muted-foreground">
+            Resources
+         </h3>
          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
             {resources.map((r) =>
                editingId === r.id ? (
@@ -142,7 +144,7 @@ export function ProjectResources({
                               <Pencil className="size-3.5 mr-2" /> Edit label
                            </DropdownMenuItem>
                            <DropdownMenuItem
-                              className="text-red-600 focus:text-red-600"
+                              className="text-destructive focus:text-destructive"
                               onClick={() => remove(r.id)}
                            >
                               <Trash2 className="size-3.5 mr-2" /> Remove

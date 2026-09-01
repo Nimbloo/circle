@@ -32,8 +32,8 @@ interface IssueDetailViewProps {
  * notificação abre a issue inteira, não um resumo read-only.
  *
  * A sidebar responde à largura do CONTAINER (não do viewport): no preview do
- * inbox o pane redimensionável pode ser estreito com o viewport largo — em
- * ≥48rem de pane ela aparece compacta (w-64) e em ≥64rem, larga (w-80).
+ * inbox o pane redimensionável pode ser estreito com o viewport largo. Na rota
+ * completa, o grid reproduz as colunas medidas no Linear (791 + 56 + 400px).
  */
 export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
    const { orgId } = useParams<{ orgId: string }>();
@@ -157,10 +157,10 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
    };
 
    return (
-      <div className="@container w-full h-full flex overflow-hidden">
-         {/* Main column */}
-         <div className="flex-1 min-w-0 h-full overflow-y-auto">
-            <div className="max-w-3xl mx-auto px-8 py-10">
+      <div className="@container h-full w-full overflow-hidden">
+         <div className="mx-auto grid h-full w-full grid-cols-1 @3xl:grid-cols-[minmax(0,1fr)_16rem] @3xl:gap-6 @5xl:grid-cols-[minmax(0,1fr)_20rem] @7xl:max-w-[1247px] @7xl:grid-cols-[minmax(0,791px)_400px] @7xl:gap-14">
+            {/* Main column */}
+            <main className="h-full min-w-0 overflow-x-hidden overflow-y-auto px-8 py-10 @7xl:px-0 @7xl:pt-[59px]">
                {banner}
                {editingTitle ? (
                   <textarea
@@ -177,11 +177,11 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
                         }
                      }}
                      rows={1}
-                     className="w-full resize-none bg-transparent text-3xl font-semibold leading-tight outline-none"
+                     className="w-full resize-none bg-transparent text-2xl font-semibold leading-8 outline-none"
                   />
                ) : (
                   <h1
-                     className="text-3xl font-semibold leading-tight text-balance cursor-text hover:bg-accent/20 rounded-md -mx-1 px-1 transition-colors"
+                     className="cursor-text rounded-md text-2xl font-semibold leading-8 text-balance transition-colors hover:bg-accent/20"
                      onClick={() => {
                         setTitleDraft(displayTitle);
                         setEditingTitle(true);
@@ -203,11 +203,11 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
                         }}
                         placeholder="Add a description…"
                         rows={Math.max(4, descDraft.split('\n').length + 1)}
-                        className="w-full resize-none bg-transparent text-sm leading-relaxed outline-none placeholder:text-muted-foreground/70"
+                        className="w-full resize-none bg-transparent text-[15px] leading-6 outline-none placeholder:text-muted-foreground/70"
                      />
                   ) : (
                      <div
-                        className="cursor-text hover:bg-accent/10 rounded-md -mx-2 px-2 py-1 transition-colors min-h-[2rem]"
+                        className="-mx-[14px] min-h-8 cursor-text rounded-md px-[14px] py-1 transition-colors hover:bg-accent/10"
                         onClick={() => {
                            setDescDraft(rawDescription);
                            setEditingDesc(true);
@@ -216,7 +216,7 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
                         {rawDescription.trim() ? (
                            <ContentBlocks blocks={detail.description} />
                         ) : (
-                           <span className="text-sm text-muted-foreground/70">
+                           <span className="text-[15px] leading-6 text-muted-foreground/70">
                               Add a description…
                            </span>
                         )}
@@ -286,18 +286,17 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
                   issueId={issue.id}
                   onCommentAdded={() => setReloadKey((k) => k + 1)}
                />
-            </div>
-         </div>
+            </main>
 
-         {/* Properties sidebar — por container query: compacta em pane ≥48rem,
-             larga em ≥64rem, oculta abaixo (pane estreito/mobile). */}
-         <aside className="hidden @3xl:block w-64 @5xl:w-80 shrink-0 border-l h-full overflow-y-auto bg-container px-4 py-5 @5xl:px-5 @5xl:py-6">
-            <IssuePropertiesPanel
-               issue={issue}
-               detail={detail}
-               onChanged={() => setReloadKey((k) => k + 1)}
-            />
-         </aside>
+            {/* Properties sidebar — compacta no split view e com 400px na rota completa. */}
+            <aside className="hidden h-full min-w-0 overflow-y-auto px-4 py-5 @3xl:block @5xl:px-5 @5xl:py-6 @7xl:px-0 @7xl:pt-[21px]">
+               <IssuePropertiesPanel
+                  issue={issue}
+                  detail={detail}
+                  onChanged={() => setReloadKey((k) => k + 1)}
+               />
+            </aside>
+         </div>
       </div>
    );
 }

@@ -3,10 +3,17 @@
 import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
 import { HeaderActions, HeaderGroup, LocationBar } from '@/components/layout/header-primitives';
 import { Button } from '@/components/ui/button';
-import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { ChevronDown, ChevronRight, ChevronUp, MoreHorizontal, Star } from 'lucide-react';
+import {
+   Bell,
+   BellOff,
+   ChevronDown,
+   ChevronRight,
+   ChevronUp,
+   MoreHorizontal,
+   Star,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
@@ -21,6 +28,10 @@ export default function HeaderNav() {
 
    const index = issues.findIndex((candidate) => candidate.identifier === issueId);
    const issue = index >= 0 ? issues[index] : undefined;
+   const subscribed = useWorkspaceStore((s) =>
+      issue ? (s.me?.subscribedIssueIds.includes(issue.id) ?? false) : false
+   );
+   const toggleSubscription = useWorkspaceStore((s) => s.toggleSubscription);
    // time real da issue (fallback p/ o 1º só enquanto o workspace ainda hidrata)
    const team = teams.find((t) => t.id === issue?.teamId) ?? teams[0];
    const cycle = useWorkspaceStore((s) =>
@@ -36,7 +47,6 @@ export default function HeaderNav() {
    return (
       <LocationBar className="gap-4">
          <HeaderGroup>
-            <SidebarTrigger />
             <Link
                href={`/${orgId}/team/${team.id}/overview`}
                className="flex shrink-0 items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground"
@@ -72,6 +82,18 @@ export default function HeaderNav() {
          </HeaderGroup>
 
          <HeaderActions>
+            {issue && (
+               <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-6"
+                  onClick={() => toggleSubscription(issue.id)}
+                  aria-label={subscribed ? 'Unsubscribe' : 'Subscribe'}
+                  aria-pressed={subscribed}
+               >
+                  {subscribed ? <Bell className="size-3.5" /> : <BellOff className="size-3.5" />}
+               </Button>
+            )}
             {index >= 0 && (
                <span className="text-xs text-muted-foreground mr-1">
                   {index + 1} / {issues.length}

@@ -86,19 +86,17 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
       // Ainda carregando → skeleton; carregado sem projeto → not found.
       if (!loaded) {
          return (
-            <div className="w-full h-full flex overflow-hidden">
-               <div className="flex-1 min-w-0 px-8 py-6 flex flex-col gap-5">
-                  <Skeleton className="h-7 w-1/2" />
-                  <Skeleton className="h-4 w-24" />
-                  <div className="flex flex-col gap-3 mt-2">
-                     <Skeleton className="h-4 w-full" />
-                     <Skeleton className="h-4 w-11/12" />
+            <div className="flex h-full w-full overflow-hidden">
+               <div className="min-w-0 flex-1 overflow-hidden">
+                  <div className="mx-auto flex max-w-[869px] flex-col gap-5 px-8 pt-16 pb-10">
+                     <Skeleton className="size-8" />
+                     <Skeleton className="h-8 w-1/2" />
                      <Skeleton className="h-4 w-3/4" />
                   </div>
                </div>
-               <div className="w-72 shrink-0 border-l px-5 py-6 flex flex-col gap-5">
+               <div className="hidden w-[400px] shrink-0 flex-col gap-2 overflow-hidden pl-1 xl:flex">
                   {Array.from({ length: 5 }).map((_, i) => (
-                     <div key={i} className="flex flex-col gap-2">
+                     <div key={i} className="flex flex-col gap-2 rounded-[10px] border bg-card p-3">
                         <Skeleton className="h-3 w-16" />
                         <Skeleton className="h-6 w-32" />
                      </div>
@@ -120,19 +118,21 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
          <div className="flex-1 min-w-0 h-full relative">
             <DocumentOutline items={outlineItems} scrollRef={scrollRef} />
             <div ref={scrollRef} className="h-full overflow-y-auto">
-               <div className="max-w-3xl mx-auto px-6 lg:px-10 py-10">
-                  <div className="inline-flex size-10 bg-muted/50 items-center justify-center rounded-md mb-4">
-                     <project.icon className="size-6" />
+               <div className="mx-auto max-w-[869px] px-8 pt-16 pb-10">
+                  <div className="mb-3 inline-flex size-8 items-center justify-center rounded-md bg-muted/50">
+                     <project.icon className="size-5" />
                   </div>
-                  <h1 className="text-3xl font-semibold tracking-tight">{project.name}</h1>
+                  <h1 className="text-2xl font-semibold leading-8 tracking-tight">
+                     {project.name}
+                  </h1>
                   {summaryDraft !== null ? (
-                     <div className="mt-3">
+                     <div className="mt-1">
                         <textarea
                            value={summaryDraft}
                            onChange={(event) => setSummaryDraft(event.target.value)}
                            autoFocus
                            placeholder="Add a one-line summary…"
-                           className="w-full min-h-16 resize-y bg-transparent text-muted-foreground leading-relaxed outline-none border rounded-md p-2"
+                           className="min-h-16 w-full resize-y rounded-md border bg-transparent p-2 text-[15px] leading-6 text-muted-foreground outline-none"
                         />
                         <div className="mt-2 flex items-center gap-2">
                            <Button size="xs" onClick={handleSaveSummary}>
@@ -147,16 +147,18 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                      <button
                         type="button"
                         onClick={() => setSummaryDraft(detail.summary)}
-                        className="mt-3 block w-full text-left text-muted-foreground leading-relaxed hover:text-foreground transition-colors"
+                        className="mt-1 block w-full text-left text-[15px] leading-6 text-muted-foreground transition-colors hover:text-foreground"
                      >
                         {detail.summary || 'Add a one-line summary…'}
                      </button>
                   )}
 
                   {/* Inline properties */}
-                  <div className="mt-6 flex flex-col gap-2.5 text-sm">
-                     <div className="flex items-center gap-3">
-                        <span className="w-24 text-muted-foreground shrink-0">Properties</span>
+                  <div className="mt-[19px] flex flex-col gap-3 text-sm">
+                     <div className="flex min-h-7 items-center gap-3">
+                        <h3 className="w-24 shrink-0 py-1.5 text-[13px] font-medium leading-4 text-muted-foreground">
+                           Properties
+                        </h3>
                         <div className="flex items-center gap-3 flex-wrap">
                            <span className="inline-flex items-center gap-1.5">
                               <project.status.icon />
@@ -208,24 +210,28 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                         </div>
                      )}
 
-                     <div className="flex items-center gap-3">
-                        <span className="w-24 text-muted-foreground shrink-0">Labels</span>
-                        <div className="flex items-center gap-1.5">
-                           {project.labels.map((label) => (
-                              <span
-                                 key={label.id}
-                                 className="inline-flex items-center gap-1 text-xs border rounded-full px-2 py-0.5"
-                              >
+                     {project.labels.length > 0 && (
+                        <div className="flex min-h-7 items-center gap-3">
+                           <h3 className="w-24 shrink-0 py-1.5 text-[13px] font-medium leading-4 text-muted-foreground">
+                              Labels
+                           </h3>
+                           <div className="flex items-center gap-1.5">
+                              {project.labels.map((label) => (
                                  <span
-                                    className="size-2 rounded-full"
-                                    style={{ backgroundColor: label.color }}
-                                 />
-                                 {label.name}
-                                 <ChevronDown className="size-3 text-muted-foreground" />
-                              </span>
-                           ))}
+                                    key={label.id}
+                                    className="inline-flex items-center gap-1 text-xs border rounded-full px-2 py-0.5"
+                                 >
+                                    <span
+                                       className="size-2 rounded-full"
+                                       style={{ backgroundColor: label.color }}
+                                    />
+                                    {label.name}
+                                    <ChevronDown className="size-3 text-muted-foreground" />
+                                 </span>
+                              ))}
+                           </div>
                         </div>
-                     </div>
+                     )}
 
                      <ProjectResources
                         projectId={projectId}
@@ -237,19 +243,19 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                   {/* Update CTA */}
                   <Link
                      href={`/${orgId}/project/${project.id}/activity`}
-                     className="mt-8 flex items-center justify-center gap-2 border rounded-lg py-4 text-sm text-muted-foreground hover:text-foreground hover:bg-accent/30 transition-colors"
+                     className="-mx-4 mt-4 flex h-[66px] items-center justify-center gap-2 rounded-[10px] border text-sm text-muted-foreground transition-colors hover:bg-accent/30 hover:text-foreground"
                   >
                      <PenLine className="size-4" />
                      Write {detail.updates.length === 0 ? 'first ' : ''}project update
                   </Link>
 
                   {/* Description */}
-                  <div className="mt-10">
-                     <div className="flex items-center gap-1 text-sm font-medium text-muted-foreground mb-2">
+                  <div className="-mx-4 mt-7 rounded-xl px-4 pt-2.5">
+                     <div className="mb-2 flex items-center gap-1 py-1.5 text-[13px] font-medium leading-4 text-muted-foreground">
                         Description
                         <ChevronDown className="size-3.5" />
                      </div>
-                     <div className="text-[15px] leading-relaxed">
+                     <div className="text-[15px] leading-6">
                         <ContentBlocks blocks={detail.description} />
                      </div>
                   </div>

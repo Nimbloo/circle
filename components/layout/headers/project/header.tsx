@@ -8,11 +8,10 @@ import {
    LocationBar,
    ViewBar,
 } from '@/components/layout/header-primitives';
-import { SidebarTrigger } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { BarChart3, ChevronRight, PanelRight } from 'lucide-react';
+import { BarChart3, PanelRight } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, usePathname } from 'next/navigation';
 
@@ -77,7 +76,6 @@ function PanelToggles() {
 }
 
 export default function Header({ projectId }: { projectId: string }) {
-   const { orgId } = useParams<{ orgId: string }>();
    const project = useWorkspaceStore((s) => s.getProjectById(projectId));
    if (!project) return null;
 
@@ -85,15 +83,7 @@ export default function Header({ projectId }: { projectId: string }) {
       <>
          <LocationBar>
             <HeaderGroup>
-               <SidebarTrigger />
-               <div className="flex items-center gap-1.5 text-sm min-w-0">
-                  <Link
-                     href={`/${orgId}/projects`}
-                     className="text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                     Projects
-                  </Link>
-                  <ChevronRight className="size-3.5 text-muted-foreground shrink-0" />
+               <div className="flex min-w-0 items-center gap-1.5 text-sm">
                   <span className="inline-flex size-5 bg-muted/50 items-center justify-center rounded shrink-0">
                      <project.icon className="size-3.5" />
                   </span>

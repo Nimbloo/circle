@@ -25,6 +25,8 @@
    --review-open: #1a7f37;
    --review-merged: #8250df;
    --review-closed: #d1242f;
+   --media-overlay-background: #090a0b;
+   --media-overlay-foreground: #ffffff;
    /* Acento índigo do Linear (#5e6ad2) — botão primário, seleção, foco. */
    --primary: #5e6ad2;
    --primary-foreground: #ffffff;
@@ -77,6 +79,8 @@
    --review-open: #3fb950;
    --review-merged: #a371f7;
    --review-closed: #f85149;
+   --media-overlay-background: #090a0b;
+   --media-overlay-foreground: #ffffff;
    --primary: #5e6ad2;
    --primary-foreground: #ffffff;
    --secondary: lch(10.149 0.689 272);
@@ -124,6 +128,8 @@
    --color-accent-foreground: var(--accent-foreground);
    --color-destructive: var(--destructive);
    --color-destructive-foreground: var(--destructive-foreground);
+   --color-media-overlay-background: var(--media-overlay-background);
+   --color-media-overlay-foreground: var(--media-overlay-foreground);
    --color-border: var(--border);
    --color-input: var(--input);
    --color-ring: var(--ring);
