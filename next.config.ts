@@ -1,5 +1,6 @@
 import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs/config';
+import { buildContentSecurityPolicy } from './lib/security/content-security-policy';
 
 // Headers de segurança em toda resposta (defesa em profundidade além do gateway Istio).
 // CSP permite o mínimo do Next (styles inline do runtime; imagens data:/blob: pro avatar
@@ -9,19 +10,12 @@ const CDN = (process.env.CIRCLE_CDN_URL || 'https://d23ibma5syugvj.cloudfront.ne
    /\/$/,
    ''
 );
-const CSP = [
-   "default-src 'self'",
-   "script-src 'self' 'unsafe-inline'",
-   "style-src 'self' 'unsafe-inline'",
-   `img-src 'self' data: blob: ${CDN}`,
-   "font-src 'self' data:",
-   // O ingest do Sentry precisa ser liberado explicitamente: com `connect-src 'self'`
-   // sozinho o browser bloqueia o envio dos eventos e o error tracking fica mudo.
-   "connect-src 'self' https://*.ingest.us.sentry.io",
-   "frame-ancestors 'none'",
-   "base-uri 'self'",
-   "form-action 'self'",
-].join('; ');
+const CSP = buildContentSecurityPolicy({
+   cdnUrl: CDN,
+   // O React Refresh do Next usa avaliação dinâmica em desenvolvimento. Produção
+   // continua estrita e nunca recebe `unsafe-eval`.
+   isDevelopment: process.env.NODE_ENV === 'development',
+});
 
 const SECURITY_HEADERS = [
    { key: 'Content-Security-Policy', value: CSP },
