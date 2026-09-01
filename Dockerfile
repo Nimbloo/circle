@@ -17,6 +17,13 @@ RUN --mount=type=cache,id=circle-pnpm-store,target=/pnpm/store \
 
 FROM base AS build
 ENV NEXT_TELEMETRY_DISABLED=1
+# NEXT_PUBLIC_* sao EMBUTIDOS no bundle do browser em tempo de build — definir so no
+# runtime (chart) ativa Sentry no server/edge e deixa o CLIENTE mudo. Por isso entram
+# como build arg. Vazio = SDK inerte, que e o default seguro.
+ARG NEXT_PUBLIC_SENTRY_DSN=""
+ARG NEXT_PUBLIC_CIRCLE_ENV="production"
+ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN \
+    NEXT_PUBLIC_CIRCLE_ENV=$NEXT_PUBLIC_CIRCLE_ENV
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Cache mount no .next/cache: compilação incremental do Next entre builds. (Não vai pro
