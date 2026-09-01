@@ -52,6 +52,7 @@ import type {
 import type { IssueMatrix, ProjectProgress, TimeMetrics } from '@/lib/api/aggregations';
 import type { MeDto } from '@/lib/api/users';
 import type { AuditLogDto } from '@/lib/api/audit';
+import type { InviteDto } from '@/lib/api/invites';
 import type { FavoriteDto, FavoriteEntityType } from '@/lib/api/favorites';
 import type { SlackConfigDto } from '@/lib/api/integrations/slack';
 
@@ -165,6 +166,13 @@ export const api = {
 
    /** Audit log de ações administrativas (só admin). */
    audit: () => get<AuditLogDto[]>('/audit'),
+
+   /** Convites de acesso (admin). `create` devolve o magic link uma unica vez. */
+   invites: {
+      list: () => get<InviteDto[]>('/invites'),
+      create: (email: string) => post<InviteDto & { url: string }>('/invites', { email }),
+      revoke: (id: string) => del<{ deleted: boolean }>(`/invites/${id}`),
+   },
 
    statuses: Object.assign(() => get<StatusDto[]>('/statuses'), {
       create: (input: CreateStatusInput) => post<StatusDto>('/statuses', input),
