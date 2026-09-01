@@ -25,6 +25,7 @@
    --review-open: #1a7f37;
    --review-merged: #8250df;
    --review-closed: #d1242f;
+   --cycle-started: #ca8a04;
    --media-overlay-background: #090a0b;
    --media-overlay-foreground: #ffffff;
    /* Acento índigo do Linear (#5e6ad2) — botão primário, seleção, foco. */
@@ -79,6 +80,7 @@
    --review-open: #3fb950;
    --review-merged: #a371f7;
    --review-closed: #f85149;
+   --cycle-started: #facc15;
    --media-overlay-background: #090a0b;
    --media-overlay-foreground: #ffffff;
    --primary: #5e6ad2;

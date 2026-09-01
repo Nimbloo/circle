@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { useNotificationsStore } from '@/store/notifications-store';
 import { Button } from '@/components/ui/button';
 import {
@@ -18,14 +17,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import {
-   SlidersHorizontal,
-   CheckCheck,
-   InboxIcon,
-   ListFilter,
-   MoreHorizontal,
-   Bell,
-} from 'lucide-react';
+import { SlidersHorizontal, CheckCheck, ListFilter, MoreHorizontal, Bell } from 'lucide-react';
 import { getNotificationIcon } from '@/lib/notification-utils';
 import type { NotificationType } from '@/data/inbox';
 import NotificationPreview from './issue-preview';
@@ -117,10 +109,10 @@ export default function Inbox() {
       <>
          {/* Header — espelho do Linear: "Inbox" 13px/500 + menu "..." de ações à esquerda;
              Add filter (funil) e Display options (sliders) à direita. */}
-         <div className="flex items-center justify-between pl-4 pr-2.5 h-10 border-b border-border">
+         <div className="flex h-11 items-center justify-between border-b border-border pl-[18px] pr-2.5">
             <div className="flex items-center gap-1.5">
                <SidebarTrigger className="inline-flex lg:hidden" />
-               <span className="text-[13px] font-medium">Inbox</span>
+               <span className="text-[13px] font-medium leading-4">Inbox</span>
                <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                      <Button variant="ghost" size="xs" aria-label="Notification actions">
@@ -284,21 +276,8 @@ export default function Inbox() {
                </DropdownMenu>
             </div>
          </div>
-         <div className="w-full flex flex-col items-center justify-start overflow-y-auto h-[calc(100%-40px)] py-1">
-            {filteredNotifications.length === 0 ? (
-               <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-24 text-center">
-                  <div className="flex size-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
-                     <InboxIcon className="size-6" />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                     <p className="text-sm font-medium">All caught up</p>
-                     <p className="max-w-xs text-sm text-muted-foreground">
-                        You have no notifications right now. New mentions and updates will land
-                        here.
-                     </p>
-                  </div>
-               </div>
-            ) : (
+         <div className="flex h-[calc(100%-44px)] w-full flex-col items-center justify-start overflow-y-auto py-2">
+            {filteredNotifications.length > 0 &&
                filteredNotifications.map(({ item: notification, isSnoozed }) =>
                   isSnoozed ? (
                      <IssueLine
@@ -323,8 +302,7 @@ export default function Inbox() {
                         showStatusIcon={showStatusIcon}
                      />
                   )
-               )
-            )}
+               )}
          </div>
       </>
    );
@@ -334,7 +312,7 @@ export default function Inbox() {
          <div className="flex flex-col h-full w-full">
             <button
                onClick={() => setSelectedNotification(undefined)}
-               className="flex items-center gap-1 px-4 h-10 border-b border-border text-sm text-muted-foreground hover:text-foreground shrink-0"
+               className="flex h-11 shrink-0 items-center gap-1 border-b border-border px-4 text-sm text-muted-foreground hover:text-foreground"
             >
                <ChevronLeft className="size-4" />
                Inbox
@@ -353,24 +331,15 @@ export default function Inbox() {
    }
 
    return (
-      <ResizablePanelGroup
-         direction="horizontal"
-         autoSaveId="inbox-panel-group"
-         className="w-full h-full"
-      >
-         <ResizablePanel defaultSize={350} maxSize={500}>
-            {listPane}
-         </ResizablePanel>
-         {/* Divisor estilo Linear: linha fina, sem grip — só o cursor col-resize
-             e o realce sutil no hover/drag denunciam o resize. */}
-         <ResizableHandle />
-         <ResizablePanel defaultSize={350} maxSize={500}>
+      <div className="grid h-full w-full grid-cols-[300px_minmax(0,1fr)]">
+         <section className="min-w-0 border-r border-border">{listPane}</section>
+         <section className="min-w-0">
             <NotificationPreview
                notification={selectedNotification}
                onMarkAsRead={markAsRead}
                onMarkAsUnread={markAsUnread}
             />
-         </ResizablePanel>
-      </ResizablePanelGroup>
+         </section>
+      </div>
    );
 }

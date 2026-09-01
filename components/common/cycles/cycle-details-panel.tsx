@@ -90,7 +90,7 @@ function BreakdownList({ rows, isActive, toggle }: BreakdownListProps) {
                            {active ? 'Clear filter' : 'Filter'}
                         </span>
                      )}
-                     <CapacityRing value={row.completedPercent} color="#6771c5" />
+                     <CapacityRing value={row.completedPercent} />
                      <span className="whitespace-nowrap">
                         {row.completedPercent}% of {row.total}
                      </span>
@@ -163,7 +163,7 @@ export function CycleDetailsPanel({ cycle, issues }: CycleDetailsPanelProps) {
                   leading: (
                      <span
                         className="size-2.5 rounded-full shrink-0"
-                        style={{ backgroundColor: label?.color ?? 'gray' }}
+                        style={{ backgroundColor: label?.color ?? 'var(--muted-foreground)' }}
                      />
                   ),
                   filter: { columnId: 'labels' as const, value: String(key) },
@@ -251,14 +251,17 @@ export function CycleDetailsPanel({ cycle, issues }: CycleDetailsPanelProps) {
             <div className="grid grid-cols-3 gap-2 mb-3">
                <div className="flex flex-col gap-0.5">
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                     <span className="size-2 rounded-[2px] bg-[#8f9299]" />
+                     <span
+                        className="size-2 rounded-[2px]"
+                        style={{ backgroundColor: 'var(--muted-foreground)' }}
+                     />
                      Scope
                   </div>
                   <div className="text-sm">
                      <span className="font-medium">{cycle.scope}</span>{' '}
                      {cycle.scopeDelta !== 0 && (
                         <span
-                           className={`text-xs ${cycle.scopeDelta > 0 ? 'text-red-500' : 'text-emerald-500'}`}
+                           className={`text-xs ${cycle.scopeDelta > 0 ? 'text-destructive' : 'text-chart-2'}`}
                         >
                            {cycle.scopeDelta > 0 ? '+' : ''}
                            {cycle.scopeDelta}%
@@ -268,7 +271,10 @@ export function CycleDetailsPanel({ cycle, issues }: CycleDetailsPanelProps) {
                </div>
                <div className="flex flex-col gap-0.5">
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                     <span className="size-2 rounded-[2px] bg-[#facc15]" />
+                     <span
+                        className="size-2 rounded-[2px]"
+                        style={{ backgroundColor: 'var(--cycle-started)' }}
+                     />
                      Started
                   </div>
                   <div className="text-sm">
@@ -278,7 +284,10 @@ export function CycleDetailsPanel({ cycle, issues }: CycleDetailsPanelProps) {
                </div>
                <div className="flex flex-col gap-0.5">
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                     <span className="size-2 rounded-[2px] bg-[#6771c5]" />
+                     <span
+                        className="size-2 rounded-[2px]"
+                        style={{ backgroundColor: 'var(--primary)' }}
+                     />
                      Completed
                   </div>
                   <div className="text-sm">

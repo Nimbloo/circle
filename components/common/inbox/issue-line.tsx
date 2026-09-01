@@ -60,9 +60,9 @@ export default function IssueLine({
       <motion.div
          {...(layoutId && { layoutId: `notification-line-${notification.id}` })}
          onClick={onClick}
-         className="w-full px-2"
+         className="w-full pl-2.5"
       >
-         <div className="group/inbox-line relative flex w-full cursor-pointer items-center gap-3 rounded-lg py-2.5 pl-2.5 pr-2">
+         <div className="group/inbox-line relative flex h-[55px] w-full cursor-pointer items-center gap-3 rounded-lg px-2">
             {/* Realce que DISSIPA nas pontas (Linear): camada de fundo com máscara de
                 gradiente horizontal — o fill some suavemente nas bordas laterais. */}
             <div

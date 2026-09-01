@@ -2,10 +2,9 @@
 
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
-import { CyclePlayIcon } from './cycle-line';
 import { useParams } from 'next/navigation';
-import { Fragment, useMemo } from 'react';
-import CycleLine from './cycle-line';
+import { useMemo } from 'react';
+import CycleLine, { CyclePlayIcon } from './cycle-line';
 import { CycleBurnupChart, CycleProgressLegend } from './cycle-burnup-chart';
 
 /**
@@ -18,11 +17,11 @@ import { CycleBurnupChart, CycleProgressLegend } from './cycle-burnup-chart';
  */
 export default function Cycles() {
    const { teamId } = useParams<{ teamId?: string }>();
-   const allCycles = useWorkspaceStore((s) => s.cycles);
-   const cycles = useMemo(
-      () => (teamId ? allCycles.filter((c) => c.teamId === teamId) : allCycles),
-      [allCycles, teamId]
-   );
+   const allCycles = useWorkspaceStore((state) => state.cycles);
+   const cycles = useMemo(() => {
+      const teamCycles = teamId ? allCycles.filter((cycle) => cycle.teamId === teamId) : allCycles;
+      return [...teamCycles].sort((a, b) => b.startDate.localeCompare(a.startDate));
+   }, [allCycles, teamId]);
 
    if (cycles.length === 0) {
       return (
@@ -42,48 +41,41 @@ export default function Cycles() {
    }
 
    return (
-      <div className="w-full py-4">
+      <div className="w-full">
          {cycles.map((cycle) => (
-            <Fragment key={cycle.id}>
-               <div className="w-full flex items-stretch">
-                  {/* Date rail */}
-                  <div className="relative w-14 sm:w-20 shrink-0 flex flex-col items-end pr-4">
-                     {/* Vertical rail, centered on the dots (pr-4 = 16px + half dot 5px - half line) */}
-                     <div className="absolute right-[20.5px] top-0 bottom-0 w-px bg-border" />
-                     <div className="flex items-center gap-2 h-12">
-                        <span className="text-[11px] leading-tight text-muted-foreground text-right">
-                           {format(parseISO(cycle.startDate), 'MMM')}
-                           <br />
-                           {format(parseISO(cycle.startDate), 'd')}
-                        </span>
-                        <span
-                           className={
-                              'relative z-10 size-2.5 rounded-full border-2 bg-background ' +
-                              (cycle.status === 'current'
-                                 ? 'border-indigo-400 bg-indigo-400'
-                                 : 'border-muted-foreground/40')
-                           }
-                        />
-                     </div>
-                  </div>
-
-                  {/* Cycle row + expanded chart for the current cycle */}
-                  <div className="flex-1 min-w-0 border-b border-border/60">
-                     <CycleLine cycle={cycle} />
-
-                     {cycle.status === 'current' && (
-                        <div className="flex flex-col lg:flex-row items-stretch gap-8 px-6 pb-6 pt-2">
-                           <div className="flex-1 min-w-0">
-                              <CycleBurnupChart cycle={cycle} height={220} />
-                           </div>
-                           <div className="lg:w-64 shrink-0 flex items-center">
-                              <CycleProgressLegend cycle={cycle} />
-                           </div>
-                        </div>
-                     )}
-                  </div>
+            <div key={cycle.id} className="flex w-full items-stretch">
+               <div className="relative w-14 shrink-0 sm:w-[126px]">
+                  <div className="absolute bottom-[4.5px] left-[27.5px] top-0 w-px bg-border sm:left-[73.5px]" />
+                  <span className="absolute -bottom-4 left-0 hidden w-[63px] text-right text-xs font-[450] leading-[15px] text-muted-foreground sm:block">
+                     {format(parseISO(cycle.startDate), 'MMM')}
+                     <br />
+                     {format(parseISO(cycle.startDate), 'd')}
+                  </span>
+                  <span
+                     className={
+                        'absolute -bottom-[4.5px] left-[23.5px] z-10 size-[9px] rounded-full border-2 bg-background sm:left-[69.5px] ' +
+                        (cycle.status === 'current'
+                           ? 'border-primary bg-primary'
+                           : 'border-muted-foreground/40')
+                     }
+                  />
                </div>
-            </Fragment>
+
+               <div className="min-w-0 flex-1 border-b border-border/60">
+                  <CycleLine cycle={cycle} />
+
+                  {cycle.status === 'current' && (
+                     <div className="-mt-4 mb-4 flex h-[216px] items-stretch gap-5 px-2.5 xl:pr-[60px]">
+                        <div className="min-w-0 flex-1">
+                           <CycleBurnupChart cycle={cycle} height={216} />
+                        </div>
+                        <div className="hidden w-[300px] shrink-0 items-center xl:flex">
+                           <CycleProgressLegend cycle={cycle} />
+                        </div>
+                     </div>
+                  )}
+               </div>
+            </div>
          ))}
       </div>
    );
