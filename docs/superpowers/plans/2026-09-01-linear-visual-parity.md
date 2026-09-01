@@ -49,7 +49,7 @@ que apenas congelavam classes CSS foram substituídos por testes de comportament
 - Produces: `loadLocalDatabaseEnv(options?: { cwd?: string; environment?: NodeJS.ProcessEnv }): void`
 - Consumes: `.env.local` apenas quando `DATABASE_URL` ainda não está definido.
 
-- [ ] **Step 1: escrever os testes RED para precedência e leitura de `.env.local`**
+- [x] **Step 1: escrever os testes RED para precedência e leitura de `.env.local`**
 
 ```ts
 import { afterEach, describe, expect, it } from 'vitest';
@@ -89,13 +89,13 @@ describe('loadLocalDatabaseEnv', () => {
 });
 ```
 
-- [ ] **Step 2: rodar o teste e confirmar o RED correto**
+- [x] **Step 2: rodar o teste e confirmar o RED correto**
 
 Run: `pnpm exec vitest run test/local-database-env.test.ts`
 
 Expected: FAIL porque `db/load-local-env.ts` ainda não existe.
 
-- [ ] **Step 3: adicionar `dotenv` e implementar o loader mínimo**
+- [x] **Step 3: adicionar `dotenv` e implementar o loader mínimo**
 
 Run: `pnpm add -D dotenv`
 
@@ -123,7 +123,7 @@ export function loadLocalDatabaseEnv({
 }
 ```
 
-- [ ] **Step 4: carregar o ambiente antes de avaliar Drizzle e antes do import de `db` no seed**
+- [x] **Step 4: carregar o ambiente antes de avaliar Drizzle e antes do import de `db` no seed**
 
 ```ts
 // drizzle.config.ts
@@ -144,7 +144,7 @@ async function main() {
 }
 ```
 
-- [ ] **Step 5: verificar GREEN e os dois comandos documentados**
+- [x] **Step 5: verificar GREEN e os dois comandos documentados**
 
 Run: `pnpm exec vitest run test/local-database-env.test.ts`
 
@@ -158,7 +158,7 @@ Run: `pnpm db:seed`
 
 Expected: catálogos semeados sem erro de conexão.
 
-- [ ] **Step 6: corrigir o README e commitar**
+- [x] **Step 6: corrigir o README e commitar**
 
 Documentar que os comandos carregam `.env.local` sem sobrescrever `DATABASE_URL` injetada.
 
@@ -186,7 +186,7 @@ git commit -m "fix(dev): carrega ambiente local nos comandos de banco"
 - Produces: `MainLayout({ children, header })` com área de conteúdo `flex-1 min-h-0`.
 - Consumes: tokens Tailwind existentes (`background`, `container`, `muted`, `secondary`, `accent`, `border`).
 
-- [ ] **Step 1: escrever o teste RED do contrato semântico e geométrico**
+- [x] **Step 1: escrever o teste RED do contrato semântico e geométrico**
 
 ```tsx
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -221,13 +221,13 @@ describe('layout primitives', () => {
 });
 ```
 
-- [ ] **Step 2: rodar o teste e confirmar RED**
+- [x] **Step 2: rodar o teste e confirmar RED**
 
 Run: `pnpm exec vitest run test/layout-primitives.test.tsx`
 
 Expected: FAIL porque `header-primitives.tsx` não existe e o `MainLayout` ainda usa `calc()`.
 
-- [ ] **Step 3: implementar as primitivas mínimas**
+- [x] **Step 3: implementar as primitivas mínimas**
 
 ```tsx
 import type { ComponentProps, ReactNode } from 'react';
@@ -272,7 +272,7 @@ export function HeaderActions({ className, ...props }: ComponentProps<'div'>) {
 }
 ```
 
-- [ ] **Step 4: substituir o cálculo de altura por flex layout**
+- [x] **Step 4: substituir o cálculo de altura por flex layout**
 
 ```tsx
 export default function MainLayout({ children, header }: MainLayoutProps) {
@@ -287,7 +287,7 @@ export default function MainLayout({ children, header }: MainLayoutProps) {
 
 Remover `headersNumber` da interface e das páginas; o número de barras deixa de afetar o cálculo.
 
-- [ ] **Step 5: calibrar tokens dark confirmados e preservar variantes**
+- [x] **Step 5: calibrar tokens dark confirmados e preservar variantes**
 
 ```css
 .dark {
@@ -303,7 +303,7 @@ Remover `headersNumber` da interface e das páginas; o número de barras deixa d
 
 Manter `--primary: #5e6ad2`; revisar light e variantes contra referências oficiais sem copiar o dark por aproximação.
 
-- [ ] **Step 6: verificar GREEN, typecheck e shell no browser**
+- [x] **Step 6: verificar GREEN, typecheck e shell no browser**
 
 Run: `pnpm exec vitest run test/layout-primitives.test.tsx && pnpm typecheck`
 
@@ -311,7 +311,7 @@ Expected: testes e typecheck PASS.
 
 Browser: comparar em `1718 × 1270`; exigir sidebar `244px`, main `x=244`, `y=8`, radius `12px`.
 
-- [ ] **Step 7: commitar**
+- [x] **Step 7: commitar**
 
 ```bash
 git add app/globals.css app/[orgId] components/layout/main-layout.tsx components/layout/header-primitives.tsx test/layout-primitives.test.tsx
@@ -342,11 +342,11 @@ git commit -m "style(shell): alinha fundação visual ao Linear 2026"
 - Consumes: tokens da Task 2 e `SidebarMenuButton` existente.
 - Produces: navegação desktop de `244px`, itens de `28px`, ícones de `14px`, radius `8px` e busca de Settings.
 
-- [ ] **Step 1: registrar screenshot/medidas do Circle antes da mudança**
+- [x] **Step 1: registrar screenshot/medidas do Circle antes da mudança**
 
 Capturar Inbox e Settings em `1718 × 1270`, dark. Registrar apenas medidas, sem dados do Linear.
 
-- [ ] **Step 2: ajustar as variantes do menu**
+- [x] **Step 2: ajustar as variantes do menu**
 
 ```ts
 const sidebarMenuButtonVariants = cva(
@@ -365,15 +365,15 @@ const sidebarMenuButtonVariants = cva(
 
 Preservar atributos, atalhos, collapse mobile e handlers existentes.
 
-- [ ] **Step 3: alinhar grupos e ordem visual sem alterar rotas**
+- [x] **Step 3: alinhar grupos e ordem visual sem alterar rotas**
 
 Usar `gap-0.5`, grupos com `px-3 py-2`, labels de `12px`, ícones `size-3.5` e selected via `bg-sidebar-accent`. Na sidebar de Settings, renderizar `BackToApp`, busca e grupos sem botão contornado.
 
-- [ ] **Step 4: validar teclado e responsividade**
+- [x] **Step 4: validar teclado e responsividade**
 
 Browser: testar `Ctrl/Cmd+B`, mobile `390 × 844`, active item, hover, foco e scroll independente da Settings sidebar.
 
-- [ ] **Step 5: rodar regressão e commitar**
+- [x] **Step 5: rodar regressão e commitar**
 
 Run: `pnpm typecheck && pnpm lint && pnpm test`
 
@@ -427,7 +427,7 @@ git commit -m "style(sidebar): reproduz navegação compacta do Linear"
 - Consumes: `LocationBar`, `ViewBar`, `HeaderGroup`, `HeaderTitle`, `HeaderActions`.
 - Preserves: search, notifications, filters, export, insights, display options, favorites e links.
 
-- [ ] **Step 1: migrar primeiro o header de Issues como referência**
+- [x] **Step 1: migrar primeiro o header de Issues como referência**
 
 ```tsx
 <>
@@ -444,19 +444,19 @@ git commit -m "style(sidebar): reproduz navegação compacta do Linear"
 
 Tabs usam `h-7 rounded-full px-2.5 text-xs font-medium`; ativo usa `bg-accent`, inativo `text-muted-foreground`.
 
-- [ ] **Step 2: comparar Issues no browser antes de replicar**
+- [x] **Step 2: comparar Issues no browser antes de replicar**
 
 Exigir: primeira barra `44px`, segunda `43px`, controles `28px`, padding lateral inicial `8px`, sem terceira borda.
 
-- [ ] **Step 3: migrar as demais famílias preservando ações**
+- [x] **Step 3: migrar as demais famílias preservando ações**
 
 Aplicar uma `LocationBar` quando a rota só tem contexto; adicionar `ViewBar` somente quando há tabs/filtros. Settings não recebe header global: o título fica no conteúdo da página.
 
-- [ ] **Step 4: validar todas as rotas com snapshot DOM**
+- [x] **Step 4: validar todas as rotas com snapshot DOM**
 
 Confirmar um único `main`, no máximo um `location-bar`, no máximo um `view-bar` e `aria-label` em todo botão apenas com ícone.
 
-- [ ] **Step 5: rodar regressão e commitar**
+- [x] **Step 5: rodar regressão e commitar**
 
 Run: `pnpm typecheck && pnpm lint && pnpm test`
 
@@ -486,11 +486,11 @@ git commit -m "refactor(headers): unifica chrome das páginas"
 - Preserves: agrupamento, ordenação, filtros, seleção em massa, drag-and-drop e virtualização.
 - Produces: rows `44px`, group headers `36px`, cards e skeletons com a mesma geometria final.
 
-- [ ] **Step 1: capturar RED visual do Circle e medir os elementos atuais**
+- [x] **Step 1: capturar RED visual do Circle e medir os elementos atuais**
 
 Registrar altura de row/group, alinhamento do identifier, título, labels, assignee e data.
 
-- [ ] **Step 2: ajustar a lista virtual e seus estimadores juntos**
+- [x] **Step 2: ajustar a lista virtual e seus estimadores juntos**
 
 ```ts
 const GROUP_HEADER_HEIGHT = 36;
@@ -499,15 +499,15 @@ const ISSUE_ROW_HEIGHT = 44;
 
 Usar os mesmos valores no CSS (`h-9`, `h-11`) e no virtualizer. Group header: `mx-2 rounded-lg bg-muted`; row: `px-3`, hover `bg-accent/40`, divisores apenas dentro do grupo quando necessários.
 
-- [ ] **Step 3: alinhar metadados e truncamento**
+- [x] **Step 3: alinhar metadados e truncamento**
 
 Identifier e data em `text-xs text-muted-foreground tabular-nums`; título em `text-[13px] font-medium`; badges `h-6 rounded-full`; ações aparecem por focus-within/hover sem deslocar o conteúdo.
 
-- [ ] **Step 4: alinhar board e filtros ao mesmo vocabulário**
+- [x] **Step 4: alinhar board e filtros ao mesmo vocabulário**
 
 Columns usam superfície `bg-muted`, radius `10px`, header `36px`; cards usam `bg-card`, radius `8px`, border sutil e padding `10px`. Popovers de filtro/display usam os primitivos Radix existentes.
 
-- [ ] **Step 5: comparar list e board em dark/light e commitar**
+- [x] **Step 5: comparar list e board em dark/light e commitar**
 
 Run: `pnpm typecheck && pnpm lint && pnpm test`
 
@@ -548,11 +548,11 @@ git commit -m "style(issues): alinha listas e boards ao Linear"
 - Consumes: tokens, header primitives e densidade estabelecidos nas Tasks 2–5.
 - Preserves: DnD, seleção, filtros, timeline, side panels e navegação.
 
-- [ ] **Step 1: confirmar a estrutura de cada equivalente no Linear**
+- [x] **Step 1: confirmar a estrutura de cada equivalente no Linear**
 
 Projects/Initiatives: location + view bars de `44/43px`, header de tabela logo abaixo e rows compactas. Teams/Views/Reviews: usar a mesma gramática do Circle quando não houver equivalente 1:1, sem inventar função.
 
-- [ ] **Step 2: padronizar tabelas e linhas**
+- [x] **Step 2: padronizar tabelas e linhas**
 
 ```text
 table header: 32px, 12px/500, muted
@@ -563,11 +563,11 @@ hover: accent/40
 
 Não mudar ordem, filtros ou conteúdo das colunas.
 
-- [ ] **Step 3: padronizar board, timeline e side panels**
+- [x] **Step 3: padronizar board, timeline e side panels**
 
 Usar os tokens de `card`, `muted`, `accent` e `border`; remover chrome duplicado; manter handles e handlers DnD existentes.
 
-- [ ] **Step 4: validar rotas e commitar**
+- [x] **Step 4: validar rotas e commitar**
 
 Run: `pnpm typecheck && pnpm lint && pnpm test`
 
@@ -600,11 +600,11 @@ git commit -m "style(workspace): harmoniza superfícies de trabalho"
 - Preserves: edição, comments, reactions, relações, subscription, propriedades e activity.
 - Produces: coluna editorial `minmax(0, 800px)` e painel de propriedades `360px` no desktop.
 
-- [ ] **Step 1: confirmar benchmark de detalhe**
+- [x] **Step 1: confirmar benchmark de detalhe**
 
 No viewport `1718 × 1270`, conteúdo principal observado em cerca de `791px`; propriedades ficam em coluna direita sem card externo. Título usa `26px`/`32px`, peso `600`.
 
-- [ ] **Step 2: aplicar o grid editorial**
+- [x] **Step 2: aplicar o grid editorial**
 
 ```tsx
 <div className="mx-auto grid w-full max-w-[1120px] grid-cols-[minmax(0,800px)_360px] gap-12 px-8 py-8 max-lg:grid-cols-1">
@@ -613,15 +613,15 @@ No viewport `1718 × 1270`, conteúdo principal observado em cerca de `791px`; p
 </div>
 ```
 
-- [ ] **Step 3: reduzir chrome de propriedades e activity**
+- [x] **Step 3: reduzir chrome de propriedades e activity**
 
 Propriedades usam rows de `28px`, labels de seção `12px`, sem container card. Comments preservam ações e threading, usando superfície elevada apenas no comentário, não no feed inteiro.
 
-- [ ] **Step 4: espelhar geometria em skeletons**
+- [x] **Step 4: espelhar geometria em skeletons**
 
 Skeleton deve ocupar exatamente as duas colunas e trocar para uma coluna nos mesmos breakpoints.
 
-- [ ] **Step 5: validar edição e commitar**
+- [x] **Step 5: validar edição e commitar**
 
 Browser: abrir issue/project/initiative, editar um campo local descartável, confirmar toast após API e rollback em falha simulada apenas no ambiente local.
 
@@ -652,7 +652,7 @@ git commit -m "style(details): aplica layout editorial do Linear"
 - Preserves: filtros, read/unread, snooze, seleção, burn-up e actions.
 - Produces: Inbox com lista `302px` incluindo chrome e rows `55px`; Cycles com timeline densa e current expandido.
 
-- [ ] **Step 1: alinhar Inbox ao split confirmado**
+- [x] **Step 1: alinhar Inbox ao split confirmado**
 
 ```tsx
 <div className="grid h-full grid-cols-[302px_minmax(0,1fr)] max-md:grid-cols-1">
@@ -663,15 +663,15 @@ git commit -m "style(details): aplica layout editorial do Linear"
 
 Row: `h-[55px] rounded-lg px-2`; selected usa `bg-accent`; apenas o painel direito renderiza “No notification selected”. No mobile, seleção troca lista por detalhe e mantém o botão Back existente.
 
-- [ ] **Step 2: alinhar Cycles sem alterar cálculos**
+- [x] **Step 2: alinhar Cycles sem alterar cálculos**
 
 Cycle row colapsada usa `44px`; current expandido contém burn-up e stats no mesmo fluxo, com eixos/divisores discretos. Não tocar em `data/cycles.ts`, adapters ou store.
 
-- [ ] **Step 3: validar estados especiais**
+- [x] **Step 3: validar estados especiais**
 
 Inbox: carregado, vazio, unread, snoozed, selected e mobile. Cycles: current, upcoming, previous, sem burn-up e loading.
 
-- [ ] **Step 4: rodar regressão e commitar**
+- [x] **Step 4: rodar regressão e commitar**
 
 Run: `pnpm typecheck && pnpm lint && pnpm test`
 
@@ -717,7 +717,7 @@ git commit -m "style(special): alinha Inbox e Cycles ao Linear"
 - Preserves: formulários, save states, dialogs, menus, keyboard navigation e toasts.
 - Produces: conteúdo Settings `640px`, cards radius `10px`, overlays coerentes.
 
-- [ ] **Step 1: ajustar os componentes compartilhados de Settings**
+- [x] **Step 1: ajustar os componentes compartilhados de Settings**
 
 ```tsx
 <div className="mx-auto w-full max-w-[640px] px-0 py-16 max-md:px-5 max-md:py-8">
@@ -728,19 +728,19 @@ git commit -m "style(special): alinha Inbox e Cycles ao Linear"
 
 `SettingsCard`: `rounded-[10px] bg-card divide-y divide-border/60`, sem borda externa forte. `SettingsRow`: mínimo `64px`, padding `16px`.
 
-- [ ] **Step 2: remover cor literal compartilhada**
+- [x] **Step 2: remover cor literal compartilhada**
 
 Trocar `bg-[#00cc66]` de `EnabledDot` por token semântico de sucesso já existente ou adicionar `--success`/`--color-success` em `globals.css` e usar `bg-success`.
 
-- [ ] **Step 3: calibrar overlays vendored sem alterar APIs**
+- [x] **Step 3: calibrar overlays vendored sem alterar APIs**
 
 Popover/dialog/menu: `bg-popover`, radius `10px`, border sutil, shadow curta, item `28px`, focus/selected via `bg-accent`. Dialog mantém focus trap, escape e portais Radix.
 
-- [ ] **Step 4: validar teclado, foco e todos os Settings shells**
+- [x] **Step 4: validar teclado, foco e todos os Settings shells**
 
 Percorrer Profile, Preferences, Notifications, Code & reviews, Agent personalization, templates, labels, integrations, audit e team settings. Confirmar que o loading usa a mesma largura do conteúdo final.
 
-- [ ] **Step 5: rodar regressão e commitar**
+- [x] **Step 5: rodar regressão e commitar**
 
 Run: `pnpm typecheck && pnpm lint && pnpm test`
 
@@ -776,7 +776,7 @@ git commit -m "style(settings): reproduz superfícies e overlays do Linear"
 - Produces: dark/light, cinco viewports, focus/keyboard e estados finais aprovados.
 - Preserves: todas as APIs públicas dos componentes e stores.
 
-- [ ] **Step 1: executar a matriz visual completa**
+- [x] **Step 1: executar a matriz visual completa**
 
 Rotas: Inbox, My issues, team Active/Backlog/All, Cycles, Projects, Initiatives, Views, Reviews, Members, Teams, issue detail, project detail, initiative detail e cada grupo de Settings.
 
@@ -784,19 +784,19 @@ Viewports: `1718×1270`, `1440×900`, `1280×800`, `768×1024`, `390×844`.
 
 Estados: loaded, empty, loading, error, hover, selected, focus, popover e dialog.
 
-- [ ] **Step 2: corrigir apenas divergências reproduzidas**
+- [x] **Step 2: corrigir apenas divergências reproduzidas**
 
 Cada ajuste deve registrar rota, viewport, medida esperada e medida observada antes da alteração. Não fazer limpeza lateral.
 
-- [ ] **Step 3: validar acessibilidade**
+- [x] **Step 3: validar acessibilidade**
 
 Usar Tab/Shift+Tab/Escape/Enter/Space; confirmar focus ring, ordem de foco, `aria-label` em icon buttons, reduced motion e ausência de cor como único indicador.
 
-- [ ] **Step 4: validar temas**
+- [x] **Step 4: validar temas**
 
 Comparar dark com o Linear autenticado e light com as referências oficiais. Validar também `pure-light`, `magic-blue`, `classic-dark` e custom theme sem sobrescrever os tokens escolhidos pelo usuário.
 
-- [ ] **Step 5: executar verificação final automatizada**
+- [x] **Step 5: executar verificação final automatizada**
 
 Run: `pnpm typecheck`
 
@@ -823,7 +823,7 @@ Run: `git grep -n CIRCLE_DEV_AUTH_EMAIL HEAD -- lib/api/auth.ts middleware.ts`
 
 Expected: saída vazia.
 
-- [ ] **Step 6: atualizar continuidade e commitar**
+- [x] **Step 6: atualizar continuidade e commitar**
 
 Registrar em `docs/PENDENCIAS.md` a issue #65, o estado dos lotes, as divergências intencionais e os resultados de verificação.
 
@@ -832,6 +832,6 @@ git add app components docs/PENDENCIAS.md
 git commit -m "docs(ui): registra conclusão da paridade visual"
 ```
 
-- [ ] **Step 7: solicitar code review e preparar PR**
+- [x] **Step 7: solicitar code review e preparar PR**
 
 Revisar o diff completo contra a spec, corrigir findings reproduzíveis, reexecutar a verificação final e abrir PR para `develop` com `Closes #65`.
