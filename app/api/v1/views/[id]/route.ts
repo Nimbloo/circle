@@ -21,6 +21,8 @@ export async function GET(req: Request, { params }: Params) {
 
 const UpdateSchema = z.object({
    name: z.string().min(1).optional(),
+   // Compartilhamento: time que enxerga a view; `null` a torna pessoal.
+   teamId: z.string().max(16).nullish(),
    description: z.string().nullish(),
    icon: z.string().nullish(),
    filter: z
