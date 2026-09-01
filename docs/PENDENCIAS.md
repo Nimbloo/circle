@@ -15,10 +15,10 @@ Estado em **2026-09-01**, sobre a `develop` (v0.21.0).
 
 ### Paridade visual com o Linear — [#65](https://github.com/Nimbloo/circle/issues/65)
 
-Implementada na branch `danilo/65-paridade-visual-linear`, a partir da `develop`
-atualizada. O trabalho cobriu dez lotes: tokens e shell, sidebar, headers, listas e
-boards, superfícies de workspace, detalhes editoriais, Inbox/Cycles, Settings,
-overlays e hardening responsivo/acessível. Não houve mudança de API, schema ou contrato.
+Implementada nos commits da issue #65, a partir da `develop` atualizada. O trabalho
+cobriu dez lotes: tokens e shell, sidebar, headers, listas e boards, superfícies de
+workspace, detalhes editoriais, Inbox/Cycles, Settings, overlays e hardening
+responsivo/acessível. Não houve mudança de API, schema ou contrato.
 
 A revisão independente final encontrou e fechou lacunas que a primeira passada visual
 não capturou: sidebar indisponível em alguns headers móveis, properties de
@@ -55,12 +55,13 @@ semanticamente incorreto. As variantes de tema próprias do Circle foram preserv
 o Linear é o benchmark de composição, densidade e interação, não uma razão para apagar
 preferências do produto.
 
-**A `develop` está 7 commits à frente da `main`.** O `package.json` já está em `0.21.0`
-e a última tag é `v0.20.0`. Está parado em produção, entre outras coisas, o **conserto de
-um crash**: a página de Cycles estourava `ReferenceError` porque `teamId` era usado num
-seletor do zustand antes da declaração.
+**A `develop` contém mudanças ainda não promovidas para a `main`, além desta entrega.**
+O `package.json` já está em `0.21.0` e a última tag é `v0.20.0`. Está parado em
+produção, entre outras coisas, o **conserto de um crash**: a página de Cycles estourava
+`ReferenceError` porque `teamId` era usado num seletor do zustand antes da declaração.
 
-Para promover: PR `develop → main`. O CI cria tag e release; o ArgoCD faz o rollout.
+Para entregar a #65: PR da branch da issue para `develop`. Depois, para promover o
+conjunto: PR `develop → main`. O CI cria tag e release; o ArgoCD faz o rollout.
 
 **`AGENTS.md` e `.agents/skills/` não estão rastreados nem ignorados.** Apareceram em
 01/09 09:45 — é o guia do projeto para o Codex, espelhando o `CLAUDE.md`. Enquanto ficam
