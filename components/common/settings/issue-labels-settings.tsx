@@ -229,20 +229,18 @@ export default function IssueLabelsSettings() {
    };
 
    return (
-      <div className="w-full overflow-y-auto h-full">
-         <div className="max-w-5xl mx-auto px-6 py-10 pb-20">
-            <h1 className="text-2xl font-medium mb-6">Issue labels</h1>
+      <div className="h-full w-full overflow-y-auto">
+         <div className="px-14 py-16 pb-20 max-md:px-5 max-md:py-8">
+            <h1 className="mb-[13px] text-2xl font-medium leading-8">Issue labels</h1>
 
-            <div className="flex items-center justify-between gap-3 mb-6">
+            <div className="mb-6 flex items-center justify-between gap-3">
                <Input
                   placeholder="Filter by name..."
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  className="w-64 h-8"
+                  className="h-8 w-[300px] max-w-full"
                />
-               <Button size="xs" onClick={openCreate}>
-                  New label
-               </Button>
+               <Button onClick={openCreate}>New label</Button>
             </div>
 
             {/* Header */}

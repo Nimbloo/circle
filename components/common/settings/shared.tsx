@@ -1,31 +1,45 @@
 'use client';
 
 import {
-   DropdownMenu,
-   DropdownMenuContent,
-   DropdownMenuItem,
-   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+   Select,
+   SelectContent,
+   SelectItem,
+   SelectTrigger,
+   SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { Check, ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
 /** Centered settings page: big title, optional description, stacked sections. */
 export function SettingsShell({
    title,
    description,
+   action,
    children,
 }: {
    title: string;
    description?: string;
+   action?: React.ReactNode;
    children: React.ReactNode;
 }) {
    return (
-      <div className="w-full overflow-y-auto h-full">
-         <div className="max-w-2xl mx-auto px-6 py-10 pb-20">
-            <h1 className="text-2xl font-medium">{title}</h1>
-            {description && <p className="text-sm text-muted-foreground mt-1">{description}</p>}
-            <div className="flex flex-col gap-10 mt-10">{children}</div>
+      <div className="h-full w-full overflow-y-scroll">
+         <div className="relative -left-[2.5px] mx-auto w-full max-w-[640px] py-16 pb-20 max-md:left-0 max-md:px-5 max-md:py-8">
+            <div className="relative px-4 max-md:px-0">
+               <div className="min-w-0">
+                  <h1 className="text-2xl font-medium leading-8">{title}</h1>
+                  {description && (
+                     <p className="mt-1 text-[13px] leading-[22px] text-muted-foreground">
+                        {description}
+                     </p>
+                  )}
+               </div>
+               {action && <div className="absolute right-4 top-0 max-md:right-0">{action}</div>}
+            </div>
+            <div className={cn('mt-8 flex flex-col gap-12', description && 'mt-[34px]')}>
+               {children}
+            </div>
          </div>
       </div>
    );
@@ -45,17 +59,19 @@ export function SettingsSection({
    return (
       <section>
          {(title || action) && (
-            <div className="flex items-end justify-between gap-4 mb-1">
+            <div className="flex items-end justify-between gap-4 px-4 max-md:px-0">
                <div>
-                  {title && <h2 className="text-md font-medium">{title}</h2>}
+                  {title && <h2 className="text-[15px] font-medium leading-[23px]">{title}</h2>}
                   {description && (
-                     <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
+                     <p className="mt-0.5 text-[13px] leading-4 text-muted-foreground">
+                        {description}
+                     </p>
                   )}
                </div>
                {action}
             </div>
          )}
-         <div className="mt-3 flex flex-col gap-3">{children}</div>
+         <div className={cn('flex flex-col gap-3', (title || action) && 'mt-4')}>{children}</div>
       </section>
    );
 }
@@ -68,7 +84,12 @@ export function SettingsCard({
    className?: string;
 }) {
    return (
-      <div className={cn('rounded-lg border bg-container divide-y divide-border/60', className)}>
+      <div
+         className={cn(
+            'divide-y divide-border/60 overflow-hidden rounded-[10px] bg-card',
+            className
+         )}
+      >
          {children}
       </div>
    );
@@ -97,24 +118,26 @@ export function SettingsRow({
       <Comp
          onClick={onClick}
          className={cn(
-            'w-full flex items-center gap-3 px-4 py-3 text-left',
-            onClick && 'hover:bg-accent/40 transition-colors cursor-pointer',
+            'flex min-h-[60px] w-full items-center gap-3 px-4 py-[15.5px] text-left last:min-h-[66px]',
+            onClick && 'cursor-pointer transition-colors hover:bg-accent/40',
             muted && 'opacity-60'
          )}
       >
          {icon && (
-            <span className="inline-flex size-8 items-center justify-center rounded-md bg-muted/50 shrink-0 text-muted-foreground">
+            <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/50 text-muted-foreground">
                {icon}
             </span>
          )}
-         <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium flex items-center gap-2">{title}</div>
+         <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-[13px] font-medium leading-4">{title}</div>
             {description && (
-               <div className="text-xs text-muted-foreground mt-0.5">{description}</div>
+               <div className="mt-0.5 text-[13px] leading-4 text-muted-foreground">
+                  {description}
+               </div>
             )}
          </div>
          {trailing && (
-            <div className="shrink-0 flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex shrink-0 items-center gap-2 text-[13px] text-muted-foreground">
                {trailing}
             </div>
          )}
@@ -139,27 +162,24 @@ export function SelectMenu({
    const [internal, setInternal] = useState(defaultValue ?? options[0]);
    const value = controlledValue ?? internal;
    return (
-      <DropdownMenu>
-         <DropdownMenuTrigger className="h-8 px-3 rounded-md border bg-container text-sm inline-flex items-center gap-1.5 hover:bg-accent transition-colors outline-none">
-            {value}
-            <ChevronDown className="size-3.5 text-muted-foreground" />
-         </DropdownMenuTrigger>
-         <DropdownMenuContent align="end" className="min-w-40">
+      <Select
+         value={value}
+         onValueChange={(nextValue) => {
+            setInternal(nextValue);
+            onChange?.(nextValue);
+         }}
+      >
+         <SelectTrigger className="h-[30px] w-auto min-w-24 bg-accent px-2.5 hover:bg-accent/80">
+            <SelectValue />
+         </SelectTrigger>
+         <SelectContent position="item-aligned" className="min-w-40">
             {options.map((option) => (
-               <DropdownMenuItem
-                  key={option}
-                  onClick={() => {
-                     setInternal(option);
-                     onChange?.(option);
-                  }}
-                  className="flex items-center gap-2 text-sm"
-               >
-                  <span className="flex-1">{option}</span>
-                  {value === option && <Check className="size-3.5" />}
-               </DropdownMenuItem>
+               <SelectItem key={option} value={option}>
+                  {option}
+               </SelectItem>
             ))}
-         </DropdownMenuContent>
-      </DropdownMenu>
+         </SelectContent>
+      </Select>
    );
 }
 
@@ -167,7 +187,7 @@ export function SelectMenu({
 export function EnabledDot({ children }: { children: React.ReactNode }) {
    return (
       <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-         <span className="size-1.5 rounded-full bg-[#00cc66] shrink-0" />
+         <span className="size-1.5 shrink-0 rounded-full bg-[var(--online-indicator)]" />
          {children}
       </span>
    );

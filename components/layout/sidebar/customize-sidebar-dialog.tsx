@@ -195,7 +195,7 @@ export function CustomizeSidebarDialog({
 
    return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-         <DialogContent className="sm:max-w-md p-0 gap-0">
+         <DialogContent className="top-[41.5%] gap-0 p-0 sm:max-w-[480px] lg:left-[calc(50%+113px)]">
             <DialogHeader className="px-5 pt-5 pb-3">
                <DialogTitle className="text-base">Customize sidebar</DialogTitle>
             </DialogHeader>

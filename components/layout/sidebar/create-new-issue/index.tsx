@@ -126,7 +126,7 @@ export function CreateNewIssue() {
                <SquarePen className="size-3.5" />
             </Button>
          </DialogTrigger>
-         <DialogContent className="w-full sm:max-w-[750px] p-0 shadow-xl top-[30%]">
+         <DialogContent className="top-[23.8%] w-full gap-[5.5px] rounded-[21px] bg-card p-0 shadow-xl sm:max-w-[750px]">
             <DialogHeader>
                <DialogTitle className="px-4 pt-4 text-base font-medium">New issue</DialogTitle>
             </DialogHeader>

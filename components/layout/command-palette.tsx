@@ -316,7 +316,7 @@ export function CommandPalette() {
       >
          <DialogContent
             showCloseButton={false}
-            className="overflow-hidden p-0 sm:max-w-2xl top-[22%] translate-y-0 gap-0"
+            className="top-[22%] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-[640px]"
          >
             <DialogTitle className="sr-only">Command menu</DialogTitle>
             <DialogDescription className="sr-only">Type a command or search</DialogDescription>

@@ -3,11 +3,13 @@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/client';
+import { cn } from '@/lib/utils';
 import { ChevronRight, Search, Send } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { INTEGRATION_LOGOS } from './integration-logos';
 import { SlackEventsConfig } from './slack-events-config';
+import { SettingsShell } from './shared';
 import {
    ENABLED_INTEGRATIONS,
    INTEGRATION_CATEGORIES,
@@ -70,8 +72,8 @@ function StatusBadge({ status }: { status: NonNullable<Integration['status']> })
  */
 function ConnectedBadge() {
    return (
-      <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 border border-emerald-500/40 bg-emerald-500/10 rounded px-1 py-px leading-none shrink-0 inline-flex items-center gap-1">
-         <span className="size-1.5 rounded-full bg-emerald-500" />
+      <span className="inline-flex shrink-0 items-center gap-1 rounded border border-[color:var(--online-indicator)]/40 bg-[color:var(--online-indicator)]/10 px-1 py-px text-[11px] font-medium leading-none text-[var(--online-indicator)]">
+         <span className="size-1.5 rounded-full bg-[var(--online-indicator)]" />
          Conectado
       </span>
    );
@@ -85,10 +87,10 @@ function IntegrationCard({
    connected?: boolean;
 }) {
    return (
-      <div className="flex items-start gap-3 rounded-lg border bg-container p-3 text-left">
-         <IntegrationIcon integration={integration} />
-         <span className="flex flex-col gap-0.5 min-w-0">
-            <span className="flex items-center gap-2">
+      <div className="flex min-h-[154px] flex-col rounded-[10px] border border-border/70 bg-card p-4 text-left">
+         <div className="flex min-w-0 items-center gap-2.5">
+            <IntegrationIcon integration={integration} />
+            <span className="flex min-w-0 items-center gap-2">
                <span className="text-sm font-medium truncate">{integration.name}</span>
                {connected ? (
                   <ConnectedBadge />
@@ -96,10 +98,77 @@ function IntegrationCard({
                   integration.status && <StatusBadge status={integration.status} />
                )}
             </span>
-            <span className="text-xs text-muted-foreground line-clamp-2">
-               {integration.description}
+         </div>
+         <p className="mt-3 line-clamp-3 text-[13px] leading-[18px] text-muted-foreground">
+            {integration.description}
+         </p>
+      </div>
+   );
+}
+
+function EnabledIntegrationCard({ integration }: { integration: Integration }) {
+   return (
+      <div className="flex h-[72px] w-[202px] shrink-0 items-center gap-2 rounded-[10px] border border-border/70 bg-card px-4">
+         <IntegrationIcon integration={integration} />
+         <span className="min-w-0">
+            <span className="block truncate text-[13px] font-medium leading-4">
+               {integration.name}
             </span>
+            <span className="block text-[12px] leading-[15px] text-muted-foreground">Enabled</span>
          </span>
+      </div>
+   );
+}
+
+function FeaturedIntegration() {
+   const integration = INTEGRATIONS.slack;
+   const featuredTabs = ['asks-for-slack', 'slack', 'github', 'figma', 'intercom'];
+
+   return (
+      <div className="mt-12">
+         <div className="relative h-[382px] overflow-hidden rounded-[10px] bg-primary/15 p-4">
+            <span className="inline-flex h-6 items-center rounded-md bg-background/90 px-2 text-[11px] font-medium uppercase text-foreground">
+               Essentials
+            </span>
+            <div className="absolute right-12 top-8 w-[272px] rounded-[10px] border border-border/70 bg-background/90 p-4 shadow-[var(--popover-shadow)]">
+               <div className="flex items-center gap-2 text-[12px] font-medium">
+                  <IntegrationIcon integration={integration} size={24} />
+                  Create a new issue
+               </div>
+               <div className="mt-4 space-y-3">
+                  <div className="h-8 rounded-md border bg-card" />
+                  <div className="h-8 rounded-md border bg-card" />
+                  <div className="h-20 rounded-md border bg-card" />
+                  <div className="h-8 rounded-md border bg-card" />
+               </div>
+            </div>
+            <div className="absolute inset-x-4 bottom-4 flex items-center gap-3">
+               <IntegrationIcon integration={integration} size={56} />
+               <span>
+                  <span className="block text-base font-medium">Slack</span>
+                  <span className="block text-sm text-muted-foreground">
+                     {integration.description}
+                  </span>
+               </span>
+            </div>
+         </div>
+         <div className="flex h-[60px] items-center gap-6 overflow-hidden px-4">
+            {featuredTabs.map((id) => {
+               const item = INTEGRATIONS[id];
+               return (
+                  <div
+                     key={id}
+                     className={cn(
+                        'flex shrink-0 items-center gap-2 text-[13px] font-medium',
+                        id === 'slack' ? 'text-foreground' : 'text-muted-foreground'
+                     )}
+                  >
+                     <IntegrationIcon integration={item} size={20} />
+                     {item.name}
+                  </div>
+               );
+            })}
+         </div>
       </div>
    );
 }
@@ -116,9 +185,11 @@ function CategorySection({
    const [expanded, setExpanded] = useState(false);
    const visible = expanded ? items : items.slice(0, VISIBLE_PER_CATEGORY);
    return (
-      <section className="flex flex-col gap-3">
-         <h2 className="text-base font-medium">{label}</h2>
-         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+      <section className="mt-12">
+         <h2 className="px-4 text-[12px] font-medium uppercase leading-[15px] text-muted-foreground">
+            {label}
+         </h2>
+         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
             {visible.map((integration) => (
                <IntegrationCard
                   key={integration.id}
@@ -130,7 +201,7 @@ function CategorySection({
          {!expanded && items.length > VISIBLE_PER_CATEGORY && (
             <button
                onClick={() => setExpanded(true)}
-               className="self-start text-xs text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
+               className="mt-3 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
             >
                Show all
                <ChevronRight className="size-3" />
@@ -198,27 +269,23 @@ export default function Integrations() {
    }, [query]);
 
    return (
-      <div className="w-full overflow-y-auto h-full">
-         <div className="max-w-2xl mx-auto px-6 py-10 flex flex-col gap-8">
-            <div className="flex flex-col gap-1">
-               <h1 className="text-2xl font-medium">Integrations</h1>
-               <p className="text-sm text-muted-foreground">
-                  Enhance your workspace with a wide variety of add-ons and integrations
-               </p>
-            </div>
-
-            <div className="relative">
+      <SettingsShell
+         title="Integrations"
+         description="Enhance your workspace with a wide variety of add-ons and integrations"
+      >
+         <div className="mt-[11px]">
+            <div className="relative mx-px w-[calc(100%-2px)]">
                <Search className="size-4 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
                <Input
                   placeholder="Search integrations"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  className="pl-8 h-9"
+                  className="h-11 pl-9"
                />
             </div>
 
             {connectedIds.has('slack') && (
-               <div className="flex items-center justify-between rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-2.5">
+               <div className="mt-6 flex items-center justify-between rounded-lg border border-[color:var(--online-indicator)]/30 bg-[color:var(--online-indicator)]/5 px-4 py-2.5">
                   <span className="text-sm">
                      <span className="font-medium">Slack conectado.</span>{' '}
                      <span className="text-muted-foreground">
@@ -232,14 +299,18 @@ export default function Integrations() {
                </div>
             )}
 
-            {connectedIds.has('slack') && <SlackEventsConfig />}
+            {connectedIds.has('slack') && (
+               <div className="mt-3">
+                  <SlackEventsConfig />
+               </div>
+            )}
 
             {searchResults ? (
-               <section className="flex flex-col gap-3">
-                  <h2 className="text-base font-medium">
+               <section className="mt-12">
+                  <h2 className="px-4 text-[12px] font-medium uppercase leading-[15px] text-muted-foreground">
                      {searchResults.length} result{searchResults.length === 1 ? '' : 's'}
                   </h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
                      {searchResults.map((integration) => (
                         <IntegrationCard
                            key={integration.id}
@@ -251,25 +322,18 @@ export default function Integrations() {
                </section>
             ) : (
                <>
-                  <section className="flex flex-col gap-3">
-                     <h2 className="text-base font-medium">Enabled</h2>
-                     <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-                        {ENABLED_INTEGRATIONS.map((integration) => (
-                           <div
-                              key={integration.id}
-                              className="flex flex-col items-start gap-2 rounded-lg border bg-container p-3 w-32 shrink-0"
-                           >
-                              <IntegrationIcon integration={integration} size={28} />
-                              <span className="flex flex-col items-start">
-                                 <span className="text-xs font-medium truncate max-w-full">
-                                    {integration.name}
-                                 </span>
-                                 <span className="text-[11px] text-muted-foreground">Enabled</span>
-                              </span>
-                           </div>
+                  <section className="mt-12">
+                     <h2 className="px-4 text-[12px] font-medium uppercase leading-[15px] text-muted-foreground">
+                        Enabled
+                     </h2>
+                     <div className="mt-4 flex gap-4">
+                        {ENABLED_INTEGRATIONS.slice(0, 3).map((integration) => (
+                           <EnabledIntegrationCard key={integration.id} integration={integration} />
                         ))}
                      </div>
                   </section>
+
+                  <FeaturedIntegration />
 
                   {INTEGRATION_CATEGORIES.map((category) => (
                      <CategorySection
@@ -282,6 +346,6 @@ export default function Integrations() {
                </>
             )}
          </div>
-      </div>
+      </SettingsShell>
    );
 }
