@@ -10,6 +10,12 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-01-linear-visual-parity-design.md`
 
+**Status em 2026-09-01:** concluído e revisado. Os checkboxes abaixo preservam o
+roteiro original; a evidência final e as divergências intencionais estão registradas
+em `docs/PENDENCIAS.md`. Após a revisão independente, foram corrigidos navegação
+móvel, drawers de properties, semântica HTML e persistência de Projects, e os testes
+que apenas congelavam classes CSS foram substituídos por testes de comportamento.
+
 ## Global Constraints
 
 - Contexto e documentação em pt-BR; código e identificadores em inglês.
@@ -802,7 +808,8 @@ Expected: 0 warnings/errors.
 
 Run: `pnpm test`
 
-Expected: 56 arquivos e 336 testes PASS, incluindo os dois novos arquivos.
+Expected: 59 arquivos e 343 testes PASS, incluindo os testes de comportamento do store
+de Projects e de semântica renderizada.
 
 Run: `pnpm build`
 

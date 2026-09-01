@@ -18,7 +18,15 @@ Estado em **2026-09-01**, sobre a `develop` (v0.21.0).
 Implementada na branch `danilo/65-paridade-visual-linear`, a partir da `develop`
 atualizada. O trabalho cobriu dez lotes: tokens e shell, sidebar, headers, listas e
 boards, superfícies de workspace, detalhes editoriais, Inbox/Cycles, Settings,
-overlays e hardening responsivo/acessível. Não houve mudança de API, banco ou contrato.
+overlays e hardening responsivo/acessível. Não houve mudança de API, schema ou contrato.
+
+A revisão independente final encontrou e fechou lacunas que a primeira passada visual
+não capturou: sidebar indisponível em alguns headers móveis, properties de
+issue/project/initiative inacessíveis abaixo do breakpoint desktop, regressão nas
+preferências persistidas de Projects, `<main>` aninhado no detalhe de issue e um
+controle interativo inválido dentro do link de projeto da initiative. Os testes que
+congelavam listas de classes Tailwind foram removidos; comportamento de store e
+semântica HTML agora têm testes renderizados.
 
 Validação feita em 01/09/2026:
 
@@ -31,9 +39,13 @@ Validação feita em 01/09/2026:
 - teclado e acessibilidade: foco visível, Space/Enter/Escape, focus trap dos dialogs,
   nomes acessíveis em botões de ícone, switches e comboboxes, além de
   `prefers-reduced-motion`;
-- `pnpm typecheck`, `pnpm lint`, 66 arquivos/394 testes e `pnpm build` passaram. A build
-  mantém os warnings preexistentes do `jose` sobre `CompressionStream` no Edge Runtime
-  e de serialização do cache do webpack; não houve erro de compilação.
+- auditoria automatizada em `390×844`: sidebar e drawers de properties abriram nas
+  quatro rotas críticas, com close visível, focus trap, zero botão sem nome, um único
+  landmark `main` e nenhum `main` aninhado. Em `1440×900`, houve um único trigger
+  visual por header e os três asides editoriais permaneceram visíveis;
+- `pnpm typecheck`, `pnpm lint`, 59 arquivos/343 testes e `pnpm build` passaram. A build
+  manteve apenas o warning preexistente de serialização de strings grandes no cache do
+  webpack; não houve erro de compilação.
 
 Divergências intencionais: o conteúdo continua vindo dos dados reais do Circle; não
 foram inventadas ações só para imitar o benchmark. Em
