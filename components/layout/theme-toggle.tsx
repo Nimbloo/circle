@@ -49,13 +49,13 @@ export function ThemeToggle() {
    return (
       <DropdownMenu>
          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+            <Button variant="ghost" size="icon" className="size-7 shrink-0">
                {mode === 'light' ? (
-                  <Sun className="h-4 w-4" />
+                  <Sun className="size-3.5" />
                ) : mode === 'dark' ? (
-                  <Moon className="h-4 w-4" />
+                  <Moon className="size-3.5" />
                ) : (
-                  <Laptop className="h-4 w-4" />
+                  <Laptop className="size-3.5" />
                )}
                <span className="sr-only">Toggle theme</span>
             </Button>

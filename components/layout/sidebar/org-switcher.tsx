@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { ChevronsUpDown } from 'lucide-react';
+import { ChevronsUpDown, Search } from 'lucide-react';
 import { signOut } from 'next-auth/react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -22,6 +22,7 @@ import { NimblooLogo } from '@/components/brand/nimbloo-logo';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { CreateNewIssue } from './create-new-issue';
 import { ThemeToggle } from '../theme-toggle';
+import { Button } from '@/components/ui/button';
 
 export function OrgSwitcher() {
    const { orgId } = useParams<{ orgId: string }>();
@@ -36,25 +37,33 @@ export function OrgSwitcher() {
       <SidebarMenu>
          <SidebarMenuItem>
             <DropdownMenu>
-               <div className="w-full flex gap-1 items-center pt-2">
+               <div className="flex w-full items-center gap-1">
                   <DropdownMenuTrigger asChild>
                      <SidebarMenuButton
                         size="lg"
-                        className="h-8 p-1 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                        className="h-7 min-w-0 flex-1 px-1 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                      >
                         {/* Identidade = WORKSPACE (logo + nome), como no Linear. A conta
                             do usuário vive no dropdown abaixo. */}
-                        <div className="size-6 rounded-md bg-sidebar-accent flex items-center justify-center shrink-0">
-                           <NimblooLogo size={16} />
+                        <div className="flex size-5 shrink-0 items-center justify-center rounded-md bg-sidebar-accent">
+                           <NimblooLogo size={14} />
                         </div>
-                        <span className="grid flex-1 text-left text-sm leading-tight truncate font-medium">
+                        <span className="grid flex-1 truncate text-left text-[13px] font-medium leading-tight">
                            {workspaceName}
                         </span>
-                        <ChevronsUpDown className="ml-auto size-4 text-muted-foreground" />
+                        <ChevronsUpDown className="ml-auto size-3.5 text-muted-foreground" />
                      </SidebarMenuButton>
                   </DropdownMenuTrigger>
 
-                  <ThemeToggle />
+                  <Button
+                     variant="ghost"
+                     size="icon"
+                     className="size-7 shrink-0"
+                     aria-label="Search workspace"
+                     onClick={() => window.dispatchEvent(new CustomEvent('circle:open-command'))}
+                  >
+                     <Search className="size-3.5" />
+                  </Button>
 
                   <CreateNewIssue />
                </div>
@@ -91,6 +100,11 @@ export function OrgSwitcher() {
                         <Link href={`/${org}/members`}>Invite and manage members</Link>
                      </DropdownMenuItem>
                   </DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                  <div className="flex items-center justify-between px-2 py-1 text-sm">
+                     <span>Theme</span>
+                     <ThemeToggle />
+                  </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onSelect={() => signOut({ callbackUrl: '/login' })}>
                      Log out

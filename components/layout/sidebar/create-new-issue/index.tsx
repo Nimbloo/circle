@@ -122,8 +122,8 @@ export function CreateNewIssue() {
    return (
       <Dialog open={isOpen} onOpenChange={(value) => (value ? openModal() : closeModal())}>
          <DialogTrigger asChild>
-            <Button className="size-8 shrink-0" variant="secondary" size="icon">
-               <SquarePen className="size-4" />
+            <Button className="size-7 shrink-0" variant="secondary" size="icon">
+               <SquarePen className="size-3.5" />
             </Button>
          </DialogTrigger>
          <DialogContent className="w-full sm:max-w-[750px] p-0 shadow-xl top-[30%]">
