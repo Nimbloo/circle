@@ -13,6 +13,36 @@ Estado em **2026-09-01**, sobre a `develop` (v0.21.0).
 
 ## Operacional (envelhece rápido)
 
+### Paridade visual com o Linear — [#65](https://github.com/Nimbloo/circle/issues/65)
+
+Implementada na branch `danilo/65-paridade-visual-linear`, a partir da `develop`
+atualizada. O trabalho cobriu dez lotes: tokens e shell, sidebar, headers, listas e
+boards, superfícies de workspace, detalhes editoriais, Inbox/Cycles, Settings,
+overlays e hardening responsivo/acessível. Não houve mudança de API, banco ou contrato.
+
+Validação feita em 01/09/2026:
+
+- comparação lado a lado com o Linear autenticado em `linear.app/nimbloo`, incluindo
+  medidas de eixos, larguras, alturas, raios e espaçamentos nas superfícies principais;
+- rotas principais e todos os grupos de Settings em `390×844`, `768×1024`,
+  `1280×800`, `1440×900` e desktop amplo (`1718 px`);
+- temas Light, Pure Light, Dark, Magic Blue, Classic Dark e Custom, com restauração da
+  preferência original após a auditoria;
+- teclado e acessibilidade: foco visível, Space/Enter/Escape, focus trap dos dialogs,
+  nomes acessíveis em botões de ícone, switches e comboboxes, além de
+  `prefers-reduced-motion`;
+- `pnpm typecheck`, `pnpm lint`, 66 arquivos/394 testes e `pnpm build` passaram. A build
+  mantém os warnings preexistentes do `jose` sobre `CompressionStream` no Edge Runtime
+  e de serialização do cache do webpack; não houve erro de compilação.
+
+Divergências intencionais: o conteúdo continua vindo dos dados reais do Circle; não
+foram inventadas ações só para imitar o benchmark. Em
+`/settings/project-statuses`, o título permanece **Issue statuses** porque a tela edita
+o catálogo de status de issues existente — chamá-la de Project statuses seria
+semanticamente incorreto. As variantes de tema próprias do Circle foram preservadas;
+o Linear é o benchmark de composição, densidade e interação, não uma razão para apagar
+preferências do produto.
+
 **A `develop` está 7 commits à frente da `main`.** O `package.json` já está em `0.21.0`
 e a última tag é `v0.20.0`. Está parado em produção, entre outras coisas, o **conserto de
 um crash**: a página de Cycles estourava `ReferenceError` porque `teamId` era usado num
