@@ -277,6 +277,11 @@ export default function Inbox() {
             </div>
          </div>
          <div className="flex h-[calc(100%-44px)] w-full flex-col items-center justify-start overflow-y-auto py-2">
+            {filteredNotifications.length === 0 && isMobile && (
+               <div className="h-full w-full">
+                  <NotificationPreview />
+               </div>
+            )}
             {filteredNotifications.length > 0 &&
                filteredNotifications.map(({ item: notification, isSnoozed }) =>
                   isSnoozed ? (

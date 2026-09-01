@@ -7,6 +7,7 @@ import {
    SelectTrigger,
    SelectValue,
 } from '@/components/ui/select';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
@@ -27,13 +28,16 @@ export function SettingsShell({
       <div className="h-full w-full overflow-y-scroll">
          <div className="relative -left-[2.5px] mx-auto w-full max-w-[640px] py-16 pb-20 max-md:left-0 max-md:px-5 max-md:py-8">
             <div className="relative px-4 max-md:px-0">
-               <div className="min-w-0">
-                  <h1 className="text-2xl font-medium leading-8">{title}</h1>
-                  {description && (
-                     <p className="mt-1 text-[13px] leading-[22px] text-muted-foreground">
-                        {description}
-                     </p>
-                  )}
+               <div className="flex items-start gap-1.5">
+                  <SidebarTrigger className="-ml-1 mt-0.5 md:hidden" />
+                  <div className="min-w-0">
+                     <h1 className="text-2xl font-medium leading-8">{title}</h1>
+                     {description && (
+                        <p className="mt-1 text-[13px] leading-[22px] text-muted-foreground">
+                           {description}
+                        </p>
+                     )}
+                  </div>
                </div>
                {action && <div className="absolute right-4 top-0 max-md:right-0">{action}</div>}
             </div>
@@ -152,12 +156,14 @@ export function SelectMenu({
    defaultValue,
    value: controlledValue,
    onChange,
+   ariaLabel,
 }: {
    options: string[];
    defaultValue?: string;
    /** Optional controlled value (e.g. wired to next-themes). */
    value?: string;
    onChange?: (value: string) => void;
+   ariaLabel: string;
 }) {
    const [internal, setInternal] = useState(defaultValue ?? options[0]);
    const value = controlledValue ?? internal;
@@ -169,7 +175,10 @@ export function SelectMenu({
             onChange?.(nextValue);
          }}
       >
-         <SelectTrigger className="h-[30px] w-auto min-w-24 bg-accent px-2.5 hover:bg-accent/80">
+         <SelectTrigger
+            aria-label={ariaLabel}
+            className="h-[30px] w-auto min-w-24 bg-accent px-2.5 hover:bg-accent/80"
+         >
             <SelectValue />
          </SelectTrigger>
          <SelectContent position="item-aligned" className="min-w-40">

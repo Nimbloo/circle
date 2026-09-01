@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { fetchReviews, syncReviews } from '@/lib/adapters-reviews';
 import { Review, ReviewList, ReviewStatus } from '@/data/reviews';
-import { ListFilter, RefreshCw, SlidersHorizontal } from 'lucide-react';
+import { ChevronLeft, ListFilter, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ReactNode, useEffect, useRef, useState } from 'react';
@@ -214,7 +214,12 @@ export default function Reviews({
 
    return (
       <div className="w-full h-full flex overflow-hidden">
-         <div className="w-[420px] max-w-[45%] shrink-0 border-r h-full flex flex-col bg-container">
+         <div
+            className={cn(
+               'flex h-full w-full shrink-0 flex-col border-r bg-container md:w-[420px] md:max-w-[45%]',
+               selectedReviewId && 'max-md:hidden'
+            )}
+         >
             <div className="h-11 px-[18px] flex shrink-0 items-center justify-between border-b border-border/60">
                <div className="flex items-center">
                   <span className="text-[13px] font-medium leading-[normal]">Reviews</span>
@@ -305,9 +310,26 @@ export default function Reviews({
             </div>
          </div>
 
-         <div className="flex-1 min-w-0 h-full overflow-hidden">
+         <div
+            className={cn(
+               'h-full min-w-0 flex-1 overflow-hidden',
+               !selectedReviewId && 'max-md:hidden'
+            )}
+         >
             {selectedReviewId ? (
-               <ReviewDetail reviewId={selectedReviewId} section={section} />
+               <div className="flex h-full flex-col">
+                  <Link
+                     href={`/${orgId}/reviews`}
+                     aria-label="Back to reviews"
+                     className="flex h-11 shrink-0 items-center gap-1 border-b border-border px-4 text-[13px] text-muted-foreground transition-colors hover:text-foreground md:hidden"
+                  >
+                     <ChevronLeft className="size-4" />
+                     Reviews
+                  </Link>
+                  <div className="min-h-0 flex-1">
+                     <ReviewDetail reviewId={selectedReviewId} section={section} />
+                  </div>
+               </div>
             ) : !loading && !error && total === 0 ? (
                <div className="flex h-full items-center justify-center text-muted-foreground">
                   <div className="flex w-[540px] flex-col gap-6">

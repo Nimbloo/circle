@@ -297,3 +297,14 @@ html[data-underline-links='true'] .prose a[href],
 html[data-underline-links='true'] a[href]:not([role='button']):not(.no-underline) {
    text-decoration: underline;
 }
+
+@media (prefers-reduced-motion: reduce) {
+   *,
+   *::before,
+   *::after {
+      scroll-behavior: auto !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+   }
+}

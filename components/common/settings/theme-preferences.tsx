@@ -65,15 +65,20 @@ function ThemeSelect({
    options,
    value,
    onChange,
+   ariaLabel,
 }: {
    options: ThemeOption[];
    value: string;
    onChange: (id: string) => void;
+   ariaLabel: string;
 }) {
    const current = options.find((candidate) => candidate.id === value) ?? options[0];
    return (
       <DropdownMenu>
-         <DropdownMenuTrigger className="h-8 px-2.5 rounded-md border bg-container text-sm inline-flex items-center gap-1.5 hover:bg-accent transition-colors outline-none">
+         <DropdownMenuTrigger
+            aria-label={`${ariaLabel}: ${current.label}`}
+            className="h-8 px-2.5 rounded-md border bg-container text-sm inline-flex items-center gap-1.5 hover:bg-accent transition-colors outline-none"
+         >
             <ThemeSwatch swatch={current.swatch} />
             {current.label}
             <ChevronDown className="size-3.5 text-muted-foreground" />
@@ -97,7 +102,15 @@ function ThemeSelect({
 
 /* ------------------------------ custom fields ------------------------------ */
 
-function ColorField({ value, onChange }: { value: string; onChange: (hex: string) => void }) {
+function ColorField({
+   value,
+   onChange,
+   ariaLabel,
+}: {
+   value: string;
+   onChange: (hex: string) => void;
+   ariaLabel: string;
+}) {
    const dark =
       parseInt(value.replace('#', '').slice(0, 2) || '00', 16) * 0.8 +
          parseInt(value.replace('#', '').slice(2, 4) || '00', 16) * 1.6 +
@@ -112,6 +125,7 @@ function ColorField({ value, onChange }: { value: string; onChange: (hex: string
          {value.toUpperCase()}
          <input
             type="color"
+            aria-label={ariaLabel}
             value={value}
             onChange={(event) => onChange(event.target.value)}
             className="absolute inset-0 opacity-0 cursor-pointer"
@@ -120,11 +134,20 @@ function ColorField({ value, onChange }: { value: string; onChange: (hex: string
    );
 }
 
-function ContrastField({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+function ContrastField({
+   value,
+   onChange,
+   ariaLabel,
+}: {
+   value: number;
+   onChange: (value: number) => void;
+   ariaLabel: string;
+}) {
    return (
       <span className="inline-flex items-center gap-3 w-56">
          <input
             type="range"
+            aria-label={ariaLabel}
             min={0}
             max={100}
             value={value}
@@ -219,6 +242,7 @@ export function ThemePreferences() {
                description="Select or customize your interface color scheme"
                trailing={
                   <ThemeSelect
+                     ariaLabel="Interface theme"
                      options={ALL_OPTIONS}
                      value={interfaceValue}
                      onChange={handleInterfaceChange}
@@ -232,6 +256,7 @@ export function ThemePreferences() {
                      description="Theme to use for light system appearance"
                      trailing={
                         <ThemeSelect
+                           ariaLabel="Light theme"
                            options={LIGHT_VARIANTS}
                            value={lightVariant}
                            onChange={(id) => setLightVariant(id as LightVariant)}
@@ -243,6 +268,7 @@ export function ThemePreferences() {
                      description="Theme to use for dark system appearance"
                      trailing={
                         <ThemeSelect
+                           ariaLabel="Dark theme"
                            options={DARK_VARIANTS}
                            value={darkVariant}
                            onChange={(id) => setDarkVariant(id as DarkVariant)}
@@ -257,6 +283,7 @@ export function ThemePreferences() {
                      title="Accent"
                      trailing={
                         <ColorField
+                           ariaLabel="Custom theme accent color"
                            value={custom.accent}
                            onChange={(accent) => setCustom({ accent })}
                         />
@@ -266,6 +293,7 @@ export function ThemePreferences() {
                      title="Background"
                      trailing={
                         <ColorField
+                           ariaLabel="Custom theme background color"
                            value={custom.background}
                            onChange={(background) => setCustom({ background })}
                         />
@@ -275,6 +303,7 @@ export function ThemePreferences() {
                      title="Contrast"
                      trailing={
                         <ContrastField
+                           ariaLabel="Custom theme contrast"
                            value={custom.contrast}
                            onChange={(contrast) => setCustom({ contrast })}
                         />
@@ -291,6 +320,7 @@ export function ThemePreferences() {
                      title="Custom sidebar theme"
                      trailing={
                         <Switch
+                           aria-label="Custom sidebar theme"
                            checked={custom.sidebar}
                            onCheckedChange={(sidebar: boolean) => setCustom({ sidebar })}
                         />
@@ -302,6 +332,7 @@ export function ThemePreferences() {
                            title="Accent"
                            trailing={
                               <ColorField
+                                 ariaLabel="Custom sidebar accent color"
                                  value={custom.sidebarAccent}
                                  onChange={(sidebarAccent) => setCustom({ sidebarAccent })}
                               />
@@ -311,6 +342,7 @@ export function ThemePreferences() {
                            title="Background"
                            trailing={
                               <ColorField
+                                 ariaLabel="Custom sidebar background color"
                                  value={custom.sidebarBackground}
                                  onChange={(sidebarBackground) => setCustom({ sidebarBackground })}
                               />
@@ -320,6 +352,7 @@ export function ThemePreferences() {
                            title="Contrast"
                            trailing={
                               <ContrastField
+                                 ariaLabel="Custom sidebar contrast"
                                  value={custom.sidebarContrast}
                                  onChange={(sidebarContrast) => setCustom({ sidebarContrast })}
                               />

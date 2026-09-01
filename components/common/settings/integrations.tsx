@@ -108,7 +108,7 @@ function IntegrationCard({
 
 function EnabledIntegrationCard({ integration }: { integration: Integration }) {
    return (
-      <div className="flex h-[72px] w-[202px] shrink-0 items-center gap-2 rounded-[10px] border border-border/70 bg-card px-4">
+      <div className="flex h-[72px] w-full items-center gap-2 rounded-[10px] border border-border/70 bg-card px-4">
          <IntegrationIcon integration={integration} />
          <span className="min-w-0">
             <span className="block truncate text-[13px] font-medium leading-4">
@@ -213,7 +213,7 @@ function CategorySection({
 
 /**
  * Workspace "Integrations" directory (settings/integrations): search,
- * enabled integrations carousel and categorized integration cards.
+ * enabled integrations and categorized integration cards.
  */
 export default function Integrations() {
    const [query, setQuery] = useState('');
@@ -326,7 +326,7 @@ export default function Integrations() {
                      <h2 className="px-4 text-[12px] font-medium uppercase leading-[15px] text-muted-foreground">
                         Enabled
                      </h2>
-                     <div className="mt-4 flex gap-4">
+                     <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
                         {ENABLED_INTEGRATIONS.slice(0, 3).map((integration) => (
                            <EnabledIntegrationCard key={integration.id} integration={integration} />
                         ))}

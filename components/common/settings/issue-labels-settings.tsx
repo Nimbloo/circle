@@ -19,6 +19,7 @@ import {
    DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 import { api, ApiError } from '@/lib/client';
 import type { LabelInterface } from '@/data/labels';
 import { useLabels } from '@/store/catalog-store';
@@ -231,7 +232,10 @@ export default function IssueLabelsSettings() {
    return (
       <div className="h-full w-full overflow-y-auto">
          <div className="px-14 py-16 pb-20 max-md:px-5 max-md:py-8">
-            <h1 className="mb-[13px] text-2xl font-medium leading-8">Issue labels</h1>
+            <div className="mb-[13px] flex items-center gap-1.5">
+               <SidebarTrigger className="-ml-1 md:hidden" />
+               <h1 className="text-2xl font-medium leading-8">Issue labels</h1>
+            </div>
 
             <div className="mb-6 flex items-center justify-between gap-3">
                <Input
