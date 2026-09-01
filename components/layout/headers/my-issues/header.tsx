@@ -15,7 +15,6 @@ import {
 } from '@/components/layout/header-primitives';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { SidebarTrigger } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
@@ -56,7 +55,6 @@ function HeaderNav() {
    return (
       <LocationBar>
          <HeaderGroup>
-            <SidebarTrigger />
             <HeaderTitle>My issues</HeaderTitle>
          </HeaderGroup>
          <HeaderActions>

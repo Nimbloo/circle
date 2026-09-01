@@ -12,6 +12,7 @@ import { ReviewDetail, ReviewSection } from './review-detail';
 import { toast } from 'sonner';
 import { PrIcon } from './review-shared';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 
 /** Hand-drawn empty-state sketch (paper plane over a folded sheet). */
 function EmptySketch() {
@@ -221,7 +222,8 @@ export default function Reviews({
             )}
          >
             <div className="h-11 px-[18px] flex shrink-0 items-center justify-between border-b border-border/60">
-               <div className="flex items-center">
+               <div className="flex items-center gap-2">
+                  <SidebarTrigger />
                   <span className="text-[13px] font-medium leading-[normal]">Reviews</span>
                </div>
                <div className="flex translate-y-[0.5px] items-center gap-3 text-muted-foreground">

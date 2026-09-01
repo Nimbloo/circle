@@ -8,7 +8,6 @@ import {
    DropdownMenuSeparator,
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { SidebarTrigger } from '@/components/ui/sidebar';
 import { HeaderActions, HeaderGroup, LocationBar } from '@/components/layout/header-primitives';
 import { useAgentChatStore } from '@/store/agent-chat-store';
 import { ChevronDown, MessageSquare, Plus } from 'lucide-react';
@@ -20,7 +19,6 @@ export default function Header() {
    return (
       <LocationBar>
          <HeaderGroup>
-            <SidebarTrigger />
             <DropdownMenu>
                <DropdownMenuTrigger className="flex items-center gap-1 text-sm font-medium outline-none hover:text-foreground min-w-0">
                   <span className="truncate max-w-64">{activeChat?.title ?? 'New chat'}</span>

@@ -416,7 +416,7 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
                      {/* Today pill, pinned to the scale */}
                      {todayOffset !== null && (
                         <span
-                           className="absolute -top-0.5 -translate-x-1/2 text-[10px] font-semibold bg-violet-500 text-white rounded-full px-1.5 py-px uppercase whitespace-nowrap pointer-events-none z-10"
+                           className="absolute -top-0.5 -translate-x-1/2 text-[10px] font-semibold bg-primary text-primary-foreground rounded-full px-1.5 py-px uppercase whitespace-nowrap pointer-events-none z-10"
                            style={{ left: todayOffset }}
                         >
                            {todayLabel}
@@ -439,7 +439,7 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
                {/* Today marker (hidden while it overlaps the sticky project list) */}
                {todayOffset !== null && !todayOverlapsList && (
                   <div
-                     className="absolute top-8 bottom-0 w-px bg-violet-500 z-10"
+                     className="absolute top-8 bottom-0 w-px bg-primary z-10"
                      style={{ left: todayOffset }}
                   />
                )}

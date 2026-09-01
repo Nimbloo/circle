@@ -2,7 +2,6 @@
 
 import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
 import { HeaderGroup, HeaderTitle, LocationBar } from '@/components/layout/header-primitives';
-import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { ChevronRight, MoreHorizontal, Star } from 'lucide-react';
 import Link from 'next/link';
@@ -21,7 +20,6 @@ export default function HeaderNav({ cycleView }: { cycleView: CycleView }) {
    return (
       <LocationBar>
          <HeaderGroup>
-            <SidebarTrigger />
             <Link
                href={`/${orgId}/team/${team.id}/overview`}
                className="flex min-w-0 items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground"

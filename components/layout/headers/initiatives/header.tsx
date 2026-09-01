@@ -1,7 +1,6 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { SidebarTrigger } from '@/components/ui/sidebar';
 import {
    HeaderActions,
    HeaderGroup,
@@ -19,7 +18,6 @@ export default function Header() {
       <>
          <LocationBar>
             <HeaderGroup>
-               <SidebarTrigger />
                <HeaderTitle>Initiatives</HeaderTitle>
             </HeaderGroup>
             <HeaderActions className="pr-0.5">

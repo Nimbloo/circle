@@ -105,12 +105,10 @@ export default function HeaderNav() {
                className="size-6"
                disabled={!previousIssue}
                asChild={!!previousIssue}
+               aria-label="Previous issue"
             >
                {previousIssue ? (
-                  <Link
-                     href={`/${orgId}/issue/${previousIssue.identifier}`}
-                     aria-label="Previous issue"
-                  >
+                  <Link href={`/${orgId}/issue/${previousIssue.identifier}`}>
                      <ChevronUp className="size-4" />
                   </Link>
                ) : (
@@ -123,9 +121,10 @@ export default function HeaderNav() {
                className="size-6"
                disabled={!nextIssue}
                asChild={!!nextIssue}
+               aria-label="Next issue"
             >
                {nextIssue ? (
-                  <Link href={`/${orgId}/issue/${nextIssue.identifier}`} aria-label="Next issue">
+                  <Link href={`/${orgId}/issue/${nextIssue.identifier}`}>
                      <ChevronDown className="size-4" />
                   </Link>
                ) : (

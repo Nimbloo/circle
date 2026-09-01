@@ -1,6 +1,5 @@
 'use client';
 
-import { SidebarTrigger } from '@/components/ui/sidebar';
 import {
    HeaderGroup,
    HeaderTitle,
@@ -23,7 +22,6 @@ export default function Header() {
       <>
          <LocationBar>
             <HeaderGroup>
-               <SidebarTrigger />
                <Link
                   href={`/${orgId}/team/${team.id}/overview`}
                   className="flex min-w-0 items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground"

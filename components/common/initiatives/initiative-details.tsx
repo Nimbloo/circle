@@ -18,7 +18,7 @@ import {
    CommandList,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarRange, ChevronDown, PenLine, Plus, UserRound, X } from 'lucide-react';
+import { CalendarRange, ChevronDown, PanelRight, PenLine, Plus, UserRound, X } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
@@ -29,29 +29,19 @@ import { Button } from '@/components/ui/button';
 import type { InitiativeUpdateDto } from '@/lib/api/initiative-detail';
 import type { InitiativeActivityDto } from '@/lib/api/initiatives';
 import { InitiativeProgressPanel } from './initiative-progress-panel';
+import { InitiativeProjectRow } from './initiative-project-row';
 import { InitiativeStatusIcon } from './initiative-status-icon';
 import { InitiativeActions } from './initiative-actions';
+import {
+   Sheet,
+   SheetContent,
+   SheetDescription,
+   SheetHeader,
+   SheetTitle,
+   SheetTrigger,
+} from '@/components/ui/sheet';
 
 const TABS = ['overview', 'activity', 'projects'] as const;
-
-const formatTarget = (iso: string): string => {
-   const [, month, day] = iso.split('-').map(Number);
-   const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-   ];
-   return `${months[(month ?? 1) - 1]} ${day}`;
-};
 
 /* ------------------------------ projects table ---------------------------- */
 
@@ -148,60 +138,12 @@ function ProjectsSection({ initiative }: { initiative: Initiative }) {
                   <span className="flex-1 border-b border-border/60" />
                </div>
                {group.projects.map((project) => (
-                  <Link
+                  <InitiativeProjectRow
                      key={project.id}
-                     href={`/${orgId}/project/${project.id}/overview`}
-                     className="group/row flex items-center gap-2 py-2 text-sm hover:bg-sidebar/50 rounded-md px-1 -mx-1 transition-colors"
-                  >
-                     <project.icon className="size-4 text-muted-foreground shrink-0" />
-                     <span className="flex-1 truncate font-medium">{project.name}</span>
-                     <span className="hidden sm:block w-16 shrink-0">
-                        <span
-                           className="size-2.5 rounded-full inline-block"
-                           style={{ backgroundColor: project.health.color }}
-                        />
-                     </span>
-                     <span className="hidden sm:block w-16 shrink-0">
-                        <project.priority.icon className="size-4 text-muted-foreground" />
-                     </span>
-                     <span className="hidden md:block w-12 shrink-0">
-                        <Avatar className="size-5">
-                           <AvatarImage
-                              src={project.lead?.avatarUrl || undefined}
-                              alt={project.lead?.name ?? ''}
-                           />
-                           <AvatarFallback className="text-[9px]">
-                              {project.lead?.name[0] ?? '—'}
-                           </AvatarFallback>
-                        </Avatar>
-                     </span>
-                     <span className="hidden md:flex items-center gap-1 w-24 shrink-0 text-xs text-muted-foreground">
-                        {project.targetDate ? (
-                           <>
-                              <CalendarRange className="size-3.5" />
-                              {formatTarget(project.targetDate)}
-                           </>
-                        ) : (
-                           '—'
-                        )}
-                     </span>
-                     <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                        {project.percentComplete}%
-                     </span>
-                     <span
-                        role="button"
-                        tabIndex={0}
-                        aria-label="Remove from initiative"
-                        onClick={(e) => {
-                           e.preventDefault();
-                           e.stopPropagation();
-                           removeProject(project.id);
-                        }}
-                        className="shrink-0 cursor-pointer text-muted-foreground opacity-0 transition-opacity group-hover/row:opacity-100 hover:text-destructive"
-                     >
-                        <X className="size-3.5" />
-                     </span>
-                  </Link>
+                     project={project}
+                     orgId={orgId}
+                     onRemove={removeProject}
+                  />
                ))}
             </div>
          ))}
@@ -440,6 +382,26 @@ function TargetEditor({
    );
 }
 
+function InitiativeSidePanelContent({ initiative }: { initiative: Initiative }) {
+   return (
+      <div className="flex h-full w-full flex-col gap-2 overflow-y-auto">
+         <div className="rounded-[10px] border bg-card p-3 pb-[22.5px]">
+            <PropertiesPanel initiative={initiative} />
+         </div>
+
+         {initiative.projectIds.length > 0 && (
+            <div className="rounded-[10px] border bg-card p-3">
+               <InitiativeProgressPanel initiative={initiative} />
+            </div>
+         )}
+
+         <div className="rounded-[10px] border bg-card p-3">
+            <ActivityFeed initiativeId={initiative.id} />
+         </div>
+      </div>
+   );
+}
+
 function Overview({ initiative }: { initiative: Initiative }) {
    return (
       <div className="w-full h-full flex overflow-hidden">
@@ -449,7 +411,26 @@ function Overview({ initiative }: { initiative: Initiative }) {
                   <span className="inline-flex size-8 items-center justify-center rounded-md bg-muted/50 text-xl">
                      {initiative.icon}
                   </span>
-                  <InitiativeActions initiative={initiative} />
+                  <div className="flex items-center gap-1.5">
+                     <Sheet>
+                        <SheetTrigger asChild>
+                           <Button size="xs" variant="outline" className="gap-1.5 xl:hidden">
+                              <PanelRight className="size-3.5" />
+                              Properties
+                           </Button>
+                        </SheetTrigger>
+                        <SheetContent className="w-[92vw] overflow-y-auto p-3 pt-12 sm:max-w-[400px]">
+                           <SheetHeader className="sr-only">
+                              <SheetTitle>Initiative properties</SheetTitle>
+                              <SheetDescription>
+                                 View and edit the properties of this initiative.
+                              </SheetDescription>
+                           </SheetHeader>
+                           <InitiativeSidePanelContent initiative={initiative} />
+                        </SheetContent>
+                     </Sheet>
+                     <InitiativeActions initiative={initiative} />
+                  </div>
                </div>
                <div className="mt-3 flex flex-col gap-1">
                   <h1 className="text-2xl font-semibold leading-8">{initiative.name}</h1>
@@ -508,7 +489,7 @@ function Overview({ initiative }: { initiative: Initiative }) {
                   className="-mx-4 mt-4 flex h-[67px] items-center justify-center gap-2 rounded-[10px] border text-sm text-muted-foreground transition-colors hover:bg-accent/30 hover:text-foreground"
                >
                   <PenLine className="size-4" />
-                  Write first initiative update
+                  Write initiative update
                </Link>
 
                <div className="-mx-4 mt-[27px] flex min-h-[148px] flex-col gap-2 rounded-xl px-4 pt-2.5">
@@ -525,21 +506,7 @@ function Overview({ initiative }: { initiative: Initiative }) {
          </div>
 
          <aside className="hidden h-full w-[400px] shrink-0 overflow-hidden pl-1 xl:flex">
-            <div className="flex h-full w-full flex-col gap-2 overflow-y-auto">
-               <div className="rounded-[10px] border bg-card p-3 pb-[22.5px]">
-                  <PropertiesPanel initiative={initiative} />
-               </div>
-
-               {initiative.projectIds.length > 0 && (
-                  <div className="rounded-[10px] border bg-card p-3">
-                     <InitiativeProgressPanel initiative={initiative} />
-                  </div>
-               )}
-
-               <div className="rounded-[10px] border bg-card p-3">
-                  <ActivityFeed initiativeId={initiative.id} />
-               </div>
-            </div>
+            <InitiativeSidePanelContent initiative={initiative} />
          </aside>
       </div>
    );

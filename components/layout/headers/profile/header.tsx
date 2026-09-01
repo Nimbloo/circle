@@ -11,7 +11,6 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { SidebarTrigger } from '@/components/ui/sidebar';
 import { User } from '@/data/users';
 import { cn } from '@/lib/utils';
 import { useIssuesStore } from '@/store/issues-store';
@@ -137,7 +136,6 @@ export default function Header({ member }: { member: User }) {
       <>
          <LocationBar>
             <HeaderGroup>
-               <SidebarTrigger />
                <div className="flex items-center gap-1.5 text-sm min-w-0">
                   <Link
                      href={`/${orgId}/members`}

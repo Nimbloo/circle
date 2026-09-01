@@ -146,7 +146,7 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
    }
 
    return (
-      <div className="w-full h-full flex overflow-hidden">
+      <div className="relative w-full h-full flex overflow-hidden">
          <div className="flex-1 min-w-0 h-full overflow-y-auto">
             <div className="max-w-3xl mx-auto px-6 lg:px-10 py-8">
                {/* Composer */}

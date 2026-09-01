@@ -1,4 +1,5 @@
 import React, { type ComponentProps } from 'react';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 
 export function LocationBar({ className, ...props }: ComponentProps<'header'>) {
@@ -27,8 +28,13 @@ export function ViewBar({ className, ...props }: ComponentProps<'div'>) {
    );
 }
 
-export function HeaderGroup({ className, ...props }: ComponentProps<'div'>) {
-   return <div className={cn('flex min-w-0 items-center gap-2', className)} {...props} />;
+export function HeaderGroup({ className, children, ...props }: ComponentProps<'div'>) {
+   return (
+      <div className={cn('flex min-w-0 items-center gap-2', className)} {...props}>
+         <SidebarTrigger />
+         {children}
+      </div>
+   );
 }
 
 export function HeaderTitle({ className, ...props }: ComponentProps<'h2'>) {

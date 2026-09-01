@@ -54,7 +54,7 @@ function PanelToggles() {
    const { openPanel, togglePanel } = useRightPanelStore();
 
    return (
-      <div className="flex items-center gap-1">
+      <div className="hidden items-center gap-1 xl:flex">
          <Button
             size="xs"
             variant={openPanel === 'insights' ? 'secondary' : 'ghost'}

@@ -113,7 +113,7 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    }
 
    return (
-      <div className="w-full h-full flex overflow-hidden">
+      <div className="relative w-full h-full flex overflow-hidden">
          {/* Main column */}
          <div className="flex-1 min-w-0 h-full relative">
             <DocumentOutline items={outlineItems} scrollRef={scrollRef} />
