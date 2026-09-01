@@ -4,7 +4,7 @@ import Header from '@/components/layout/headers/settings/header';
 
 export default function EmojisSettingsPage() {
    return (
-      <MainLayout header={<Header />} headersNumber={1}>
+      <MainLayout header={<Header />}>
          <EmojisSettings />
       </MainLayout>
    );

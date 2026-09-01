@@ -4,7 +4,7 @@ import Header from '@/components/layout/headers/settings/header';
 
 export default function ProjectTemplatesSettingsPage() {
    return (
-      <MainLayout header={<Header />} headersNumber={1}>
+      <MainLayout header={<Header />}>
          <ProjectTemplatesSettings />
       </MainLayout>
    );

@@ -5,7 +5,7 @@ import Header from '@/components/layout/headers/settings/header';
 export default async function Page({ params }: { params: Promise<{ teamId: string }> }) {
    const { teamId } = await params;
    return (
-      <MainLayout header={<Header />} headersNumber={1}>
+      <MainLayout header={<Header />}>
          <TeamSettings teamId={teamId} />
       </MainLayout>
    );
