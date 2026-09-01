@@ -15,6 +15,11 @@
    --card-foreground: #202124;
    --popover: #ffffff;
    --popover-foreground: #202124;
+   --popover-border: #dedfe3;
+   --popover-shadow:
+      rgb(0 0 0 / 0.12) 0 3px 8px, rgb(0 0 0 / 0.1) 0 2px 5px, rgb(0 0 0 / 0.08) 0 1px 1px;
+   --segmented-control-active: #eceef1;
+   --filter-bar: #f6f7f8;
    /* Acento índigo do Linear (#5e6ad2) — botão primário, seleção, foco. */
    --primary: #5e6ad2;
    --primary-foreground: #ffffff;
@@ -46,6 +51,7 @@
    --background: #ffffff;
    --foreground: #202124;
    --container: #ffffff;
+   --card-shadow: rgb(0 0 0 / 0.08) 0 0 0 1px, rgb(0 0 0 / 0.14) 0 0.5px 1px 1px;
 }
 
 .dark {
@@ -54,8 +60,13 @@
    --foreground: lch(100 0 272);
    --card: lch(9.232 0.85 272);
    --card-foreground: lch(100 0 272);
-   --popover: #1a1b1e;
+   --popover: lch(12.72 0.85 272);
    --popover-foreground: #f7f8f8;
+   --popover-border: lch(21.36 1.93 272);
+   --popover-shadow:
+      lch(0 0 0 / 0.125) 0 3px 8px, lch(0 0 0 / 0.125) 0 2px 5px, lch(0 0 0 / 0.125) 0 1px 1px;
+   --segmented-control-active: lch(23.906 1.429 272);
+   --filter-bar: lch(9.345 0.85 272);
    --primary: #5e6ad2;
    --primary-foreground: #ffffff;
    --secondary: lch(10.149 0.689 272);
@@ -83,6 +94,7 @@
    --sidebar-border: lch(9.84 1.48 272);
    --sidebar-ring: #5e6ad2;
    --container: lch(5.52 0.4 272);
+   --card-shadow: lch(100 0 0 / 0.048) 0 0 0 1px, lch(0 0 0 / 0.3) 0 0.5px 1px 1px;
 }
 
 @theme inline {

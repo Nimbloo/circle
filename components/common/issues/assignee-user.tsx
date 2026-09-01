@@ -13,14 +13,17 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { CheckIcon, CircleUserRound, UserIcon } from 'lucide-react';
 import { useState } from 'react';
+import { cn } from '@/lib/utils';
 
 interface AssigneeUserProps {
    user: User | null;
    /** Issue-alvo: sem ele a troca não persiste (era um seletor morto). */
    issueId: string;
+   /** Avatar de 18px usado no canto superior dos cards do board. */
+   compact?: boolean;
 }
 
-export function AssigneeUser({ user, issueId }: AssigneeUserProps) {
+export function AssigneeUser({ user, issueId, compact = false }: AssigneeUserProps) {
    const [open, setOpen] = useState(false);
    // Deriva do prop (store) — persiste via updateIssueAssignee e reverte junto no rollback.
    const currentAssignee = user;
@@ -35,7 +38,7 @@ export function AssigneeUser({ user, issueId }: AssigneeUserProps) {
    const renderAvatar = () => {
       if (currentAssignee) {
          return (
-            <Avatar className="size-6 shrink-0">
+            <Avatar className={cn('shrink-0', compact ? 'size-[18px]' : 'size-6')}>
                <AvatarImage
                   src={currentAssignee.avatarUrl || undefined}
                   alt={currentAssignee.name}
@@ -45,8 +48,15 @@ export function AssigneeUser({ user, issueId }: AssigneeUserProps) {
          );
       } else {
          return (
-            <div className="size-6 flex items-center justify-center">
-               <CircleUserRound className="size-5 text-zinc-600" />
+            <div
+               className={cn(
+                  'flex items-center justify-center',
+                  compact ? 'size-[18px]' : 'size-6'
+               )}
+            >
+               <CircleUserRound
+                  className={cn('text-muted-foreground', compact ? 'size-4' : 'size-5')}
+               />
             </div>
          );
       }
@@ -55,7 +65,7 @@ export function AssigneeUser({ user, issueId }: AssigneeUserProps) {
    return (
       <DropdownMenu open={open} onOpenChange={setOpen}>
          <DropdownMenuTrigger asChild>
-            <button className="relative w-fit focus:outline-none">
+            <button className={cn('relative w-fit focus:outline-none', compact && 'h-[18px]')}>
                {renderAvatar()}
                {currentAssignee && (
                   <span

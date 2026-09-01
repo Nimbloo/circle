@@ -86,15 +86,22 @@ export function DisplayOptions() {
                )}
             </Button>
          </PopoverTrigger>
-         <PopoverContent className="w-80 p-0" align="end">
+         <PopoverContent
+            className="min-h-[541px] w-[302px] rounded-xl border-[var(--popover-border)] bg-popover p-0 pt-2 shadow-[var(--popover-shadow)]"
+            align="end"
+            sideOffset={5}
+            style={{ boxShadow: 'var(--popover-shadow)' }}
+         >
             {/* List / Board switch */}
-            <div className="p-3">
-               <div className="grid grid-cols-2 gap-1 bg-accent/50 rounded-md p-1">
+            <div className="h-[46px] px-4 pb-2 pt-1.5">
+               <div className="grid h-8 grid-cols-2 gap-0.5 rounded-md">
                   <button
                      onClick={() => setViewType('list')}
                      className={cn(
-                        'flex items-center justify-center gap-1.5 h-8 rounded text-xs font-medium transition-colors',
-                        viewType === 'list' ? 'bg-background shadow-sm' : 'text-muted-foreground'
+                        'm-0.5 flex h-7 items-center justify-center gap-1.5 rounded-full text-xs font-medium transition-colors',
+                        viewType === 'list'
+                           ? 'bg-[var(--segmented-control-active)]'
+                           : 'text-muted-foreground'
                      )}
                   >
                      <LayoutList className="size-3.5" />
@@ -103,8 +110,10 @@ export function DisplayOptions() {
                   <button
                      onClick={() => setViewType('grid')}
                      className={cn(
-                        'flex items-center justify-center gap-1.5 h-8 rounded text-xs font-medium transition-colors',
-                        viewType === 'grid' ? 'bg-background shadow-sm' : 'text-muted-foreground'
+                        'm-0.5 flex h-7 items-center justify-center gap-1.5 rounded-full text-xs font-medium transition-colors',
+                        viewType === 'grid'
+                           ? 'bg-[var(--segmented-control-active)]'
+                           : 'text-muted-foreground'
                      )}
                   >
                      <LayoutGrid className="size-3.5" />
@@ -114,11 +123,11 @@ export function DisplayOptions() {
             </div>
 
             {/* Grouping & ordering */}
-            <div className="px-3 pb-3 flex flex-col gap-2.5">
+            <div className="flex h-36 flex-col gap-2.5 px-4 pb-2 pt-0.5">
                <div className="flex items-center justify-between gap-2">
                   <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                      <ArrowUpDown className="size-3.5" />
-                     Grouping
+                     {viewType === 'grid' ? 'Columns' : 'Grouping'}
                   </span>
                   <Select value={grouping} onValueChange={(v) => setGrouping(v as GroupingKey)}>
                      <SelectTrigger className="h-7 w-36 text-xs">
@@ -135,7 +144,9 @@ export function DisplayOptions() {
                </div>
 
                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground pl-5">Sub-grouping</span>
+                  <span className="pl-5 text-xs text-muted-foreground">
+                     {viewType === 'grid' ? 'Rows' : 'Sub-grouping'}
+                  </span>
                   <Select value="none" disabled>
                      <SelectTrigger className="h-7 w-36 text-xs">
                         <SelectValue placeholder="No grouping" />
@@ -182,7 +193,7 @@ export function DisplayOptions() {
                </div>
             </div>
 
-            <div className="border-t px-3 py-3 flex flex-col gap-2.5">
+            <div className="flex h-[81px] flex-col gap-3 border-t px-4 py-2.5">
                <div className="flex items-center justify-between gap-2">
                   <span className="text-xs text-muted-foreground">Completed issues</span>
                   <Select
@@ -218,14 +229,16 @@ export function DisplayOptions() {
                </div>
             </div>
 
-            <div className="border-t px-3 py-3 flex flex-col gap-2.5">
-               <span className="text-xs font-medium">List options</span>
+            <div className="flex h-56 flex-col gap-2.5 border-t px-4 py-3">
+               <span className="text-xs font-medium">
+                  {viewType === 'grid' ? 'Board options' : 'List options'}
+               </span>
                <div className="flex items-center justify-between">
                   <Label
                      htmlFor="show-empty-groups"
                      className="text-xs text-muted-foreground font-normal"
                   >
-                     Show empty groups
+                     {viewType === 'grid' ? 'Show empty columns' : 'Show empty groups'}
                   </Label>
                   <Switch
                      id="show-empty-groups"
@@ -253,7 +266,7 @@ export function DisplayOptions() {
                </div>
             </div>
 
-            <div className="border-t px-3 py-2.5 flex items-center justify-between">
+            <div className="flex h-9 items-center justify-between border-t px-4">
                <button
                   onClick={resetDisplaySettings}
                   className="text-xs text-muted-foreground hover:text-foreground"

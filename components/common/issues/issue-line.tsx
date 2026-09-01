@@ -43,7 +43,7 @@ function IssueLineComponent({ issue, layoutId = false }: { issue: Issue; layoutI
             <motion.div
                {...(layoutId && { layoutId: `issue-line-${issue.identifier}` })}
                className={cn(
-                  'group/line w-full flex items-center justify-start h-9 px-6 hover:bg-sidebar/50',
+                  'group/line flex h-11 w-full items-center justify-start px-3 hover:bg-accent/40 focus-within:bg-accent/40',
                   selected && 'bg-primary/5'
                )}
             >
@@ -56,7 +56,7 @@ function IssueLineComponent({ issue, layoutId = false }: { issue: Issue; layoutI
                      'mr-1.5 shrink-0 size-4 rounded border flex items-center justify-center transition-opacity',
                      selected
                         ? 'bg-primary border-primary text-primary-foreground opacity-100'
-                        : 'border-border text-transparent opacity-0 group-hover/line:opacity-100',
+                        : 'border-border text-transparent opacity-0 group-hover/line:opacity-100 group-focus-within/line:opacity-100',
                      anySelected && 'opacity-100'
                   )}
                >
@@ -67,7 +67,7 @@ function IssueLineComponent({ issue, layoutId = false }: { issue: Issue; layoutI
                      <PrioritySelector priority={issue.priority} issueId={issue.id} />
                   )}
                   {displayProperties.id && (
-                     <span className="text-sm hidden sm:inline-block text-muted-foreground font-medium w-[66px] truncate shrink-0 mr-0.5">
+                     <span className="mr-0.5 hidden w-[66px] shrink-0 truncate text-xs tabular-nums text-muted-foreground sm:inline-block">
                         {issue.identifier}
                      </span>
                   )}
@@ -79,9 +79,7 @@ function IssueLineComponent({ issue, layoutId = false }: { issue: Issue; layoutI
                   href={`/${orgId ?? 'nimbloo'}/issue/${issue.identifier}`}
                   className="min-w-0 flex items-center justify-start mr-1 ml-0.5"
                >
-                  <span className="text-xs sm:text-sm font-medium sm:font-semibold truncate">
-                     {issue.title}
-                  </span>
+                  <span className="truncate text-[13px] font-medium">{issue.title}</span>
                </Link>
                <div className="flex items-center justify-end gap-2 ml-auto sm:w-fit">
                   <div className="w-3 shrink-0"></div>
@@ -103,7 +101,7 @@ function IssueLineComponent({ issue, layoutId = false }: { issue: Issue; layoutI
                      </span>
                   )}
                   {displayProperties.dueDate && issue.dueDate && (
-                     <span className="text-xs text-orange-400 shrink-0 hidden sm:inline-block">
+                     <span className="hidden shrink-0 text-xs text-destructive sm:inline-block">
                         Due {format(new Date(issue.dueDate), 'MMM dd')}
                      </span>
                   )}
@@ -112,7 +110,7 @@ function IssueLineComponent({ issue, layoutId = false }: { issue: Issue; layoutI
                      <AssigneeUser user={issue.assignee} issueId={issue.id} />
                   )}
                   {displayProperties.created && (
-                     <span className="text-xs text-muted-foreground shrink-0 hidden sm:inline-block w-12 text-right">
+                     <span className="hidden w-12 shrink-0 text-right text-xs tabular-nums text-muted-foreground sm:inline-block">
                         {format(new Date(issue.createdAt), 'MMM d')}
                      </span>
                   )}
