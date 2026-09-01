@@ -63,10 +63,10 @@ produção, entre outras coisas, o **conserto de um crash**: a página de Cycles
 Para entregar a #65: PR da branch da issue para `develop`. Depois, para promover o
 conjunto: PR `develop → main`. O CI cria tag e release; o ArgoCD faz o rollout.
 
-**`AGENTS.md` e `.agents/skills/` não estão rastreados nem ignorados.** Apareceram em
-01/09 09:45 — é o guia do projeto para o Codex, espelhando o `CLAUDE.md`. Enquanto ficam
-soltos, estão a um `git add -A` de entrar sem querer. Decidir: versionar de propósito, ou
-adicionar ao `.gitignore`.
+**Política dos arquivos de agente resolvida.** `AGENTS.md` é versionado como guia do
+projeto para o Codex, equivalente ao `CLAUDE.md`. `.agents/` fica no `.gitignore`: os 59
+arquivos locais eram cópias byte a byte das skills instaladas pelo plugin global, não
+fonte do produto.
 
 ---
 

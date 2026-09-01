@@ -46,6 +46,9 @@ next-env.d.ts
 # editors
 .idea/
 
+# Skills instaladas pelo plugin global do agente (cache local, nunca versionar)
+/.agents/
+
 # Seam de dev local (regra de ouro nº1: nunca commitar). Ignorados de propósito para
 # que um `git add -A` distraído não os capture — ja aconteceu nesta base.
 /_devseed.ts
