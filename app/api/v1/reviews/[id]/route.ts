@@ -14,5 +14,5 @@ export async function GET(req: Request, { params }: Params) {
       const { id } = await params;
       const dto = await getReview(db, decodeURIComponent(id));
       return dto ? ok(dto) : notFound(`Review '${id}' não encontrado`);
-   });
+   }, req);
 }

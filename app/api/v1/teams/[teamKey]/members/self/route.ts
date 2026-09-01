@@ -17,5 +17,5 @@ export async function DELETE(req: Request, { params }: Params) {
       const me = await getOrCreateUser(db, email);
       await removeTeamMember(db, teamKey, me.id);
       return ok(await listTeamMembers(db, teamKey));
-   });
+   }, req);
 }

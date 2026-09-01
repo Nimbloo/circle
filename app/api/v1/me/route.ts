@@ -11,7 +11,7 @@ export async function GET(req: Request) {
    return handle(async () => {
       const email = await requireEmail(req);
       return ok(await getMe(db, email));
-   });
+   }, req);
 }
 
 const UpdateSchema = z.object({
@@ -25,5 +25,5 @@ export async function PATCH(req: Request) {
       const email = await requireEmail(req);
       const patch = UpdateSchema.parse(await req.json());
       return ok(await updateProfile(db, email, patch));
-   });
+   }, req);
 }

@@ -13,5 +13,5 @@ export async function GET(req: Request) {
       const email = await requireEmail(req);
       const user = await getOrCreateUser(db, email);
       return ok(await listMyActivity(db, user.id));
-   });
+   }, req);
 }

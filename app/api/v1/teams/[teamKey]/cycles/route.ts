@@ -18,7 +18,7 @@ export async function GET(req: Request, { params }: Params) {
       // Auto-rollover lazy (#24): fecha cycles vencidos e carrega incompletas antes de listar.
       await rolloverCyclesForTeam(db, teamKey);
       return ok(await listCyclesByTeam(db, teamKey));
-   });
+   }, req);
 }
 
 const CreateSchema = z.object({
@@ -37,5 +37,5 @@ export async function POST(req: Request, { params }: Params) {
       const input = CreateSchema.parse(await req.json());
       const dto = await createCycle(db, { teamId: teamKey, ...input });
       return ok(dto);
-   });
+   }, req);
 }

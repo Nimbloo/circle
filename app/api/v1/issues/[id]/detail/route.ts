@@ -15,7 +15,7 @@ export async function GET(req: Request, { params }: Params) {
       const { id } = await params;
       const dto = await getIssueDetail(db, id);
       return dto ? ok(dto) : notFound(`Issue '${id}' não encontrada`);
-   });
+   }, req);
 }
 
 const PatchSchema = z.object({
@@ -30,5 +30,5 @@ export async function PATCH(req: Request, { params }: Params) {
       const patch = PatchSchema.parse(await req.json());
       const dto = await updateIssueContent(db, id, patch);
       return dto ? ok(dto) : notFound(`Issue '${id}' não encontrada`);
-   });
+   }, req);
 }

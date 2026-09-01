@@ -21,7 +21,7 @@ export async function POST(req: Request) {
       const user = await getOrCreateUser(db, email);
       await setAvatar(db, user.id, dataUrl, contentType);
       return ok(await getMe(db, email));
-   });
+   }, req);
 }
 
 /** DELETE /me/avatar — remove a foto e volta pro avatar gerado. Retorna o MeDto. */
@@ -31,5 +31,5 @@ export async function DELETE(req: Request) {
       const user = await getOrCreateUser(db, email);
       await deleteAvatar(db, user.id);
       return ok(await getMe(db, email));
-   });
+   }, req);
 }

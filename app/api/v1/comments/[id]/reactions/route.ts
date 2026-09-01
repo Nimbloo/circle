@@ -18,7 +18,7 @@ export async function POST(req: Request, { params }: Params) {
       const { emoji } = ReactionSchema.parse(await req.json());
       await addReaction(db, id, emoji, email);
       return ok({ ok: true });
-   });
+   }, req);
 }
 
 export async function DELETE(req: Request, { params }: Params) {
@@ -29,5 +29,5 @@ export async function DELETE(req: Request, { params }: Params) {
       if (!emoji) return badRequest('emoji é obrigatório (?emoji=)');
       await removeReaction(db, id, emoji, email);
       return ok({ ok: true });
-   });
+   }, req);
 }

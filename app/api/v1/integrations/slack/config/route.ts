@@ -14,7 +14,7 @@ export async function GET(req: Request) {
       const email = await requireEmail(req);
       if (!(await isAdmin(email, db))) throw new ApiError(403, 'Apenas admin');
       return ok(await getSlackConfig(db));
-   });
+   }, req);
 }
 
 const PatchSchema = z.object({
@@ -30,5 +30,5 @@ export async function PATCH(req: Request) {
       if (!(await isAdmin(email, db))) throw new ApiError(403, 'Apenas admin');
       const patch = PatchSchema.parse(await req.json());
       return ok(await updateSlackConfig(db, patch));
-   });
+   }, req);
 }

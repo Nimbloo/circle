@@ -13,5 +13,5 @@ export async function GET(req: Request) {
       const weeksRaw = sp.get('weeks');
       const weeks = weeksRaw ? Math.min(26, Math.max(1, Number(weeksRaw) || 8)) : undefined;
       return ok(await timeMetrics(db, { team: sp.get('team') ?? undefined, weeks }));
-   });
+   }, req);
 }

@@ -15,5 +15,5 @@ export async function GET(req: Request, { params }: Params) {
       const me = await getOrCreateUser(db, await requireEmail(req));
       const res = await resolveView(db, id, me.id); // view pessoal só p/ o dono
       return res ? ok(res) : notFound(`View '${id}' não encontrada`);
-   });
+   }, req);
 }

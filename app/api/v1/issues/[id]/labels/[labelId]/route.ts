@@ -14,5 +14,5 @@ export async function DELETE(req: Request, { params }: Params) {
       const email = await requireEmail(req);
       const dto = await removeLabel(db, id, labelId, email);
       return dto ? ok(dto) : notFound(`Issue '${id}' não encontrada`);
-   });
+   }, req);
 }

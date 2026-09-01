@@ -12,5 +12,5 @@ export async function POST(req: Request) {
       const email = await requireEmail(req);
       const me = await getOrCreateUser(db, email);
       return ok({ marked: await markAllRead(db, me.id) });
-   });
+   }, req);
 }

@@ -16,7 +16,7 @@ export async function GET(req: Request) {
       const me = await getOrCreateUser(db, email);
       const sp = new URL(req.url).searchParams;
       return ok(await listViews(db, sp.get('team') ?? undefined, me.id));
-   });
+   }, req);
 }
 
 const FilterSchema = z.object({
@@ -43,5 +43,5 @@ export async function POST(req: Request) {
       const email = await requireEmail(req);
       const input = CreateSchema.parse(await req.json());
       return ok(await createView(db, input, email));
-   });
+   }, req);
 }

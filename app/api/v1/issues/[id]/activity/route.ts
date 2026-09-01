@@ -14,5 +14,5 @@ export async function GET(req: Request, { params }: Params) {
       await requireEmail(req);
       const { id } = await params;
       return ok(await listActivity(db, id, (await emailFromRequest(req)) ?? undefined));
-   });
+   }, req);
 }

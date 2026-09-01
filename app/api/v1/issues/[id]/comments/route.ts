@@ -20,5 +20,5 @@ export async function POST(req: Request, { params }: Params) {
       const email = await requireEmail(req);
       const { body, parentId } = CommentSchema.parse(await req.json());
       return ok(await addComment(db, id, body, email, parentId ?? null));
-   });
+   }, req);
 }

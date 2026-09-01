@@ -14,7 +14,7 @@ export async function GET(req: Request, { params }: Params) {
       await requireEmail(req);
       const { teamKey } = await params;
       return ok(await listTeamDocuments(db, teamKey));
-   });
+   }, req);
 }
 
 const CreateSchema = z.discriminatedUnion('kind', [
@@ -65,5 +65,5 @@ export async function POST(req: Request, { params }: Params) {
             email
          )
       );
-   });
+   }, req);
 }

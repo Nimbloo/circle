@@ -24,7 +24,7 @@ export async function PATCH(req: Request, { params }: Params) {
       const patch = UpdateSchema.parse(await req.json());
       const dto = await updateLabel(db, id, patch);
       return dto ? ok(dto) : notFound(`Label '${id}' não encontrado`);
-   });
+   }, req);
 }
 
 export async function DELETE(req: Request, { params }: Params) {
@@ -34,5 +34,5 @@ export async function DELETE(req: Request, { params }: Params) {
       if (!(await isAdmin(email, db))) throw new ApiError(403, 'Apenas admin');
       const removed = await deleteLabel(db, id);
       return removed ? ok({ deleted: true }) : notFound(`Label '${id}' não encontrado`);
-   });
+   }, req);
 }

@@ -28,7 +28,7 @@ export async function POST(req: Request, { params }: Params) {
          email
       );
       return dto ? ok(dto) : notFound(`Issue '${id}' não encontrada`);
-   });
+   }, req);
 }
 
 /** DELETE /issues/{id}/relations?relatedId=..&kind=.. — remove a relação. */
@@ -49,5 +49,5 @@ export async function DELETE(req: Request, { params }: Params) {
          email
       );
       return dto ? ok(dto) : notFound(`Issue '${id}' não encontrada`);
-   });
+   }, req);
 }

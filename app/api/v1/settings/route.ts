@@ -18,7 +18,7 @@ export async function GET(req: Request) {
       const email = await requireEmail(req);
       const user = await getOrCreateUser(db, email);
       return ok(await getUserSettings(db, user.id));
-   });
+   }, req);
 }
 
 /** PUT /settings — substitui as settings do usuário corrente (body = objeto, ≤32KB, schema fechado). */
@@ -32,5 +32,5 @@ export async function PUT(req: Request) {
       }
       const parsed = SettingsSchema.parse(raw ? JSON.parse(raw) : {});
       return ok(await putUserSettings(db, user.id, parsed));
-   });
+   }, req);
 }

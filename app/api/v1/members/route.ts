@@ -12,5 +12,5 @@ export async function GET(req: Request) {
       const sp = new URL(req.url).searchParams;
       const [sort, dir] = (sp.get('sort') ?? 'name-asc').split('-') as [MemberSort, 'asc' | 'desc'];
       return ok(await listMembers(db, { role: multi(sp, 'role'), sort, dir }));
-   });
+   }, req);
 }

@@ -17,5 +17,5 @@ export async function GET(req: Request) {
          sentry: !!process.env.CIRCLE_SENTRY_CLIENT_SECRET,
          email: !!process.env.CIRCLE_MAIL_FROM,
       });
-   });
+   }, req);
 }

@@ -15,7 +15,7 @@ export async function GET(req: Request, { params }: Params) {
       const { id } = await params;
       const dto = await getInitiative(db, id);
       return dto ? ok(dto) : notFound(`Initiative '${id}' não encontrada`);
-   });
+   }, req);
 }
 
 const UpdateSchema = z.object({
@@ -38,7 +38,7 @@ export async function PATCH(req: Request, { params }: Params) {
       const patch = UpdateSchema.parse(await req.json());
       const dto = await updateInitiative(db, id, patch, actor);
       return dto ? ok(dto) : notFound(`Initiative '${id}' não encontrada`);
-   });
+   }, req);
 }
 
 export async function DELETE(req: Request, { params }: Params) {
@@ -47,5 +47,5 @@ export async function DELETE(req: Request, { params }: Params) {
       await requireEmail(req);
       const removed = await deleteInitiative(db, id);
       return removed ? ok({ deleted: true }) : notFound(`Initiative '${id}' não encontrada`);
-   });
+   }, req);
 }
