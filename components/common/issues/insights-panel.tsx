@@ -8,6 +8,7 @@ import { usePriorities, useWorkflowOrderedStatuses } from '@/store/catalog-store
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { countIssueMatrix } from '@/data/insights';
 import { usePanelFilter } from './use-panel-filter';
 import { api } from '@/lib/client';
 import type { TimeMetrics } from '@/lib/api/aggregations';
@@ -140,16 +141,17 @@ export function InsightsPanel({ issues }: InsightsPanelProps) {
    const priorities = usePriorities();
 
    const rows = useMemo<InsightsRow[]>(() => {
+      // Contagem em `data/insights.ts` — a MESMA regra do `issueMatrix` do servidor,
+      // travada por `test/insights-matrix-parity.test.ts`. Aqui ela roda sobre as
+      // issues que a tela exibe (filtradas), que o servidor nao conhece.
+      const counts = countIssueMatrix(issues);
       return workflowOrderedStatus
          .map((s) => {
-            const statusIssues = issues.filter((issue) => issue.status.id === s.id);
             const byPriority: Record<string, number> = {};
             for (const priority of priorities) {
-               byPriority[priority.id] = statusIssues.filter(
-                  (issue) => issue.priority.id === priority.id
-               ).length;
+               byPriority[priority.id] = counts.cells[s.id]?.[priority.id] ?? 0;
             }
-            return { status: s, total: statusIssues.length, byPriority };
+            return { status: s, total: counts.totalsByStatus[s.id] ?? 0, byPriority };
          })
          .filter((row) => row.total > 0);
    }, [issues, workflowOrderedStatus, priorities]);
