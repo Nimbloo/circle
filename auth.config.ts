@@ -41,16 +41,32 @@ function normalizeGroup(g: unknown): string | null {
  * fecha (ninguém consegue logar). É fail-closed intencional, mas precisa ser validado
  * na config do realm (feito separadamente no nimbloo-k8s).
  */
-export function isAllowedKeycloakProfile(profile: unknown): boolean {
+/**
+ * IDENTIDADE: e-mail verificado do domínio Nimbloo. É o piso — nada entra sem isto,
+ * nem convidado. Separado do grupo porque o convite (ver `auth.ts`) dispensa a
+ * associação ao grupo, NUNCA a autenticação.
+ */
+export function hasNimblooIdentity(profile: unknown): boolean {
    if (!profile || typeof profile !== 'object') return false;
    const p = profile as Record<string, unknown>;
    const email = normalizeEmail(p.email);
    if (!email || !email.endsWith(ALLOWED_EMAIL_DOMAIN)) return false;
-   if (p.email_verified === false) return false;
+   return p.email_verified !== false;
+}
+
+/** AUTORIZAÇÃO padrão: pertencer ao grupo `app-circle` (concedido via Orbis). */
+export function hasCircleGroup(profile: unknown): boolean {
+   if (!profile || typeof profile !== 'object') return false;
+   const p = profile as Record<string, unknown>;
    const groups = Array.isArray(p.groups)
       ? p.groups.map(normalizeGroup).filter((g): g is string => g !== null)
       : [];
    return groups.includes(REQUIRED_GROUP);
+}
+
+/** Caminho padrão (sem convite): identidade + grupo. */
+export function isAllowedKeycloakProfile(profile: unknown): boolean {
+   return hasNimblooIdentity(profile) && hasCircleGroup(profile);
 }
 
 export const authConfig: NextAuthConfig = {

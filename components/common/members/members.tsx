@@ -1,6 +1,7 @@
 'use client';
 
 import MemberLine from './member-line';
+import { InvitePanel } from './invite-panel';
 import { ListSkeleton } from '@/components/common/list-skeleton';
 import { useMembersFilterStore } from '@/store/members-filter-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -46,6 +47,8 @@ export default function Members() {
 
    return (
       <div className="w-full">
+         <InvitePanel />
+
          <div className="bg-container px-6 py-1.5 text-sm flex items-center text-muted-foreground border-b sticky top-0 z-10">
             <div className="flex-1 min-w-0 flex items-center gap-1">
                Name

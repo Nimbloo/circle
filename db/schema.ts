@@ -553,6 +553,35 @@ export const initiativeUpdate = pgTable(
  * resumindo os campos que mudaram (o "changed status, owner" do Linear). Distinto de
  * `initiative_update`, que é o post editorial de health escrito à mão.
  */
+/**
+ * Convite de acesso ao Circle. Existe porque o acesso normal vem do grupo Keycloak
+ * `app-circle` (concedido no Orbis), e havia dois buracos: quem foi concedido mas ainda
+ * nao logou nao aparece em lugar nenhum, e quem nao foi concedido nao tem caminho.
+ *
+ * Um convite valido e uma EXCECAO ao grupo no `signIn` (ver `auth.ts`) — dispensa a
+ * associacao ao grupo, NUNCA a autenticacao: a pessoa ainda precisa logar no Keycloak
+ * como usuario @nimbloo.ai real. Single-use (`acceptedAt`) e com validade.
+ *
+ * Tabela separada de propositalmente NAO ser `app_user`: criar linha de usuario para
+ * quem nunca logou foi o que gerou "membro fantasma" na lista e nos seletores.
+ */
+export const invite = pgTable(
+   'invite',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      // Normalizado (trim + lowercase) na escrita; unico para nao acumular convite
+      // duplicado do mesmo e-mail — reconvidar renova o token e a validade.
+      email: varchar('email', { length: 255 }).notNull().unique(),
+      token: varchar('token', { length: 64 }).notNull().unique(),
+      invitedById: varchar('invited_by_id', { length: 36 }).references(() => appUser.id),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+      expiresAt: timestamp('expires_at').notNull(),
+      acceptedAt: timestamp('accepted_at'),
+   },
+   // Lookup por token (magic link) e por email (gate do signIn, a cada login).
+   (t) => [index('idx_invite_token').on(t.token), index('idx_invite_email').on(t.email)]
+);
+
 export const initiativeActivity = pgTable(
    'initiative_activity',
    {
