@@ -190,8 +190,12 @@ export async function resolveView(
       return { type: 'issue', issues };
    }
 
-   // project view: aplica o que mapeia (status/priority/labels)
+   // project view: aplica o que mapeia (categoria/status/priority/labels)
    let projects = await listProjects(db, {});
+   // statusCategories era aplicado SÓ no cliente (`data/views.ts`), então uma project
+   // view filtrada por categoria devolvia conjuntos diferentes na API e na tela.
+   if (f.statusCategories?.length)
+      projects = projects.filter((p) => f.statusCategories!.includes(p.status.category));
    if (f.statusIds?.length) projects = projects.filter((p) => f.statusIds!.includes(p.status.id));
    if (f.priorityIds?.length)
       projects = projects.filter((p) => f.priorityIds!.includes(p.priority.id));
