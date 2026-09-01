@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { getNotificationIcon } from '@/lib/notification-utils';
 import { InboxItem } from '@/data/inbox';
 import { useIssuesStore } from '@/store/issues-store';
-import { useNotificationsStore } from '@/store/notifications-store';
 import { ArrowUpRight, Check } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -55,7 +54,6 @@ export default function IssuePreview({
    onMarkAsUnread,
 }: IssuePreviewProps) {
    const { orgId } = useParams<{ orgId: string }>();
-   const { getUnreadCount } = useNotificationsStore();
    const issues = useIssuesStore((s) => s.issues);
 
    // Issue viva atrás da notificação (o IssueDetailView precisa da issue do store).
@@ -64,16 +62,11 @@ export default function IssuePreview({
       : undefined;
 
    if (!notification) {
-      const unreadCount = getUnreadCount();
-
       return (
-         <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-            <NotificationBox className="w-16 h-16 mb-4 text-muted-foreground/50" />
-            <h3 className="text-lg font-semibold text-muted-foreground mb-2">
-               {unreadCount} unread notification{unreadCount !== 1 ? 's' : ''}
-            </h3>
-            <p className="text-sm text-muted-foreground max-w-sm">
-               Select a notification from the list to view its details and take action.
+         <div className="flex h-full flex-col items-center justify-center gap-6 pb-7 text-center">
+            <NotificationBox className="h-[100px] w-[97.5px] text-muted-foreground" />
+            <p className="text-[13px] font-medium leading-4 text-muted-foreground">
+               No notification selected
             </p>
          </div>
       );
@@ -85,7 +78,7 @@ export default function IssuePreview({
    return (
       <div className="flex flex-col h-full overflow-hidden">
          {/* Header */}
-         <div className="flex items-center justify-between px-4 h-10 border-b border-border shrink-0">
+         <div className="flex h-11 shrink-0 items-center justify-between border-b border-border px-4">
             <div className="flex items-center gap-2 min-w-0">
                <displayIssue.status.icon />
                <span className="text-sm font-medium truncate">{displayIssue.identifier}</span>

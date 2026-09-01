@@ -9,7 +9,7 @@ export default async function InitiativeDetailsPage({
 }) {
    const { initiativeId } = await params;
    return (
-      <MainLayout header={<Header />} headersNumber={2}>
+      <MainLayout header={<Header />}>
          <InitiativeDetails initiativeId={initiativeId} />
       </MainLayout>
    );

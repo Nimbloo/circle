@@ -18,7 +18,7 @@ import {
    CommandList,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarRange, ChevronDown, Plus, UserRound, X } from 'lucide-react';
+import { CalendarRange, ChevronDown, PanelRight, PenLine, Plus, UserRound, X } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
@@ -29,29 +29,19 @@ import { Button } from '@/components/ui/button';
 import type { InitiativeUpdateDto } from '@/lib/api/initiative-detail';
 import type { InitiativeActivityDto } from '@/lib/api/initiatives';
 import { InitiativeProgressPanel } from './initiative-progress-panel';
+import { InitiativeProjectRow } from './initiative-project-row';
 import { InitiativeStatusIcon } from './initiative-status-icon';
 import { InitiativeActions } from './initiative-actions';
+import {
+   Sheet,
+   SheetContent,
+   SheetDescription,
+   SheetHeader,
+   SheetTitle,
+   SheetTrigger,
+} from '@/components/ui/sheet';
 
 const TABS = ['overview', 'activity', 'projects'] as const;
-
-const formatTarget = (iso: string): string => {
-   const [, month, day] = iso.split('-').map(Number);
-   const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-   ];
-   return `${months[(month ?? 1) - 1]} ${day}`;
-};
 
 /* ------------------------------ projects table ---------------------------- */
 
@@ -97,8 +87,8 @@ function ProjectsSection({ initiative }: { initiative: Initiative }) {
       void setProjects(initiative.projectIds.filter((x) => x !== id));
 
    return (
-      <section className="flex flex-col gap-2">
-         <div className="flex items-center justify-between">
+      <section className="mx-0.5 flex flex-col gap-2">
+         <div className="flex items-center justify-between px-2">
             <h2 className="text-lg font-medium">Projects</h2>
             <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
                <PopoverTrigger asChild>
@@ -148,60 +138,12 @@ function ProjectsSection({ initiative }: { initiative: Initiative }) {
                   <span className="flex-1 border-b border-border/60" />
                </div>
                {group.projects.map((project) => (
-                  <Link
+                  <InitiativeProjectRow
                      key={project.id}
-                     href={`/${orgId}/project/${project.id}/overview`}
-                     className="group/row flex items-center gap-2 py-2 text-sm hover:bg-sidebar/50 rounded-md px-1 -mx-1 transition-colors"
-                  >
-                     <project.icon className="size-4 text-muted-foreground shrink-0" />
-                     <span className="flex-1 truncate font-medium">{project.name}</span>
-                     <span className="hidden sm:block w-16 shrink-0">
-                        <span
-                           className="size-2.5 rounded-full inline-block"
-                           style={{ backgroundColor: project.health.color }}
-                        />
-                     </span>
-                     <span className="hidden sm:block w-16 shrink-0">
-                        <project.priority.icon className="size-4 text-muted-foreground" />
-                     </span>
-                     <span className="hidden md:block w-12 shrink-0">
-                        <Avatar className="size-5">
-                           <AvatarImage
-                              src={project.lead?.avatarUrl || undefined}
-                              alt={project.lead?.name ?? ''}
-                           />
-                           <AvatarFallback className="text-[9px]">
-                              {project.lead?.name[0] ?? '—'}
-                           </AvatarFallback>
-                        </Avatar>
-                     </span>
-                     <span className="hidden md:flex items-center gap-1 w-24 shrink-0 text-xs text-muted-foreground">
-                        {project.targetDate ? (
-                           <>
-                              <CalendarRange className="size-3.5" />
-                              {formatTarget(project.targetDate)}
-                           </>
-                        ) : (
-                           '—'
-                        )}
-                     </span>
-                     <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                        {project.percentComplete}%
-                     </span>
-                     <span
-                        role="button"
-                        tabIndex={0}
-                        aria-label="Remove from initiative"
-                        onClick={(e) => {
-                           e.preventDefault();
-                           e.stopPropagation();
-                           removeProject(project.id);
-                        }}
-                        className="opacity-0 group-hover/row:opacity-100 text-muted-foreground hover:text-red-500 transition-opacity shrink-0 cursor-pointer"
-                     >
-                        <X className="size-3.5" />
-                     </span>
-                  </Link>
+                     project={project}
+                     orgId={orgId}
+                     onRemove={removeProject}
+                  />
                ))}
             </div>
          ))}
@@ -213,8 +155,8 @@ function ProjectsSection({ initiative }: { initiative: Initiative }) {
 
 function PropertyRow({ label, children }: { label: string; children: React.ReactNode }) {
    return (
-      <div className="flex items-center gap-2 text-sm">
-         <span className="w-24 text-muted-foreground text-xs shrink-0">{label}</span>
+      <div className="flex items-center gap-2 text-[13px]">
+         <span className="w-24 shrink-0 text-[13px] text-muted-foreground">{label}</span>
          {children}
       </div>
    );
@@ -263,7 +205,7 @@ function PropertiesPanel({ initiative }: { initiative: Initiative }) {
 
    return (
       <div className="flex flex-col gap-3">
-         <span className="text-sm font-medium">Properties</span>
+         <span className="text-[13px] font-medium leading-4">Properties</span>
 
          <PropertyRow label="Status">
             <Popover>
@@ -440,26 +382,67 @@ function TargetEditor({
    );
 }
 
+function InitiativeSidePanelContent({ initiative }: { initiative: Initiative }) {
+   return (
+      <div className="flex h-full w-full flex-col gap-2 overflow-y-auto">
+         <div className="rounded-[10px] border bg-card p-3 pb-[22.5px]">
+            <PropertiesPanel initiative={initiative} />
+         </div>
+
+         {initiative.projectIds.length > 0 && (
+            <div className="rounded-[10px] border bg-card p-3">
+               <InitiativeProgressPanel initiative={initiative} />
+            </div>
+         )}
+
+         <div className="rounded-[10px] border bg-card p-3">
+            <ActivityFeed initiativeId={initiative.id} />
+         </div>
+      </div>
+   );
+}
+
 function Overview({ initiative }: { initiative: Initiative }) {
    return (
       <div className="w-full h-full flex overflow-hidden">
          <div className="flex-1 min-w-0 overflow-y-auto">
-            <div className="max-w-3xl mx-auto px-8 py-10 flex flex-col gap-6">
+            <div className="mx-auto max-w-[869px] px-8 pt-16 pb-10">
                <div className="flex items-start justify-between">
-                  <span className="inline-flex size-10 items-center justify-center rounded-md bg-muted/50 text-2xl">
+                  <span className="inline-flex size-8 items-center justify-center rounded-md bg-muted/50 text-xl">
                      {initiative.icon}
                   </span>
-                  <InitiativeActions initiative={initiative} />
+                  <div className="flex items-center gap-1.5">
+                     <Sheet>
+                        <SheetTrigger asChild>
+                           <Button size="xs" variant="outline" className="gap-1.5 xl:hidden">
+                              <PanelRight className="size-3.5" />
+                              Properties
+                           </Button>
+                        </SheetTrigger>
+                        <SheetContent className="w-[92vw] overflow-y-auto p-3 pt-12 sm:max-w-[400px]">
+                           <SheetHeader className="sr-only">
+                              <SheetTitle>Initiative properties</SheetTitle>
+                              <SheetDescription>
+                                 View and edit the properties of this initiative.
+                              </SheetDescription>
+                           </SheetHeader>
+                           <InitiativeSidePanelContent initiative={initiative} />
+                        </SheetContent>
+                     </Sheet>
+                     <InitiativeActions initiative={initiative} />
+                  </div>
                </div>
-               <div className="flex flex-col gap-2">
-                  <h1 className="text-2xl font-semibold">{initiative.name}</h1>
-                  <p className="text-sm text-muted-foreground">
+               <div className="mt-3 flex flex-col gap-1">
+                  <h1 className="text-2xl font-semibold leading-8">{initiative.name}</h1>
+                  <p className="text-[15px] leading-6 text-muted-foreground">
                      {initiative.description ?? 'Add a short summary…'}
                   </p>
                </div>
 
-               <div className="flex items-center gap-3 flex-wrap text-sm">
-                  <span className="text-muted-foreground text-xs w-24">Properties</span>
+               <div className="mt-[19px] flex min-h-7 flex-wrap items-center gap-3 text-sm">
+                  <h3 className="w-24 shrink-0 py-1.5 text-[13px] font-medium leading-4 text-muted-foreground">
+                     Properties
+                  </h3>
                   <span className="inline-flex items-center gap-1.5">
                      <InitiativeStatusIcon status={initiative.status} />
                      {INITIATIVE_STATUS_META[initiative.status].label}
@@ -494,28 +477,36 @@ function Overview({ initiative }: { initiative: Initiative }) {
                   )}
                </div>
 
-               <div className="flex items-center gap-3 text-sm">
-                  <span className="text-muted-foreground text-xs w-24">Resources</span>
+               <div className="mt-3 flex min-h-7 items-center gap-3 text-sm">
+                  <h3 className="w-24 shrink-0 py-1.5 text-[13px] font-medium leading-4 text-muted-foreground">
+                     Resources
+                  </h3>
                   <span className="text-muted-foreground">No resources</span>
                </div>
 
-               <div className="flex flex-col gap-2">
-                  <h2 className="text-sm font-medium">Description</h2>
-                  <p className="text-sm text-muted-foreground">
+               <Link
+                  href="?tab=activity"
+                  className="-mx-4 mt-4 flex h-[67px] items-center justify-center gap-2 rounded-[10px] border text-sm text-muted-foreground transition-colors hover:bg-accent/30 hover:text-foreground"
+               >
+                  <PenLine className="size-4" />
+                  Write initiative update
+               </Link>
+
+               <div className="-mx-4 mt-[27px] flex min-h-[148px] flex-col gap-2 rounded-xl px-4 pt-2.5">
+                  <h2 className="py-1.5 text-[13px] font-medium leading-4">Description</h2>
+                  <p className="text-[15px] leading-6 text-muted-foreground">
                      {initiative.description ?? 'Add description…'}
                   </p>
                </div>
 
-               <ProjectsSection initiative={initiative} />
+               <div className="mt-[92px]">
+                  <ProjectsSection initiative={initiative} />
+               </div>
             </div>
          </div>
 
-         <aside className="hidden lg:flex flex-col w-80 shrink-0 border-l h-full overflow-y-auto p-5 gap-6 bg-container">
-            <PropertiesPanel initiative={initiative} />
-
-            <InitiativeProgressPanel initiative={initiative} />
-
-            <ActivityFeed initiativeId={initiative.id} />
+         <aside className="hidden h-full w-[400px] shrink-0 overflow-hidden pl-1 xl:flex">
+            <InitiativeSidePanelContent initiative={initiative} />
          </aside>
       </div>
    );
@@ -545,7 +536,7 @@ function ActivityFeed({ initiativeId }: { initiativeId: string }) {
 
    return (
       <div className="flex flex-col gap-3">
-         <span className="text-sm font-medium">Activity</span>
+         <span className="text-[13px] font-medium leading-4">Activity</span>
          {entries === null ? (
             <p className="text-xs text-muted-foreground">Carregando…</p>
          ) : entries.length === 0 ? (
@@ -581,9 +572,9 @@ function ActivityFeed({ initiativeId }: { initiativeId: string }) {
 /* ------------------------------- activity tab ----------------------------- */
 
 const UPDATE_HEALTHS = [
-   { id: 'on-track', label: 'On track', color: '#4cb782' },
-   { id: 'at-risk', label: 'At risk', color: '#f2c94c' },
-   { id: 'off-track', label: 'Off track', color: '#eb5757' },
+   { id: 'on-track', label: 'On track', color: 'var(--chart-2)' },
+   { id: 'at-risk', label: 'At risk', color: 'var(--chart-4)' },
+   { id: 'off-track', label: 'Off track', color: 'var(--destructive)' },
 ] as const;
 
 /** Activity da initiative: composer de update (health + texto) + feed. O health do
@@ -674,7 +665,9 @@ function Activity({ initiativeId }: { initiativeId: string }) {
                         <div className="flex items-center gap-2 mb-1.5 text-sm">
                            <span
                               className="size-2 rounded-full"
-                              style={{ backgroundColor: h?.color ?? '#8f9299' }}
+                              style={{
+                                 backgroundColor: h?.color ?? 'var(--muted-foreground)',
+                              }}
                            />
                            <span className="font-medium">{h?.label ?? u.health}</span>
                            <span className="text-xs text-muted-foreground">

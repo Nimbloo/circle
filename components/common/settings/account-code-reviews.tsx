@@ -25,6 +25,7 @@ export default function AccountCodeReviews() {
                   description="Mostra a aba Reviews no sidebar para revisar pull requests do GitHub"
                   trailing={
                      <Switch
+                        aria-label="Enable code reviews"
                         checked={prefs.codeReviewsEnabled}
                         onCheckedChange={(v) => prefs.setPref('codeReviewsEnabled', v)}
                      />
@@ -35,6 +36,7 @@ export default function AccountCodeReviews() {
                   description="Automatically mark your drafts as ready upon approval or requesting a review"
                   trailing={
                      <Switch
+                        aria-label="Auto-convert draft pull requests"
                         checked={prefs.autoConvertDrafts}
                         onCheckedChange={(v) => prefs.setPref('autoConvertDrafts', v)}
                      />
@@ -45,6 +47,7 @@ export default function AccountCodeReviews() {
                   description="Choose the default merge strategy for pull requests. Repository configuration can affect available strategies"
                   trailing={
                      <SelectMenu
+                        ariaLabel="Merge strategy"
                         options={['Squash and merge', 'Merge commit', 'Rebase and merge']}
                         value={prefs.mergeStrategy}
                         onChange={(v) => prefs.setPref('mergeStrategy', v)}
@@ -61,6 +64,7 @@ export default function AccountCodeReviews() {
                   description="Select the syntax highlighting theme used in code diffs and viewers"
                   trailing={
                      <SelectMenu
+                        ariaLabel="Code theme"
                         options={['Nimbloo Light', 'Nimbloo Dark', 'Contrast']}
                         value={prefs.codeTheme}
                         onChange={(v) => prefs.setPref('codeTheme', v)}
@@ -71,6 +75,7 @@ export default function AccountCodeReviews() {
                   title="Font"
                   trailing={
                      <SelectMenu
+                        ariaLabel="Code font"
                         options={['12px, Regular, Default', '13px, Medium']}
                         value={prefs.codeFont}
                         onChange={(v) => prefs.setPref('codeFont', v)}
@@ -90,6 +95,7 @@ export default function AccountCodeReviews() {
                   description="Comments, mentions, and submitted reviews"
                   trailing={
                      <SelectMenu
+                        ariaLabel="Comments and reviews"
                         options={['Exclude Bots', 'Everyone', 'None']}
                         value={prefs.reviewComments}
                         onChange={(v) => prefs.setPref('reviewComments', v)}
@@ -101,6 +107,7 @@ export default function AccountCodeReviews() {
                   description="Requests for your personal review"
                   trailing={
                      <Switch
+                        aria-label="Review requests"
                         checked={prefs.reviewRequests}
                         onCheckedChange={(v) => prefs.setPref('reviewRequests', v)}
                      />
@@ -111,6 +118,7 @@ export default function AccountCodeReviews() {
                   description="Requests for review from your GitHub teams with 10 or fewer members"
                   trailing={
                      <Switch
+                        aria-label="GitHub team review requests"
                         checked={prefs.githubTeamRequests}
                         onCheckedChange={(v) => prefs.setPref('githubTeamRequests', v)}
                      />
@@ -121,6 +129,7 @@ export default function AccountCodeReviews() {
                   description="Check failures and merge queue updates"
                   trailing={
                      <Switch
+                        aria-label="Checks and merge queue"
                         checked={prefs.checksMergeQueue}
                         onCheckedChange={(v) => prefs.setPref('checksMergeQueue', v)}
                      />
@@ -136,6 +145,7 @@ export default function AccountCodeReviews() {
                   description="Users must upload a signing key before starting a coding session"
                   trailing={
                      <Switch
+                        aria-label="Require signed commits"
                         checked={prefs.requireSignedCommits}
                         onCheckedChange={(v) => prefs.setPref('requireSignedCommits', v)}
                      />
@@ -169,6 +179,7 @@ export default function AccountCodeReviews() {
                   description="The format of GitHub/GitLab attachments on issues"
                   trailing={
                      <SelectMenu
+                        ariaLabel="Git attachment format"
                         options={['Title', 'URL', 'Compact']}
                         value={prefs.gitAttachmentFormat}
                         onChange={(v) => prefs.setPref('gitAttachmentFormat', v)}
@@ -180,6 +191,7 @@ export default function AccountCodeReviews() {
                   description="After copying the git branch name, issue status is moved to the team's first started workflow status. Hold ⌥ to disable."
                   trailing={
                      <Switch
+                        aria-label="On git branch copy, move issue to started status"
                         checked={prefs.gitBranchCopyMoveStarted}
                         onCheckedChange={(v) => prefs.setPref('gitBranchCopyMoveStarted', v)}
                      />
@@ -190,6 +202,7 @@ export default function AccountCodeReviews() {
                   description="After opening an issue in a coding tool or copying as prompt, issue status is moved to the team's first started workflow status. Hold ⌥ to disable."
                   trailing={
                      <Switch
+                        aria-label="On open in coding tool, move issue to started status"
                         checked={prefs.openCodingToolMoveStarted}
                         onCheckedChange={(v) => prefs.setPref('openCodingToolMoveStarted', v)}
                      />

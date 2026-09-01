@@ -13,27 +13,25 @@ import { ProjectContextMenu } from './project-context-menu';
 
 function ProjectCard({ project }: { project: Project }) {
    const { orgId } = useParams<{ orgId: string }>();
-   const { displayProperties } = useProjectsDisplayStore();
+   const displayProperties = useProjectsDisplayStore((state) => state.displayProperties);
    // % de conclusão vem pronto do backend (assemble calcula por agregação).
    const percentComplete = project.percentComplete;
 
    return (
       <ProjectContextMenu project={project}>
-         <div className="rounded-md border bg-container p-3 hover:bg-accent/30 transition-colors">
-            <div className="flex items-start gap-2">
-               <span className="inline-flex size-6 bg-muted/50 items-center justify-center rounded shrink-0">
-                  <project.icon className="size-4" />
-               </span>
+         <div className="min-h-[94px] rounded-lg bg-card px-1.5 py-[5px] shadow-[var(--card-shadow)] transition-colors hover:bg-accent/30">
+            <div className="flex h-7 items-center gap-4">
+               <project.icon className="size-4 shrink-0" />
                <Link
                   href={`/${orgId}/project/${project.id}/overview`}
-                  className="text-sm font-medium leading-snug hover:underline underline-offset-2 min-w-0"
+                  className="min-w-0 truncate text-[13px] font-medium leading-4 hover:underline hover:underline-offset-2"
                >
                   {project.name}
                </Link>
             </div>
 
             {displayProperties.health && (
-               <div className="mt-2.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+               <div className="flex h-7 items-center gap-1.5 text-xs text-muted-foreground">
                   <span
                      className="size-2 rounded-full shrink-0"
                      style={{ backgroundColor: project.health.color }}
@@ -46,7 +44,7 @@ function ProjectCard({ project }: { project: Project }) {
             )}
 
             {displayProperties.labels && project.labels.length > 0 && (
-               <div className="mt-2 flex flex-wrap gap-1">
+               <div className="flex min-h-7 flex-wrap items-center gap-1">
                   {project.labels.map((label) => (
                      <span
                         key={label.id}
@@ -62,10 +60,10 @@ function ProjectCard({ project }: { project: Project }) {
                </div>
             )}
 
-            <div className="mt-2.5 flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="flex h-7 items-center gap-2 text-xs text-muted-foreground">
                {displayProperties.status && (
                   <span className="inline-flex items-center gap-1">
-                     <CapacityRing value={percentComplete} color="#6771c5" />
+                     <CapacityRing value={percentComplete} color="var(--primary)" />
                      {percentComplete}%
                   </span>
                )}
@@ -93,27 +91,31 @@ function ProjectCard({ project }: { project: Project }) {
    );
 }
 
-/** Projects "Board" view: one column per group (team by default). */
+/** Projects "Board" view: one 354px column per project status. */
 export default function ProjectsBoard({ groups }: { groups: ProjectGroup[] }) {
    return (
-      <div className="w-full h-full overflow-x-auto">
-         <div className="flex h-full gap-3 px-4 py-3 min-w-max">
+      <div className="h-full w-full overflow-x-auto">
+         <div className="flex h-full min-w-max gap-0 px-1">
             {groups.map((group) => (
-               <div key={group.id} className="w-[320px] shrink-0 h-full flex flex-col">
-                  <div className="flex items-center gap-2 px-1 pb-2 text-sm font-medium shrink-0">
-                     {group.icon && <span>{group.icon}</span>}
-                     {group.name}
+               <div key={group.id} className="flex h-full w-[354px] shrink-0 flex-col">
+                  <div className="flex h-[50px] shrink-0 items-center gap-2 px-[18px] pt-0.5 text-[13px] font-medium">
+                     {group.status ? (
+                        <span
+                           className="size-4 shrink-0 [&_svg]:size-4"
+                           style={{ color: group.status.color }}
+                        >
+                           <group.status.icon />
+                        </span>
+                     ) : (
+                        group.icon && <span>{group.icon}</span>
+                     )}
+                     <span>{group.name}</span>
                      <span className="text-xs text-muted-foreground">{group.projects.length}</span>
                   </div>
-                  <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2 pb-4">
+                  <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-4 pl-[13px] pr-4 pt-[9px]">
                      {group.projects.map((project) => (
                         <ProjectCard key={project.id} project={project} />
                      ))}
-                     {group.projects.length === 0 && (
-                        <div className="text-xs text-muted-foreground border border-dashed rounded-md p-4 text-center">
-                           No projects
-                        </div>
-                     )}
                   </div>
                </div>
             ))}

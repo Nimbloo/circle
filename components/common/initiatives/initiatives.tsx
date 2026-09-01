@@ -24,6 +24,7 @@ import { Initiative, INITIATIVE_STATUS_META, InitiativeStatus } from '@/data/ini
 import { health as allHealth } from '@/data/projects';
 import { usePriorities } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { useRightPanelStore } from '@/store/right-panel-store';
 import { InitiativesFilterType, useInitiativesFilterStore } from '@/store/initiatives-filter-store';
 import {
    InitiativesDisplayProperties,
@@ -36,7 +37,6 @@ import {
    Goal,
    HeartPulse,
    ListFilter,
-   PanelRight,
    SlidersHorizontal,
    UserRound,
 } from 'lucide-react';
@@ -50,17 +50,11 @@ import { InlineNewInitiative } from './inline-new-initiative';
 import { InitiativeContextMenu } from './initiative-context-menu';
 import { useInlineInitiativeStore } from '@/store/inline-initiative-store';
 
-const TABS = ['active', 'planned', 'all'] as const;
-
-const TAB_ITEMS: { label: string; value: (typeof TABS)[number] }[] = [
-   { label: 'Active', value: 'active' },
-   { label: 'Planned', value: 'planned' },
-   { label: 'All initiatives', value: 'all' },
-];
+export const INITIATIVE_TABS = ['active', 'planned', 'all'] as const;
 
 /* --------------------------------- filter --------------------------------- */
 
-function InitiativesFilter() {
+export function InitiativesFilter() {
    const [open, setOpen] = useState(false);
    const [active, setActive] = useState<InitiativesFilterType | null>(null);
    const users = useWorkspaceStore((s) => s.users);
@@ -79,7 +73,12 @@ function InitiativesFilter() {
          }}
       >
          <PopoverTrigger asChild>
-            <Button size="xs" variant="ghost" className="relative" aria-label="Filter initiatives">
+            <Button
+               size="xs"
+               variant="ghost"
+               className="relative size-7 p-0"
+               aria-label="Filter initiatives"
+            >
                <ListFilter className="size-4" />
                {count > 0 && (
                   <span className="absolute -top-1 -right-1 size-4 rounded-full bg-primary text-primary-foreground text-[9px] inline-flex items-center justify-center">
@@ -205,70 +204,88 @@ function InitiativesFilter() {
 
 const PROPERTY_CHIPS: { key: keyof InitiativesDisplayProperties; label: string }[] = [
    { key: 'description', label: 'Description' },
+   { key: 'owner', label: 'Owner' },
    { key: 'status', label: 'Status' },
    { key: 'priority', label: 'Priority' },
-   { key: 'owner', label: 'Owner' },
-   { key: 'target', label: 'Target date' },
-   { key: 'projects', label: 'Projects' },
    { key: 'health', label: 'Health' },
+   { key: 'projects', label: 'Projects' },
    { key: 'activeProjects', label: 'Active projects' },
+   { key: 'target', label: 'Target date' },
 ];
 
-function InitiativesDisplayOptions() {
+export function InitiativesDisplayOptions() {
    const { grouping, ordering, displayProperties, setGrouping, setOrdering, toggleProperty } =
       useInitiativesDisplayStore();
 
    return (
       <Popover>
          <PopoverTrigger asChild>
-            <Button size="xs" variant="ghost" aria-label="Display options">
+            <Button size="xs" variant="ghost" className="size-7 p-0" aria-label="Display options">
                <SlidersHorizontal className="size-4" />
             </Button>
          </PopoverTrigger>
-         <PopoverContent align="end" className="w-80 p-3 flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-               <span className="text-xs text-muted-foreground">Grouping</span>
-               <Select
-                  value={grouping}
-                  onValueChange={(value) => setGrouping(value as typeof grouping)}
-               >
-                  <SelectTrigger className="w-36 h-7 text-xs">
-                     <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                     <SelectItem value="none">No grouping</SelectItem>
-                     <SelectItem value="status">Status</SelectItem>
-                  </SelectContent>
-               </Select>
+         <PopoverContent
+            align="end"
+            sideOffset={4}
+            className="w-[302px] rounded-xl border-[var(--popover-border)] bg-popover p-0"
+            style={{ boxShadow: 'var(--popover-shadow)' }}
+         >
+            <div className="flex h-20 flex-col px-4 py-2">
+               <div className="flex h-8 w-full items-center justify-between">
+                  <span className="w-20 text-xs font-medium leading-[normal] text-muted-foreground">
+                     Grouping
+                  </span>
+                  <span className="flex flex-1 justify-end">
+                     <Select
+                        value={grouping}
+                        onValueChange={(value) => setGrouping(value as typeof grouping)}
+                     >
+                        <SelectTrigger className="relative h-6 w-[100px] rounded-lg border-transparent px-2 py-px pr-[18px] text-xs leading-[normal] shadow-none [&_svg]:absolute [&_svg]:right-2 [&_svg]:size-2.5">
+                           <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                           <SelectItem value="none">No grouping</SelectItem>
+                           <SelectItem value="status">Status</SelectItem>
+                        </SelectContent>
+                     </Select>
+                  </span>
+               </div>
+               <div className="flex h-8 w-full items-center justify-between">
+                  <span className="w-20 text-xs font-medium leading-[normal] text-muted-foreground">
+                     Ordering
+                  </span>
+                  <span className="flex flex-1 justify-end">
+                     <Select
+                        value={ordering}
+                        onValueChange={(value) => setOrdering(value as typeof ordering)}
+                     >
+                        <SelectTrigger className="relative h-6 w-[100px] rounded-lg border-transparent px-2 py-px pr-[18px] text-xs leading-[normal] shadow-none [&_svg]:absolute [&_svg]:right-2 [&_svg]:size-2.5">
+                           <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                           <SelectItem value="manual">Manual</SelectItem>
+                           <SelectItem value="name">Name</SelectItem>
+                           <SelectItem value="target">Target date</SelectItem>
+                        </SelectContent>
+                     </Select>
+                  </span>
+               </div>
             </div>
-            <div className="flex items-center justify-between">
-               <span className="text-xs text-muted-foreground">Ordering</span>
-               <Select
-                  value={ordering}
-                  onValueChange={(value) => setOrdering(value as typeof ordering)}
-               >
-                  <SelectTrigger className="w-36 h-7 text-xs">
-                     <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                     <SelectItem value="manual">Manual</SelectItem>
-                     <SelectItem value="name">Name</SelectItem>
-                     <SelectItem value="target">Target date</SelectItem>
-                  </SelectContent>
-               </Select>
-            </div>
-            <div className="flex flex-col gap-2">
-               <span className="text-xs text-muted-foreground">Display properties</span>
-               <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-col border-t px-4 py-2">
+               <span className="mb-1 mt-2 text-xs font-medium leading-[normal] text-muted-foreground">
+                  Display properties
+               </span>
+               <div className="mt-2 flex flex-wrap gap-px">
                   {PROPERTY_CHIPS.map(({ key, label }) => (
                      <button
                         key={key}
+                        type="button"
                         onClick={() => toggleProperty(key)}
                         className={cn(
-                           'px-2 py-0.5 rounded-md border text-xs transition-colors',
+                           'mr-1 mb-1 h-6 rounded-full border border-transparent px-2 text-xs font-medium leading-[normal] transition-colors',
                            displayProperties[key]
-                              ? 'bg-accent border-transparent'
-                              : 'text-muted-foreground hover:bg-accent/50'
+                              ? 'bg-accent text-foreground'
+                              : 'bg-muted/40 text-muted-foreground hover:bg-accent/50 hover:text-foreground'
                         )}
                      >
                         {label}
@@ -341,18 +358,20 @@ function InitiativeRow({
       <InitiativeContextMenu initiative={initiative}>
          <Link
             href={`/${orgId}/initiative/${initiative.id}`}
-            className="flex items-center gap-2 px-6 py-2 border-b border-border/50 hover:bg-sidebar/50 transition-colors text-sm"
+            className="h-[52px] pl-[52px] pr-[34px] flex items-center gap-3 rounded-lg text-[13px] hover:bg-accent/40 transition-colors"
          >
-            <span className="inline-flex size-6 items-center justify-center rounded bg-muted/50 text-sm shrink-0">
-               {initiative.icon}
-            </span>
-            <span className="flex flex-col min-w-0 flex-1">
-               <span className="font-medium truncate">{initiative.name}</span>
-               {displayProperties.description && initiative.description && (
-                  <span className="text-xs text-muted-foreground truncate">
-                     {initiative.description}
-                  </span>
-               )}
+            <span className="flex min-w-0 flex-1 items-center gap-2.5">
+               <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-muted/50 text-sm">
+                  {initiative.icon}
+               </span>
+               <span className="flex min-w-0 flex-col">
+                  <span className="truncate font-medium leading-4">{initiative.name}</span>
+                  {displayProperties.description && initiative.description && (
+                     <span className="truncate text-xs leading-4 text-muted-foreground">
+                        {initiative.description}
+                     </span>
+                  )}
+               </span>
             </span>
             {showStatus && displayProperties.status && (
                <span className="hidden md:flex items-center gap-1.5 w-28 shrink-0 text-xs">
@@ -361,12 +380,12 @@ function InitiativeRow({
                </span>
             )}
             {displayProperties.priority && (
-               <span className="hidden sm:flex w-16 shrink-0 items-center">
+               <span className="hidden sm:flex w-[56px] shrink-0 items-center">
                   <initiative.priority.icon className="size-4 text-muted-foreground" />
                </span>
             )}
             {displayProperties.owner && (
-               <span className="hidden sm:flex w-14 shrink-0">
+               <span className="hidden sm:flex w-[50px] shrink-0">
                   {initiative.owner ? (
                      <Avatar className="size-5">
                         <AvatarImage
@@ -383,18 +402,18 @@ function InitiativeRow({
                </span>
             )}
             {displayProperties.target && (
-               <span className="hidden md:block w-20 shrink-0 text-xs text-muted-foreground">
+               <span className="hidden md:block w-[100px] shrink-0 text-xs text-muted-foreground">
                   {initiative.target ?? '—'}
                </span>
             )}
             {displayProperties.projects && (
-               <span className="hidden md:flex items-center gap-1 w-16 shrink-0 text-xs text-muted-foreground">
+               <span className="hidden md:flex items-center gap-1 w-[59px] shrink-0 text-xs text-muted-foreground">
                   <BadgeCheck className="size-3.5 text-violet-400" />
                   {completed} / {projects.length}
                </span>
             )}
             {displayProperties.health && (
-               <span className="hidden xl:flex items-center gap-1.5 w-28 shrink-0 text-xs text-muted-foreground">
+               <span className="hidden xl:flex items-center gap-1.5 w-[108px] shrink-0 text-xs text-muted-foreground">
                   <span
                      className={cn(
                         'size-3.5 rounded-full border-2 shrink-0',
@@ -410,7 +429,7 @@ function InitiativeRow({
                </span>
             )}
             {displayProperties.activeProjects && (
-               <span className="hidden xl:block w-24 shrink-0">
+               <span className="hidden xl:block w-[98px] shrink-0">
                   <ActiveProjectDots initiative={initiative} />
                </span>
             )}
@@ -423,10 +442,10 @@ function InitiativeRow({
 
 export default function Initiatives() {
    const { orgId } = useParams<{ orgId: string }>();
-   const [tab, setTab] = useQueryState('tab', parseAsStringLiteral(TABS).withDefault('active'));
+   const [tab] = useQueryState('tab', parseAsStringLiteral(INITIATIVE_TABS).withDefault('active'));
    const { filters } = useInitiativesFilterStore();
    const { grouping, ordering, displayProperties } = useInitiativesDisplayStore();
-   const [showPanel, setShowPanel] = useState(true);
+   const openPanel = useRightPanelStore((state) => state.openPanel);
    const allInitiatives = useWorkspaceStore((s) => s.initiatives);
    const loaded = useWorkspaceStore((s) => s.loaded);
    const creating = useInlineInitiativeStore((s) => s.creating);
@@ -470,59 +489,28 @@ export default function Initiatives() {
    return (
       <div className="w-full h-full flex overflow-hidden">
          <div className="flex-1 min-w-0 h-full overflow-y-auto">
-            <div className="flex items-center justify-between px-6 pt-3 pb-2 sticky top-0 bg-background z-10">
-               <div className="flex items-center gap-1.5">
-                  {TAB_ITEMS.map((item) => (
-                     <button
-                        key={item.value}
-                        onClick={() => setTab(item.value)}
-                        className={cn(
-                           'px-2.5 py-1 rounded-md border text-xs font-medium transition-colors',
-                           tab === item.value
-                              ? 'bg-accent border-transparent'
-                              : 'text-muted-foreground hover:bg-accent/50'
-                        )}
-                     >
-                        {item.label}
-                     </button>
-                  ))}
-               </div>
-               <div className="flex items-center gap-1">
-                  <InitiativesFilter />
-                  <InitiativesDisplayOptions />
-                  <Button
-                     size="xs"
-                     variant={showPanel ? 'secondary' : 'ghost'}
-                     onClick={() => setShowPanel((value) => !value)}
-                     aria-label="Toggle side panel"
-                  >
-                     <PanelRight className="size-4" />
-                  </Button>
-               </div>
-            </div>
-
-            <div className="flex items-center gap-2 px-6 py-1.5 text-xs text-muted-foreground border-b">
-               <span className="flex-1">Name</span>
+            <div className="flex h-8 pl-[52px] pr-[34px] items-center gap-3 text-xs font-[450] leading-[15px] text-[var(--table-header-foreground)]">
+               <span className="flex-1 pl-1.5">Name</span>
                {showStatus && displayProperties.status && (
                   <span className="hidden md:block w-28 shrink-0">Status</span>
                )}
                {displayProperties.priority && (
-                  <span className="hidden sm:block w-16 shrink-0">Priority</span>
+                  <span className="hidden sm:block w-[56px] shrink-0">Priority</span>
                )}
                {displayProperties.owner && (
-                  <span className="hidden sm:block w-14 shrink-0">Owner</span>
+                  <span className="hidden sm:block w-[50px] shrink-0">Owner</span>
                )}
                {displayProperties.target && (
-                  <span className="hidden md:block w-20 shrink-0">Target</span>
+                  <span className="hidden md:block w-[100px] shrink-0">Target</span>
                )}
                {displayProperties.projects && (
-                  <span className="hidden md:block w-16 shrink-0">Projects</span>
+                  <span className="hidden md:block w-[59px] shrink-0">Projects</span>
                )}
                {displayProperties.health && (
-                  <span className="hidden xl:block w-28 shrink-0">Health</span>
+                  <span className="hidden xl:block w-[108px] shrink-0">Health</span>
                )}
                {displayProperties.activeProjects && (
-                  <span className="hidden xl:block w-24 shrink-0">Active Projects</span>
+                  <span className="hidden xl:block w-[98px] shrink-0">Active Projects</span>
                )}
             </div>
 
@@ -587,7 +575,7 @@ export default function Initiatives() {
                ))
             )}
          </div>
-         {showPanel && <InitiativesSidePanel initiatives={displayed} />}
+         {openPanel === 'initiatives-breakdown' && <InitiativesSidePanel initiatives={displayed} />}
       </div>
    );
 }

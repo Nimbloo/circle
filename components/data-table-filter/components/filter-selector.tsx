@@ -149,7 +149,9 @@ function __FilterSelector<TData>({
       <PopoverContent
         align="start"
         side="bottom"
-        className="w-fit p-0 origin-(--radix-popover-content-transform-origin)"
+        sideOffset={5}
+        className="w-[238px] rounded-xl border-[var(--popover-border)] bg-popover p-0 origin-(--radix-popover-content-transform-origin)"
+        style={{ boxShadow: 'var(--popover-shadow)' }}
       >
         {content}
       </PopoverContent>

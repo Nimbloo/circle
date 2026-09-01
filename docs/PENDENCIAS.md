@@ -13,12 +13,55 @@ Estado em **2026-09-01**, sobre a `develop` (v0.21.0).
 
 ## Operacional (envelhece rápido)
 
-**A `develop` está 7 commits à frente da `main`.** O `package.json` já está em `0.21.0`
-e a última tag é `v0.20.0`. Está parado em produção, entre outras coisas, o **conserto de
-um crash**: a página de Cycles estourava `ReferenceError` porque `teamId` era usado num
-seletor do zustand antes da declaração.
+### Paridade visual com o Linear — [#65](https://github.com/Nimbloo/circle/issues/65)
 
-Para promover: PR `develop → main`. O CI cria tag e release; o ArgoCD faz o rollout.
+Implementada nos commits da issue #65, a partir da `develop` atualizada. O trabalho
+cobriu dez lotes: tokens e shell, sidebar, headers, listas e boards, superfícies de
+workspace, detalhes editoriais, Inbox/Cycles, Settings, overlays e hardening
+responsivo/acessível. Não houve mudança de API, schema ou contrato.
+
+A revisão independente final encontrou e fechou lacunas que a primeira passada visual
+não capturou: sidebar indisponível em alguns headers móveis, properties de
+issue/project/initiative inacessíveis abaixo do breakpoint desktop, regressão nas
+preferências persistidas de Projects, `<main>` aninhado no detalhe de issue e um
+controle interativo inválido dentro do link de projeto da initiative. Os testes que
+congelavam listas de classes Tailwind foram removidos; comportamento de store e
+semântica HTML agora têm testes renderizados.
+
+Validação feita em 01/09/2026:
+
+- comparação lado a lado com o Linear autenticado em `linear.app/nimbloo`, incluindo
+  medidas de eixos, larguras, alturas, raios e espaçamentos nas superfícies principais;
+- rotas principais e todos os grupos de Settings em `390×844`, `768×1024`,
+  `1280×800`, `1440×900` e desktop amplo (`1718 px`);
+- temas Light, Pure Light, Dark, Magic Blue, Classic Dark e Custom, com restauração da
+  preferência original após a auditoria;
+- teclado e acessibilidade: foco visível, Space/Enter/Escape, focus trap dos dialogs,
+  nomes acessíveis em botões de ícone, switches e comboboxes, além de
+  `prefers-reduced-motion`;
+- auditoria automatizada em `390×844`: sidebar e drawers de properties abriram nas
+  quatro rotas críticas, com close visível, focus trap, zero botão sem nome, um único
+  landmark `main` e nenhum `main` aninhado. Em `1440×900`, houve um único trigger
+  visual por header e os três asides editoriais permaneceram visíveis;
+- `pnpm typecheck`, `pnpm lint`, 59 arquivos/343 testes e `pnpm build` passaram. A build
+  manteve apenas o warning preexistente de serialização de strings grandes no cache do
+  webpack; não houve erro de compilação.
+
+Divergências intencionais: o conteúdo continua vindo dos dados reais do Circle; não
+foram inventadas ações só para imitar o benchmark. Em
+`/settings/project-statuses`, o título permanece **Issue statuses** porque a tela edita
+o catálogo de status de issues existente — chamá-la de Project statuses seria
+semanticamente incorreto. As variantes de tema próprias do Circle foram preservadas;
+o Linear é o benchmark de composição, densidade e interação, não uma razão para apagar
+preferências do produto.
+
+**A `develop` contém mudanças ainda não promovidas para a `main`, além desta entrega.**
+O `package.json` já está em `0.21.0` e a última tag é `v0.20.0`. Está parado em
+produção, entre outras coisas, o **conserto de um crash**: a página de Cycles estourava
+`ReferenceError` porque `teamId` era usado num seletor do zustand antes da declaração.
+
+Para entregar a #65: PR da branch da issue para `develop`. Depois, para promover o
+conjunto: PR `develop → main`. O CI cria tag e release; o ArgoCD faz o rollout.
 
 **`AGENTS.md` e `.agents/skills/` não estão rastreados nem ignorados.** Apareceram em
 01/09 09:45 — é o guia do projeto para o Codex, espelhando o `CLAUDE.md`. Enquanto ficam

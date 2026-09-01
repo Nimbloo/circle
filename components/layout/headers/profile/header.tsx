@@ -1,10 +1,16 @@
 'use client';
 
 import { IssueFilterTrigger } from '@/components/common/issues/issue-filter-trigger';
+import {
+   HeaderActions,
+   HeaderGroup,
+   HeaderTitle,
+   LocationBar,
+   ViewBar,
+} from '@/components/layout/header-primitives';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { SidebarTrigger } from '@/components/ui/sidebar';
 import { User } from '@/data/users';
 import { cn } from '@/lib/utils';
 import { useIssuesStore } from '@/store/issues-store';
@@ -105,7 +111,7 @@ function HeaderSearch() {
             variant="ghost"
             size="icon"
             onClick={toggleSearch}
-            className="h-8 w-8"
+            className="size-7"
             aria-label="Search"
          >
             <SearchIcon className="h-4 w-4" />
@@ -128,9 +134,8 @@ export default function Header({ member }: { member: User }) {
 
    return (
       <>
-         <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">
-            <div className="flex items-center gap-2 min-w-0">
-               <SidebarTrigger className="" />
+         <LocationBar>
+            <HeaderGroup>
                <div className="flex items-center gap-1.5 text-sm min-w-0">
                   <Link
                      href={`/${orgId}/members`}
@@ -143,21 +148,21 @@ export default function Header({ member }: { member: User }) {
                      <AvatarImage src={member.avatarUrl || undefined} alt={member.name} />
                      <AvatarFallback>{member.name[0]}</AvatarFallback>
                   </Avatar>
-                  <span className="font-medium truncate">{member.name}</span>
+                  <HeaderTitle>{member.name}</HeaderTitle>
                </div>
-            </div>
-            <div className="flex items-center gap-2">
+            </HeaderGroup>
+            <HeaderActions>
                <HeaderSearch />
-            </div>
-         </div>
-         <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">
+            </HeaderActions>
+         </LocationBar>
+         <ViewBar>
             <div className="flex items-center gap-3">
                <ProfileTabs />
-               <span className="text-sm text-muted-foreground hidden sm:inline">
+               <span className="hidden text-xs text-muted-foreground sm:inline">
                   {count} {count === 1 ? 'issue' : 'issues'}
                </span>
             </div>
-            <div className="flex items-center gap-1">
+            <HeaderActions>
                <IssueFilterTrigger />
                <Button
                   size="xs"
@@ -178,8 +183,8 @@ export default function Header({ member }: { member: User }) {
                   <PanelRight className="size-4" />
                </Button>
                <DisplayOptions />
-            </div>
-         </div>
+            </HeaderActions>
+         </ViewBar>
       </>
    );
 }

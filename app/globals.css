@@ -4,7 +4,7 @@
 
 @custom-variant dark (&:is(.dark *));
 
-@theme {
+@theme inline {
    --font-sans: var(--font-inter);
    --font-mono: var(--font-geist-mono);
 }
@@ -15,6 +15,19 @@
    --card-foreground: #202124;
    --popover: #ffffff;
    --popover-foreground: #202124;
+   --popover-border: #dedfe3;
+   --popover-shadow:
+      rgb(0 0 0 / 0.12) 0 3px 8px, rgb(0 0 0 / 0.1) 0 2px 5px, rgb(0 0 0 / 0.08) 0 1px 1px;
+   --segmented-control-active: #eceef1;
+   --filter-bar: #f6f7f8;
+   --table-header-foreground: #777b82;
+   --online-indicator: #00a86b;
+   --review-open: #1a7f37;
+   --review-merged: #8250df;
+   --review-closed: #d1242f;
+   --cycle-started: #ca8a04;
+   --media-overlay-background: #090a0b;
+   --media-overlay-foreground: #ffffff;
    /* Acento índigo do Linear (#5e6ad2) — botão primário, seleção, foco. */
    --primary: #5e6ad2;
    --primary-foreground: #ffffff;
@@ -46,27 +59,41 @@
    --background: #ffffff;
    --foreground: #202124;
    --container: #ffffff;
+   --card-shadow: rgb(0 0 0 / 0.08) 0 0 0 1px, rgb(0 0 0 / 0.14) 0 0.5px 1px 1px;
 }
 
 .dark {
    /* ---- Bench de cores Linear — tema DARK (default) ---- */
-   --background: #0e0f11;
-   --foreground: #f7f8f8;
-   --card: #16171a;
-   --card-foreground: #f7f8f8;
-   --popover: #1a1b1e;
+   --background: lch(2.595 0.4 272);
+   --foreground: lch(100 0 272);
+   --card: lch(9.232 0.85 272);
+   --card-foreground: lch(100 0 272);
+   --popover: lch(12.72 0.85 272);
    --popover-foreground: #f7f8f8;
+   --popover-border: lch(21.36 1.93 272);
+   --popover-shadow:
+      lch(0 0 0 / 0.125) 0 3px 8px, lch(0 0 0 / 0.125) 0 2px 5px, lch(0 0 0 / 0.125) 0 1px 1px;
+   --segmented-control-active: lch(23.906 1.429 272);
+   --filter-bar: lch(9.345 0.85 272);
+   --table-header-foreground: lch(61.803 1.2 272);
+   --online-indicator: #00cc66;
+   --review-open: #3fb950;
+   --review-merged: #a371f7;
+   --review-closed: #f85149;
+   --cycle-started: #facc15;
+   --media-overlay-background: #090a0b;
+   --media-overlay-foreground: #ffffff;
    --primary: #5e6ad2;
    --primary-foreground: #ffffff;
-   --secondary: #26272b;
+   --secondary: lch(10.149 0.689 272);
    --secondary-foreground: #eceef1;
-   --muted: #1c1d20;
+   --muted: lch(9.232 0.85 272);
    --muted-foreground: #8a8f98;
-   --accent: #26272b;
+   --accent: lch(13.845 1.3 272);
    --accent-foreground: #f7f8f8;
    --destructive: #e5484d;
    --destructive-foreground: #ffffff;
-   --border: #23252a;
+   --border: lch(9.84 1.48 272);
    --input: #2a2b2f;
    --ring: #5e6ad2;
    --chart-1: oklch(0.488 0.243 264.376);
@@ -74,15 +101,16 @@
    --chart-3: oklch(0.769 0.188 70.08);
    --chart-4: oklch(0.627 0.265 303.9);
    --chart-5: oklch(0.645 0.246 16.439);
-   --sidebar: #0b0c0e;
+   --sidebar: lch(2.595 0.4 272);
    --sidebar-foreground: #d0d3d9;
    --sidebar-primary: #5e6ad2;
    --sidebar-primary-foreground: #ffffff;
-   --sidebar-accent: #1b1c1f;
+   --sidebar-accent: lch(13.845 1.3 272);
    --sidebar-accent-foreground: #f7f8f8;
-   --sidebar-border: #1a1b1e;
+   --sidebar-border: lch(9.84 1.48 272);
    --sidebar-ring: #5e6ad2;
-   --container: #0b0c0e;
+   --container: lch(5.52 0.4 272);
+   --card-shadow: lch(100 0 0 / 0.048) 0 0 0 1px, lch(0 0 0 / 0.3) 0 0.5px 1px 1px;
 }
 
 @theme inline {
@@ -102,6 +130,8 @@
    --color-accent-foreground: var(--accent-foreground);
    --color-destructive: var(--destructive);
    --color-destructive-foreground: var(--destructive-foreground);
+   --color-media-overlay-background: var(--media-overlay-background);
+   --color-media-overlay-foreground: var(--media-overlay-foreground);
    --color-border: var(--border);
    --color-input: var(--input);
    --color-ring: var(--ring);
@@ -266,4 +296,15 @@ html[data-pointer-cursors='true'] label[for] {
 html[data-underline-links='true'] .prose a[href],
 html[data-underline-links='true'] a[href]:not([role='button']):not(.no-underline) {
    text-decoration: underline;
+}
+
+@media (prefers-reduced-motion: reduce) {
+   *,
+   *::before,
+   *::after {
+      scroll-behavior: auto !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+   }
 }

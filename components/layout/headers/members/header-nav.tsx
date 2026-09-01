@@ -1,19 +1,29 @@
 'use client';
 
-import { SidebarTrigger } from '@/components/ui/sidebar';
+import { InvitePanel } from '@/components/common/members/invite-panel';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import {
+   HeaderActions,
+   HeaderGroup,
+   HeaderTitle,
+   LocationBar,
+} from '@/components/layout/header-primitives';
+import { Filter } from './filter';
 
 export default function HeaderNav() {
    const users = useWorkspaceStore((s) => s.users);
    return (
-      <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">
-         <div className="flex items-center gap-2">
-            <SidebarTrigger className="" />
-            <div className="flex items-center gap-1">
-               <span className="text-sm font-medium">Members</span>
-               <span className="text-xs bg-accent rounded-md px-1.5 py-1">{users.length}</span>
-            </div>
-         </div>
-      </div>
+      <LocationBar>
+         <HeaderGroup className="gap-2 pl-2.5">
+            <HeaderTitle>Members</HeaderTitle>
+            <span className="text-xs font-[450] leading-[normal] text-muted-foreground">
+               {users.length}
+            </span>
+         </HeaderGroup>
+         <HeaderActions className="gap-1.5 pr-0.5">
+            <Filter />
+            <InvitePanel />
+         </HeaderActions>
+      </LocationBar>
    );
 }

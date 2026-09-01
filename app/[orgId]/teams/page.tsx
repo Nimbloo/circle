@@ -4,7 +4,7 @@ import MainLayout from '@/components/layout/main-layout';
 
 export default function TeamsPage() {
    return (
-      <MainLayout header={<Header />} headersNumber={1}>
+      <MainLayout header={<Header />}>
          <Teams />
       </MainLayout>
    );

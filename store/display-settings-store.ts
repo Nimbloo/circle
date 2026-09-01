@@ -22,12 +22,12 @@ export const DISPLAY_PROPERTIES: { key: DisplayPropertyKey; label: string }[] = 
    { key: 'status', label: 'Status' },
    { key: 'assignee', label: 'Assignee' },
    { key: 'priority', label: 'Priority' },
-   { key: 'labels', label: 'Labels' },
    { key: 'project', label: 'Project' },
-   { key: 'estimate', label: 'Estimate' },
    { key: 'dueDate', label: 'Due date' },
-   { key: 'created', label: 'Created' },
    { key: 'cycle', label: 'Cycle' },
+   { key: 'labels', label: 'Labels' },
+   { key: 'estimate', label: 'Estimate' },
+   { key: 'created', label: 'Created' },
 ];
 
 const DEFAULT_DISPLAY_PROPERTIES: Record<DisplayPropertyKey, boolean> = {

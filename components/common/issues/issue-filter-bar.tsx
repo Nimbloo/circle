@@ -32,7 +32,7 @@ export function IssueFilterBar() {
    if (filters.length === 0) return null;
 
    return (
-      <div className="w-full px-6 py-2 border-b border-border/60 bg-container">
+      <div className="ml-2 mr-2.5 flex h-[46px] w-auto items-center rounded-lg border bg-[var(--filter-bar)] p-2.5">
          <DataTableFilter
             columns={columns}
             filters={filters}

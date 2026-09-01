@@ -162,7 +162,7 @@ export default function Profile() {
                   description="PNG, JPEG or WebP. Resized to a square."
                   trailing={
                      <div className="flex items-center gap-3">
-                        <Avatar className="size-9">
+                        <Avatar className="size-8">
                            <AvatarImage src={avatarSrc || undefined} alt={me.name} />
                            <AvatarFallback>{me.name[0]}</AvatarFallback>
                         </Avatar>
@@ -209,7 +209,7 @@ export default function Profile() {
                            if (e.key === 'Enter') e.currentTarget.blur();
                         }}
                         disabled={saving}
-                        className="h-8 w-44"
+                        className="h-8 w-[180px]"
                      />
                   }
                />
@@ -226,14 +226,14 @@ export default function Profile() {
                            if (e.key === 'Enter') e.currentTarget.blur();
                         }}
                         disabled={saving}
-                        className="h-8 w-44"
+                        className="h-8 w-[180px]"
                      />
                   }
                />
                <SettingsRow
                   title="Username"
                   description="One word, like a nickname or first name"
-                  trailing={<Input defaultValue={me.slug} disabled className="h-8 w-44" />}
+                  trailing={<Input defaultValue={me.slug} disabled className="h-8 w-[180px]" />}
                />
             </SettingsCard>
          </SettingsSection>

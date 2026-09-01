@@ -6,9 +6,15 @@ import {
    useMyIssuesTab,
 } from '@/components/common/my-issues/use-my-issues';
 import { IssueFilterTrigger } from '@/components/common/issues/issue-filter-trigger';
+import {
+   HeaderActions,
+   HeaderGroup,
+   HeaderTitle,
+   LocationBar,
+   ViewBar,
+} from '@/components/layout/header-primitives';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { SidebarTrigger } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
@@ -47,12 +53,11 @@ function HeaderNav() {
    }, [isSearchOpen, closeSearch, searchQuery]);
 
    return (
-      <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">
-         <div className="flex items-center gap-2">
-            <SidebarTrigger />
-            <span className="text-sm font-medium">My issues</span>
-         </div>
-         <div className="flex items-center gap-2">
+      <LocationBar>
+         <HeaderGroup>
+            <HeaderTitle>My issues</HeaderTitle>
+         </HeaderGroup>
+         <HeaderActions>
             {isSearchOpen ? (
                <div ref={searchContainerRef} className="relative flex items-center w-64">
                   <SearchIcon className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
@@ -77,7 +82,7 @@ function HeaderNav() {
                      variant="ghost"
                      size="icon"
                      onClick={toggleSearch}
-                     className="h-8 w-8"
+                     className="size-7"
                      aria-label="Search"
                   >
                      <SearchIcon className="h-4 w-4" />
@@ -85,8 +90,8 @@ function HeaderNav() {
                   <Notifications />
                </>
             )}
-         </div>
-      </div>
+         </HeaderActions>
+      </LocationBar>
    );
 }
 
@@ -101,7 +106,7 @@ function HeaderOptions() {
    const count = scopeMyIssues(issues, tab, meId, subscribedIds).length;
 
    return (
-      <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">
+      <ViewBar>
          <div className="flex items-center gap-3">
             <div className="flex items-center gap-1">
                {MY_ISSUES_TAB_ITEMS.map((item) => (
@@ -120,11 +125,11 @@ function HeaderOptions() {
                   </button>
                ))}
             </div>
-            <span className="text-sm text-muted-foreground hidden sm:inline">
+            <span className="hidden text-xs text-muted-foreground sm:inline">
                {count} {count === 1 ? 'issue' : 'issues'}
             </span>
          </div>
-         <div className="flex items-center gap-1">
+         <HeaderActions>
             <IssueFilterTrigger />
             <Button
                size="xs"
@@ -143,8 +148,8 @@ function HeaderOptions() {
                <PanelRight className="size-4" />
             </Button>
             <DisplayOptions />
-         </div>
-      </div>
+         </HeaderActions>
+      </ViewBar>
    );
 }
 

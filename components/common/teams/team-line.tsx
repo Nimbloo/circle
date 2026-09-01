@@ -27,23 +27,25 @@ export default function TeamLine({ team }: TeamLineProps) {
       <TeamContextMenu team={team}>
          <Link
             href={`/${orgId}/team/${team.id}/overview`}
-            className="w-full flex items-center py-2.5 px-6 border-b hover:bg-sidebar/50 border-muted-foreground/5 text-sm"
+            className="h-12 pl-[18px] pr-[34px] flex w-full items-center text-[13px] hover:bg-accent/40"
          >
             {/* Name + identifier */}
-            <div className="flex-1 min-w-0 flex items-center gap-2.5">
-               <span className="inline-flex size-6 bg-muted/50 items-center justify-center rounded shrink-0 text-sm">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+               <span className="inline-flex size-[18px] shrink-0 items-center justify-center rounded bg-muted/50 text-xs">
                   {team.icon}
                </span>
-               <span className="font-medium truncate">{team.name}</span>
-               <span className="text-xs text-muted-foreground uppercase tracking-wide shrink-0">
-                  {team.id}
+               <span className="flex min-w-0 items-center gap-3">
+                  <span className="truncate font-medium leading-4">{team.name}</span>
+                  <span className="shrink-0 font-medium leading-4 text-muted-foreground/50">
+                     {team.id}
+                  </span>
                </span>
             </div>
 
             {displayProperties.membership && (
-               <div className="hidden sm:block w-[110px] shrink-0">
+               <div className="hidden w-[96px] shrink-0 sm:block">
                   {team.joined && (
-                     <span className="inline-flex items-center gap-1 text-xs border rounded-md px-1.5 py-0.5 text-muted-foreground">
+                     <span className="box-border inline-flex h-[19px] items-center gap-1 rounded border px-[3px] text-xs font-medium leading-[normal] text-muted-foreground">
                         <Check className="size-3" />
                         Joined
                      </span>
@@ -63,12 +65,12 @@ export default function TeamLine({ team }: TeamLineProps) {
             )}
 
             {displayProperties.members && (
-               <div className="w-[150px] shrink-0 flex items-center gap-1.5">
+               <div className="flex w-[126px] shrink-0 items-center gap-1.5">
                   {team.members.length > 0 && (
                      <>
-                        <span className="flex -space-x-1.5">
+                        <span className="flex -space-x-2">
                            {team.members.slice(0, 6).map((member) => (
-                              <Avatar key={member.id} className="size-5 border-2 border-container">
+                              <Avatar key={member.id} className="size-4 border border-container">
                                  <AvatarImage
                                     src={member.avatarUrl || undefined}
                                     alt={member.name}
@@ -84,7 +86,7 @@ export default function TeamLine({ team }: TeamLineProps) {
             )}
 
             {displayProperties.cycle && (
-               <div className="hidden md:flex w-[80px] shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+               <div className="hidden w-[88px] shrink-0 items-center gap-1.5 text-xs text-muted-foreground md:flex">
                   {cycles.length > 0 && (
                      <>
                         <Play className="size-3.5" />
@@ -95,7 +97,7 @@ export default function TeamLine({ team }: TeamLineProps) {
             )}
 
             {displayProperties.projects && (
-               <div className="hidden sm:flex w-[80px] shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+               <div className="hidden w-[154px] shrink-0 items-center gap-1.5 text-xs text-muted-foreground sm:flex">
                   <Box className="size-3.5" />
                   {uniqueProjects}
                </div>

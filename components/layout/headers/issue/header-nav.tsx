@@ -1,11 +1,19 @@
 'use client';
 
 import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
+import { HeaderActions, HeaderGroup, LocationBar } from '@/components/layout/header-primitives';
 import { Button } from '@/components/ui/button';
-import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { ChevronDown, ChevronRight, ChevronUp, MoreHorizontal, Star } from 'lucide-react';
+import {
+   Bell,
+   BellOff,
+   ChevronDown,
+   ChevronRight,
+   ChevronUp,
+   MoreHorizontal,
+   Star,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
@@ -20,6 +28,10 @@ export default function HeaderNav() {
 
    const index = issues.findIndex((candidate) => candidate.identifier === issueId);
    const issue = index >= 0 ? issues[index] : undefined;
+   const subscribed = useWorkspaceStore((s) =>
+      issue ? (s.me?.subscribedIssueIds.includes(issue.id) ?? false) : false
+   );
+   const toggleSubscription = useWorkspaceStore((s) => s.toggleSubscription);
    // time real da issue (fallback p/ o 1º só enquanto o workspace ainda hidrata)
    const team = teams.find((t) => t.id === issue?.teamId) ?? teams[0];
    const cycle = useWorkspaceStore((s) =>
@@ -33,24 +45,23 @@ export default function HeaderNav() {
    if (!team) return null;
 
    return (
-      <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10 gap-4">
-         <div className="flex items-center gap-2 min-w-0">
-            <SidebarTrigger />
+      <LocationBar className="gap-4">
+         <HeaderGroup>
             <Link
                href={`/${orgId}/team/${team.id}/overview`}
-               className="flex items-center gap-1.5 shrink-0 hover:opacity-80"
+               className="flex shrink-0 items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground"
             >
                <div className="inline-flex size-5 bg-muted/50 items-center justify-center rounded shrink-0 text-xs">
                   {team.icon}
                </div>
-               <span className="text-sm font-medium hidden md:inline">{team.name}</span>
+               <span className="hidden text-[13px] md:inline">{team.name}</span>
             </Link>
             {cycle && (
                <>
                   <ChevronRight className="size-3.5 text-muted-foreground shrink-0" />
                   <Link
                      href={`/${orgId}/team/${team.id}/cycles`}
-                     className="hidden sm:flex items-center gap-1.5 shrink-0 text-sm text-muted-foreground hover:text-foreground"
+                     className="hidden shrink-0 items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground sm:flex"
                   >
                      <CyclePlayIcon className="size-3.5" />
                      {cycle.name}
@@ -59,7 +70,7 @@ export default function HeaderNav() {
             )}
             <ChevronRight className="size-3.5 text-muted-foreground shrink-0" />
             {issue && (
-               <span className="text-sm min-w-0 truncate">
+               <span className="min-w-0 truncate text-[13px]">
                   <span className="font-medium text-muted-foreground mr-1.5">
                      {issue.identifier}
                   </span>
@@ -68,9 +79,21 @@ export default function HeaderNav() {
             )}
             <Star className="size-3.5 text-muted-foreground shrink-0" />
             <MoreHorizontal className="size-3.5 text-muted-foreground shrink-0" />
-         </div>
+         </HeaderGroup>
 
-         <div className="flex items-center gap-1 shrink-0">
+         <HeaderActions>
+            {issue && (
+               <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-6"
+                  onClick={() => toggleSubscription(issue.id)}
+                  aria-label={subscribed ? 'Unsubscribe' : 'Subscribe'}
+                  aria-pressed={subscribed}
+               >
+                  {subscribed ? <Bell className="size-3.5" /> : <BellOff className="size-3.5" />}
+               </Button>
+            )}
             {index >= 0 && (
                <span className="text-xs text-muted-foreground mr-1">
                   {index + 1} / {issues.length}
@@ -82,12 +105,10 @@ export default function HeaderNav() {
                className="size-6"
                disabled={!previousIssue}
                asChild={!!previousIssue}
+               aria-label="Previous issue"
             >
                {previousIssue ? (
-                  <Link
-                     href={`/${orgId}/issue/${previousIssue.identifier}`}
-                     aria-label="Previous issue"
-                  >
+                  <Link href={`/${orgId}/issue/${previousIssue.identifier}`}>
                      <ChevronUp className="size-4" />
                   </Link>
                ) : (
@@ -100,16 +121,17 @@ export default function HeaderNav() {
                className="size-6"
                disabled={!nextIssue}
                asChild={!!nextIssue}
+               aria-label="Next issue"
             >
                {nextIssue ? (
-                  <Link href={`/${orgId}/issue/${nextIssue.identifier}`} aria-label="Next issue">
+                  <Link href={`/${orgId}/issue/${nextIssue.identifier}`}>
                      <ChevronDown className="size-4" />
                   </Link>
                ) : (
                   <ChevronDown className="size-4" />
                )}
             </Button>
-         </div>
-      </div>
+         </HeaderActions>
+      </LocationBar>
    );
 }

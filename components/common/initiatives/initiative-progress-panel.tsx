@@ -9,7 +9,11 @@ import { useMemo, useState } from 'react';
 
 type BreakdownTab = 'health' | 'status' | 'teams' | 'leads';
 
-const PROGRESS_COLORS = { scope: '#95a2b3', started: '#f2c94c', completed: '#5e6ad2' };
+const PROGRESS_COLORS = {
+   scope: 'var(--muted-foreground)',
+   started: 'var(--chart-4)',
+   completed: 'var(--primary)',
+};
 
 /** Progress snapshot + Health/Status/Teams/Leads breakdown of an initiative. */
 export function InitiativeProgressPanel({ initiative }: { initiative: Initiative }) {
@@ -86,7 +90,7 @@ export function InitiativeProgressPanel({ initiative }: { initiative: Initiative
 
    return (
       <div className="flex flex-col gap-3">
-         <span className="text-sm font-medium">Progress</span>
+         <span className="text-[13px] font-medium leading-4">Progress</span>
          {progress.total === 0 ? (
             <p className="text-xs text-muted-foreground py-2">No progress history yet.</p>
          ) : (

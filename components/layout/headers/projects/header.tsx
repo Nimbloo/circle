@@ -1,9 +1,14 @@
 import HeaderNav from './header-nav';
+import { ViewBar } from '@/components/layout/header-primitives';
+import { ProjectsViewControls } from './projects-view-controls';
 
 export default function Header() {
    return (
-      <div className="w-full flex flex-col items-center">
+      <>
          <HeaderNav />
-      </div>
+         <ViewBar>
+            <ProjectsViewControls />
+         </ViewBar>
+      </>
    );
 }

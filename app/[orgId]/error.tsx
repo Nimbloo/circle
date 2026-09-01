@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { ErrorState } from '@/components/common/error-state';
 import { Button } from '@/components/ui/button';
 
 /**
@@ -21,14 +22,11 @@ export default function OrgError({
    }, [error]);
 
    return (
-      <div className="w-full h-full flex flex-col items-center justify-center gap-4 p-6 text-center bg-background">
-         <div className="flex flex-col gap-1.5">
-            <h2 className="text-lg font-semibold text-foreground">Algo deu errado</h2>
-            <p className="text-sm text-muted-foreground max-w-md">
-               Ocorreu um erro ao carregar esta página. Você pode tentar novamente.
-            </p>
-         </div>
-         <Button onClick={() => reset()}>Tentar de novo</Button>
-      </div>
+      <ErrorState
+         title="Não foi possível carregar esta página"
+         description="Ocorreu um erro inesperado. Tente novamente para recarregar o conteúdo."
+         action={<Button onClick={() => reset()}>Tentar de novo</Button>}
+         className="h-full min-h-0"
+      />
    );
 }

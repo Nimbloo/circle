@@ -1,8 +1,10 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { ViewBar } from '@/components/layout/header-primitives';
 import Link from 'next/link';
 import { useParams, usePathname } from 'next/navigation';
+import { AddTeamMemberButton } from '@/components/common/teams/add-team-member-button';
 
 const TEAM_TABS = [
    { label: 'Overview', segment: 'overview' },
@@ -15,8 +17,8 @@ export default function HeaderTabs() {
    const pathname = usePathname();
 
    return (
-      <div className="w-full flex justify-between items-center border-b py-1.5 px-6 h-10">
-         <div className="flex items-center gap-1">
+      <ViewBar className="pl-2 pr-2.5">
+         <div className="flex translate-y-[0.5px] items-center gap-2">
             {TEAM_TABS.map((tab) => {
                const href = `/${orgId}/team/${teamId}/${tab.segment}`;
                const isActive = pathname === href;
@@ -36,6 +38,11 @@ export default function HeaderTabs() {
                );
             })}
          </div>
-      </div>
+         {pathname.endsWith('/members') && (
+            <div className="mr-[34px] translate-y-[0.5px]">
+               <AddTeamMemberButton />
+            </div>
+         )}
+      </ViewBar>
    );
 }

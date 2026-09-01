@@ -16,14 +16,14 @@ type Row =
    | { kind: 'header'; group: IssueGroupDescriptor; count: number }
    | { kind: 'issue'; issue: Issue };
 
-const HEADER_H = 40; // group header (h-10)
-const ROW_H = 40; // IssueLine (h-10) — densidade Linear
+export const ISSUE_GROUP_HEADER_HEIGHT = 36;
+export const ISSUE_ROW_HEIGHT = 44;
 
 /**
  * List view VIRTUALIZADA (estilo Linear): achata [header, ...rows, header, ...] numa
  * lista única e só renderiza as linhas VISÍVEIS (@tanstack/react-virtual). Com centenas/
  * milhares de issues, o DOM fica constante (~janela + overscan) em vez de crescer linear —
- * scroll fluido e sem travar a main thread. Alturas fixas (40/44px) → sem medição.
+ * scroll fluido e sem travar a main thread. Alturas fixas (36/44px) → sem medição.
  * Headers NÃO são sticky aqui (simplicidade; o agrupamento segue visível ao rolar).
  */
 export function VirtualIssueList({ entries }: { entries: Entry[] }) {
@@ -41,12 +41,13 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
    const virtualizer = useVirtualizer({
       count: rows.length,
       getScrollElement: () => parentRef.current,
-      estimateSize: (i) => (rows[i].kind === 'header' ? HEADER_H : ROW_H),
+      estimateSize: (i) =>
+         rows[i].kind === 'header' ? ISSUE_GROUP_HEADER_HEIGHT : ISSUE_ROW_HEIGHT,
       overscan: 14,
    });
 
    return (
-      <div ref={parentRef} className="h-full overflow-y-auto">
+      <div ref={parentRef} className="h-full overflow-y-auto pr-[5px] [scrollbar-gutter:stable]">
          <div style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
             {virtualizer.getVirtualItems().map((vi) => {
                const row = rows[vi.index];
@@ -63,13 +64,12 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
                      }}
                   >
                      {row.kind === 'header' ? (
-                        <div
-                           className="w-full h-10 flex items-center px-6 gap-2 border-b border-border/40"
-                           style={{ backgroundColor: `${row.group.color}0d` }}
-                        >
+                        <div className="mx-2 flex h-9 items-center gap-2 rounded-lg bg-muted px-2">
                            {row.group.icon}
-                           <span className="text-sm font-medium">{row.group.name}</span>
-                           <span className="text-sm text-muted-foreground">{row.count}</span>
+                           <span className="text-[13px] font-medium">{row.group.name}</span>
+                           <span className="text-xs tabular-nums text-muted-foreground">
+                              {row.count}
+                           </span>
                         </div>
                      ) : (
                         // layoutId=false: sem animação de layout do framer-motion (brigaria

@@ -96,7 +96,7 @@ export function NavSettings() {
                         <SidebarMenuItem key={`${group.label}-${item.name}`}>
                            <SidebarMenuButton asChild isActive={isActive}>
                               <Link href={href}>
-                                 <item.icon className="size-4" />
+                                 <item.icon className="size-3.5" />
                                  <span>{item.name}</span>
                               </Link>
                            </SidebarMenuButton>

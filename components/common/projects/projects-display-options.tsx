@@ -13,6 +13,7 @@ import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import {
    PROJECT_DISPLAY_PROPERTIES,
+   type ProjectDisplayPropertyKey,
    ProjectsGrouping,
    ProjectsOrdering,
    ProjectsViewType,
@@ -45,10 +46,22 @@ const ORDERINGS: { value: ProjectsOrdering; label: string }[] = [
    { value: 'title', label: 'Title' },
 ];
 
+const DEFAULT_PROPERTY_VALUES: Record<ProjectDisplayPropertyKey, boolean> = {
+   milestones: false,
+   priority: true,
+   status: true,
+   health: true,
+   lead: true,
+   members: false,
+   targetDate: true,
+   issues: true,
+   labels: false,
+};
+
 function OptionRow({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
    return (
-      <div className="flex items-center justify-between gap-3 min-h-8">
-         <span className="text-sm">{label}</span>
+      <div className="flex h-7 w-full items-center justify-between gap-3">
+         <span className="text-xs text-muted-foreground">{label}</span>
          {children}
       </div>
    );
@@ -80,28 +93,42 @@ export function ProjectsDisplayOptions() {
       resetDisplaySettings,
    } = useProjectsDisplayStore();
    const viewType = viewTypes[tab];
+   const isDefault =
+      viewType === (tab === 'all' ? 'list' : 'timeline') &&
+      grouping === 'none' &&
+      ordering === 'start-date' &&
+      closedProjects === 'all' &&
+      !showEmptyGroups &&
+      Object.entries(DEFAULT_PROPERTY_VALUES).every(
+         ([key, enabled]) => displayProperties[key as ProjectDisplayPropertyKey] === enabled
+      );
 
    return (
       <Popover>
          <PopoverTrigger asChild>
-            <Button size="xs" variant="ghost" aria-label="Display options">
+            <Button size="xs" variant="ghost" className="size-7 p-0" aria-label="Display options">
                <SlidersHorizontal className="size-4" />
             </Button>
          </PopoverTrigger>
-         <PopoverContent align="end" className="w-[420px] p-0">
-            <div className="p-3 flex flex-col gap-3">
+         <PopoverContent
+            align="end"
+            sideOffset={5}
+            className="h-[406px] w-[332px] rounded-xl border-[var(--popover-border)] bg-popover p-0 pt-2"
+            style={{ boxShadow: 'var(--popover-shadow)' }}
+         >
+            <div className="flex h-[126px] flex-col gap-3 px-4 pb-3 pt-2">
                {/* View switcher */}
-               <div className="grid grid-cols-3 gap-2">
+               <div className="grid h-8 grid-cols-3 gap-0.5">
                   {VIEW_TYPES.map((view) => (
                      <button
                         key={view.value}
                         type="button"
                         onClick={() => setViewType(tab, view.value)}
                         className={cn(
-                           'flex items-center justify-center gap-1.5 h-9 rounded-full border text-sm transition-colors',
+                           'm-0.5 flex h-7 items-center justify-center gap-1.5 rounded-full text-xs transition-colors',
                            viewType === view.value
-                              ? 'bg-accent text-foreground border-border font-medium'
-                              : 'border-border/60 text-muted-foreground hover:text-foreground hover:bg-accent/40'
+                              ? 'bg-[var(--segmented-control-active)] font-medium text-foreground'
+                              : 'text-muted-foreground hover:bg-accent/40 hover:text-foreground'
                         )}
                      >
                         <view.icon className="size-4" />
@@ -124,7 +151,7 @@ export function ProjectsDisplayOptions() {
                         value={grouping}
                         onValueChange={(value) => setGrouping(value as ProjectsGrouping)}
                      >
-                        <SelectTrigger className="h-8 w-36 text-xs">
+                        <SelectTrigger className="h-7 w-36 text-xs">
                            <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -148,7 +175,7 @@ export function ProjectsDisplayOptions() {
                         value={ordering}
                         onValueChange={(value) => setOrdering(value as ProjectsOrdering)}
                      >
-                        <SelectTrigger className="h-8 w-36 text-xs">
+                        <SelectTrigger className="h-7 w-36 text-xs">
                            <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -161,15 +188,15 @@ export function ProjectsDisplayOptions() {
                      </Select>
                   </OptionRow>
                </div>
+            </div>
 
-               <div className="border-t -mx-3" />
-
+            <div className="flex h-[49px] items-center border-t px-4">
                <OptionRow label="Show closed projects">
                   <Select
                      value={closedProjects}
                      onValueChange={(value) => setClosedProjects(value as 'all' | 'hide')}
                   >
-                     <SelectTrigger className="h-8 w-36 text-xs">
+                     <SelectTrigger className="h-7 w-36 text-xs">
                         <SelectValue />
                      </SelectTrigger>
                      <SelectContent>
@@ -178,12 +205,12 @@ export function ProjectsDisplayOptions() {
                      </SelectContent>
                   </Select>
                </OptionRow>
+            </div>
 
-               <div className="border-t -mx-3" />
-
+            <div className="relative h-[221px] border-t px-4 py-2">
                {/* Per-view options */}
                <div className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium">
+                  <span className="text-xs font-medium">
                      {viewType === 'timeline'
                         ? 'Timeline options'
                         : viewType === 'board'
@@ -200,17 +227,17 @@ export function ProjectsDisplayOptions() {
                         </OptionRow>
                      </>
                   )}
-                  <OptionRow
-                     label={viewType === 'board' ? 'Show empty columns' : 'Show empty groups'}
-                  >
-                     <Switch checked={showEmptyGroups} onCheckedChange={setShowEmptyGroups} />
-                  </OptionRow>
+                  {viewType === 'board' && (
+                     <OptionRow label="Show empty columns">
+                        <Switch checked={showEmptyGroups} onCheckedChange={setShowEmptyGroups} />
+                     </OptionRow>
+                  )}
                </div>
 
                {/* Display properties */}
-               <div className="flex flex-col gap-2">
-                  <span className="text-sm text-muted-foreground">Display properties</span>
-                  <div className="flex flex-wrap gap-1.5">
+               <div className="mt-3 flex flex-col gap-2">
+                  <span className="text-xs text-muted-foreground">Display properties</span>
+                  <div className="flex flex-wrap gap-1">
                      {PROJECT_DISPLAY_PROPERTIES.map((property) => {
                         const enabled = displayProperties[property.key];
                         return (
@@ -219,7 +246,7 @@ export function ProjectsDisplayOptions() {
                               type="button"
                               onClick={() => toggleDisplayProperty(property.key)}
                               className={cn(
-                                 'px-2.5 h-7 rounded-full border text-xs transition-colors',
+                                 'h-6 rounded-md border px-2 text-xs transition-colors',
                                  enabled
                                     ? 'bg-accent text-foreground border-border'
                                     : 'border-border/60 text-muted-foreground hover:text-foreground'
@@ -231,16 +258,15 @@ export function ProjectsDisplayOptions() {
                      })}
                   </div>
                </div>
-            </div>
-
-            <div className="border-t px-3 py-2.5 flex items-center justify-between">
-               <button
-                  type="button"
-                  onClick={resetDisplaySettings}
-                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-               >
-                  Reset
-               </button>
+               {!isDefault && (
+                  <button
+                     type="button"
+                     onClick={resetDisplaySettings}
+                     className="absolute bottom-2 left-4 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                     Reset
+                  </button>
+               )}
             </div>
          </PopoverContent>
       </Popover>

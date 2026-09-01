@@ -1,47 +1,18 @@
 import React from 'react';
-import { cn } from '@/lib/utils';
 
 interface MainLayoutProps {
    children: React.ReactNode;
    header?: React.ReactNode;
-   headersNumber?: 1 | 2;
 }
 
-const isEmptyHeader = (header: React.ReactNode | undefined): boolean => {
-   if (!header) return true;
-
-   if (React.isValidElement(header) && header.type === React.Fragment) {
-      const props = header.props as { children?: React.ReactNode };
-
-      if (!props.children) return true;
-
-      if (Array.isArray(props.children) && props.children.length === 0) {
-         return true;
-      }
-   }
-
-   return false;
-};
-
-export default function MainLayout({ children, header, headersNumber = 2 }: MainLayoutProps) {
-   const height = {
-      1: 'h-[calc(100svh-40px)] lg:h-[calc(100svh-56px)]',
-      2: 'h-[calc(100svh-80px)] lg:h-[calc(100svh-96px)]',
-   };
+export default function MainLayout({ children, header }: MainLayoutProps) {
    // Frame interno per-página (header + área de scroll). O shell persistente
    // (SidebarProvider, AppSidebar, DataHydrator, CommandPalette) vive em
    // `app/[orgId]/layout.tsx` — assim não remonta a cada navegação.
    return (
-      <div className="lg:border lg:rounded-md overflow-hidden flex flex-col items-center justify-start bg-container h-full w-full">
-         {header}
-         <div
-            className={cn(
-               'overflow-auto w-full',
-               isEmptyHeader(header) ? 'h-full' : height[headersNumber as keyof typeof height]
-            )}
-         >
-            {children}
-         </div>
-      </div>
+      <main className="flex h-full w-full flex-col overflow-hidden bg-container lg:rounded-xl lg:border lg:border-border/60">
+         {header && <div className="shrink-0">{header}</div>}
+         <div className="min-h-0 w-full flex-1 overflow-auto">{children}</div>
+      </main>
    );
 }
