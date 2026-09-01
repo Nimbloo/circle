@@ -33,14 +33,18 @@ export default function CycleIssues({ cycleView }: CycleIssuesProps) {
    const { filters } = useFilterStore();
    const issues = useIssuesStore((s) => s.issues);
    const { openPanel } = useRightPanelStore();
-   // Chamada DENTRO do seletor: assinar a funcao nao re-renderiza (referencia estavel).
-   const currentCycle = useWorkspaceStore((s) => s.getCurrentCycle(teamId));
-   const upcomingCycle = useWorkspaceStore((s) => s.getUpcomingCycle(teamId));
    const displayOrderedStatus = useDisplayOrderedStatuses();
 
    // Escopa pelo time da rota — senão pega o ciclo current/upcoming de QUALQUER time
    // (em workspace multi-time, /team/B/cycle/active mostrava o ciclo do time A).
+   // DECLARADO ANTES dos seletores de propósito: o zustand executa o seletor de forma
+   // SÍNCRONA durante o render, então usar `teamId` acima daqui estoura ReferenceError
+   // (temporal dead zone) — o build passa e a página quebra só em runtime.
    const { teamId } = useParams<{ teamId?: string }>();
+
+   // Chamada DENTRO do seletor: assinar a função não re-renderiza (referência estável).
+   const currentCycle = useWorkspaceStore((s) => s.getCurrentCycle(teamId));
+   const upcomingCycle = useWorkspaceStore((s) => s.getUpcomingCycle(teamId));
    const cycle = cycleView === 'active' ? currentCycle : upcomingCycle;
 
    const isSearching = isSearchOpen && searchQuery.trim() !== '';

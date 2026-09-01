@@ -330,10 +330,12 @@ function InitiativeRow({
    // Deriva da fatia assinada: o getter devolve array NOVO a cada leitura, entao nao
    // pode ir dentro do seletor (referencia nova = re-render infinito).
    const allProjects = useWorkspaceStore((s) => s.projects);
-   const countCompletedProjects = useWorkspaceStore((s) => s.countCompletedProjects);
    const linkedIds = new Set(initiative.projectIds);
    const projects = allProjects.filter((p) => linkedIds.has(p.id));
-   const { completed } = countCompletedProjects(initiative.id);
+   // Mesma regra do `countCompletedProjects` do store, derivada da fatia ja assinada.
+   const completed = projects.filter(
+      (p) => p.status.category === 'completed' || p.percentComplete >= 100
+   ).length;
 
    return (
       <InitiativeContextMenu initiative={initiative}>

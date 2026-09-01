@@ -27,7 +27,9 @@ export function LabelSelector({ selectedLabels, onChange }: LabelSelectorProps) 
    const [open, setOpen] = useState<boolean>(false);
 
    const labels = useLabels();
-   const filterByLabel = useIssuesStore((s) => s.filterByLabel);
+   // Conta derivada da fatia assinada: assinar `filterByLabel` (funcao, referencia
+   // estavel) deixaria o contador do dropdown parado quando as issues mudam.
+   const allIssues = useIssuesStore((s) => s.issues);
 
    const handleLabelToggle = (label: LabelInterface) => {
       const isSelected = selectedLabels.some((l) => l.id === label.id);
@@ -98,7 +100,11 @@ export function LabelSelector({ selectedLabels, onChange }: LabelSelectorProps) 
                                  </div>
                                  {isSelected && <CheckIcon size={16} className="ml-auto" />}
                                  <span className="text-muted-foreground text-xs">
-                                    {filterByLabel(label.id).length}
+                                    {
+                                       allIssues.filter((i) =>
+                                          i.labels.some((l) => l.id === label.id)
+                                       ).length
+                                    }
                                  </span>
                               </CommandItem>
                            );

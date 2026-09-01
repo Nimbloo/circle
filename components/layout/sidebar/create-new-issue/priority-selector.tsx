@@ -27,7 +27,9 @@ export function PrioritySelector({ priority, onChange }: PrioritySelectorProps) 
    const [value, setValue] = useState<string>(priority.id);
 
    const priorities = usePriorities();
-   const filterByPriority = useIssuesStore((s) => s.filterByPriority);
+   // Conta derivada da fatia assinada: assinar `filterByPriority` (funcao, referencia
+   // estavel) deixaria o contador do dropdown parado quando as issues mudam.
+   const allIssues = useIssuesStore((s) => s.issues);
 
    useEffect(() => {
       setValue(priority.id);
@@ -90,7 +92,7 @@ export function PrioritySelector({ priority, onChange }: PrioritySelectorProps) 
                               </div>
                               {value === item.id && <CheckIcon size={16} className="ml-auto" />}
                               <span className="text-muted-foreground text-xs">
-                                 {filterByPriority(item.id).length}
+                                 {allIssues.filter((i) => i.priority.id === item.id).length}
                               </span>
                            </CommandItem>
                         ))}

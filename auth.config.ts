@@ -51,7 +51,10 @@ export function hasNimblooIdentity(profile: unknown): boolean {
    const p = profile as Record<string, unknown>;
    const email = normalizeEmail(p.email);
    if (!email || !email.endsWith(ALLOWED_EMAIL_DOMAIN)) return false;
-   return p.email_verified !== false;
+   // FAIL-CLOSED, igual ao gate de grupo: exige o claim PRESENTE e true. Antes era
+   // `!== false`, então um `email_verified` ausente (mapper fora do realm) passava —
+   // fail-open justo na barreira que o convite NÃO pode dispensar.
+   return p.email_verified === true;
 }
 
 /** AUTORIZAÇÃO padrão: pertencer ao grupo `app-circle` (concedido via Orbis). */

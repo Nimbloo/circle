@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ErrorEvent } from '@sentry/nextjs';
-import { sentryBaseOptions } from '@/lib/sentry-options';
+import { sentryBaseOptions, scrubUrl } from '@/lib/sentry-options';
 
 /**
  * O domínio Nimbloo carrega PII, então nenhum evento pode sair com credencial ou
@@ -41,6 +41,27 @@ describe('scrubber do Sentry', () => {
       } as unknown as ErrorEvent);
 
       expect(out?.extra).toEqual({ payload: { senha: '[Filtered]', nome: 'Ana' } });
+   });
+
+   it('mascara o token do magic link na URL, no transaction e nos breadcrumbs', () => {
+      const url = 'https://circle.nimbloo.ai/invite/a0fb2866b9bab2edcafe1234567890ab';
+      const out = scrub({
+         request: { url },
+         transaction: '/invite/a0fb2866b9bab2edcafe1234567890ab',
+         breadcrumbs: [{ data: { from: '/login', to: url } }],
+      } as unknown as ErrorEvent);
+
+      expect(out?.request?.url).toBe('https://circle.nimbloo.ai/invite/[Filtered]');
+      expect(out?.transaction).toBe('/invite/[Filtered]');
+      expect(out?.breadcrumbs?.[0].data?.to).toBe('https://circle.nimbloo.ai/invite/[Filtered]');
+      // O token nao pode sobrar em lugar nenhum do evento.
+      expect(JSON.stringify(out)).not.toContain('a0fb2866');
+   });
+
+   it('scrubUrl nao estraga URL sem segredo', () => {
+      expect(scrubUrl('https://circle.nimbloo.ai/CORE-12')).toBe(
+         'https://circle.nimbloo.ai/CORE-12'
+      );
    });
 
    it('não amostra erro (sampleRate 1.0) e não envia PII por padrão', () => {

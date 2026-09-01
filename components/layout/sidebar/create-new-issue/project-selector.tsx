@@ -26,7 +26,9 @@ export function ProjectSelector({ project, onChange }: ProjectSelectorProps) {
    const [open, setOpen] = useState<boolean>(false);
    const [value, setValue] = useState<string | undefined>(project?.id);
 
-   const filterByProject = useIssuesStore((s) => s.filterByProject);
+   // Conta derivada da fatia assinada: assinar `filterByProject` (funcao, referencia
+   // estavel) deixaria o contador do dropdown parado quando as issues mudam.
+   const allIssues = useIssuesStore((s) => s.issues);
    const projects = useWorkspaceStore((s) => s.projects);
 
    useEffect(() => {
@@ -107,7 +109,7 @@ export function ProjectSelector({ project, onChange }: ProjectSelectorProps) {
                               </div>
                               {value === project.id && <CheckIcon size={16} className="ml-auto" />}
                               <span className="text-muted-foreground text-xs">
-                                 {filterByProject(project.id).length}
+                                 {allIssues.filter((i) => i.project?.id === project.id).length}
                               </span>
                            </CommandItem>
                         ))}
