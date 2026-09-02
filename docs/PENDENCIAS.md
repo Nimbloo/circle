@@ -155,6 +155,39 @@ implementação original, corrigido, mas a pegadinha continua valendo para qualq
 
 ---
 
+### Front — estado, filtros e sidebar (auditoria de 02/09/2026)
+
+Auditoria read-only da arquitetura de estado (spec
+`docs/superpowers/specs/2026-09-02-sidebar-e-estado-design.md`). O que saiu na mesma leva:
+collapse da sidebar animado e persistido por time; `workspace.hydrate` coalescido (uma
+chamada concorrente não é mais descartada) e auto-rollover de cycles só no boot (antes, ~25
+refetches pós-mutação disparavam a escrita); filtros `is not` corretos para issue sem
+projeto/criador/data, opções "No project"/"No creator", tabs preservando `?filters=`;
+"Show sub-issues" removido do Display (o domínio não tem sub-issues).
+
+**Ficou para depois, em ordem de valor:**
+
+- **Display settings por view.** Hoje grouping/ordering/propriedades são um conjunto
+  global em localStorage: escolher no board do time A vaza para cycle, project e
+  my-issues. Linear é por view. Chavear o persist por rota (ou salvar no servidor por
+  view).
+- **Painel lateral unificado (`DetailSidePanel`).** Initiative, project e issue divergem:
+  toggle persistido só na initiative, larguras/breakpoints diferentes (aside `xl`
+  400 px vs container query `@7xl`), Sheet mobile com paddings e triggers distintos, e
+  "Properties" duplicado inline + aside em initiative e project.
+- **`right-panel-store` por rota.** Abrir Insights na lista de issues e navegar para um
+  projeto mostra Insights no lugar de Properties; não há reset na troca de rota.
+- **Preferências de layout no servidor.** Só theme/notifications/preferences sincronizam;
+  display, view-store, sidebar e initiative-details ficam por dispositivo.
+- **De-para pixel do painel de initiatives com o Linear.** Bloqueado: a extensão
+  Claude-in-Chrome está sem permissão para `linear.app` (navegação recusada). Liberar o
+  domínio na extensão para medir hover/spacing/tipografia ao vivo.
+
+**Produção — checks dos PRs em 0/0.** O `GITHUB_TOKEN` do Secrets Manager é um PAT
+fine-grained sem a permissão **Checks: Read-only** (`/check-runs` devolve 403 "Resource
+not accessible by personal access token"; `/files` e `/commits` funcionam). Ajustar as
+permissões do token no GitHub e rodar o sync de novo — nada a mudar no código.
+
 ## Decisões suas (não é falta de código)
 
 ### Datas reais em iniciativas
