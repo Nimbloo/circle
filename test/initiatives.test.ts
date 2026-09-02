@@ -11,6 +11,7 @@ import {
    deleteInitiative,
    listInitiativeActivity,
 } from '@/lib/api/initiatives';
+import { createLabel, deleteLabel } from '@/lib/api/labels';
 
 async function setup() {
    const db = await makeTestDb();
@@ -37,6 +38,48 @@ describe('initiatives', () => {
       expect(init.health.id).toBe('at-risk');
       expect(init.projectCount).toBe(2);
       expect(init.completedProjectCount).toBe(1); // só p1 (done)
+   });
+
+   it('cria e atualiza labels e metadados de ícone sem quebrar campos existentes', async () => {
+      const db = await setup();
+      await createLabel(db, { id: 'growth', name: 'Growth', color: 'purple' });
+      await createLabel(db, { id: 'platform', name: 'Platform', color: 'blue' });
+
+      const init = await createInitiative(db, {
+         slug: 'north-star',
+         name: 'North Star',
+         priorityId: 'high',
+         healthId: 'on-track',
+         icon: 'rocket',
+         iconColor: 'violet',
+         labelIds: ['growth', 'platform'],
+      });
+
+      expect(init.icon).toBe('rocket');
+      expect(init.iconColor).toBe('violet');
+      expect(init.labels.map((label) => label.id).sort()).toEqual(['growth', 'platform']);
+
+      const updated = await updateInitiative(db, init.id, {
+         iconColor: 'green',
+         labelIds: ['platform'],
+      });
+      expect(updated?.iconColor).toBe('green');
+      expect(updated?.labels.map((label) => label.id)).toEqual(['platform']);
+   });
+
+   it('limpa vínculos de initiative ao excluir um label', async () => {
+      const db = await setup();
+      await createLabel(db, { id: 'growth', name: 'Growth', color: 'purple' });
+      const init = await createInitiative(db, {
+         slug: 'growth-plan',
+         name: 'Growth plan',
+         priorityId: 'high',
+         healthId: 'on-track',
+         labelIds: ['growth'],
+      });
+
+      await expect(deleteLabel(db, 'growth')).resolves.toBe(true);
+      expect((await getInitiative(db, init.id))?.labels).toEqual([]);
    });
 
    it('filters by status and priority', async () => {

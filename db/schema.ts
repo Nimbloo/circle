@@ -171,7 +171,8 @@ export const initiative = pgTable('initiative', {
    slug: varchar('slug', { length: 96 }).notNull().unique(),
    name: varchar('name', { length: 196 }).notNull(),
    description: text('description'),
-   icon: varchar('icon', { length: 16 }),
+   icon: varchar('icon', { length: 64 }),
+   iconColor: varchar('icon_color', { length: 32 }),
    status: varchar('status', { length: 16 }).notNull(), // active|planned|completed
    priorityId: varchar('priority_id', { length: 64 })
       .notNull()
@@ -228,6 +229,19 @@ export const projectLabel = pgTable(
          .references(() => label.id),
    },
    (t) => [primaryKey({ columns: [t.projectId, t.labelId] })]
+);
+
+export const initiativeLabel = pgTable(
+   'initiative_label',
+   {
+      initiativeId: varchar('initiative_id', { length: 36 })
+         .notNull()
+         .references(() => initiative.id),
+      labelId: varchar('label_id', { length: 64 })
+         .notNull()
+         .references(() => label.id),
+   },
+   (t) => [primaryKey({ columns: [t.initiativeId, t.labelId] })]
 );
 
 export const initiativeProject = pgTable(
