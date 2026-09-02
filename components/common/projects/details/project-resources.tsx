@@ -129,7 +129,8 @@ export function ProjectResources({
                            <Button
                               size="icon"
                               variant="ghost"
-                              className="size-5 shrink-0 opacity-0 group-hover/res:opacity-100 data-[state=open]:opacity-100"
+                              className="size-7 shrink-0 opacity-0 group-hover/res:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+                              aria-label={`Resource actions for ${r.label}`}
                            >
                               <MoreHorizontal className="size-3.5" />
                            </Button>

@@ -131,7 +131,7 @@ export default function IssueLine({
                               type="button"
                               aria-label="Adiar notificação"
                               onClick={(e) => e.stopPropagation()}
-                              className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-accent focus:opacity-100 group-hover/inbox-line:opacity-100"
+                              className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-accent focus:opacity-100 group-hover/inbox-line:opacity-100"
                            >
                               <Clock className="size-3.5" />
                            </button>

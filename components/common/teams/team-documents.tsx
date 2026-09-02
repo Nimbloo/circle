@@ -181,7 +181,8 @@ export default function TeamDocuments() {
                                     <Button
                                        size="icon"
                                        variant="ghost"
-                                       className="size-6 shrink-0 opacity-0 group-hover/doc:opacity-100 data-[state=open]:opacity-100"
+                                       className="size-7 shrink-0 opacity-0 group-hover/doc:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+                                       aria-label={`Document actions for ${doc.name}`}
                                     >
                                        <MoreHorizontal className="size-4" />
                                     </Button>

@@ -1,9 +1,15 @@
 'use client';
 
 import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
-import { HeaderGroup, HeaderTitle, LocationBar } from '@/components/layout/header-primitives';
+import { CycleActions } from '@/components/common/cycles/cycle-actions';
+import {
+   HeaderActions,
+   HeaderGroup,
+   HeaderTitle,
+   LocationBar,
+} from '@/components/layout/header-primitives';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { ChevronRight, MoreHorizontal, Star } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { CycleView } from '@/components/common/issues/cycle-issues';
@@ -41,9 +47,12 @@ export default function HeaderNav({ cycleView }: { cycleView: CycleView }) {
                <CyclePlayIcon className="size-3.5" />
                <HeaderTitle>{cycle?.name}</HeaderTitle>
             </div>
-            <Star className="size-3.5 text-muted-foreground shrink-0 ml-1" />
-            <MoreHorizontal className="size-3.5 text-muted-foreground shrink-0" />
          </HeaderGroup>
+         {cycle && (
+            <HeaderActions>
+               <CycleActions cycle={cycle} />
+            </HeaderActions>
+         )}
       </LocationBar>
    );
 }
