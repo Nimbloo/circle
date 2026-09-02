@@ -41,7 +41,7 @@ import type {
 import type { ViewDto, CreateViewInput, UpdateViewInput } from '@/lib/api/views';
 import type { WorkspaceBootstrap } from '@/lib/api/workspace';
 import type { NotificationDto } from '@/lib/api/notifications';
-import type { ReviewDto } from '@/lib/api/reviews';
+import type { ReviewDetailDto, ReviewDto } from '@/lib/api/reviews';
 import type { FolderDto, DocumentDto } from '@/lib/api/documents';
 import type {
    IssueDetailDto,
@@ -438,7 +438,7 @@ export const api = {
             offset: m.offset ?? opts.offset ?? 0,
          };
       },
-      get: (id: string) => get<ReviewDto>(`/reviews/${id}`),
+      get: (id: string) => get<ReviewDetailDto>(`/reviews/${encodeURIComponent(id)}`),
       sync: () => post<{ started: boolean }>('/reviews/sync'),
    },
 };

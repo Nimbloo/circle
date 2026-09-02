@@ -1,7 +1,14 @@
 import { createHash } from 'node:crypto';
-import { and, count, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
-import { review, issue as issueT, issuePrLink, status as statusT } from '@/db/schema';
+import {
+   review,
+   reviewCommit,
+   reviewFile,
+   issue as issueT,
+   issuePrLink,
+   status as statusT,
+} from '@/db/schema';
 import { ApiError } from './errors';
 import { notifySlackEvent } from './integrations/slack';
 
@@ -123,9 +130,60 @@ export async function listReviews(db: Db, opts: ListReviewsOptions = {}): Promis
    return { items: rows.map(toDto), total };
 }
 
-export async function getReview(db: Db, id: string): Promise<ReviewDto | null> {
+export interface ReviewFileDto {
+   path: string;
+   status: string; // added|modified|removed|renamed
+   additions: number;
+   deletions: number;
+   /** Unified diff do arquivo como o GitHub devolve; null para binário/arquivo grande. */
+   patch: string | null;
+}
+
+export interface ReviewCommitDto {
+   sha: string;
+   message: string;
+   author: string | null;
+   committedAt: string | null;
+}
+
+/** Detalhe do review: o PR + arquivos e commits ingeridos (aditivo ao `ReviewDto`). */
+export interface ReviewDetailDto extends ReviewDto {
+   files: ReviewFileDto[];
+   commits: ReviewCommitDto[];
+}
+
+function toIso(d: Date | string | null): string | null {
+   if (!d) return null;
+   return d instanceof Date ? d.toISOString() : String(d);
+}
+
+export async function getReview(db: Db, id: string): Promise<ReviewDetailDto | null> {
    const rows = await db.select().from(review).where(eq(review.id, id)).limit(1);
-   return rows.length ? toDto(rows[0]) : null;
+   if (!rows.length) return null;
+   const [files, commits] = await Promise.all([
+      db.select().from(reviewFile).where(eq(reviewFile.reviewId, id)).orderBy(asc(reviewFile.path)),
+      db
+         .select()
+         .from(reviewCommit)
+         .where(eq(reviewCommit.reviewId, id))
+         .orderBy(asc(reviewCommit.committedAt), asc(reviewCommit.sha)),
+   ]);
+   return {
+      ...toDto(rows[0]),
+      files: files.map((f) => ({
+         path: f.path,
+         status: f.status,
+         additions: f.additions,
+         deletions: f.deletions,
+         patch: f.patch,
+      })),
+      commits: commits.map((c) => ({
+         sha: c.sha,
+         message: c.message,
+         author: c.author,
+         committedAt: toIso(c.committedAt),
+      })),
+   };
 }
 
 // ── Ingestão do GitHub ────────────────────────────────────────────
@@ -140,7 +198,7 @@ interface GitHubPr {
    requested_reviewers?: { login?: string }[] | null;
    body?: string | null;
    base?: { ref: string };
-   head?: { ref: string };
+   head?: { ref: string; sha?: string };
    // Só presentes no GET individual do PR (a lista /pulls não os retorna).
    additions?: number;
    deletions?: number;
@@ -153,7 +211,8 @@ type FetchLike = typeof fetch;
 // em ~86 repos). MAX_PAGES × PER_PAGE = teto de PRs varridos por repo.
 const PER_PAGE = 50;
 const MAX_PAGES = 5; // 500 PRs/repo — PRs antigos além disso não são varridos
-const DETAIL_CONCURRENCY = 8;
+// Cada PR aberto custa 4 chamadas (detalhe, files, commits, check-runs) → lote menor.
+const DETAIL_CONCURRENCY = 4;
 
 function ghHeaders(token: string): HeadersInit {
    return {
@@ -261,6 +320,173 @@ async function fetchPrDetail(
    }
 }
 
+// ── Profundidade do PR: arquivos, commits e checks ────────────────
+interface GitHubFile {
+   filename: string;
+   status?: string; // added|modified|removed|renamed
+   additions?: number;
+   deletions?: number;
+   patch?: string | null; // omitido pelo GitHub em binários/arquivos grandes
+}
+
+interface GitHubCommit {
+   sha: string;
+   commit?: { message?: string; author?: { name?: string; date?: string } | null } | null;
+   author?: { login?: string } | null;
+}
+
+interface CheckRunsResponse {
+   total_count?: number;
+   check_runs?: { conclusion?: string | null }[];
+}
+
+interface PrChecks {
+   passed: number;
+   total: number;
+}
+
+/** O que foi buscado do PR — null em cada parte que falhou (best-effort). */
+interface PrDepth {
+   files: GitHubFile[] | null;
+   commits: GitHubCommit[] | null;
+   checks: PrChecks | null;
+}
+
+const FILES_PER_PAGE = 100;
+const FILES_MAX_PAGES = 3; // 300 arquivos — acima disso a lista da UI fica truncada
+const PASSED_CONCLUSIONS = new Set(['success', 'neutral', 'skipped']);
+
+/** GET JSON best-effort: null em erro HTTP, timeout ou corpo inesperado. */
+async function ghGet<T>(url: string, token: string, doFetch: FetchLike): Promise<T | null> {
+   try {
+      const res = await doFetch(url, {
+         headers: ghHeaders(token),
+         signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) return null;
+      return (await res.json()) as T;
+   } catch {
+      return null;
+   }
+}
+
+async function fetchPrFiles(
+   repo: string,
+   prNumber: number,
+   token: string,
+   doFetch: FetchLike
+): Promise<GitHubFile[] | null> {
+   const files: GitHubFile[] = [];
+   for (let page = 1; page <= FILES_MAX_PAGES; page += 1) {
+      const pageFiles = await ghGet<GitHubFile[]>(
+         `https://api.github.com/repos/${repo}/pulls/${prNumber}/files?per_page=${FILES_PER_PAGE}&page=${page}`,
+         token,
+         doFetch
+      );
+      // 1ª página falhou → sem dado; página seguinte falhou → fica com o que já veio.
+      if (!Array.isArray(pageFiles)) return page === 1 ? null : files;
+      files.push(...pageFiles);
+      if (pageFiles.length < FILES_PER_PAGE) break;
+   }
+   return files;
+}
+
+async function fetchPrCommits(
+   repo: string,
+   prNumber: number,
+   token: string,
+   doFetch: FetchLike
+): Promise<GitHubCommit[] | null> {
+   const commits = await ghGet<GitHubCommit[]>(
+      `https://api.github.com/repos/${repo}/pulls/${prNumber}/commits?per_page=100`,
+      token,
+      doFetch
+   );
+   return Array.isArray(commits) ? commits : null;
+}
+
+/** Checks do commit da cabeça do PR: passed = success|neutral|skipped, total = total_count. */
+async function fetchPrChecks(
+   repo: string,
+   headSha: string | undefined,
+   token: string,
+   doFetch: FetchLike
+): Promise<PrChecks | null> {
+   if (!headSha) return null;
+   const data = await ghGet<CheckRunsResponse>(
+      `https://api.github.com/repos/${repo}/commits/${headSha}/check-runs?per_page=100`,
+      token,
+      doFetch
+   );
+   if (!data || !Array.isArray(data.check_runs)) return null;
+   const passed = data.check_runs.filter((c) => PASSED_CONCLUSIONS.has(c.conclusion ?? '')).length;
+   return { passed, total: Number(data.total_count ?? data.check_runs.length) || 0 };
+}
+
+async function fetchPrDepth(
+   repo: string,
+   pr: GitHubPr,
+   token: string,
+   doFetch: FetchLike
+): Promise<PrDepth> {
+   const [files, commits, checks] = await Promise.all([
+      fetchPrFiles(repo, pr.number, token, doFetch),
+      fetchPrCommits(repo, pr.number, token, doFetch),
+      fetchPrChecks(repo, pr.head?.sha, token, doFetch),
+   ]);
+   return { files, commits, checks };
+}
+
+/**
+ * Substitui arquivos e commits do review (delete + insert na mesma transação). Só toca
+ * no que foi buscado com sucesso — uma falha em /files não apaga a lista anterior.
+ */
+async function persistPrDepth(db: Db, reviewId: string, depth: PrDepth): Promise<void> {
+   if (!depth.files && !depth.commits) return;
+   await db.transaction(async (tx) => {
+      if (depth.files) {
+         await tx.delete(reviewFile).where(eq(reviewFile.reviewId, reviewId));
+         const seen = new Set<string>();
+         const rows = depth.files
+            .filter((f) => typeof f.filename === 'string' && f.filename && !seen.has(f.filename))
+            .map((f) => {
+               seen.add(f.filename);
+               return {
+                  reviewId,
+                  path: clip(f.filename, 512),
+                  status: clip(f.status || 'modified', 16),
+                  additions: Number(f.additions) || 0,
+                  deletions: Number(f.deletions) || 0,
+                  patch: typeof f.patch === 'string' ? f.patch : null,
+               };
+            });
+         for (let i = 0; i < rows.length; i += 50) {
+            await tx.insert(reviewFile).values(rows.slice(i, i + 50));
+         }
+      }
+      if (depth.commits) {
+         await tx.delete(reviewCommit).where(eq(reviewCommit.reviewId, reviewId));
+         const seen = new Set<string>();
+         const rows = depth.commits
+            .filter((c) => typeof c.sha === 'string' && c.sha && !seen.has(c.sha))
+            .map((c) => {
+               seen.add(c.sha);
+               const date = c.commit?.author?.date ? new Date(c.commit.author.date) : null;
+               return {
+                  reviewId,
+                  sha: clip(c.sha, 40),
+                  message: clip(c.commit?.message || '', 512),
+                  author: clip(c.author?.login ?? null, 128),
+                  committedAt: date && !Number.isNaN(date.getTime()) ? date : null,
+               };
+            });
+         for (let i = 0; i < rows.length; i += 50) {
+            await tx.insert(reviewCommit).values(rows.slice(i, i + 50));
+         }
+      }
+   });
+}
+
 /** Puxa os PRs de um repo (paginado) e faz upsert. Retorna quantos foram sincronizados. */
 async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike): Promise<number> {
    // Pagina /pulls até acabar ou atingir o teto (PRs antigos além do teto ficam de fora).
@@ -277,14 +503,23 @@ async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike)
    // teve detalhe) — não sobrescrevemos com 0 no upsert.
    const openPrs = prs.filter((pr) => statusOf(pr) === 'open');
    const detailByNumber = new Map<number, { additions: number; deletions: number }>();
+   // Arquivos/commits/checks seguem o mesmo cap: só PRs open, mesmo lote.
+   const depthByNumber = new Map<number, PrDepth>();
    for (let i = 0; i < openPrs.length; i += DETAIL_CONCURRENCY) {
       const batch = openPrs.slice(i, i + DETAIL_CONCURRENCY);
-      const details = await Promise.all(
-         batch.map((pr) => fetchPrDetail(repo, pr.number, token, doFetch))
+      const results = await Promise.all(
+         batch.map(async (pr) => {
+            const [detail, depth] = await Promise.all([
+               fetchPrDetail(repo, pr.number, token, doFetch),
+               fetchPrDepth(repo, pr, token, doFetch),
+            ]);
+            return { detail, depth };
+         })
       );
       batch.forEach((pr, idx) => {
-         const d = details[idx];
-         if (d) detailByNumber.set(pr.number, d);
+         const { detail, depth } = results[idx];
+         if (detail) detailByNumber.set(pr.number, detail);
+         depthByNumber.set(pr.number, depth);
       });
    }
 
@@ -296,6 +531,7 @@ async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike)
    for (const pr of prs) {
       const resolvesId = parseResolves(pr.title, pr.head?.ref, pr.body);
       const detail = detailByNumber.get(pr.number);
+      const depth = depthByNumber.get(pr.number);
       const row = {
          id: `${repo}#${pr.number}`,
          // clip: trunca ao limite da coluna — títulos/branches de PR podem passar de
@@ -313,8 +549,8 @@ async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike)
          deletions: detail?.deletions ?? pr.deletions ?? 0,
          resolvesIdentifier: resolvesId,
          resolvesTitle: resolvesId ? clip(pr.title, 512) : null,
-         checksPassed: 0,
-         checksTotal: 0,
+         checksPassed: depth?.checks?.passed ?? 0,
+         checksTotal: depth?.checks?.total ?? 0,
          createdAt: new Date(pr.created_at),
          syncedAt: new Date(),
       };
@@ -339,11 +575,17 @@ async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike)
          set.additions = row.additions;
          set.deletions = row.deletions;
       }
+      // Checks só entram quando a chamada respondeu (mesmo cuidado dos contadores).
+      if (depth?.checks) {
+         set.checksPassed = row.checksPassed;
+         set.checksTotal = row.checksTotal;
+      }
 
       try {
          await db.insert(review).values(row).onConflictDoUpdate({ target: review.id, set });
          count += 1;
          if (resolvesId) linkByIdentifier.set(resolvesId, { title: row.title, status: row.status });
+         if (depth) await persistPrDepth(db, row.id, depth);
       } catch (e) {
          // Um PR com dado ruim NÃO aborta o sync do repo — loga e segue.
          console.warn(`[circle] review upsert falhou (${row.id}):`, (e as Error).message);
@@ -440,9 +682,15 @@ export interface PullRequestEvent {
  * lógica do sync por polling, mas para UM PR — o payload do webhook já traz
  * additions/deletions (ao contrário da lista /pulls). Retorna o identifier vinculado.
  */
+export interface WebhookOptions {
+   token?: string;
+   fetchImpl?: FetchLike;
+}
+
 export async function handlePullRequestEvent(
    db: Db,
-   payload: PullRequestEvent
+   payload: PullRequestEvent,
+   opts: WebhookOptions = {}
 ): Promise<{ linked: string | null }> {
    const repoFull = payload.repository?.full_name;
    const pr = payload.pull_request;
@@ -493,5 +741,60 @@ export async function handlePullRequestEvent(
    if (resolvesId) {
       await linkPrsToIssues(db, repo, new Map([[resolvesId, { title, status }]]));
    }
+   // Arquivos/commits/checks do PR aberto, quando há token (best-effort — o ACK do
+   // webhook não depende disso).
+   const token = opts.token ?? process.env.GITHUB_TOKEN;
+   if (status === 'open' && token) {
+      try {
+         const depth = await fetchPrDepth(repo, pr, token, opts.fetchImpl ?? fetch);
+         if (depth.checks) {
+            await db
+               .update(review)
+               .set({ checksPassed: depth.checks.passed, checksTotal: depth.checks.total })
+               .where(eq(review.id, row.id));
+         }
+         await persistPrDepth(db, row.id, depth);
+      } catch (e) {
+         console.warn(`[circle] profundidade do PR falhou (${row.id}):`, (e as Error).message);
+      }
+   }
    return { linked: resolvesId };
+}
+
+/** Payload dos eventos `check_run`/`check_suite` do webhook (subset consumido). */
+export interface CheckRunEvent {
+   repository?: { full_name?: string };
+   check_run?: { head_sha?: string; pull_requests?: { number: number }[] };
+   check_suite?: { head_sha?: string; pull_requests?: { number: number }[] };
+}
+
+/**
+ * Recalcula `checksPassed/checksTotal` dos PRs que o evento lista (só os que já são
+ * review no Circle). Uma chamada ao check-runs do head_sha serve para todos eles.
+ */
+export async function handleCheckRunEvent(
+   db: Db,
+   payload: CheckRunEvent,
+   opts: WebhookOptions = {}
+): Promise<{ updated: string[] }> {
+   const repoFull = payload.repository?.full_name;
+   const run = payload.check_run ?? payload.check_suite;
+   const token = opts.token ?? process.env.GITHUB_TOKEN;
+   if (!repoFull || !run?.head_sha || !token) return { updated: [] };
+   const repo = clip(repoFull, 196) as string;
+   const ids = (run.pull_requests ?? [])
+      .map((p) => p?.number)
+      .filter((n): n is number => Number.isInteger(n))
+      .map((n) => `${repo}#${n}`);
+   if (ids.length === 0) return { updated: [] };
+   const existing = await db.select({ id: review.id }).from(review).where(inArray(review.id, ids));
+   if (existing.length === 0) return { updated: [] };
+   const checks = await fetchPrChecks(repo, run.head_sha, token, opts.fetchImpl ?? fetch);
+   if (!checks) return { updated: [] };
+   const updated = existing.map((e) => e.id);
+   await db
+      .update(review)
+      .set({ checksPassed: checks.passed, checksTotal: checks.total, syncedAt: new Date() })
+      .where(inArray(review.id, updated));
+   return { updated };
 }
