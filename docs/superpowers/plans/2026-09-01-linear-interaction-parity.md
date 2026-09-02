@@ -18,13 +18,14 @@ de initiatives aprovado na especificação.
 
 - **Onde:** worktree `C:/Projetos/circle-functional-audit`, branch
   `danilo/linear-interaction-parity` (base `develop` @ `80bad79`, v0.21.0).
-- **Feito:** Tasks 1–7 implementadas (Codex, 2026-09-01). Diff ainda **não commitado**.
+- **Feito:** Tasks 1–8. Implementação (Codex, 2026-09-01); verificação, auditoria, docs,
+  7 commits e PR (Claude, 2026-09-02): https://github.com/Nimbloo/circle/pull/75
 - **Última verificação (2026-09-02, Claude):** `pnpm typecheck` ok · `pnpm lint` ok ·
-  `pnpm test` 67 arquivos / 379 testes ok · `pnpm build` ok · `git diff --check` ok ·
-  guard do dev seam ok (`git grep CIRCLE_DEV_AUTH_EMAIL HEAD -- lib/api/auth.ts middleware.ts` vazio).
-- **Próximo passo:** Task 8 — smoke no Chrome (inbox splitter, filtros, new initiative,
-  details toggle), atualizar `docs/PENDENCIAS.md`, commits Conventional, PR para
-  `develop` referenciando o épico #25.
+  `pnpm test` 67 arquivos / 379 testes ok (re-rodado após o ajuste de `defaultSize` no
+  Inbox) · `pnpm build` ok · `git diff --check` ok · guard do dev seam vazio. Smoke no
+  Chrome só em dark `1424×771`; light e viewports `390/768/1728` sem validação manual.
+- **Próximo passo:** acompanhar CI e review do PR; após o merge em `develop`, o plano está
+  concluído. Se sobrar tempo, validar light + viewports móveis em outro Chrome.
 - **Bloqueios / decisões pendentes:** nenhum.
 
 ## Restrições globais
@@ -132,5 +133,5 @@ encontrados por `rg "MoreHorizontal|Ellipsis" components`;
 - [x] Validar manualmente no Chrome contra o Linear em dark/light e quatro viewports,
       incluindo mouse, teclado, resize, reload e reduced motion.
 - [x] Auditar o diff completo por bugs e débitos; corrigir apenas findings reproduzíveis.
-- [ ] Atualizar `docs/PENDENCIAS.md`, commitar em Conventional Commits e abrir PR para
+- [x] Atualizar `docs/PENDENCIAS.md`, commitar em Conventional Commits e abrir PR para
       `develop` com a issue correspondente.
