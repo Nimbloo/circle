@@ -1,6 +1,6 @@
 # Pendências do Circle
 
-Estado em **2026-09-02**, com `main` e `develop` sincronizadas na v0.22.0.
+Estado em **2026-09-02**, com `main` e `develop` sincronizadas na v0.22.1.
 
 > **As [issues](https://github.com/Nimbloo/circle/issues) são a fonte da verdade** sobre
 > escopo. Este documento registra o que elas **não** capturam: bloqueios que vivem em
@@ -99,6 +99,18 @@ interação entre `onResize` e o `useLayoutEffect` que aplica a largura do store
 [v0.22.0](https://github.com/Nimbloo/circle/releases/tag/v0.22.0)** (PRs #75 e #76). O
 Image Updater trocou a tag em ~4 min após o push no ECR; rollout `Synced/Healthy`,
 migração `0033` aplicada no boot (34/34), `healthz`/`readyz` em `200`, pod sem reinícios.
+
+**Complemento na release
+[v0.22.1](https://github.com/Nimbloo/circle/releases/tag/v0.22.1)** (PRs #78 e #79): a
+lacuna de tema light e viewports foi fechada com emulação headless do Chrome instalado
+(`puppeteer-core`, sem download de navegador), em light e dark, `390×844`, `768×1024` e
+`1728×1200`: sem scroll horizontal, zero botão de ícone sem nome, Sheet de propriedades
+com labels no mobile/tablet, splitter da Inbox e aside de 400 px só no desktop. Dois fixes
+saíram daí: a linha de chips do card inline de initiative tinha altura fixa e sobrepunha os
+inputs em 390 px; o seletor compacto de prioridade dos cards do board não tinha nome
+acessível. Rollout `Synced/Healthy`, `healthz`/`readyz` em `200`. O iframe same-origin não
+serve para emular viewport aqui: o app envia `frame-ancestors 'none'` e
+`X-Frame-Options: DENY` (correto).
 
 ---
 
