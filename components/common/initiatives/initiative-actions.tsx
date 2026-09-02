@@ -22,6 +22,7 @@ import {
    DropdownMenu,
    DropdownMenuContent,
    DropdownMenuItem,
+   DropdownMenuSeparator,
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -38,7 +39,7 @@ import { api } from '@/lib/client';
 import { Initiative, INITIATIVE_STATUS_META, InitiativeStatus } from '@/data/initiatives';
 import { usePriorities, useHealthStates } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Link2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -188,6 +189,16 @@ export function InitiativeActions({ initiative }: { initiative: Initiative }) {
    const [confirmOpen, setConfirmOpen] = useState(false);
    const [busy, setBusy] = useState(false);
 
+   const copyLink = async () => {
+      try {
+         const url = `${window.location.origin}/${orgId}/initiative/${initiative.id}`;
+         await navigator.clipboard.writeText(url);
+         toast.success('Initiative link copied');
+      } catch {
+         toast.error('Could not copy the initiative link');
+      }
+   };
+
    const remove = async () => {
       if (busy) return;
       setBusy(true);
@@ -217,7 +228,7 @@ export function InitiativeActions({ initiative }: { initiative: Initiative }) {
                   <MoreHorizontal className="size-4 text-muted-foreground" />
                </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align="end" className="w-56">
                <DropdownMenuItem
                   onSelect={(e) => {
                      e.preventDefault();
@@ -227,6 +238,11 @@ export function InitiativeActions({ initiative }: { initiative: Initiative }) {
                   <Pencil className="size-4" />
                   Edit
                </DropdownMenuItem>
+               <DropdownMenuItem onSelect={() => void copyLink()}>
+                  <Link2 className="size-4" />
+                  Copy link
+               </DropdownMenuItem>
+               <DropdownMenuSeparator />
                <DropdownMenuItem
                   variant="destructive"
                   onSelect={(e) => {

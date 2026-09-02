@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -9,152 +10,208 @@ import {
    CommandInput,
    CommandItem,
    CommandList,
+   CommandShortcut,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { INITIATIVE_STATUS_META, type InitiativeStatus } from '@/data/initiatives';
 import { api } from '@/lib/client';
 import { cn } from '@/lib/utils';
-import { INITIATIVE_STATUS_META, InitiativeStatus } from '@/data/initiatives';
-import { health as allHealth } from '@/data/projects';
-import { usePriorities } from '@/store/catalog-store';
-import { useWorkspaceStore } from '@/store/workspace-store';
+import { useHealthStates, useLabels, usePriorities } from '@/store/catalog-store';
 import { useInlineInitiativeStore } from '@/store/inline-initiative-store';
-import { CalendarClock, CheckIcon, UserRound } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useWorkspaceStore } from '@/store/workspace-store';
+import { CheckIcon, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
+import { InitiativeIconPicker } from './initiative-icon-picker';
+import { InitiativeLabelPicker } from './initiative-label-picker';
 import { InitiativeStatusIcon } from './initiative-status-icon';
+import { InitiativeTargetPicker } from './initiative-target-picker';
 
-function slugify(v: string): string {
-   return v
+export function buildInitiativeSlug(value: string): string {
+   const base = value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase()
       .trim()
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-}
-
-/** Chip clicável (mesma linguagem visual dos chips do New Issue). */
-function Chip({ children }: { children: React.ReactNode }) {
-   return (
-      <span className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md border text-xs text-muted-foreground hover:bg-accent/50 transition-colors cursor-pointer">
-         {children}
-      </span>
-   );
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 83);
+   const suffix = crypto.randomUUID().replaceAll('-', '').slice(0, 12);
+   return `${base || 'initiative'}-${suffix}`;
 }
 
 const STATUS_IDS = Object.keys(INITIATIVE_STATUS_META) as InitiativeStatus[];
+const triggerClassName = 'gap-1.5 bg-transparent px-2 text-xs font-normal text-muted-foreground';
 
-/**
- * Criação INLINE de initiative (padrão Linear): linha editável no topo da lista,
- * com nome + resumo + chips de propriedade (status/priority/owner/target date) e
- * ações Cancel/Create — sem modal.
- */
-export function InlineNewInitiative({ defaultStatus }: { defaultStatus: InitiativeStatus }) {
-   const stop = useInlineInitiativeStore((s) => s.stop);
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
-   const users = useWorkspaceStore((s) => s.users);
+export function InlineNewInitiative({
+   defaultStatus,
+}: {
+   defaultStatus: InitiativeStatus | 'all';
+}) {
+   const stop = useInlineInitiativeStore((state) => state.stop);
+   const applyInitiative = useWorkspaceStore((state) => state.applyInitiative);
+   const users = useWorkspaceStore((state) => state.users);
    const priorities = usePriorities();
+   const healthStates = useHealthStates();
+   const labels = useLabels();
 
    const [busy, setBusy] = useState(false);
    const [name, setName] = useState('');
    const [summary, setSummary] = useState('');
+   const [icon, setIcon] = useState('target');
+   const [iconColor, setIconColor] = useState('violet');
    const [status, setStatus] = useState<InitiativeStatus>(
-      defaultStatus === ('all' as InitiativeStatus) ? 'active' : defaultStatus
+      defaultStatus === 'all' ? 'active' : defaultStatus
    );
    const [priorityId, setPriorityId] = useState('');
    const [healthId, setHealthId] = useState('');
    const [ownerId, setOwnerId] = useState<string | null>(null);
    const [target, setTarget] = useState('');
+   const [labelIds, setLabelIds] = useState<string[]>([]);
+   const [statusOpen, setStatusOpen] = useState(false);
+   const [priorityOpen, setPriorityOpen] = useState(false);
+   const [ownerOpen, setOwnerOpen] = useState(false);
    const nameRef = useRef<HTMLInputElement>(null);
 
    useEffect(() => {
       nameRef.current?.focus();
-      void (async () => {
-         try {
-            const [pr, he] = await Promise.all([api.priorities(), api.healthStates()]);
-            setPriorityId((v) => v || pr[0]?.id || '');
-            setHealthId(he[0]?.id || '');
-         } catch {
-            /* catálogos opcionais */
-         }
-      })();
    }, []);
 
-   const owner = users.find((u) => u.id === ownerId) ?? null;
-   const priority = priorities.find((p) => p.id === priorityId);
+   useEffect(() => {
+      if (!priorityId) {
+         const noPriority = priorities.find((priority) => /no priority/i.test(priority.name));
+         setPriorityId(noPriority?.id ?? priorities[0]?.id ?? '');
+      }
+      if (!healthId) {
+         const noUpdate = healthStates.find((health) => health.id === 'no-update');
+         setHealthId(noUpdate?.id ?? healthStates[0]?.id ?? '');
+      }
+   }, [healthId, healthStates, priorities, priorityId]);
+
+   const owner = users.find((user) => user.id === ownerId) ?? null;
+   const priority = priorities.find((entry) => entry.id === priorityId);
 
    const create = async () => {
-      if (!name.trim() || busy) return;
+      if (!name.trim() || !priorityId || !healthId || busy) return;
       setBusy(true);
       try {
-         await api.initiatives.create({
-            slug: slugify(name),
+         const created = await api.initiatives.create({
+            slug: buildInitiativeSlug(name),
             name: name.trim(),
-            priorityId: priorityId || priorities[0]?.id || '',
-            healthId: healthId || allHealth[0]?.id || '',
+            priorityId,
+            healthId,
             status,
             description: summary.trim() || null,
+            icon,
+            iconColor,
             ownerId,
             target: target || null,
+            labelIds,
          });
-         await hydrate();
+         applyInitiative(created);
          toast.success('Initiative created');
          stop();
       } catch {
-         toast.error('Não foi possível criar a initiative (slug já existe?)');
+         toast.error('Não foi possível criar a initiative');
+      } finally {
          setBusy(false);
       }
    };
 
-   const onKeyDown = (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-         e.preventDefault();
-         void create();
-      } else if (e.key === 'Escape') {
+   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (!event.currentTarget.contains(event.target as Node)) return;
+      if (event.key === 'Escape') {
+         event.preventDefault();
          stop();
+         return;
+      }
+      if (
+         event.key === 'Enter' &&
+         !event.shiftKey &&
+         (event.target === nameRef.current ||
+            event.currentTarget.querySelector('[aria-label="Initiative summary"]') === event.target)
+      ) {
+         event.preventDefault();
+         void create();
       }
    };
 
    return (
-      <div className="px-6 py-3 border-b bg-accent/20" onKeyDown={onKeyDown}>
-         <div className="flex items-start gap-2">
-            <span className="inline-flex size-6 items-center justify-center rounded bg-muted/50 text-sm shrink-0 mt-0.5">
-               <InitiativeStatusIcon status={status} />
-            </span>
-            <div className="flex-1 min-w-0">
-               <input
-                  ref={nameRef}
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="New initiative"
-                  className="w-full bg-transparent text-sm font-medium outline-none placeholder:text-muted-foreground"
-               />
-               <input
-                  value={summary}
-                  onChange={(e) => setSummary(e.target.value)}
-                  placeholder="Add a short summary…"
-                  className="w-full bg-transparent text-xs text-muted-foreground outline-none placeholder:text-muted-foreground/70 mt-0.5"
-               />
-            </div>
+      <div
+         className="mx-3 mb-3 rounded-md border border-[var(--initiative-editor-border)] bg-card px-[17px] pb-4 pt-3 shadow-[var(--initiative-editor-shadow)]"
+         onKeyDown={onKeyDown}
+      >
+         <div className="flex h-7 items-center gap-3">
+            <InitiativeIconPicker
+               icon={icon}
+               color={iconColor}
+               onIconChange={setIcon}
+               onColorChange={setIconColor}
+               compact
+            />
+            <input
+               ref={nameRef}
+               value={name}
+               onChange={(event) => setName(event.target.value)}
+               placeholder="Initiative name"
+               aria-label="Initiative name"
+               maxLength={196}
+               className="block h-[23px] min-w-0 flex-1 bg-transparent text-base font-medium leading-[23px] outline-none placeholder:text-muted-foreground"
+            />
          </div>
 
-         <div className="flex items-center justify-between mt-2.5 pl-8">
-            <div className="flex items-center gap-1.5 flex-wrap">
-               {/* Status */}
-               <Popover>
+         <div className="flex h-[30px] items-start pl-10">
+            <input
+               value={summary}
+               onChange={(event) => setSummary(event.target.value)}
+               placeholder="Initiative summary"
+               aria-label="Initiative summary"
+               className="block h-[22px] w-full bg-transparent text-[13px] leading-[22px] text-muted-foreground outline-none placeholder:text-muted-foreground/70"
+            />
+         </div>
+
+         <div className="flex h-6 items-center justify-between gap-3 pl-10">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+               <Popover open={statusOpen} onOpenChange={setStatusOpen}>
                   <PopoverTrigger asChild>
-                     <Chip>
+                     <Button
+                        type="button"
+                        size="xxs"
+                        variant="outline"
+                        className={triggerClassName}
+                        aria-label="Change status"
+                     >
                         <InitiativeStatusIcon status={status} />
                         {INITIATIVE_STATUS_META[status].label}
-                     </Chip>
+                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent align="start" className="w-48 p-0">
-                     <Command>
+                  <PopoverContent align="start" className="w-52 p-0">
+                     <Command
+                        onKeyDown={(event) => {
+                           const candidate = STATUS_IDS[Number(event.key) - 1];
+                           if (!candidate || event.metaKey || event.ctrlKey || event.altKey) return;
+                           event.preventDefault();
+                           setStatus(candidate);
+                           setStatusOpen(false);
+                        }}
+                     >
+                        <CommandInput autoFocus placeholder="Change status…" />
                         <CommandList>
+                           <CommandEmpty>No results.</CommandEmpty>
                            <CommandGroup>
-                              {STATUS_IDS.map((s) => (
-                                 <CommandItem key={s} onSelect={() => setStatus(s)}>
-                                    <InitiativeStatusIcon status={s} />
-                                    {INITIATIVE_STATUS_META[s].label}
-                                    {status === s && <CheckIcon className="ml-auto size-3.5" />}
+                              {STATUS_IDS.map((candidate, index) => (
+                                 <CommandItem
+                                    key={candidate}
+                                    onSelect={() => {
+                                       setStatus(candidate);
+                                       setStatusOpen(false);
+                                    }}
+                                 >
+                                    <InitiativeStatusIcon status={candidate} />
+                                    {INITIATIVE_STATUS_META[candidate].label}
+                                    {status === candidate && (
+                                       <CheckIcon className="ml-auto size-3.5" />
+                                    )}
+                                    <CommandShortcut>{index + 1}</CommandShortcut>
                                  </CommandItem>
                               ))}
                            </CommandGroup>
@@ -163,10 +220,15 @@ export function InlineNewInitiative({ defaultStatus }: { defaultStatus: Initiati
                   </PopoverContent>
                </Popover>
 
-               {/* Priority */}
-               <Popover>
+               <Popover open={priorityOpen} onOpenChange={setPriorityOpen}>
                   <PopoverTrigger asChild>
-                     <Chip>
+                     <Button
+                        type="button"
+                        size="xxs"
+                        variant="outline"
+                        className={triggerClassName}
+                        aria-label="Change priority"
+                     >
                         {priority ? (
                            <>
                               <priority.icon className="size-3.5" />
@@ -175,21 +237,43 @@ export function InlineNewInitiative({ defaultStatus }: { defaultStatus: Initiati
                         ) : (
                            'Priority'
                         )}
-                     </Chip>
+                     </Button>
                   </PopoverTrigger>
                   <PopoverContent align="start" className="w-52 p-0">
-                     <Command>
-                        <CommandInput placeholder="Priority…" />
+                     <Command
+                        onKeyDown={(event) => {
+                           if (
+                              !/^\d$/.test(event.key) ||
+                              event.metaKey ||
+                              event.ctrlKey ||
+                              event.altKey
+                           )
+                              return;
+                           const candidate = priorities[Number(event.key)];
+                           if (!candidate) return;
+                           event.preventDefault();
+                           setPriorityId(candidate.id);
+                           setPriorityOpen(false);
+                        }}
+                     >
+                        <CommandInput autoFocus placeholder="Change priority…" />
                         <CommandList>
                            <CommandEmpty>No results.</CommandEmpty>
                            <CommandGroup>
-                              {priorities.map((p) => (
-                                 <CommandItem key={p.id} onSelect={() => setPriorityId(p.id)}>
-                                    <p.icon className="size-4 text-muted-foreground" />
-                                    {p.name}
-                                    {priorityId === p.id && (
+                              {priorities.map((candidate, index) => (
+                                 <CommandItem
+                                    key={candidate.id}
+                                    onSelect={() => {
+                                       setPriorityId(candidate.id);
+                                       setPriorityOpen(false);
+                                    }}
+                                 >
+                                    <candidate.icon className="size-4 text-muted-foreground" />
+                                    {candidate.name}
+                                    {priorityId === candidate.id && (
                                        <CheckIcon className="ml-auto size-3.5" />
                                     )}
+                                    <CommandShortcut>{index}</CommandShortcut>
                                  </CommandItem>
                               ))}
                            </CommandGroup>
@@ -198,10 +282,15 @@ export function InlineNewInitiative({ defaultStatus }: { defaultStatus: Initiati
                   </PopoverContent>
                </Popover>
 
-               {/* Owner */}
-               <Popover>
+               <Popover open={ownerOpen} onOpenChange={setOwnerOpen}>
                   <PopoverTrigger asChild>
-                     <Chip>
+                     <Button
+                        type="button"
+                        size="xxs"
+                        variant="outline"
+                        className={triggerClassName}
+                        aria-label="Change initiative owner"
+                     >
                         {owner ? (
                            <>
                               <Avatar className="size-4">
@@ -218,29 +307,65 @@ export function InlineNewInitiative({ defaultStatus }: { defaultStatus: Initiati
                               Owner
                            </>
                         )}
-                     </Chip>
+                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent align="start" className="w-56 p-0">
-                     <Command>
-                        <CommandInput placeholder="Owner…" />
+                  <PopoverContent align="start" className="w-60 p-0">
+                     <Command
+                        onKeyDown={(event) => {
+                           if (
+                              !/^\d$/.test(event.key) ||
+                              event.metaKey ||
+                              event.ctrlKey ||
+                              event.altKey
+                           )
+                              return;
+                           event.preventDefault();
+                           if (event.key === '0') setOwnerId(null);
+                           else {
+                              const candidate = users[Number(event.key) - 1];
+                              if (!candidate) return;
+                              setOwnerId(candidate.id);
+                           }
+                           setOwnerOpen(false);
+                        }}
+                     >
+                        <CommandInput autoFocus placeholder="Set owner…" />
                         <CommandList>
                            <CommandEmpty>No results.</CommandEmpty>
                            <CommandGroup>
-                              <CommandItem onSelect={() => setOwnerId(null)}>
+                              <CommandItem
+                                 onSelect={() => {
+                                    setOwnerId(null);
+                                    setOwnerOpen(false);
+                                 }}
+                              >
                                  <UserRound className="size-4 text-muted-foreground" />
                                  No owner
                                  {!ownerId && <CheckIcon className="ml-auto size-3.5" />}
+                                 <CommandShortcut>0</CommandShortcut>
                               </CommandItem>
-                              {users.map((u) => (
-                                 <CommandItem key={u.id} onSelect={() => setOwnerId(u.id)}>
+                              {users.map((user, index) => (
+                                 <CommandItem
+                                    key={user.id}
+                                    onSelect={() => {
+                                       setOwnerId(user.id);
+                                       setOwnerOpen(false);
+                                    }}
+                                 >
                                     <Avatar className="size-4">
-                                       <AvatarImage src={u.avatarUrl || undefined} alt={u.name} />
+                                       <AvatarImage
+                                          src={user.avatarUrl || undefined}
+                                          alt={user.name}
+                                       />
                                        <AvatarFallback className="text-[8px]">
-                                          {u.name[0]}
+                                          {user.name[0]}
                                        </AvatarFallback>
                                     </Avatar>
-                                    {u.name}
-                                    {ownerId === u.id && <CheckIcon className="ml-auto size-3.5" />}
+                                    {user.name}
+                                    {ownerId === user.id && (
+                                       <CheckIcon className="ml-auto size-3.5" />
+                                    )}
+                                    {index < 9 && <CommandShortcut>{index + 1}</CommandShortcut>}
                                  </CommandItem>
                               ))}
                            </CommandGroup>
@@ -249,33 +374,32 @@ export function InlineNewInitiative({ defaultStatus }: { defaultStatus: Initiati
                   </PopoverContent>
                </Popover>
 
-               {/* Target date */}
-               <Popover>
-                  <PopoverTrigger asChild>
-                     <Chip>
-                        <CalendarClock className="size-3.5" />
-                        {target || 'Target date'}
-                     </Chip>
-                  </PopoverTrigger>
-                  <PopoverContent align="start" className="w-auto p-2">
-                     <input
-                        type="date"
-                        value={target}
-                        onChange={(e) => setTarget(e.target.value)}
-                        className="bg-transparent text-sm outline-none"
-                     />
-                  </PopoverContent>
-               </Popover>
+               <InitiativeTargetPicker value={target} onChange={setTarget} compact />
+               <InitiativeLabelPicker
+                  labels={labels}
+                  value={labelIds}
+                  onChange={setLabelIds}
+                  compact
+               />
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
-               <Button size="xs" variant="ghost" onClick={stop} disabled={busy}>
+            <div className="flex shrink-0 items-center gap-2">
+               <Button
+                  type="button"
+                  size="xxs"
+                  variant="ghost"
+                  onClick={stop}
+                  disabled={busy}
+                  aria-label="Cancel initiative"
+               >
                   Cancel
                </Button>
                <Button
-                  size="xs"
+                  type="button"
+                  size="xxs"
                   onClick={() => void create()}
-                  disabled={busy || !name.trim()}
+                  disabled={busy || !name.trim() || !priorityId || !healthId}
+                  aria-label="Create initiative"
                   className={cn(busy && 'opacity-70')}
                >
                   Create
