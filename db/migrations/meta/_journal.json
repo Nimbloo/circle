@@ -239,6 +239,13 @@
          "when": 1788313690886,
          "tag": "0033_fresh_night_thrasher",
          "breakpoints": true
+      },
+      {
+         "idx": 34,
+         "version": "7",
+         "when": 1788376043016,
+         "tag": "0034_material_victor_mancha",
+         "breakpoints": true
       }
    ]
 }
