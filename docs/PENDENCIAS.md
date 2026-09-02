@@ -1,6 +1,6 @@
 # Pendências do Circle
 
-Estado em **2026-09-02**, com `main` e `develop` sincronizadas na v0.23.0.
+Estado em **2026-09-02**, com `main` e `develop` sincronizadas na v0.24.0.
 
 > **As [issues](https://github.com/Nimbloo/circle/issues) são a fonte da verdade** sobre
 > escopo. Este documento registra o que elas **não** capturam: bloqueios que vivem em
@@ -163,7 +163,7 @@ collapse da sidebar animado e persistido por time; `workspace.hydrate` coalescid
 chamada concorrente não é mais descartada) e auto-rollover de cycles só no boot (antes, ~25
 refetches pós-mutação disparavam a escrita); filtros `is not` corretos para issue sem
 projeto/criador/data, opções "No project"/"No creator", tabs preservando `?filters=`;
-"Show sub-issues" removido do Display (o domínio não tem sub-issues).
+"Show sub-issues" removido do Display (o domínio não tem sub-issues). Promovido na release [v0.24.0](https://github.com/Nimbloo/circle/releases/tag/v0.24.0) (PRs #84 e #85).
 
 **Ficou para depois, em ordem de valor:**
 
