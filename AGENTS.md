@@ -1,6 +1,6 @@
 # AGENTS.md — guia do projeto Circle
 
-Instruções para o Codex (e humanos) evoluírem o Circle. Complementa o
+Instruções para os agentes de código (Codex, Claude) e humanos evoluírem o Circle. Complementa o
 [README.md](./README.md). **Contexto em pt-BR, código em inglês.**
 
 Circle é um gestor de issues inspirado no **Linear**, full-stack Next.js, em produção em
@@ -85,7 +85,7 @@ serviço de `lib/api/` que tocar. `pnpm typecheck` antes de commitar.
 ## Commits
 
 Conventional Commits em pt-BR: `feat|fix|docs|style|refactor|test|chore|perf(<escopo>): <descrição>`.
-Sem emoji. **Não** referencie IA/assistente/Codex no commit (sem `Co-Authored-By`, sem 🤖).
+Sem emoji. **Não** referencie IA/assistente (Codex, Claude) no commit (sem `Co-Authored-By`, sem 🤖).
 
 ---
 
@@ -104,3 +104,26 @@ Sem emoji. **Não** referencie IA/assistente/Codex no commit (sem `Co-Authored-B
 ## Comandos
 
 `pnpm dev` · `pnpm test` · `pnpm typecheck` · `pnpm build` · `pnpm db:generate` · `pnpm db:migrate` · `pnpm db:seed`
+
+---
+
+## Continuidade entre agentes (Codex ↔ Claude)
+
+Codex e Claude alternam no mesmo trabalho. O que garante a troca fluida é **estado no
+repositório**, nunca a memória de sessão de uma ferramenta:
+
+1. **Um guia só.** `AGENTS.md` é a fonte; `CLAUDE.md` apenas o importa (`@AGENTS.md`).
+   Edite somente o `AGENTS.md`.
+2. **Trabalho em andamento vive em `docs/superpowers/`.** Spec em
+   `specs/<data>-<slug>-design.md`, plano em `plans/<data>-<slug>.md` com checkboxes por
+   task e um bloco **`## Estado (handoff entre agentes)`** no topo do plano: onde
+   (worktree/branch), feito, última verificação (data, quem rodou, resultado), próximo
+   passo e bloqueios.
+3. **Ao retomar** ("continua aí"): `git worktree list` → abrir o plano mais recente sem
+   status concluído → ler o bloco Estado → rodar a verificação declarada **antes** de
+   mudar código.
+4. **Ao pausar ou fechar uma task:** marcar os checkboxes, atualizar o bloco Estado e,
+   se houver mudança pronta, commitar (Conventional Commits). Diff grande sem commit é o
+   maior risco da alternância.
+5. **Mesmo worktree.** Os dois agentes trabalham no mesmo worktree/branch; não abrir um
+   segundo worktree para o mesmo plano.
