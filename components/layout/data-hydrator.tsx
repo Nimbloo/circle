@@ -20,7 +20,8 @@ import { PreferencesApplier } from '@/components/layout/preferences-applier';
  */
 export function DataHydrator() {
    useEffect(() => {
-      useWorkspaceStore.getState().hydrate();
+      // Único lugar que pede o auto-rollover de cycles (escrita); refetches não.
+      useWorkspaceStore.getState().hydrate({ rollover: true });
       void startUserSettingsSync();
       void useIssuesStore
          .getState()

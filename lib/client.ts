@@ -135,12 +135,12 @@ export const api = {
 
    /**
     * Bootstrap do workspace num GET só (me, catálogos, teams, projects, members,
-    * cycles, initiatives, views). `rollover: false` pula o auto-rollover de cycles
-    * (escrita) — usado no refetch disparado por SSE, onde só o boot da página deve
-    * fazer a escrita.
+    * cycles, initiatives, views). O auto-rollover de cycles (ESCRITA) só roda com
+    * `rollover: true` — o boot da página (`DataHydrator`). Os ~25 refetches pós-mutação
+    * e os de SSE passam sem opção e ficam só na leitura.
     */
    workspace: (opts?: { rollover?: boolean }) =>
-      get<WorkspaceBootstrap>(`/workspace${opts?.rollover === false ? '?rollover=0' : ''}`),
+      get<WorkspaceBootstrap>(`/workspace${opts?.rollover === true ? '' : '?rollover=0'}`),
 
    /** Agent com IA real (Bedrock/Claude via IRSA) + contexto do workspace. */
    agent: {
