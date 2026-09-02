@@ -1,6 +1,6 @@
 # Pendências do Circle
 
-Estado em **2026-09-01**, sobre a `develop` (v0.21.0).
+Estado em **2026-09-02**, com `main` e `develop` sincronizadas na v0.21.0.
 
 > **As [issues](https://github.com/Nimbloo/circle/issues) são a fonte da verdade** sobre
 > escopo. Este documento registra o que elas **não** capturam: bloqueios que vivem em
@@ -55,13 +55,10 @@ semanticamente incorreto. As variantes de tema próprias do Circle foram preserv
 o Linear é o benchmark de composição, densidade e interação, não uma razão para apagar
 preferências do produto.
 
-**A `develop` contém mudanças ainda não promovidas para a `main`, além desta entrega.**
-O `package.json` já está em `0.21.0` e a última tag é `v0.20.0`. Está parado em
-produção, entre outras coisas, o **conserto de um crash**: a página de Cycles estourava
-`ReferenceError` porque `teamId` era usado num seletor do zustand antes da declaração.
-
-Para entregar a #65: PR da branch da issue para `develop`. Depois, para promover o
-conjunto: PR `develop → main`. O CI cria tag e release; o ArgoCD faz o rollout.
+**Promovida para produção na release
+[v0.21.0](https://github.com/Nimbloo/circle/releases/tag/v0.21.0).** O rollout ficou
+`Synced/Healthy` no ArgoCD, com probes de health/readiness em `200`, pod sem reinícios e
+o digest da tag SemVer idêntico ao executado. `main` e `develop` estão sincronizadas.
 
 **Política dos arquivos de agente resolvida.** `AGENTS.md` é versionado como guia do
 projeto para o Codex, equivalente ao `CLAUDE.md`. `.agents/` fica no `.gitignore`: os 59
@@ -99,8 +96,8 @@ cobertura.
 ### Sentry — DSN
 
 O SDK está nos três runtimes e o build já injeta `NEXT_PUBLIC_SENTRY_DSN` como build arg
-(`Dockerfile` + `vars.NEXT_PUBLIC_SENTRY_DSN` no CI). Falta **criar a variável de repo**
-com o DSN do projeto `circle`, e mergear o
+(`Dockerfile` + `vars.NEXT_PUBLIC_SENTRY_DSN` no CI). O projeto `circle` ainda **não
+existe no Sentry**. Falta criá-lo, cadastrar o DSN na variável de repo e mergear o
 [PR #645 no `nimbloo-k8s`](https://github.com/Nimbloo/nimbloo-k8s/pull/645) (env de
 runtime, necessário para o lado servidor).
 
