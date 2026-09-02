@@ -25,7 +25,7 @@ import { IssueContextMenu } from './issue-context-menu';
 function IssueLineComponent({ issue, layoutId = false }: { issue: Issue; layoutId?: boolean }) {
    const { orgId } = useParams<{ orgId: string }>();
    // Selector estreito: assina só displayProperties (não o store inteiro) — senão toda
-   // linha memoizada re-renderiza a qualquer mudança do display-store (ex.: showSubIssues).
+   // linha memoizada re-renderiza a qualquer mudança do display-store (ex.: showEmptyGroups).
    const displayProperties = useDisplaySettingsStore((s) => s.displayProperties);
    // Chamada DENTRO do seletor (referencia estavel: `find`), senao a linha nao
    // acorda quando o ciclo muda.

@@ -48,7 +48,6 @@ interface DisplaySettingsState {
    ordering: OrderingKey;
    orderCompletedByRecency: boolean;
    completedIssues: CompletedIssuesFilter;
-   showSubIssues: boolean;
    showEmptyGroups: boolean;
    displayProperties: Record<DisplayPropertyKey, boolean>;
 
@@ -56,7 +55,6 @@ interface DisplaySettingsState {
    setOrdering: (ordering: OrderingKey) => void;
    setOrderCompletedByRecency: (value: boolean) => void;
    setCompletedIssues: (value: CompletedIssuesFilter) => void;
-   setShowSubIssues: (value: boolean) => void;
    setShowEmptyGroups: (value: boolean) => void;
    toggleDisplayProperty: (key: DisplayPropertyKey) => void;
    resetDisplaySettings: () => void;
@@ -67,7 +65,8 @@ const DEFAULTS = {
    ordering: 'priority' as OrderingKey,
    orderCompletedByRecency: false,
    completedIssues: 'all' as CompletedIssuesFilter,
-   showSubIssues: true,
+   // "Show sub-issues" foi removido: o domínio não tem sub-issues (sem parentId), o
+   // toggle não tinha consumidor. Volta junto com sub-issues (#25).
    showEmptyGroups: false,
    displayProperties: DEFAULT_DISPLAY_PROPERTIES,
 };
@@ -86,7 +85,6 @@ export const useDisplaySettingsStore = create<DisplaySettingsState>()(
          setOrdering: (ordering) => set({ ordering }),
          setOrderCompletedByRecency: (orderCompletedByRecency) => set({ orderCompletedByRecency }),
          setCompletedIssues: (completedIssues) => set({ completedIssues }),
-         setShowSubIssues: (showSubIssues) => set({ showSubIssues }),
          setShowEmptyGroups: (showEmptyGroups) => set({ showEmptyGroups }),
          toggleDisplayProperty: (key) =>
             set((state) => ({

@@ -60,6 +60,10 @@ interface WorkspaceState {
    getViewById: (id: string) => View | undefined;
 }
 
+/** Fetch do bootstrap em voo e a repetição única agendada (ver `hydrate`). */
+let inFlight: Promise<void> | null = null;
+let queued: Promise<void> | null = null;
+
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
    loaded: false,
    loading: false,
@@ -71,32 +75,47 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
    initiatives: [],
    views: [],
 
-   hydrate: async (opts) => {
-      if (get().loading) return;
-      set({ loading: true });
-      try {
-         // Refetch de SSE passa rollover:false — não repetir a escrita do auto-rollover
-         // de cycles a cada evento (só o boot genuíno da página faz o rollover).
-         const data = await api.workspace({ rollover: opts?.rollover });
-         // Catálogos (status/priority/label/health) já vêm no bootstrap — populamos
-         // o catalog-store a partir daqui, sem fetch duplicado.
-         useCatalogStore.getState().setCatalogs(data);
-         const users = data.members.map(adaptMemberToUser);
-         const usersById = new Map(users.map((u) => [u.id, u]));
-         set({
-            me: data.me,
-            projects: data.projects.map(adaptProject),
-            teams: data.teams.map(adaptTeam),
-            users,
-            cycles: data.cycles.map(adaptCycle),
-            initiatives: data.initiatives.map((i) => adaptInitiative(i, usersById)),
-            views: data.views.map((v) => adaptView(v, usersById)),
-            loaded: true,
-            loading: false,
-         });
-      } catch {
-         set({ loading: false });
+   hydrate: (opts) => {
+      // Coalescência: com um fetch em voo, a chamada nova NÃO é descartada (antes era —
+      // e o refresh pós-mutação sumia quando um refetch de SSE estava no ar). Ela espera
+      // o atual terminar e roda mais uma vez; várias chamadas nesse meio tempo viram uma.
+      if (inFlight) {
+         if (!queued) {
+            queued = inFlight.then(() => {
+               queued = null;
+               return get().hydrate(opts);
+            });
+         }
+         return queued;
       }
+      inFlight = (async () => {
+         set({ loading: true });
+         try {
+            // Só o boot da página pede rollover (escrita); refetches ficam na leitura.
+            const data = await api.workspace({ rollover: opts?.rollover });
+            // Catálogos (status/priority/label/health) já vêm no bootstrap — populamos
+            // o catalog-store a partir daqui, sem fetch duplicado.
+            useCatalogStore.getState().setCatalogs(data);
+            const users = data.members.map(adaptMemberToUser);
+            const usersById = new Map(users.map((u) => [u.id, u]));
+            set({
+               me: data.me,
+               projects: data.projects.map(adaptProject),
+               teams: data.teams.map(adaptTeam),
+               users,
+               cycles: data.cycles.map(adaptCycle),
+               initiatives: data.initiatives.map((i) => adaptInitiative(i, usersById)),
+               views: data.views.map((v) => adaptView(v, usersById)),
+               loaded: true,
+               loading: false,
+            });
+         } catch {
+            set({ loading: false });
+         } finally {
+            inFlight = null;
+         }
+      })();
+      return inFlight;
    },
 
    applyProject: (dto) => {
