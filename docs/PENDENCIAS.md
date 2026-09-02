@@ -1,7 +1,6 @@
 # Pendências do Circle
 
-Estado em **2026-09-02**, com `main` e `develop` sincronizadas na v0.21.0 e a 2ª leva de
-paridade (interação) pronta para PR.
+Estado em **2026-09-02**, com `main` e `develop` sincronizadas na v0.22.0.
 
 > **As [issues](https://github.com/Nimbloo/circle/issues) são a fonte da verdade** sobre
 > escopo. Este documento registra o que elas **não** capturam: bloqueios que vivem em
