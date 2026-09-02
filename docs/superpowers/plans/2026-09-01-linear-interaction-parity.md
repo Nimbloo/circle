@@ -24,8 +24,8 @@ de initiatives aprovado na especificação.
   `pnpm test` 67 arquivos / 379 testes ok (re-rodado após o ajuste de `defaultSize` no
   Inbox) · `pnpm build` ok · `git diff --check` ok · guard do dev seam vazio. Smoke no
   Chrome só em dark `1424×771`; light e viewports `390/768/1728` sem validação manual.
-- **Próximo passo:** acompanhar CI e review do PR; após o merge em `develop`, o plano está
-  concluído. Se sobrar tempo, validar light + viewports móveis em outro Chrome.
+- **Próximo passo:** nenhum — plano **concluído**; mergeado em `develop` (#75) e em produção na
+  v0.22.0 (#76). Pendência registrada em `docs/PENDENCIAS.md`: light + viewports móveis.
 - **Bloqueios / decisões pendentes:** nenhum.
 
 ## Restrições globais
