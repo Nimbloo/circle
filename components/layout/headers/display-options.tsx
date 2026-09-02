@@ -56,14 +56,12 @@ export function DisplayOptions() {
       ordering,
       orderCompletedByRecency,
       completedIssues,
-      showSubIssues,
       showEmptyGroups,
       displayProperties,
       setGrouping,
       setOrdering,
       setOrderCompletedByRecency,
       setCompletedIssues,
-      setShowSubIssues,
       setShowEmptyGroups,
       toggleDisplayProperty,
       resetDisplaySettings,
@@ -212,20 +210,6 @@ export function DisplayOptions() {
                         </SelectItem>
                      </SelectContent>
                   </Select>
-               </div>
-
-               <div className="flex items-center justify-between">
-                  <Label
-                     htmlFor="show-sub-issues"
-                     className="text-xs text-muted-foreground font-normal"
-                  >
-                     Show sub-issues
-                  </Label>
-                  <Switch
-                     id="show-sub-issues"
-                     checked={showSubIssues}
-                     onCheckedChange={setShowSubIssues}
-                  />
                </div>
             </div>
 
