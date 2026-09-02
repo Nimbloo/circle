@@ -34,6 +34,7 @@ import {
    SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { isTeamOpen, useSidebarTeamsStore } from '@/store/sidebar-teams-store';
 import { toast } from 'sonner';
 import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
 
@@ -62,6 +63,9 @@ function TeamSub({ href, children }: { href: string; children: ReactNode }) {
 export function NavTeams() {
    const { orgId } = useParams<{ orgId: string }>();
    const teams = useWorkspaceStore((s) => s.teams);
+   // Expandido/recolhido por time é persistido (Linear lembra entre sessões).
+   const openById = useSidebarTeamsStore((s) => s.openById);
+   const setTeamOpen = useSidebarTeamsStore((s) => s.setOpen);
    const joinedTeams = teams.filter((t) => t.joined);
    return (
       <SidebarGroup>
@@ -69,9 +73,10 @@ export function NavTeams() {
          <SidebarMenu>
             {joinedTeams.map((item, index) => (
                <Collapsible
-                  key={item.name}
+                  key={item.id}
                   asChild
-                  defaultOpen={index === 0}
+                  open={isTeamOpen(openById, item.id, index)}
+                  onOpenChange={(open) => setTeamOpen(item.id, open)}
                   className="group/collapsible"
                >
                   <SidebarMenuItem>
@@ -114,6 +119,8 @@ export function NavTeams() {
                            </DropdownMenuItem>
                         </DropdownMenuContent>
                      </DropdownMenu>
+                     {/* Altura + opacidade animadas (200 ms) na abertura e no fechamento —
+                         regra global de [data-slot=collapsible-content] em globals.css. */}
                      <CollapsibleContent>
                         <SidebarMenuSub>
                            <SidebarMenuSubItem>

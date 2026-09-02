@@ -14,7 +14,10 @@ export function optionFilterFn<TData>(
   inputData: string,
   filterValue: FilterModel<'option'>,
 ) {
-  if (!inputData) return false
+  // Sem valor (ex.: issue sem projeto): "is not X" é verdadeiro — a linha NÃO é X.
+  // Antes qualquer operador excluía a linha, e "Project is not X" sumia com as sem projeto.
+  if (!inputData)
+    return filterValue.operator === 'is not' || filterValue.operator === 'is none of'
   if (filterValue.values.length === 0) return true
 
   const value = inputData.toString().toLowerCase()
@@ -35,7 +38,8 @@ export function multiOptionFilterFn(
   inputData: string[],
   filterValue: FilterModel<'multiOption'>,
 ) {
-  if (!inputData) return false
+  // Sem valores: só os operadores de exclusão passam (a linha não inclui nada).
+  if (!inputData) return filterValue.operator.startsWith('exclude')
 
   if (
     filterValue.values.length === 0 ||

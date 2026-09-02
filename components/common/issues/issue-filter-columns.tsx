@@ -95,25 +95,44 @@ function assigneeOptions(users: User[]): ColumnOption[] {
    ];
 }
 
+// Valor ausente vira opção explícita (padrão Linear: "No project"), como `unassigned`
+// e `no-cycle` — assim "Project is No project" e "is not X" funcionam sem caso especial.
+export const NO_PROJECT = 'no-project';
+export const NO_CREATOR = 'no-creator';
+
 function creatorOptions(users: User[]): ColumnOption[] {
-   return users.map((user) => ({
-      value: user.id,
-      label: user.name,
-      icon: (
-         <Avatar className="size-4">
-            <AvatarImage src={user.avatarUrl || undefined} alt={user.name} />
-            <AvatarFallback>{user.name[0]}</AvatarFallback>
-         </Avatar>
-      ),
-   }));
+   return [
+      {
+         value: NO_CREATOR,
+         label: 'No creator',
+         icon: <UserPen className="size-4 text-muted-foreground" />,
+      },
+      ...users.map((user) => ({
+         value: user.id,
+         label: user.name,
+         icon: (
+            <Avatar className="size-4">
+               <AvatarImage src={user.avatarUrl || undefined} alt={user.name} />
+               <AvatarFallback>{user.name[0]}</AvatarFallback>
+            </Avatar>
+         ),
+      })),
+   ];
 }
 
 function projectOptions(projects: Project[]): ColumnOption[] {
-   return projects.map((project) => ({
-      value: project.id,
-      label: project.name,
-      icon: <project.icon className="size-4 text-muted-foreground" />,
-   }));
+   return [
+      {
+         value: NO_PROJECT,
+         label: 'No project',
+         icon: <Folder className="size-4 text-muted-foreground" />,
+      },
+      ...projects.map((project) => ({
+         value: project.id,
+         label: project.name,
+         icon: <project.icon className="size-4 text-muted-foreground" />,
+      })),
+   ];
 }
 
 function cycleOptions(cycles: Cycle[]): ColumnOption[] {
@@ -188,7 +207,7 @@ function buildIssueFilterColumns(
       dtf
          .option()
          .id('project')
-         .accessor((i: Issue) => i.project?.id ?? '')
+         .accessor((i: Issue) => i.project?.id ?? NO_PROJECT)
          .displayName('Project')
          .icon(Folder)
          .options(projectOptions(projects))
@@ -204,7 +223,7 @@ function buildIssueFilterColumns(
       dtf
          .option()
          .id('creator')
-         .accessor((i: Issue) => i.createdById ?? '')
+         .accessor((i: Issue) => i.createdById ?? NO_CREATOR)
          .displayName('Created by')
          .icon(UserPen)
          .options(creatorOptions(users))
@@ -246,6 +265,8 @@ export function useIssueFilterColumns() {
    );
 }
 
+const NEGATIVE_DATE_OPERATORS = new Set(['is not', 'is not between']);
+
 /**
  * Aplica um FiltersState (bazza/ui) a uma lista de issues, honrando o operador
  * de cada filtro. Data-independente (usa só os accessors).
@@ -263,8 +284,10 @@ export function applyIssueFilters(issues: Issue[], filters: FiltersState): Issue
             case 'multiOption':
                return multiOptionFilterFn((value as string[]) ?? [], filter) ?? true;
             case 'date':
-               // issue sem a data (ex.: sem due date) é excluída quando o filtro de data está ativo.
-               return value instanceof Date ? dateFilterFn(value, filter) : false;
+               // Sem a data (ex.: sem due date): passa só nos operadores negativos — a issue
+               // "não é" / "não está entre" aquela data. Nos demais fica de fora.
+               if (!(value instanceof Date)) return NEGATIVE_DATE_OPERATORS.has(filter.operator);
+               return dateFilterFn(value, filter);
             default:
                return true;
          }

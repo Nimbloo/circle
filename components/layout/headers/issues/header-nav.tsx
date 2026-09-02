@@ -13,7 +13,7 @@ import { useSearchStore } from '@/store/search-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { ChevronRight, SearchIcon } from 'lucide-react';
 import Link from 'next/link';
-import { useParams, usePathname } from 'next/navigation';
+import { useParams, usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 import Notifications from './notifications';
 
@@ -26,6 +26,9 @@ const ISSUE_VIEW_TABS = [
 export function IssueViewTabs() {
    const { orgId, teamId } = useParams<{ orgId: string; teamId: string }>();
    const pathname = usePathname();
+   // Filtros vivem em `?filters=`; trocar de tab (All → Active) preserva a query, como
+   // no Linear — antes o Link sem query zerava os filtros.
+   const search = useSearchParams().toString();
 
    return (
       <div className="flex items-center gap-1">
@@ -35,7 +38,7 @@ export function IssueViewTabs() {
             return (
                <Link
                   key={tab.segment}
-                  href={href}
+                  href={search ? `${href}?${search}` : href}
                   className={cn(
                      'px-2.5 h-7 inline-flex items-center rounded-full border text-xs font-medium transition-colors',
                      isActive
