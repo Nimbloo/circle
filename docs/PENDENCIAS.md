@@ -1,7 +1,6 @@
 # Pendências do Circle
 
-Estado em **2026-09-02**, com `main` e `develop` sincronizadas na v0.21.0 e a 2ª leva de
-paridade (interação) pronta para PR.
+Estado em **2026-09-02**, com `main` e `develop` sincronizadas na v0.22.0.
 
 > **As [issues](https://github.com/Nimbloo/circle/issues) são a fonte da verdade** sobre
 > escopo. Este documento registra o que elas **não** capturam: bloqueios que vivem em
@@ -95,6 +94,11 @@ da auditoria: `defaultSize` no painel de detalhe do Inbox (warning de layout shi
 `react-resizable-panels` no SSR). Observado uma única vez e **não reproduzido**: lista do
 Inbox abrindo com 424 px em vez de 300 numa janela de 1718 px — se voltar, olhar a
 interação entre `onResize` e o `useLayoutEffect` que aplica a largura do store.
+
+**Promovida para produção na release
+[v0.22.0](https://github.com/Nimbloo/circle/releases/tag/v0.22.0)** (PRs #75 e #76). O
+Image Updater trocou a tag em ~4 min após o push no ECR; rollout `Synced/Healthy`,
+migração `0033` aplicada no boot (34/34), `healthz`/`readyz` em `200`, pod sem reinícios.
 
 ---
 

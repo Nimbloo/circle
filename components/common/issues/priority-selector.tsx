@@ -70,6 +70,7 @@ export function PrioritySelector({
                   variant="ghost"
                   role="combobox"
                   aria-expanded={open}
+                  aria-label={showName ? undefined : `Change priority: ${priority?.name ?? 'none'}`}
                >
                   {(() => {
                      const selectedItem = priorities.find((item) => item.id === value);
