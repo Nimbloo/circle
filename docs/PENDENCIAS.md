@@ -1,6 +1,6 @@
 # Pendências do Circle
 
-Estado em **2026-09-02**, com `main` e `develop` sincronizadas na v0.22.0.
+Estado em **2026-09-02**, com `main` e `develop` sincronizadas na v0.22.1.
 
 > **As [issues](https://github.com/Nimbloo/circle/issues) são a fonte da verdade** sobre
 > escopo. Este documento registra o que elas **não** capturam: bloqueios que vivem em
@@ -100,6 +100,18 @@ interação entre `onResize` e o `useLayoutEffect` que aplica a largura do store
 Image Updater trocou a tag em ~4 min após o push no ECR; rollout `Synced/Healthy`,
 migração `0033` aplicada no boot (34/34), `healthz`/`readyz` em `200`, pod sem reinícios.
 
+**Complemento na release
+[v0.22.1](https://github.com/Nimbloo/circle/releases/tag/v0.22.1)** (PRs #78 e #79): a
+lacuna de tema light e viewports foi fechada com emulação headless do Chrome instalado
+(`puppeteer-core`, sem download de navegador), em light e dark, `390×844`, `768×1024` e
+`1728×1200`: sem scroll horizontal, zero botão de ícone sem nome, Sheet de propriedades
+com labels no mobile/tablet, splitter da Inbox e aside de 400 px só no desktop. Dois fixes
+saíram daí: a linha de chips do card inline de initiative tinha altura fixa e sobrepunha os
+inputs em 390 px; o seletor compacto de prioridade dos cards do board não tinha nome
+acessível. Rollout `Synced/Healthy`, `healthz`/`readyz` em `200`. O iframe same-origin não
+serve para emular viewport aqui: o app envia `frame-ancestors 'none'` e
+`X-Frame-Options: DENY` (correto).
+
 ---
 
 ## Bloqueado em outro repositório
@@ -178,7 +190,7 @@ Roadmap, não limpeza. Priorize por valor.
 | Issue                                              | O que falta de verdade                                                                                                                                                                                                                                                                                                                |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [#19](https://github.com/Nimbloo/circle/issues/19) | **Só dois itens**: DnD no board de projetos e reschedule no timeline. Health do update, resources edit/remove e delete de milestone **já estão prontos** — a descrição original está obsoleta. O repo já tem `react-dnd`. Nota: o board agrupa por **time** por default, então "DnD muda status" precisa de revalidação do requisito. |
-| [#22](https://github.com/Nimbloo/circle/issues/22) | Webhook e "For you/Created" **já saíram**. Restam: colunas para files/commits/diff (schema novo — hoje o sync busca `changed_files` e **descarta**), e `checksPassed/Total` via Checks API (as colunas existem, são hard-coded `0` nos dois caminhos de escrita).                                                                     |
+| [#22](https://github.com/Nimbloo/circle/issues/22) | Webhook, "For you/Created" e **arquivos/commits/diff + checks reais já saíram** (tabelas `review_file`/`review_commit`, Checks API, abas Overview/Guide/Diff, webhook `check_run`). Restam: Guide narrado (sem fonte de dados hoje) e notas/comentários de review.                                                                    |
 | [#24](https://github.com/Nimbloo/circle/issues/24) | Cool-down (não existe em lugar nenhum do repo) e snapshots — ver decisão acima. Burn-up real **já saiu**.                                                                                                                                                                                                                             |
 | [#16](https://github.com/Nimbloo/circle/issues/16) | Editor de blocos — ver decisão acima.                                                                                                                                                                                                                                                                                                 |
 | [#25](https://github.com/Nimbloo/circle/issues/25) | Épico de paridade com o Linear. Serve para **fatiar**, não para executar.                                                                                                                                                                                                                                                             |

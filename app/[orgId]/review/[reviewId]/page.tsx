@@ -9,7 +9,7 @@ export default async function ReviewOverviewPage({
    const { reviewId } = await params;
    return (
       <MainLayout>
-         <Reviews selectedReviewId={reviewId} section="overview" />
+         <Reviews selectedReviewId={decodeURIComponent(reviewId)} section="overview" />
       </MainLayout>
    );
 }

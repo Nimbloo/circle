@@ -16,6 +16,10 @@ export interface ReviewFileStat {
    additions: number;
    deletions: number;
    category: ReviewFileCategory;
+   /** added|modified|removed|renamed (só para arquivos vindos do GitHub). */
+   status?: string;
+   /** Unified diff do GitHub; null/ausente quando o arquivo é binário ou grande. */
+   patch?: string | null;
 }
 
 export interface ReviewCommit {

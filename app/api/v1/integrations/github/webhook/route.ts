@@ -1,6 +1,11 @@
 import { db } from '@/db';
 import { verifySignature, signatureFrom } from '@/lib/api/integrations/github';
-import { handlePullRequestEvent, type PullRequestEvent } from '@/lib/api/reviews';
+import {
+   handleCheckRunEvent,
+   handlePullRequestEvent,
+   type CheckRunEvent,
+   type PullRequestEvent,
+} from '@/lib/api/reviews';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,14 +28,15 @@ export async function POST(req: Request) {
    if (event === 'ping') {
       return Response.json({ ok: true, pong: true });
    }
-   if (event !== 'pull_request') {
+   const isCheckEvent = event === 'check_run' || event === 'check_suite';
+   if (event !== 'pull_request' && !isCheckEvent) {
       // ACK a outros eventos sem processar (evita re-entrega do GitHub).
       return Response.json({ ok: true, ignored: event });
    }
 
-   let payload: PullRequestEvent;
+   let payload: (PullRequestEvent & CheckRunEvent & { action?: string }) | null = null;
    try {
-      payload = JSON.parse(raw) as PullRequestEvent;
+      payload = JSON.parse(raw);
    } catch {
       return new Response(JSON.stringify({ error: 'payload inválido' }), {
          status: 400,
@@ -39,7 +45,13 @@ export async function POST(req: Request) {
    }
 
    try {
-      const { linked } = await handlePullRequestEvent(db, payload);
+      if (isCheckEvent) {
+         // Só o estado final interessa (`completed`); os demais actions viram ACK.
+         if (payload?.action !== 'completed') return Response.json({ ok: true, ignored: event });
+         const { updated } = await handleCheckRunEvent(db, payload);
+         return Response.json({ ok: true, updated });
+      }
+      const { linked } = await handlePullRequestEvent(db, payload ?? {});
       return Response.json({ ok: true, linked });
    } catch (e) {
       console.warn('[circle] github webhook falhou:', (e as Error).message);

@@ -23,9 +23,9 @@ de initiatives aprovado na especificação.
 - **Última verificação (2026-09-02, Claude):** `pnpm typecheck` ok · `pnpm lint` ok ·
   `pnpm test` 67 arquivos / 379 testes ok (re-rodado após o ajuste de `defaultSize` no
   Inbox) · `pnpm build` ok · `git diff --check` ok · guard do dev seam vazio. Smoke no
-  Chrome só em dark `1424×771`; light e viewports `390/768/1728` sem validação manual.
+  Chrome em dark `1424×771`; light e viewports `390/768/1728` validados por emulação headless na v0.22.1.
 - **Próximo passo:** nenhum — plano **concluído**; mergeado em `develop` (#75) e em produção na
-  v0.22.0 (#76). Pendência registrada em `docs/PENDENCIAS.md`: light + viewports móveis.
+  v0.22.0 (#76) e v0.22.1 (#79, fixes da validação light/viewports). Sem pendência.
 - **Bloqueios / decisões pendentes:** nenhum.
 
 ## Restrições globais
