@@ -5,7 +5,7 @@ import { ListSkeleton } from '@/components/common/list-skeleton';
 import { ProjectGroup } from '@/components/common/projects/projects';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Initiative, INITIATIVE_STATUS_META, type InitiativeStatus } from '@/data/initiatives';
-import { usePriorities } from '@/store/catalog-store';
+import { useLabels, usePriorities } from '@/store/catalog-store';
 import { Project } from '@/data/projects';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { api } from '@/lib/client';
@@ -18,7 +18,16 @@ import {
    CommandList,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarRange, ChevronDown, PanelRight, PenLine, Plus, UserRound, X } from 'lucide-react';
+import {
+   Boxes,
+   CalendarRange,
+   ChevronDown,
+   PanelRight,
+   PenLine,
+   Plus,
+   UserRound,
+   X,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
@@ -31,7 +40,10 @@ import type { InitiativeActivityDto } from '@/lib/api/initiatives';
 import { InitiativeProgressPanel } from './initiative-progress-panel';
 import { InitiativeProjectRow } from './initiative-project-row';
 import { InitiativeStatusIcon } from './initiative-status-icon';
-import { InitiativeActions } from './initiative-actions';
+import { InitiativeIconPicker } from './initiative-icon-picker';
+import { InitiativeLabelPicker } from './initiative-label-picker';
+import { InitiativeTargetPicker } from './initiative-target-picker';
+import { useInitiativeDetailsStore } from '@/store/initiative-details-store';
 import {
    Sheet,
    SheetContent,
@@ -130,23 +142,47 @@ function ProjectsSection({ initiative }: { initiative: Initiative }) {
             <span className="hidden md:block w-24 shrink-0">Target date</span>
             <span className="w-16 shrink-0">Status</span>
          </div>
-         {groups.map((group) => (
-            <div key={group.key} className="flex flex-col">
-               <div className="flex items-center gap-2 py-1.5 text-xs text-muted-foreground">
-                  <ChevronDown className="size-3" />
-                  {group.label}
-                  <span className="flex-1 border-b border-border/60" />
+         {groups.length === 0 ? (
+            <div className="flex min-h-56 flex-col items-center justify-center gap-3 rounded-lg border text-center">
+               <div className="flex size-10 items-center justify-center rounded-lg border bg-secondary text-muted-foreground">
+                  <Boxes className="size-5" />
                </div>
-               {group.projects.map((project) => (
-                  <InitiativeProjectRow
-                     key={project.id}
-                     project={project}
-                     orgId={orgId}
-                     onRemove={removeProject}
-                  />
-               ))}
+               <div>
+                  <p className="text-sm font-medium">No projects in this initiative</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                     Add projects to track their progress together.
+                  </p>
+               </div>
+               <Button
+                  type="button"
+                  size="xs"
+                  variant="outline"
+                  className="gap-1.5"
+                  onClick={() => setPickerOpen(true)}
+               >
+                  <Plus className="size-3.5" />
+                  Add project to initiative
+               </Button>
             </div>
-         ))}
+         ) : (
+            groups.map((group) => (
+               <div key={group.key} className="flex flex-col">
+                  <div className="flex items-center gap-2 py-1.5 text-xs text-muted-foreground">
+                     <ChevronDown className="size-3" />
+                     {group.label}
+                     <span className="flex-1 border-b border-border/60" />
+                  </div>
+                  {group.projects.map((project) => (
+                     <InitiativeProjectRow
+                        key={project.id}
+                        project={project}
+                        orgId={orgId}
+                        onRemove={removeProject}
+                     />
+                  ))}
+               </div>
+            ))
+         )}
       </section>
    );
 }
@@ -185,6 +221,7 @@ function PropertiesPanel({ initiative }: { initiative: Initiative }) {
    const applyInitiative = useWorkspaceStore((s) => s.applyInitiative);
    const users = useWorkspaceStore((s) => s.users);
    const priorities = usePriorities();
+   const labels = useLabels();
    // Deriva da fatia assinada: assinar `countCompletedProjects` (funcao, referencia
    // estavel) nao acorda o painel quando um projeto e vinculado ou concluido.
    const allProjects = useWorkspaceStore((s) => s.projects);
@@ -319,7 +356,23 @@ function PropertiesPanel({ initiative }: { initiative: Initiative }) {
          </PropertyRow>
 
          <PropertyRow label="Target">
-            <TargetEditor initiative={initiative} onSave={patch} />
+            <InitiativeTargetPicker
+               value={initiative.target ?? ''}
+               onChange={(target) =>
+                  void patch(
+                     { target: target || null },
+                     target ? `Target → ${target}` : 'Target removido'
+                  )
+               }
+            />
+         </PropertyRow>
+
+         <PropertyRow label="Labels">
+            <InitiativeLabelPicker
+               labels={labels}
+               value={initiative.labels.map((label) => label.id)}
+               onChange={(labelIds) => void patch({ labelIds }, 'Labels atualizadas')}
+            />
          </PropertyRow>
 
          <PropertyRow label="Projects">
@@ -335,53 +388,6 @@ function PropertiesPanel({ initiative }: { initiative: Initiative }) {
  * `target` é varchar livre no schema (texto tipo "Q3 2026"), não uma data — por isso
  * é um input de texto e não um date picker. Datas reais exigiriam colunas novas.
  */
-function TargetEditor({
-   initiative,
-   onSave,
-}: {
-   initiative: Initiative;
-   onSave: (body: { target: string | null }, msg: string) => Promise<void>;
-}) {
-   const [open, setOpen] = useState(false);
-   const [value, setValue] = useState(initiative.target ?? '');
-
-   useEffect(() => setValue(initiative.target ?? ''), [initiative.target]);
-
-   const commit = () => {
-      const next = value.trim();
-      setOpen(false);
-      if (next === (initiative.target ?? '')) return;
-      void onSave({ target: next || null }, next ? `Target → ${next}` : 'Target removido');
-   };
-
-   return (
-      <Popover open={open} onOpenChange={setOpen}>
-         <PopoverTrigger asChild>
-            <PropertyButton>
-               <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                  <CalendarRange className="size-4" />
-                  {initiative.target ?? 'Add target'}
-               </span>
-            </PropertyButton>
-         </PopoverTrigger>
-         <PopoverContent align="start" className="w-60 p-2">
-            <input
-               autoFocus
-               value={value}
-               onChange={(e) => setValue(e.target.value)}
-               onKeyDown={(e) => {
-                  if (e.key === 'Enter') commit();
-                  if (e.key === 'Escape') setOpen(false);
-               }}
-               onBlur={commit}
-               placeholder="Ex.: Q3 2026"
-               className="w-full bg-transparent text-sm outline-none border rounded px-2 py-1"
-            />
-         </PopoverContent>
-      </Popover>
-   );
-}
-
 function InitiativeSidePanelContent({ initiative }: { initiative: Initiative }) {
    return (
       <div className="flex h-full w-full flex-col gap-2 overflow-y-auto">
@@ -403,111 +409,127 @@ function InitiativeSidePanelContent({ initiative }: { initiative: Initiative }) 
 }
 
 function Overview({ initiative }: { initiative: Initiative }) {
+   const applyInitiative = useWorkspaceStore((state) => state.applyInitiative);
+
+   const updateIcon = async (body: Parameters<typeof api.initiatives.update>[1]) => {
+      try {
+         const dto = await api.initiatives.update(initiative.id, body);
+         applyInitiative(dto);
+         toast.success('Initiative icon updated');
+      } catch {
+         toast.error('Could not update the initiative icon');
+      }
+   };
+
    return (
-      <div className="w-full h-full flex overflow-hidden">
-         <div className="flex-1 min-w-0 overflow-y-auto">
-            <div className="mx-auto max-w-[869px] px-8 pt-16 pb-10">
-               <div className="flex items-start justify-between">
-                  <span className="inline-flex size-8 items-center justify-center rounded-md bg-muted/50 text-xl">
-                     {initiative.icon}
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                     <Sheet>
-                        <SheetTrigger asChild>
-                           <Button size="xs" variant="outline" className="gap-1.5 xl:hidden">
-                              <PanelRight className="size-3.5" />
-                              Properties
-                           </Button>
-                        </SheetTrigger>
-                        <SheetContent className="w-[92vw] overflow-y-auto p-3 pt-12 sm:max-w-[400px]">
-                           <SheetHeader className="sr-only">
-                              <SheetTitle>Initiative properties</SheetTitle>
-                              <SheetDescription>
-                                 View and edit the properties of this initiative.
-                              </SheetDescription>
-                           </SheetHeader>
-                           <InitiativeSidePanelContent initiative={initiative} />
-                        </SheetContent>
-                     </Sheet>
-                     <InitiativeActions initiative={initiative} />
-                  </div>
-               </div>
-               <div className="mt-3 flex flex-col gap-1">
-                  <h1 className="text-2xl font-semibold leading-8">{initiative.name}</h1>
-                  <p className="text-[15px] leading-6 text-muted-foreground">
-                     {initiative.description ?? 'Add a short summary…'}
-                  </p>
-               </div>
-
-               <div className="mt-[19px] flex min-h-7 flex-wrap items-center gap-3 text-sm">
-                  <h3 className="w-24 shrink-0 py-1.5 text-[13px] font-medium leading-4 text-muted-foreground">
-                     Properties
-                  </h3>
-                  <span className="inline-flex items-center gap-1.5">
-                     <InitiativeStatusIcon status={initiative.status} />
-                     {INITIATIVE_STATUS_META[initiative.status].label}
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                     <initiative.priority.icon className="size-4" />
-                     {initiative.priority.name}
-                  </span>
-                  {initiative.owner ? (
-                     <span className="inline-flex items-center gap-1.5">
-                        <Avatar className="size-4">
-                           <AvatarImage
-                              src={initiative.owner.avatarUrl || undefined}
-                              alt={initiative.owner.name}
-                           />
-                           <AvatarFallback className="text-[8px]">
-                              {initiative.owner.name[0]}
-                           </AvatarFallback>
-                        </Avatar>
-                        {initiative.owner.name}
-                     </span>
-                  ) : (
-                     <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                        <UserRound className="size-4" /> Owner
-                     </span>
-                  )}
-                  {initiative.target && (
-                     <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                        <CalendarRange className="size-4" />
-                        {initiative.target}
-                     </span>
-                  )}
-               </div>
-
-               <div className="mt-3 flex min-h-7 items-center gap-3 text-sm">
-                  <h3 className="w-24 shrink-0 py-1.5 text-[13px] font-medium leading-4 text-muted-foreground">
-                     Resources
-                  </h3>
-                  <span className="text-muted-foreground">No resources</span>
-               </div>
-
-               <Link
-                  href="?tab=activity"
-                  className="-mx-4 mt-4 flex h-[67px] items-center justify-center gap-2 rounded-[10px] border text-sm text-muted-foreground transition-colors hover:bg-accent/30 hover:text-foreground"
-               >
-                  <PenLine className="size-4" />
-                  Write initiative update
-               </Link>
-
-               <div className="-mx-4 mt-[27px] flex min-h-[148px] flex-col gap-2 rounded-xl px-4 pt-2.5">
-                  <h2 className="py-1.5 text-[13px] font-medium leading-4">Description</h2>
-                  <p className="text-[15px] leading-6 text-muted-foreground">
-                     {initiative.description ?? 'Add description…'}
-                  </p>
-               </div>
-
-               <div className="mt-[92px]">
-                  <ProjectsSection initiative={initiative} />
+      <div className="h-full overflow-y-auto">
+         <div className="mx-auto max-w-[869px] px-8 pt-16 pb-10">
+            <div className="flex items-start justify-between">
+               <InitiativeIconPicker
+                  icon={initiative.icon}
+                  color={initiative.iconColor ?? 'gray'}
+                  onIconChange={(icon) => void updateIcon({ icon })}
+                  onColorChange={(iconColor) => void updateIcon({ iconColor })}
+               />
+               <div className="flex items-center gap-1.5">
+                  <Sheet>
+                     <SheetTrigger asChild>
+                        <Button size="xs" variant="outline" className="gap-1.5 xl:hidden">
+                           <PanelRight className="size-3.5" />
+                           Properties
+                        </Button>
+                     </SheetTrigger>
+                     <SheetContent className="w-[92vw] overflow-y-auto p-3 pt-12 sm:max-w-[400px]">
+                        <SheetHeader className="sr-only">
+                           <SheetTitle>Initiative properties</SheetTitle>
+                           <SheetDescription>
+                              View and edit the properties of this initiative.
+                           </SheetDescription>
+                        </SheetHeader>
+                        <InitiativeSidePanelContent initiative={initiative} />
+                     </SheetContent>
+                  </Sheet>
                </div>
             </div>
-         </div>
+            <div className="mt-3 flex flex-col gap-1">
+               <h1 className="text-2xl font-semibold leading-8">{initiative.name}</h1>
+               <p className="text-[15px] leading-6 text-muted-foreground">
+                  {initiative.description ?? 'Add a short summary…'}
+               </p>
+            </div>
 
-         <aside className="hidden h-full w-[400px] shrink-0 overflow-hidden pl-1 xl:flex">
-            <InitiativeSidePanelContent initiative={initiative} />
-         </aside>
+            <div className="mt-[19px] flex min-h-7 flex-wrap items-center gap-3 text-sm">
+               <h3 className="w-24 shrink-0 py-1.5 text-[13px] font-medium leading-4 text-muted-foreground">
+                  Properties
+               </h3>
+               <span className="inline-flex items-center gap-1.5">
+                  <InitiativeStatusIcon status={initiative.status} />
+                  {INITIATIVE_STATUS_META[initiative.status].label}
+               </span>
+               <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                  <initiative.priority.icon className="size-4" />
+                  {initiative.priority.name}
+               </span>
+               {initiative.owner ? (
+                  <span className="inline-flex items-center gap-1.5">
+                     <Avatar className="size-4">
+                        <AvatarImage
+                           src={initiative.owner.avatarUrl || undefined}
+                           alt={initiative.owner.name}
+                        />
+                        <AvatarFallback className="text-[8px]">
+                           {initiative.owner.name[0]}
+                        </AvatarFallback>
+                     </Avatar>
+                     {initiative.owner.name}
+                  </span>
+               ) : (
+                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                     <UserRound className="size-4" /> Owner
+                  </span>
+               )}
+               {initiative.target && (
+                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                     <CalendarRange className="size-4" />
+                     {initiative.target}
+                  </span>
+               )}
+               {initiative.labels.map((label) => (
+                  <span
+                     key={label.id}
+                     className="inline-flex items-center rounded border bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground"
+                  >
+                     {label.name}
+                  </span>
+               ))}
+            </div>
+
+            <div className="mt-3 flex min-h-7 items-center gap-3 text-sm">
+               <h3 className="w-24 shrink-0 py-1.5 text-[13px] font-medium leading-4 text-muted-foreground">
+                  Resources
+               </h3>
+               <span className="text-muted-foreground">No resources</span>
+            </div>
+
+            <Link
+               href="?tab=activity"
+               className="-mx-4 mt-4 flex h-[67px] items-center justify-center gap-2 rounded-[10px] border text-sm text-muted-foreground transition-colors hover:bg-accent/30 hover:text-foreground"
+            >
+               <PenLine className="size-4" />
+               Write initiative update
+            </Link>
+
+            <div className="-mx-4 mt-[27px] flex min-h-[148px] flex-col gap-2 rounded-xl px-4 pt-2.5">
+               <h2 className="py-1.5 text-[13px] font-medium leading-4">Description</h2>
+               <p className="text-[15px] leading-6 text-muted-foreground">
+                  {initiative.description ?? 'Add description…'}
+               </p>
+            </div>
+
+            <div className="mt-[92px]">
+               <ProjectsSection initiative={initiative} />
+            </div>
+         </div>
       </div>
    );
 }
@@ -696,6 +718,7 @@ function Activity({ initiativeId }: { initiativeId: string }) {
 /** Initiative detail page: Overview / Activity / Projects tabs. */
 export default function InitiativeDetails({ initiativeId }: { initiativeId: string }) {
    const [tab] = useQueryState('tab', parseAsStringLiteral(TABS).withDefault('overview'));
+   const detailsOpen = useInitiativeDetailsStore((state) => state.open);
    // A chamada vai DENTRO do seletor: assinar `s.getInitiativeById` assinaria a
    // função (referência estável), e a tela nunca re-renderizaria depois de um
    // update — salvava no store e continuava mostrando o valor antigo.
@@ -735,7 +758,26 @@ export default function InitiativeDetails({ initiativeId }: { initiativeId: stri
       );
    }
 
-   if (tab === 'activity') return <Activity initiativeId={initiativeId} />;
-   if (tab === 'projects') return <ProjectsTimeline groups={timelineGroups} />;
-   return <Overview initiative={initiative} />;
+   const content =
+      tab === 'activity' ? (
+         <Activity initiativeId={initiativeId} />
+      ) : tab === 'projects' ? (
+         <ProjectsTimeline groups={timelineGroups} />
+      ) : (
+         <Overview initiative={initiative} />
+      );
+
+   return (
+      <div className="flex h-full w-full overflow-hidden">
+         <div className="min-w-0 flex-1 overflow-hidden">{content}</div>
+         {detailsOpen && (
+            <aside
+               className="hidden h-full w-[400px] shrink-0 overflow-hidden pl-1 xl:flex"
+               aria-label="Initiative details"
+            >
+               <InitiativeSidePanelContent initiative={initiative} />
+            </aside>
+         )}
+      </div>
+   );
 }

@@ -12,6 +12,7 @@ import {
    CommandList,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { useCommandPages } from '@/components/ui/use-command-pages';
 import {
    Select,
    SelectContent,
@@ -44,10 +45,12 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
 import { useMemo, useState } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { InitiativeStatusIcon } from './initiative-status-icon';
 import { InitiativesSidePanel } from './initiatives-side-panel';
 import { InlineNewInitiative } from './inline-new-initiative';
 import { InitiativeContextMenu } from './initiative-context-menu';
+import { InitiativeGlyph } from './initiative-glyph';
 import { useInlineInitiativeStore } from '@/store/inline-initiative-store';
 
 export const INITIATIVE_TABS = ['active', 'planned', 'all'] as const;
@@ -56,7 +59,8 @@ export const INITIATIVE_TABS = ['active', 'planned', 'all'] as const;
 
 export function InitiativesFilter() {
    const [open, setOpen] = useState(false);
-   const [active, setActive] = useState<InitiativesFilterType | null>(null);
+   const navigation = useCommandPages<'root' | InitiativesFilterType>('root', () => setOpen(false));
+   const active = navigation.page === 'root' ? null : navigation.page;
    const users = useWorkspaceStore((s) => s.users);
    const priorities = usePriorities();
    const { filters, toggleFilter, clearFilters, getActiveFiltersCount } =
@@ -69,7 +73,7 @@ export function InitiativesFilter() {
          open={open}
          onOpenChange={(next) => {
             setOpen(next);
-            if (!next) setActive(null);
+            if (!next) navigation.reset();
          }}
       >
          <PopoverTrigger asChild>
@@ -88,28 +92,45 @@ export function InitiativesFilter() {
             </Button>
          </PopoverTrigger>
          <PopoverContent align="end" className="w-60 p-0">
-            <Command>
-               <CommandInput placeholder={active ? 'Filter...' : 'Add filter...'} />
+            <Command onKeyDown={navigation.onKeyDown}>
+               <CommandInput
+                  ref={navigation.searchInputRef}
+                  value={navigation.query}
+                  onValueChange={navigation.setQuery}
+                  placeholder={active ? 'Filter...' : 'Add filter...'}
+               />
                <CommandList>
                   <CommandEmpty>No results.</CommandEmpty>
                   {!active && (
                      <CommandGroup>
-                        <CommandItem onSelect={() => setActive('status')}>
+                        <CommandItem
+                           data-command-page="status"
+                           onSelect={() => navigation.push('status')}
+                        >
                            <BadgeCheck className="size-4 text-muted-foreground" />
                            Status
                            <ChevronRight className="ml-auto size-3.5 text-muted-foreground" />
                         </CommandItem>
-                        <CommandItem onSelect={() => setActive('priority')}>
+                        <CommandItem
+                           data-command-page="priority"
+                           onSelect={() => navigation.push('priority')}
+                        >
                            <SlidersHorizontal className="size-4 text-muted-foreground" />
                            Priority
                            <ChevronRight className="ml-auto size-3.5 text-muted-foreground" />
                         </CommandItem>
-                        <CommandItem onSelect={() => setActive('owner')}>
+                        <CommandItem
+                           data-command-page="owner"
+                           onSelect={() => navigation.push('owner')}
+                        >
                            <UserRound className="size-4 text-muted-foreground" />
                            Owner
                            <ChevronRight className="ml-auto size-3.5 text-muted-foreground" />
                         </CommandItem>
-                        <CommandItem onSelect={() => setActive('health')}>
+                        <CommandItem
+                           data-command-page="health"
+                           onSelect={() => navigation.push('health')}
+                        >
                            <HeartPulse className="size-4 text-muted-foreground" />
                            Health
                            <ChevronRight className="ml-auto size-3.5 text-muted-foreground" />
@@ -362,7 +383,7 @@ function InitiativeRow({
          >
             <span className="flex min-w-0 flex-1 items-center gap-2.5">
                <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-muted/50 text-sm">
-                  {initiative.icon}
+                  <InitiativeGlyph icon={initiative.icon} color={initiative.iconColor} />
                </span>
                <span className="flex min-w-0 flex-col">
                   <span className="truncate font-medium leading-4">{initiative.name}</span>
@@ -450,6 +471,7 @@ export default function Initiatives() {
    const loaded = useWorkspaceStore((s) => s.loaded);
    const creating = useInlineInitiativeStore((s) => s.creating);
    const startCreate = useInlineInitiativeStore((s) => s.start);
+   const prefersReducedMotion = useReducedMotion();
 
    const displayed = useMemo(() => {
       let list = allInitiatives.slice();
@@ -514,8 +536,23 @@ export default function Initiatives() {
                )}
             </div>
 
-            {/* Criação INLINE (padrão Linear): linha editável no topo da lista, sem modal. */}
-            {creating && <InlineNewInitiative defaultStatus={tab as InitiativeStatus} />}
+            <AnimatePresence initial={false}>
+               {creating && (
+                  <motion.div
+                     key="new-initiative"
+                     initial={{ height: 0, opacity: 0 }}
+                     animate={{ height: 'auto', opacity: 1 }}
+                     exit={{ height: 0, opacity: 0 }}
+                     transition={{
+                        duration: prefersReducedMotion ? 0 : 0.2,
+                        ease: [0.2, 0, 0, 1],
+                     }}
+                     className="overflow-hidden pt-3"
+                  >
+                     <InlineNewInitiative defaultStatus={tab} />
+                  </motion.div>
+               )}
+            </AnimatePresence>
 
             {displayed.length === 0 && !creating && !loaded ? (
                // Hidratando → skeleton; o empty state "No initiatives yet" só depois

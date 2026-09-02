@@ -3,7 +3,7 @@
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { FileDiff } from '@/data/reviews';
-import { ArrowDownToLine, FileCode2, MoreHorizontal } from 'lucide-react';
+import { ArrowDownToLine, FileCode2 } from 'lucide-react';
 import { DiffStat } from './review-shared';
 
 /** One file diff: header (name, path, stats, Reviewed) + unified code view. */
@@ -20,7 +20,6 @@ export function DiffView({ diff }: { diff: FileDiff }) {
                <Checkbox className="size-3.5" />
                Reviewed
             </label>
-            <MoreHorizontal className="size-4 text-muted-foreground" />
          </div>
          <div className="font-mono text-xs leading-5 overflow-x-auto">
             {diff.lines.map((line, index) => {

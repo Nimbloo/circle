@@ -14,6 +14,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
+import { useCommandPages } from '@/components/ui/use-command-pages'
 import { ArrowRightIcon, ChevronRightIcon, FilterIcon } from 'lucide-react'
 import {
   isValidElement,
@@ -55,9 +56,10 @@ function __FilterSelector<TData>({
   locale = 'en',
 }: FilterSelectorProps<TData>) {
   const [open, setOpen] = useState(false)
-  const [value, setValue] = useState('')
-  const [property, setProperty] = useState<string | undefined>(undefined)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const navigation = useCommandPages<string>('root', () => setOpen(false))
+  const value = navigation.query
+  const setValue = navigation.setQuery
+  const property = navigation.page === 'root' ? undefined : navigation.page
 
   const column = property ? getColumn(columns, property) : undefined
   const filter = property
@@ -67,10 +69,7 @@ function __FilterSelector<TData>({
   const hasFilters = filters.length > 0
 
   useEffect(() => {
-    if (property && inputRef) {
-      inputRef.current?.focus()
-      setValue('')
-    }
+    if (property) setValue('')
   }, [property])
 
   useEffect(() => {
@@ -101,7 +100,7 @@ function __FilterSelector<TData>({
           <CommandInput
             value={value}
             onValueChange={setValue}
-            ref={inputRef}
+            ref={navigation.searchInputRef}
             placeholder={t('search', locale)}
           />
           <CommandEmpty>{t('noresults', locale)}</CommandEmpty>
@@ -111,7 +110,7 @@ function __FilterSelector<TData>({
                 <FilterableColumn
                   key={column.id}
                   column={column}
-                  setProperty={setProperty}
+                  setProperty={navigation.push}
                 />
               ))}
               <QuickSearchFilters
@@ -134,7 +133,7 @@ function __FilterSelector<TData>({
       open={open}
       onOpenChange={async (value) => {
         setOpen(value)
-        if (!value) setTimeout(() => setProperty(undefined), 100)
+        if (!value) setTimeout(navigation.reset, 100)
       }}
     >
       <PopoverTrigger asChild>
@@ -153,7 +152,7 @@ function __FilterSelector<TData>({
         className="w-[238px] rounded-xl border-[var(--popover-border)] bg-popover p-0 origin-(--radix-popover-content-transform-origin)"
         style={{ boxShadow: 'var(--popover-shadow)' }}
       >
-        {content}
+        <div onKeyDown={navigation.onKeyDown}>{content}</div>
       </PopoverContent>
     </Popover>
   )
@@ -204,6 +203,7 @@ export function FilterableColumn<TData, TType extends ColumnDataType, TVal>({
     <CommandItem
       ref={itemRef}
       value={column.id}
+      data-command-page={column.id}
       keywords={[column.displayName]}
       onSelect={() => setProperty(column.id)}
       className="group"

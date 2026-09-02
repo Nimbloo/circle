@@ -1,7 +1,14 @@
 'use client';
 
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+   DropdownMenu,
+   DropdownMenuCheckboxItem,
+   DropdownMenuContent,
+   DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import type { Review } from '@/data/reviews';
 import {
@@ -17,6 +24,7 @@ import { useMemo, useState } from 'react';
 /** Diff tab: Files / Commits toolbar, file list and stacked unified diffs. */
 export function ReviewDiff({ review }: { review: Review }) {
    const [query, setQuery] = useState('');
+   const [showFileTree, setShowFileTree] = useState(true);
 
    const files = useMemo(
       () =>
@@ -37,7 +45,10 @@ export function ReviewDiff({ review }: { review: Review }) {
                </span>
                <Popover>
                   <PopoverTrigger asChild>
-                     <button className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-muted-foreground hover:bg-accent/50 transition-colors">
+                     <button
+                        type="button"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-muted-foreground hover:bg-accent/50 transition-colors"
+                     >
                         <GitCommitHorizontal className="size-3.5" />
                         Commits
                         <span>{review.commits.length}</span>
@@ -64,11 +75,36 @@ export function ReviewDiff({ review }: { review: Review }) {
                   </PopoverContent>
                </Popover>
             </div>
-            <SlidersHorizontal className="size-4 text-muted-foreground" />
+            <DropdownMenu>
+               <DropdownMenuTrigger asChild>
+                  <Button
+                     type="button"
+                     size="icon"
+                     variant="ghost"
+                     className="size-7"
+                     aria-label="Diff display options"
+                  >
+                     <SlidersHorizontal className="size-4 text-muted-foreground" />
+                  </Button>
+               </DropdownMenuTrigger>
+               <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuCheckboxItem
+                     checked={showFileTree}
+                     onCheckedChange={setShowFileTree}
+                  >
+                     Show file tree
+                  </DropdownMenuCheckboxItem>
+               </DropdownMenuContent>
+            </DropdownMenu>
          </div>
 
          <div className="flex-1 min-h-0 flex overflow-hidden">
-            <div className="hidden md:flex flex-col w-64 shrink-0 border-r p-3 gap-2 overflow-y-auto">
+            <div
+               className={cn(
+                  'hidden flex-col w-64 shrink-0 border-r p-3 gap-2 overflow-y-auto',
+                  showFileTree && 'md:flex'
+               )}
+            >
                <div className="relative shrink-0">
                   <Search className="size-3.5 text-muted-foreground absolute left-2 top-1/2 -translate-y-1/2" />
                   <Input

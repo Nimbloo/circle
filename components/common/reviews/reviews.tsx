@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { fetchReviews, syncReviews } from '@/lib/adapters-reviews';
 import { Review, ReviewList, ReviewStatus } from '@/data/reviews';
-import { ChevronLeft, ListFilter, RefreshCw, SlidersHorizontal } from 'lucide-react';
+import { CheckIcon, ChevronLeft, ListFilter, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ReactNode, useEffect, useRef, useState } from 'react';
@@ -13,6 +13,22 @@ import { toast } from 'sonner';
 import { PrIcon } from './review-shared';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SidebarTrigger } from '@/components/ui/sidebar';
+import { Button } from '@/components/ui/button';
+import {
+   Command,
+   CommandEmpty,
+   CommandGroup,
+   CommandInput,
+   CommandItem,
+   CommandList,
+} from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+   DropdownMenu,
+   DropdownMenuCheckboxItem,
+   DropdownMenuContent,
+   DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 /** Hand-drawn empty-state sketch (paper plane over a folded sheet). */
 function EmptySketch() {
@@ -35,6 +51,8 @@ const GROUP_LABELS: Record<ReviewStatus, string> = {
    merged: 'Merged',
    closed: 'Closed',
 };
+
+const REVIEW_STATUSES = Object.keys(GROUP_LABELS) as ReviewStatus[];
 
 /** Tamanho de página do load-more (alinhado ao default do backend). */
 const PAGE_SIZE = 50;
@@ -109,6 +127,36 @@ function ReviewGroup({
    );
 }
 
+function ReviewPagination({
+   reviewsLoaded,
+   total,
+   loading,
+   onLoadMore,
+}: {
+   reviewsLoaded: number;
+   total: number;
+   loading: boolean;
+   onLoadMore: () => void;
+}) {
+   return (
+      <div className="flex flex-col items-center gap-2 px-4 py-3">
+         <span className="text-xs text-muted-foreground">
+            {reviewsLoaded} de {total}
+         </span>
+         {reviewsLoaded < total && (
+            <button
+               type="button"
+               onClick={onLoadMore}
+               disabled={loading}
+               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium hover:bg-accent/50 transition-colors disabled:opacity-60"
+            >
+               {loading ? 'Carregando…' : 'Carregar mais'}
+            </button>
+         )}
+      </div>
+   );
+}
+
 interface ReviewsProps {
    /** Which list tab is active ("/reviews" vs "/reviews/created"). */
    listTab?: ReviewList;
@@ -132,6 +180,10 @@ export default function Reviews({
    const [error, setError] = useState(false);
    const [syncing, setSyncing] = useState(false);
    const [reloadKey, setReloadKey] = useState(0);
+   const [visibleStatuses, setVisibleStatuses] = useState<Set<ReviewStatus>>(
+      () => new Set(REVIEW_STATUSES)
+   );
+   const [groupByStatus, setGroupByStatus] = useState(true);
 
    // Skeleton só na PRIMEIRA carga; o refetch do reloadKey (pós-sync) é silencioso —
    // a lista atual permanece na tela até a nova chegar (padrão stale-while-revalidate,
@@ -204,14 +256,12 @@ export default function Reviews({
    // 'created' = PRs que abri, 'for-you' = PRs em que fui pedido como reviewer.
    // Sem handle configurado a lista vem vazia — antes as duas abas mostravam o
    // mesmo conjunto e nada indicava que não filtravam.
-   const source = reviews;
+   const source = reviews.filter((review) => visibleStatuses.has(review.status));
 
-   const groups = (['open', 'merged', 'closed'] as ReviewStatus[])
-      .map((status) => ({
-         label: status === 'merged' && listTab === 'for-you' ? 'Completed' : GROUP_LABELS[status],
-         items: source.filter((review) => review.status === status),
-      }))
-      .filter((group) => group.items.length > 0);
+   const groups = REVIEW_STATUSES.map((status) => ({
+      label: status === 'merged' && listTab === 'for-you' ? 'Completed' : GROUP_LABELS[status],
+      items: source.filter((review) => review.status === status),
+   })).filter((group) => group.items.length > 0);
 
    return (
       <div className="w-full h-full flex overflow-hidden">
@@ -226,9 +276,73 @@ export default function Reviews({
                   <SidebarTrigger />
                   <span className="text-[13px] font-medium leading-[normal]">Reviews</span>
                </div>
-               <div className="flex translate-y-[0.5px] items-center gap-3 text-muted-foreground">
-                  <ListFilter className="size-4" />
-                  <SlidersHorizontal className="size-4" />
+               <div className="flex translate-y-[0.5px] items-center gap-0.5 text-muted-foreground">
+                  <Popover>
+                     <PopoverTrigger asChild>
+                        <Button
+                           type="button"
+                           size="icon"
+                           variant="ghost"
+                           className={cn(
+                              'relative size-7',
+                              visibleStatuses.size < REVIEW_STATUSES.length && 'bg-accent'
+                           )}
+                           aria-label="Filter reviews"
+                        >
+                           <ListFilter className="size-4" />
+                        </Button>
+                     </PopoverTrigger>
+                     <PopoverContent align="end" className="w-60 p-0">
+                        <Command>
+                           <CommandInput placeholder="Filter reviews…" />
+                           <CommandList>
+                              <CommandEmpty>No filters found.</CommandEmpty>
+                              <CommandGroup heading="Status">
+                                 {REVIEW_STATUSES.map((status) => (
+                                    <CommandItem
+                                       key={status}
+                                       onSelect={() =>
+                                          setVisibleStatuses((current) => {
+                                             const next = new Set(current);
+                                             if (next.has(status)) next.delete(status);
+                                             else next.add(status);
+                                             return next;
+                                          })
+                                       }
+                                    >
+                                       <PrIcon status={status} />
+                                       {GROUP_LABELS[status]}
+                                       {visibleStatuses.has(status) && (
+                                          <CheckIcon className="ml-auto size-3.5" />
+                                       )}
+                                    </CommandItem>
+                                 ))}
+                              </CommandGroup>
+                           </CommandList>
+                        </Command>
+                     </PopoverContent>
+                  </Popover>
+                  <DropdownMenu>
+                     <DropdownMenuTrigger asChild>
+                        <Button
+                           type="button"
+                           size="icon"
+                           variant="ghost"
+                           className="size-7"
+                           aria-label="Review display options"
+                        >
+                           <SlidersHorizontal className="size-4" />
+                        </Button>
+                     </DropdownMenuTrigger>
+                     <DropdownMenuContent align="end" className="w-52">
+                        <DropdownMenuCheckboxItem
+                           checked={groupByStatus}
+                           onCheckedChange={setGroupByStatus}
+                        >
+                           Group by status
+                        </DropdownMenuCheckboxItem>
+                     </DropdownMenuContent>
+                  </DropdownMenu>
                </div>
             </div>
             <div className="h-[43px] px-2 flex shrink-0 translate-y-[0.5px] items-center gap-1.5 border-b border-border/40">
@@ -272,42 +386,40 @@ export default function Reviews({
                   </div>
                ) : groups.length === 0 ? (
                   <div className="px-[18px] py-6 text-[13px] text-muted-foreground">
-                     No reviews yet.
+                     {reviews.length > 0
+                        ? 'No reviews match the current filters.'
+                        : 'No reviews yet.'}
                   </div>
+               ) : groupByStatus ? (
+                  groups.map((group) => (
+                     <ReviewGroup key={group.label} label={group.label} count={group.items.length}>
+                        {group.items.map((review) => (
+                           <ReviewRow
+                              key={review.id}
+                              review={review}
+                              orgId={orgId}
+                              selected={review.id === selectedReviewId}
+                           />
+                        ))}
+                     </ReviewGroup>
+                  ))
                ) : (
-                  <>
-                     {groups.map((group) => (
-                        <ReviewGroup
-                           key={group.label}
-                           label={group.label}
-                           count={group.items.length}
-                        >
-                           {group.items.map((review) => (
-                              <ReviewRow
-                                 key={review.id}
-                                 review={review}
-                                 orgId={orgId}
-                                 selected={review.id === selectedReviewId}
-                              />
-                           ))}
-                        </ReviewGroup>
-                     ))}
-                     <div className="flex flex-col items-center gap-2 px-4 py-3">
-                        <span className="text-xs text-muted-foreground">
-                           {reviews.length} de {total}
-                        </span>
-                        {reviews.length < total && (
-                           <button
-                              type="button"
-                              onClick={handleLoadMore}
-                              disabled={loadingMore}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium hover:bg-accent/50 transition-colors disabled:opacity-60"
-                           >
-                              {loadingMore ? 'Carregando…' : 'Carregar mais'}
-                           </button>
-                        )}
-                     </div>
-                  </>
+                  source.map((review) => (
+                     <ReviewRow
+                        key={review.id}
+                        review={review}
+                        orgId={orgId}
+                        selected={review.id === selectedReviewId}
+                     />
+                  ))
+               )}
+               {!loading && !error && total > 0 && (
+                  <ReviewPagination
+                     reviewsLoaded={reviews.length}
+                     total={total}
+                     loading={loadingMore}
+                     onLoadMore={() => void handleLoadMore()}
+                  />
                )}
             </div>
          </div>

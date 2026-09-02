@@ -1,6 +1,6 @@
 import { asc, eq } from 'drizzle-orm';
 import type { Db } from '@/db';
-import { label as labelT, issueLabel, projectLabel } from '@/db/schema';
+import { label as labelT, initiativeLabel, issueLabel, projectLabel } from '@/db/schema';
 import { ApiError } from './errors';
 import { publish } from './events';
 
@@ -91,6 +91,7 @@ export async function deleteLabel(db: Db, id: string): Promise<boolean> {
    await db.transaction(async (tx) => {
       await tx.delete(issueLabel).where(eq(issueLabel.labelId, id));
       await tx.delete(projectLabel).where(eq(projectLabel.labelId, id));
+      await tx.delete(initiativeLabel).where(eq(initiativeLabel.labelId, id));
       await tx.delete(labelT).where(eq(labelT.id, id));
    });
    publish({ entity: 'label', action: 'deleted', id });

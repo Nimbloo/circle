@@ -49,7 +49,12 @@ export function ThemeToggle() {
    return (
       <DropdownMenu>
          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-7 shrink-0">
+            <Button
+               variant="ghost"
+               size="icon"
+               className="size-7 shrink-0"
+               aria-label={`Theme: ${mode}`}
+            >
                {mode === 'light' ? (
                   <Sun className="size-3.5" />
                ) : mode === 'dark' ? (

@@ -37,6 +37,17 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { toast } from 'sonner';
 import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
 
+async function copyTeamUrl(orgId: string, teamId: string) {
+   try {
+      await navigator.clipboard.writeText(
+         `${window.location.origin}/${orgId}/team/${teamId}/overview`
+      );
+      toast.success('Link copiado');
+   } catch {
+      toast.error('Não foi possível copiar');
+   }
+}
+
 /** Sub-item de time com href resolvido pelo orgId real e realce de rota ativa. */
 function TeamSub({ href, children }: { href: string; children: ReactNode }) {
    const pathname = usePathname();
@@ -78,42 +89,31 @@ export function NavTeams() {
                            <span className="w-3 shrink-0">
                               <ChevronRight className="w-full transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                            </span>
-                           <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                 <SidebarMenuAction asChild showOnHover>
-                                    <div>
-                                       <MoreHorizontal />
-                                       <span className="sr-only">More</span>
-                                    </div>
-                                 </SidebarMenuAction>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent
-                                 className="w-48 rounded-lg"
-                                 side="right"
-                                 align="start"
-                              >
-                                 <DropdownMenuItem asChild>
-                                    <Link href={`/${orgId}/settings/teams/${item.id}`}>
-                                       <Settings className="size-4" />
-                                       <span>Team settings</span>
-                                    </Link>
-                                 </DropdownMenuItem>
-                                 <DropdownMenuItem
-                                    onSelect={() => {
-                                       void navigator.clipboard
-                                          .writeText(
-                                             `${window.location.origin}/${orgId}/team/${item.id}/overview`
-                                          )
-                                          .then(() => toast.success('Link copiado'));
-                                    }}
-                                 >
-                                    <LinkIcon className="size-4" />
-                                    <span>Copy link</span>
-                                 </DropdownMenuItem>
-                              </DropdownMenuContent>
-                           </DropdownMenu>
                         </SidebarMenuButton>
                      </CollapsibleTrigger>
+                     <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                           <SidebarMenuAction showOnHover aria-label={`${item.name} actions`}>
+                              <MoreHorizontal />
+                           </SidebarMenuAction>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-48 rounded-lg" side="right" align="start">
+                           <DropdownMenuItem asChild>
+                              <Link href={`/${orgId}/settings/teams/${item.id}`}>
+                                 <Settings className="size-4" />
+                                 <span>Team settings</span>
+                              </Link>
+                           </DropdownMenuItem>
+                           <DropdownMenuItem
+                              onSelect={() => {
+                                 void copyTeamUrl(orgId, item.id);
+                              }}
+                           >
+                              <LinkIcon className="size-4" />
+                              <span>Copy link</span>
+                           </DropdownMenuItem>
+                        </DropdownMenuContent>
+                     </DropdownMenu>
                      <CollapsibleContent>
                         <SidebarMenuSub>
                            <SidebarMenuSubItem>

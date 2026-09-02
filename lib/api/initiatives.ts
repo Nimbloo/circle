@@ -4,12 +4,14 @@ import type { Db } from '@/db';
 import {
    initiative as initT,
    initiativeActivity,
+   initiativeLabel,
    initiativeProject,
    project as projectT,
    priority as priorityT,
    health as healthT,
    projectStatus as projectStatusT,
    appUser,
+   label as labelT,
 } from '@/db/schema';
 import { ApiError } from './errors';
 import { publish } from './events';
@@ -19,6 +21,7 @@ import type { UserRef } from './issues';
 type InitiativeRow = typeof initT.$inferSelect;
 type PriorityRow = typeof priorityT.$inferSelect;
 type HealthRow = typeof healthT.$inferSelect;
+type LabelRow = typeof labelT.$inferSelect;
 
 export interface InitiativeDto {
    id: string;
@@ -26,11 +29,13 @@ export interface InitiativeDto {
    name: string;
    description: string | null;
    icon: string | null;
+   iconColor: string | null;
    status: string;
    priority: PriorityRow;
    health: HealthRow;
    owner: UserRef | null;
    target: string | null;
+   labels: LabelRow[];
    projectIds: string[];
    projectCount: number;
    completedProjectCount: number;
@@ -40,16 +45,19 @@ export interface InitiativeDto {
 interface Maps {
    priorities: Map<string, PriorityRow>;
    healths: Map<string, HealthRow>;
+   labels: Map<string, LabelRow>;
 }
 
 async function loadMaps(db: Db): Promise<Maps> {
-   const [priorities, healths] = await Promise.all([
+   const [priorities, healths, labels] = await Promise.all([
       db.select().from(priorityT),
       db.select().from(healthT),
+      db.select().from(labelT),
    ]);
    return {
       priorities: new Map(priorities.map((p) => [p.id, p])),
       healths: new Map(healths.map((h) => [h.id, h])),
+      labels: new Map(labels.map((label) => [label.id, label])),
    };
 }
 
@@ -98,16 +106,21 @@ async function projectsByInitiative(db: Db, initIds: string[]) {
 async function assemble(db: Db, rows: InitiativeRow[], maps: Maps): Promise<InitiativeDto[]> {
    if (rows.length === 0) return [];
    const ownerIds = [...new Set(rows.map((r) => r.ownerId).filter(Boolean) as string[])];
-   const [owners, projMap] = await Promise.all([
+   const initiativeIds = rows.map((row) => row.id);
+   const [owners, projMap, labelLinks] = await Promise.all([
       ownerIds.length
          ? db.select().from(appUser).where(inArray(appUser.id, ownerIds))
          : Promise.resolve([]),
-      projectsByInitiative(
-         db,
-         rows.map((r) => r.id)
-      ),
+      projectsByInitiative(db, initiativeIds),
+      db.select().from(initiativeLabel).where(inArray(initiativeLabel.initiativeId, initiativeIds)),
    ]);
    const ownerMap = new Map(owners.map((u) => [u.id, u]));
+   const labelIdsByInitiative = new Map<string, string[]>();
+   for (const link of labelLinks) {
+      const labelIds = labelIdsByInitiative.get(link.initiativeId) ?? [];
+      labelIds.push(link.labelId);
+      labelIdsByInitiative.set(link.initiativeId, labelIds);
+   }
 
    return rows.map((r) => {
       const owner = r.ownerId ? ownerMap.get(r.ownerId) : undefined;
@@ -118,6 +131,7 @@ async function assemble(db: Db, rows: InitiativeRow[], maps: Maps): Promise<Init
          name: r.name,
          description: r.description,
          icon: r.icon,
+         iconColor: r.iconColor,
          status: r.status,
          priority: maps.priorities.get(r.priorityId)!,
          health: maps.healths.get(r.healthId)!,
@@ -131,6 +145,9 @@ async function assemble(db: Db, rows: InitiativeRow[], maps: Maps): Promise<Init
               }
             : null,
          target: r.target,
+         labels: (labelIdsByInitiative.get(r.id) ?? [])
+            .map((labelId) => maps.labels.get(labelId))
+            .filter((label): label is LabelRow => Boolean(label)),
          projectIds: p.ids,
          projectCount: p.ids.length,
          completedProjectCount: p.completed,
@@ -175,9 +192,11 @@ export interface CreateInitiativeInput {
    status?: string;
    description?: string | null;
    icon?: string | null;
+   iconColor?: string | null;
    ownerId?: string | null;
    target?: string | null;
    projectIds?: string[];
+   labelIds?: string[];
 }
 
 export async function createInitiative(
@@ -191,6 +210,9 @@ export async function createInitiative(
       throw new ApiError(400, `priority '${input.priorityId}' inválido`);
    if (!maps.healths.has(input.healthId))
       throw new ApiError(400, `health '${input.healthId}' inválido`);
+   const labelIds = [...new Set(input.labelIds ?? [])];
+   const unknownLabelId = labelIds.find((labelId) => !maps.labels.has(labelId));
+   if (unknownLabelId) throw new ApiError(400, `label '${unknownLabelId}' inválido`);
    const id = randomUUID();
    await db.transaction(async (tx) => {
       await tx.insert(initT).values({
@@ -199,6 +221,7 @@ export async function createInitiative(
          name: input.name,
          description: input.description ?? null,
          icon: input.icon ?? null,
+         iconColor: input.iconColor ?? null,
          status: input.status ?? 'planned',
          priorityId: input.priorityId,
          ownerId: input.ownerId ?? null,
@@ -206,6 +229,11 @@ export async function createInitiative(
          healthId: input.healthId,
          createdAt: new Date(),
       });
+      if (labelIds.length) {
+         await tx
+            .insert(initiativeLabel)
+            .values(labelIds.map((labelId) => ({ initiativeId: id, labelId })));
+      }
       if (input.projectIds?.length) {
          await tx
             .insert(initiativeProject)
@@ -226,12 +254,14 @@ export interface UpdateInitiativeInput {
    name?: string;
    description?: string | null;
    icon?: string | null;
+   iconColor?: string | null;
    status?: string;
    priorityId?: string;
    healthId?: string;
    ownerId?: string | null;
    target?: string | null;
    projectIds?: string[];
+   labelIds?: string[];
 }
 
 /** Rótulos legíveis dos campos, para o feed de alterações (espelha o de project). */
@@ -243,6 +273,7 @@ const INITIATIVE_FIELD_LABELS: Partial<Record<keyof UpdateInitiativeInput, strin
    ownerId: 'owner',
    target: 'target',
    projectIds: 'projects',
+   labelIds: 'labels',
 };
 
 export async function updateInitiative(
@@ -253,6 +284,7 @@ export async function updateInitiative(
 ): Promise<InitiativeDto | null> {
    const existing = await db.select({ id: initT.id }).from(initT).where(eq(initT.id, id)).limit(1);
    if (existing.length === 0) return null;
+   const maps = await loadMaps(db);
 
    // Campos alterados que entram no feed, resolvidos ANTES da transação: o ator precisa
    // de uma consulta própria, e consultar `db` de dentro da `tx` trava (a conexão é uma só).
@@ -267,6 +299,7 @@ export async function updateInitiative(
       'name',
       'description',
       'icon',
+      'iconColor',
       'status',
       'priorityId',
       'healthId',
@@ -302,6 +335,17 @@ export async function updateInitiative(
                .update(projectT)
                .set({ initiativeId: id })
                .where(inArray(projectT.id, patch.projectIds));
+         }
+      }
+      if (patch.labelIds !== undefined) {
+         const labelIds = [...new Set(patch.labelIds)];
+         const unknownLabelId = labelIds.find((labelId) => !maps.labels.has(labelId));
+         if (unknownLabelId) throw new ApiError(400, `label '${unknownLabelId}' inválido`);
+         await tx.delete(initiativeLabel).where(eq(initiativeLabel.initiativeId, id));
+         if (labelIds.length) {
+            await tx
+               .insert(initiativeLabel)
+               .values(labelIds.map((labelId) => ({ initiativeId: id, labelId })));
          }
       }
 
@@ -362,6 +406,7 @@ export async function deleteInitiative(db: Db, id: string): Promise<boolean> {
    if (existing.length === 0) return false;
    await db.transaction(async (tx) => {
       await tx.delete(initiativeProject).where(eq(initiativeProject.initiativeId, id));
+      await tx.delete(initiativeLabel).where(eq(initiativeLabel.initiativeId, id));
       // project.initiativeId é RESTRICT e nullable: desvincula os projetos antes de deletar.
       await tx.update(projectT).set({ initiativeId: null }).where(eq(projectT.initiativeId, id));
       await tx.delete(initT).where(eq(initT.id, id));

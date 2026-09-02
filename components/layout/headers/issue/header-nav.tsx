@@ -3,6 +3,15 @@
 import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
 import { HeaderActions, HeaderGroup, LocationBar } from '@/components/layout/header-primitives';
 import { Button } from '@/components/ui/button';
+import {
+   DropdownMenu,
+   DropdownMenuContent,
+   DropdownMenuItem,
+   DropdownMenuSeparator,
+   DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
+import { useFavoritesStore } from '@/store/favorites-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import {
@@ -13,9 +22,20 @@ import {
    ChevronUp,
    MoreHorizontal,
    Star,
+   Copy,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { toast } from 'sonner';
+
+async function copyToClipboard(value: string, successMessage: string) {
+   try {
+      await navigator.clipboard.writeText(value);
+      toast.success(successMessage);
+   } catch {
+      toast.error('Não foi possível copiar');
+   }
+}
 
 /**
  * Issue page header: breadcrumb (team › cycle › identifier + title) and
@@ -32,6 +52,10 @@ export default function HeaderNav() {
       issue ? (s.me?.subscribedIssueIds.includes(issue.id) ?? false) : false
    );
    const toggleSubscription = useWorkspaceStore((s) => s.toggleSubscription);
+   const isFavorite = useFavoritesStore((state) =>
+      issue ? state.isFavorite('issue', issue.id) : false
+   );
+   const toggleFavorite = useFavoritesStore((state) => state.toggle);
    // time real da issue (fallback p/ o 1º só enquanto o workspace ainda hidrata)
    const team = teams.find((t) => t.id === issue?.teamId) ?? teams[0];
    const cycle = useWorkspaceStore((s) =>
@@ -77,8 +101,65 @@ export default function HeaderNav() {
                   <span className="font-medium">{issue.title}</span>
                </span>
             )}
-            <Star className="size-3.5 text-muted-foreground shrink-0" />
-            <MoreHorizontal className="size-3.5 text-muted-foreground shrink-0" />
+            {issue && (
+               <>
+                  <Button
+                     type="button"
+                     size="icon"
+                     variant="ghost"
+                     className="size-7 shrink-0"
+                     onClick={() => void toggleFavorite('issue', issue.id)}
+                     aria-label={isFavorite ? 'Unfavorite issue' : 'Favorite issue'}
+                     aria-pressed={isFavorite}
+                  >
+                     <Star className={cn('size-4', isFavorite && 'fill-current text-primary')} />
+                  </Button>
+                  <DropdownMenu>
+                     <DropdownMenuTrigger asChild>
+                        <Button
+                           type="button"
+                           size="icon"
+                           variant="ghost"
+                           className="size-7 shrink-0"
+                           aria-label="Issue actions"
+                        >
+                           <MoreHorizontal className="size-4" />
+                        </Button>
+                     </DropdownMenuTrigger>
+                     <DropdownMenuContent align="start" className="w-48">
+                        <DropdownMenuItem
+                           onSelect={() => {
+                              void copyToClipboard(window.location.href, 'Link copiado');
+                           }}
+                        >
+                           <Copy className="size-4" />
+                           Copy link
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                           onSelect={() => {
+                              void copyToClipboard(issue.identifier, 'ID copiado');
+                           }}
+                        >
+                           <Copy className="size-4" />
+                           Copy ID
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                           onSelect={() => {
+                              void copyToClipboard(issue.title, 'Título copiado');
+                           }}
+                        >
+                           <Copy className="size-4" />
+                           Copy title
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={() => void toggleFavorite('issue', issue.id)}>
+                           <Star className={cn('size-4', isFavorite && 'fill-current')} />
+                           {isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                        </DropdownMenuItem>
+                     </DropdownMenuContent>
+                  </DropdownMenu>
+               </>
+            )}
          </HeaderGroup>
 
          <HeaderActions>
