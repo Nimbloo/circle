@@ -6,6 +6,13 @@ name: build-and-push
 on:
   push:
     branches: [master, main]
+    # Alterações sem impacto no artefato não podem repontar uma tag SemVer já
+    # publicada. O workflow manual continua disponível quando necessário.
+    paths-ignore:
+      - ".github/**"
+      - "docs/**"
+      - "**/*.md"
+      - ".gitignore"
   workflow_dispatch:
 
 concurrency:
