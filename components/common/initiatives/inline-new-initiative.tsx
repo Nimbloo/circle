@@ -169,7 +169,7 @@ export function InlineNewInitiative({
             />
          </div>
 
-         <div className="flex h-6 items-center justify-between gap-3 pl-10">
+         <div className="flex min-h-6 items-center justify-between gap-3 pl-10">
             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                <Popover open={statusOpen} onOpenChange={setStatusOpen}>
                   <PopoverTrigger asChild>
