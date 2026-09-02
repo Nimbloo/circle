@@ -17,8 +17,9 @@
 - **Última verificação (2026-09-02, Claude):** `pnpm typecheck` ok · `pnpm lint` ok ·
   `pnpm test` 70 arquivos / 391 testes ok · `pnpm build` ok · `git diff --check` ok ·
   guard do dev seam vazio.
-- **Próximo passo:** PR para `develop` (Refs #22) e release. Fora desta fatia, ainda
-  abertos na #22: Guide narrado (sem fonte de dados) e notas/comentários de review.
+- **Próximo passo:** nenhum — fatia 1 **concluída**: mergeada em `develop` (#81) e em
+  produção na v0.23.0 (#82; migration 0034 aplicada, rollout Synced/Healthy). Fora desta
+  fatia, ainda abertos na #22: Guide narrado (sem fonte de dados) e notas/comentários.
 - **Bloqueios / decisões pendentes:** nenhum.
 
 ## Task 1 — Schema e migration
