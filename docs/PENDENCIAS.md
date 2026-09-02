@@ -1,6 +1,7 @@
 # Pendências do Circle
 
-Estado em **2026-09-02**, com `main` e `develop` sincronizadas na v0.21.0.
+Estado em **2026-09-02**, com `main` e `develop` sincronizadas na v0.21.0 e a 2ª leva de
+paridade (interação) pronta para PR.
 
 > **As [issues](https://github.com/Nimbloo/circle/issues) são a fonte da verdade** sobre
 > escopo. Este documento registra o que elas **não** capturam: bloqueios que vivem em
@@ -60,10 +61,40 @@ preferências do produto.
 `Synced/Healthy` no ArgoCD, com probes de health/readiness em `200`, pod sem reinícios e
 o digest da tag SemVer idêntico ao executado. `main` e `develop` estão sincronizadas.
 
-**Política dos arquivos de agente resolvida.** `AGENTS.md` é versionado como guia do
-projeto para o Codex, equivalente ao `CLAUDE.md`. `.agents/` fica no `.gitignore`: os 59
-arquivos locais eram cópias byte a byte das skills instaladas pelo plugin global, não
+**Política dos arquivos de agente resolvida.** `AGENTS.md` é a fonte única do guia do
+projeto; `CLAUDE.md` só o importa (`@AGENTS.md`). A seção _Continuidade entre agentes_ do
+`AGENTS.md` define o handoff Codex ↔ Claude: bloco **Estado** no plano em
+`docs/superpowers/plans/`, atualizado ao fechar cada task. `.agents/` fica no `.gitignore`:
+os 59 arquivos locais eram cópias byte a byte das skills instaladas pelo plugin global, não
 fonte do produto.
+
+### Paridade de interação com o Linear — [#25](https://github.com/Nimbloo/circle/issues/25), 2ª leva
+
+Segunda leva depois da visual (v0.21.0), na branch `danilo/linear-interaction-parity`:
+splitter persistido da Inbox (lista de 300 px mínimo, até 50% da área, largura salva),
+navegação hierárquica por teclado nos filtros (ArrowRight/Enter avança, ArrowLeft/Escape
+volta, Escape na raiz fecha e devolve o foco ao gatilho), token `--sidebar-hover` distinto
+do selecionado, botões de opções como controles reais (28 × 28 px, `aria-label`), criação
+inline de initiative com card de 112 px animado e pickers (ícone/emoji/cor, status,
+prioridade, owner, período, labels) e painel de detalhes com toggle persistido (400 px, sem
+coluna residual).
+
+Contrato **aditivo** de initiatives, autorizado na spec
+(`docs/superpowers/specs/2026-09-01-linear-interaction-parity-design.md`): tabela
+`initiative_label`, coluna `icon_color`, `icon` ampliado para 64 chars (migration 0033, sem
+DROP). Inputs `labelIds`/`iconColor` opcionais; DTO ganha `labels` e `iconColor`.
+
+Validação em 02/09/2026, dark, `1424×771` — o Chrome desta máquina ignorou o resize de
+janela, então os viewports `390`/`768`/`1728` e o tema light **não** foram cobertos
+manualmente (os tokens light existem em `globals.css` e os testes renderizados cobrem
+store e semântica): splitter (drag, clamp em 300, largura após reload), criação de
+initiative (toast só após a API, ícone/cor e label persistidos no GET), toggle de detalhes
+(foco preservado no botão, estado após reload), filtro de initiatives por teclado.
+`pnpm typecheck`, `pnpm lint`, 67 arquivos/379 testes e `pnpm build` verdes. Único ajuste
+da auditoria: `defaultSize` no painel de detalhe do Inbox (warning de layout shift do
+`react-resizable-panels` no SSR). Observado uma única vez e **não reproduzido**: lista do
+Inbox abrindo com 424 px em vez de 300 numa janela de 1718 px — se voltar, olhar a
+interação entre `onResize` e o `useLayoutEffect` que aplica a largura do store.
 
 ---
 

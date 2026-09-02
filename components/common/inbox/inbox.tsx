@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNotificationsStore } from '@/store/notifications-store';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,20 +11,42 @@ import {
    DropdownMenuTrigger,
    DropdownMenuLabel,
    DropdownMenuCheckboxItem,
-   DropdownMenuSub,
-   DropdownMenuSubTrigger,
-   DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu';
+import {
+   Command,
+   CommandEmpty,
+   CommandGroup,
+   CommandInput,
+   CommandItem,
+   CommandList,
+} from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { SlidersHorizontal, CheckCheck, ListFilter, MoreHorizontal, Bell } from 'lucide-react';
+import {
+   Bell,
+   CheckCheck,
+   CheckIcon,
+   ChevronLeft,
+   ChevronRight,
+   ListFilter,
+   MoreHorizontal,
+   SlidersHorizontal,
+} from 'lucide-react';
 import { getNotificationIcon } from '@/lib/notification-utils';
 import type { NotificationType } from '@/data/inbox';
 import NotificationPreview from './issue-preview';
 import IssueLine from './issue-line';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { ChevronLeft } from 'lucide-react';
+import { useCommandPages } from '@/components/ui/use-command-pages';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
+import {
+   clampInboxListWidth,
+   DEFAULT_INBOX_LIST_WIDTH,
+   useInboxLayoutStore,
+} from '@/store/inbox-layout-store';
+import type { ImperativePanelHandle } from 'react-resizable-panels';
 
 /** Rótulos legíveis dos tipos de notificação para o filtro (ordem do Linear). */
 const TYPE_LABELS: { value: NotificationType; label: string }[] = [
@@ -55,6 +77,11 @@ export default function Inbox() {
    } = useNotificationsStore();
 
    const isMobile = useIsMobile();
+   const desktopContainerRef = useRef<HTMLDivElement>(null);
+   const listPanelRef = useRef<ImperativePanelHandle>(null);
+   const [desktopWidth, setDesktopWidth] = useState(0);
+   const listWidth = useInboxLayoutStore((state) => state.listWidth);
+   const setListWidth = useInboxLayoutStore((state) => state.setListWidth);
    // Snoozed deixou de ser aba: vira o toggle "Show snoozed" do Display options
    // (paridade Linear) — as adiadas entram na própria lista, com o botão Restaurar.
    const [showSnoozed, setShowSnoozed] = useState(false);
@@ -63,6 +90,10 @@ export default function Inbox() {
    const [ordering, setOrdering] = useState('newest');
    const [showId, setShowId] = useState(true);
    const [showStatusIcon, setShowStatusIcon] = useState(true);
+   const [filterOpen, setFilterOpen] = useState(false);
+   const filterNavigation = useCommandPages<'root' | 'notification-type'>('root', () =>
+      setFilterOpen(false)
+   );
    // Filtro por tipo (padrão Linear): vazio = todos os tipos.
    const [typeFilter, setTypeFilter] = useState<Set<NotificationType>>(new Set());
 
@@ -78,6 +109,23 @@ export default function Inbox() {
    useEffect(() => {
       if (showSnoozed) void hydrateSnoozed();
    }, [showSnoozed, hydrateSnoozed]);
+
+   useEffect(() => {
+      const container = desktopContainerRef.current;
+      if (!container || isMobile) return;
+
+      const measure = () => setDesktopWidth(container.getBoundingClientRect().width);
+      measure();
+      const observer = new ResizeObserver(measure);
+      observer.observe(container);
+      return () => observer.disconnect();
+   }, [isMobile]);
+
+   useLayoutEffect(() => {
+      if (!desktopWidth) return;
+      const nextWidth = clampInboxListWidth(listWidth, desktopWidth);
+      listPanelRef.current?.resize((nextWidth / desktopWidth) * 100);
+   }, [desktopWidth, listWidth]);
 
    // Filter and sort notifications based on settings (memoizado: era recomputado — array
    // novo + re-sort — a cada render, re-renderizando toda a lista de notificações).
@@ -115,7 +163,12 @@ export default function Inbox() {
                <span className="text-[13px] font-medium leading-4">Inbox</span>
                <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                     <Button variant="ghost" size="xs" aria-label="Notification actions">
+                     <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-7"
+                        aria-label="Notification actions"
+                     >
                         <MoreHorizontal className="size-4 text-muted-foreground" />
                      </Button>
                   </DropdownMenuTrigger>
@@ -132,9 +185,20 @@ export default function Inbox() {
             </div>
 
             <div className="flex items-center gap-0.5">
-               <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                     <Button variant="ghost" size="xs" className="relative" aria-label="Add filter">
+               <Popover
+                  open={filterOpen}
+                  onOpenChange={(next) => {
+                     setFilterOpen(next);
+                     if (!next) filterNavigation.reset();
+                  }}
+               >
+                  <PopoverTrigger asChild>
+                     <Button
+                        variant="ghost"
+                        size="icon"
+                        className="relative size-7"
+                        aria-label="Add filter"
+                     >
                         <ListFilter className="size-4 text-muted-foreground" />
                         {typeFilter.size > 0 && (
                            <span className="absolute -right-0.5 -top-0.5 flex size-3.5 items-center justify-center rounded-full bg-primary text-[9px] font-medium text-primary-foreground">
@@ -142,48 +206,68 @@ export default function Inbox() {
                            </span>
                         )}
                      </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                     <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-                        Add filter…
-                     </DropdownMenuLabel>
-                     <DropdownMenuSub>
-                        <DropdownMenuSubTrigger>
-                           <Bell className="mr-2 size-4 text-muted-foreground" />
-                           Notification type
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent className="w-52">
-                           {TYPE_LABELS.map((type) => (
-                              <DropdownMenuCheckboxItem
-                                 key={type.value}
-                                 checked={typeFilter.has(type.value)}
-                                 onCheckedChange={() => toggleType(type.value)}
-                                 onSelect={(event) => event.preventDefault()}
-                              >
-                                 <span className="mr-0.5 inline-flex">
-                                    {getNotificationIcon(
-                                       type.value,
-                                       'size-3.5 text-muted-foreground'
-                                    )}
-                                 </span>
-                                 {type.label}
-                              </DropdownMenuCheckboxItem>
-                           ))}
-                        </DropdownMenuSubContent>
-                     </DropdownMenuSub>
-                     {typeFilter.size > 0 && (
-                        <>
-                           <DropdownMenuSeparator />
-                           <DropdownMenuItem onClick={() => setTypeFilter(new Set())}>
-                              Clear filters
-                           </DropdownMenuItem>
-                        </>
-                     )}
-                  </DropdownMenuContent>
-               </DropdownMenu>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-60 p-0">
+                     <Command onKeyDown={filterNavigation.onKeyDown}>
+                        <CommandInput
+                           ref={filterNavigation.searchInputRef}
+                           value={filterNavigation.query}
+                           onValueChange={filterNavigation.setQuery}
+                           placeholder={
+                              filterNavigation.page === 'root' ? 'Add Filter…' : 'Filter…'
+                           }
+                        />
+                        <CommandList>
+                           <CommandEmpty>No results.</CommandEmpty>
+                           {filterNavigation.page === 'root' ? (
+                              <CommandGroup>
+                                 <CommandItem
+                                    data-command-page="notification-type"
+                                    onSelect={() => filterNavigation.push('notification-type')}
+                                 >
+                                    <Bell className="size-4 text-muted-foreground" />
+                                    Notification type
+                                    <ChevronRight className="ml-auto size-3.5 text-muted-foreground" />
+                                 </CommandItem>
+                                 {typeFilter.size > 0 && (
+                                    <CommandItem onSelect={() => setTypeFilter(new Set())}>
+                                       Clear filters
+                                    </CommandItem>
+                                 )}
+                              </CommandGroup>
+                           ) : (
+                              <CommandGroup>
+                                 {TYPE_LABELS.map((type) => (
+                                    <CommandItem
+                                       key={type.value}
+                                       onSelect={() => toggleType(type.value)}
+                                    >
+                                       <span className="mr-0.5 inline-flex">
+                                          {getNotificationIcon(
+                                             type.value,
+                                             'size-3.5 text-muted-foreground'
+                                          )}
+                                       </span>
+                                       {type.label}
+                                       {typeFilter.has(type.value) && (
+                                          <CheckIcon className="ml-auto size-3.5" />
+                                       )}
+                                    </CommandItem>
+                                 ))}
+                              </CommandGroup>
+                           )}
+                        </CommandList>
+                     </Command>
+                  </PopoverContent>
+               </Popover>
                <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                     <Button variant="ghost" size="xs" aria-label="Display options">
+                     <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-7"
+                        aria-label="Display options"
+                     >
                         <SlidersHorizontal className="size-4 text-muted-foreground" />
                      </Button>
                   </DropdownMenuTrigger>
@@ -335,16 +419,47 @@ export default function Inbox() {
       );
    }
 
+   const minimumSize = desktopWidth ? (DEFAULT_INBOX_LIST_WIDTH / desktopWidth) * 100 : 20;
+   const maximumSize = Math.max(minimumSize, 50);
+
    return (
-      <div className="grid h-full w-full grid-cols-[300px_minmax(0,1fr)]">
-         <section className="min-w-0 border-r border-border">{listPane}</section>
-         <section className="min-w-0">
-            <NotificationPreview
-               notification={selectedNotification}
-               onMarkAsRead={markAsRead}
-               onMarkAsUnread={markAsUnread}
+      <div ref={desktopContainerRef} className="h-full w-full">
+         <ResizablePanelGroup direction="horizontal" className="h-full w-full">
+            <ResizablePanel
+               ref={listPanelRef}
+               id="inbox-list"
+               order={1}
+               defaultSize={minimumSize}
+               minSize={minimumSize}
+               maxSize={maximumSize}
+               onResize={(size) => {
+                  if (!desktopWidth) return;
+                  setListWidth(clampInboxListWidth((size / 100) * desktopWidth, desktopWidth));
+               }}
+               className="min-w-[300px]"
+            >
+               <section className="h-full min-w-0">{listPane}</section>
+            </ResizablePanel>
+            <ResizableHandle
+               id="inbox-list-resize-handle"
+               aria-label="Resize notification list"
+               hitAreaMargins={{ fine: 3, coarse: 12 }}
             />
-         </section>
+            <ResizablePanel
+               id="inbox-detail"
+               order={2}
+               defaultSize={100 - minimumSize}
+               minSize={30}
+            >
+               <section className="h-full min-w-0">
+                  <NotificationPreview
+                     notification={selectedNotification}
+                     onMarkAsRead={markAsRead}
+                     onMarkAsUnread={markAsUnread}
+                  />
+               </section>
+            </ResizablePanel>
+         </ResizablePanelGroup>
       </div>
    );
 }

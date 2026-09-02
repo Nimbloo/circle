@@ -156,11 +156,13 @@ export function adaptInitiative(i: InitiativeDto, users: Map<string, User>): Ini
       name: i.name,
       description: i.description ?? undefined,
       icon: i.icon ?? '🎯',
+      iconColor: i.iconColor ?? undefined,
       status: i.status as Initiative['status'],
       priority: toPriority(i.priority),
       owner: i.owner ? users.get(i.owner.id) : undefined,
       target: i.target ?? undefined,
       health: toHealth(i.health),
+      labels: i.labels,
       projectIds: i.projectIds,
       createdAt: i.createdAt,
    };

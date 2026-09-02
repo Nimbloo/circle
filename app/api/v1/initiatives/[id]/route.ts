@@ -19,15 +19,17 @@ export async function GET(req: Request, { params }: Params) {
 }
 
 const UpdateSchema = z.object({
-   name: z.string().min(1).optional(),
+   name: z.string().min(1).max(196).optional(),
    description: z.string().nullish(),
-   icon: z.string().nullish(),
+   icon: z.string().max(64).nullish(),
+   iconColor: z.string().max(32).nullish(),
    status: z.string().optional(),
    priorityId: z.string().optional(),
    healthId: z.string().optional(),
    ownerId: z.string().nullish(),
    target: z.string().nullish(),
    projectIds: z.array(z.string()).optional(),
+   labelIds: z.array(z.string().max(64)).max(100).optional(),
 });
 
 export async function PATCH(req: Request, { params }: Params) {

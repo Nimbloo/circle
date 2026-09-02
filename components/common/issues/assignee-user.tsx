@@ -65,7 +65,13 @@ export function AssigneeUser({ user, issueId, compact = false }: AssigneeUserPro
    return (
       <DropdownMenu open={open} onOpenChange={setOpen}>
          <DropdownMenuTrigger asChild>
-            <button className={cn('relative w-fit focus:outline-none', compact && 'h-[18px]')}>
+            <button
+               type="button"
+               aria-label={
+                  currentAssignee ? `Change assignee: ${currentAssignee.name}` : 'Assign issue'
+               }
+               className={cn('relative w-fit focus:outline-none', compact && 'h-[18px]')}
+            >
                {renderAvatar()}
                {currentAssignee && (
                   <span

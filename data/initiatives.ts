@@ -1,6 +1,7 @@
 import { Priority, priorities } from './priorities';
 import { Health, health, Project, projects } from './projects';
 import { User, users } from './users';
+import type { LabelInterface } from './labels';
 
 export type InitiativeStatus = 'proposed' | 'planned' | 'active' | 'completed' | 'canceled';
 
@@ -8,14 +9,16 @@ export interface Initiative {
    id: string;
    name: string;
    description?: string;
-   /** Emoji used as the initiative icon. */
+   /** Glyph key or emoji used as the initiative icon. */
    icon: string;
+   iconColor?: string;
    status: InitiativeStatus;
    priority: Priority;
    owner?: User;
    /** Target label shown in the list ("Q3 2026", "Sep 30th", …). */
    target?: string;
    health: Health;
+   labels: LabelInterface[];
    projectIds: string[];
    createdAt: string;
 }

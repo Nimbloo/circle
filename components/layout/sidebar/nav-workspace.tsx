@@ -97,11 +97,9 @@ export function NavWorkspace() {
             <SidebarMenuItem>
                <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                     <SidebarMenuButton asChild>
-                        <span>
-                           <MoreHorizontal />
-                           <span>More</span>
-                        </span>
+                     <SidebarMenuButton aria-label="More workspace links">
+                        <MoreHorizontal />
+                        <span>More</span>
                      </SidebarMenuButton>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-48 rounded-lg" side="bottom" align="start">
