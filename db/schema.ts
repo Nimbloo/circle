@@ -704,6 +704,41 @@ export const review = pgTable(
    (t) => [index('idx_review_status').on(t.status)]
 );
 
+/**
+ * Arquivos de um PR (GET /pulls/{n}/files). `patch` é o unified diff que o GitHub
+ * devolve por arquivo — null para binários/arquivos grandes (o GitHub omite).
+ * Substituído por inteiro a cada sync do PR (sem histórico).
+ */
+export const reviewFile = pgTable(
+   'review_file',
+   {
+      reviewId: varchar('review_id', { length: 128 })
+         .notNull()
+         .references(() => review.id, { onDelete: 'cascade' }),
+      path: varchar('path', { length: 512 }).notNull(),
+      status: varchar('status', { length: 16 }).notNull(), // added|modified|removed|renamed
+      additions: integer('additions').notNull().default(0),
+      deletions: integer('deletions').notNull().default(0),
+      patch: text('patch'),
+   },
+   (t) => [primaryKey({ columns: [t.reviewId, t.path] })]
+);
+
+/** Commits de um PR (GET /pulls/{n}/commits), substituídos por inteiro a cada sync. */
+export const reviewCommit = pgTable(
+   'review_commit',
+   {
+      reviewId: varchar('review_id', { length: 128 })
+         .notNull()
+         .references(() => review.id, { onDelete: 'cascade' }),
+      sha: varchar('sha', { length: 40 }).notNull(),
+      message: varchar('message', { length: 512 }).notNull(),
+      author: varchar('author', { length: 128 }),
+      committedAt: timestamp('committed_at'),
+   },
+   (t) => [primaryKey({ columns: [t.reviewId, t.sha] })]
+);
+
 export const teamDocument = pgTable('team_document', {
    id: varchar('id', { length: 36 }).primaryKey(),
    folderId: varchar('folder_id', { length: 64 })

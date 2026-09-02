@@ -9,8 +9,8 @@
  *
  * Os fetchers usam o cliente tipado global (`api.reviews`, em lib/client.ts).
  */
-import type { Review, ReviewStatus } from '@/data/reviews';
-import type { ReviewDto } from '@/lib/api/reviews';
+import type { Review, ReviewCommit, ReviewFileStat, ReviewStatus } from '@/data/reviews';
+import type { ReviewCommitDto, ReviewDetailDto, ReviewDto, ReviewFileDto } from '@/lib/api/reviews';
 import { api, ApiError } from '@/lib/client';
 
 const VALID_STATUS: readonly ReviewStatus[] = ['open', 'merged', 'closed'];
@@ -34,12 +34,43 @@ function relativeTime(iso: string): string {
    return `${Math.floor(days / 7)}w`;
 }
 
+const TEST_PATH = /(^|\/)(__tests__|tests?|spec)(\/|$)|\.(test|spec)\.[^/]+$/;
+
+/** `src/app/x.ts` → name `x.ts`, path `src/app` (a UI mostra nome e diretório separados). */
+export function splitFilePath(full: string): { name: string; path: string } {
+   const idx = full.lastIndexOf('/');
+   return idx === -1
+      ? { name: full, path: '' }
+      : { name: full.slice(idx + 1), path: full.slice(0, idx) };
+}
+
+export function adaptReviewFile(file: ReviewFileDto): ReviewFileStat {
+   return {
+      ...splitFilePath(file.path),
+      additions: file.additions,
+      deletions: file.deletions,
+      category: TEST_PATH.test(file.path) ? 'tests' : 'implementation',
+      status: file.status,
+      patch: file.patch,
+   };
+}
+
+export function adaptReviewCommit(commit: ReviewCommitDto): ReviewCommit {
+   return {
+      sha: commit.sha.slice(0, 7),
+      message: commit.message.split('\n')[0],
+      timeAgo: commit.committedAt ? relativeTime(commit.committedAt) : '',
+   };
+}
+
 /**
- * ReviewDto (backend, PR cru) -> Review (tipo rico da UI). Os campos de detalhe
- * que o backend não expõe saem vazios; `list` é neutro ('for-you') porque o
- * backend não modela a distinção For you / Created.
+ * ReviewDto (backend, PR cru) -> Review (tipo rico da UI). Arquivos e commits só vêm
+ * no detalhe (`ReviewDetailDto`); na lista saem vazios. `summary`/`testPlan` seguem
+ * vazios (sem fonte de dados) e `list` é neutro ('for-you').
  */
-export function adaptReview(dto: ReviewDto): Review {
+export function adaptReview(dto: ReviewDto | ReviewDetailDto): Review {
+   const files = 'files' in dto ? dto.files.map(adaptReviewFile) : [];
+   const commits = 'commits' in dto ? dto.commits.map(adaptReviewCommit) : [];
    return {
       id: dto.id,
       title: dto.title,
@@ -55,8 +86,8 @@ export function adaptReview(dto: ReviewDto): Review {
       resolves: dto.resolves ?? { identifier: '', title: '' },
       checksPassed: dto.checksPassed,
       checksTotal: dto.checksTotal,
-      files: [],
-      commits: [],
+      files,
+      commits,
       summary: [],
       testPlan: [],
    };

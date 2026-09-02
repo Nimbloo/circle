@@ -68,7 +68,8 @@ function ReviewRow({
 }) {
    return (
       <Link
-         href={`/${orgId}/review/${review.id}`}
+         // id = `repo/name#n`: sem encode, `/` vira segmento e `#` vira fragment → 404.
+         href={`/${orgId}/review/${encodeURIComponent(review.id)}`}
          className={cn(
             'h-11 px-[18px] text-[13px] flex items-center gap-2 transition-colors',
             selected ? 'bg-accent/60' : 'hover:bg-accent/40'

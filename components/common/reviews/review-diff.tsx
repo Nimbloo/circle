@@ -10,7 +10,15 @@ import {
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import type { Review } from '@/data/reviews';
+import { patchToLines } from '@/lib/diff-patch';
+import type { Review, ReviewFileStat } from '@/data/reviews';
+import { DiffView } from './diff-view';
+import { DiffStat } from './review-shared';
+
+/** Âncora estável por caminho completo (dois arquivos podem ter o mesmo nome). */
+function anchorId(file: ReviewFileStat): string {
+   return `diff-${encodeURIComponent(file.path ? `${file.path}/${file.name}` : file.name)}`;
+}
 import {
    Check,
    FileCode2,
@@ -116,8 +124,8 @@ export function ReviewDiff({ review }: { review: Review }) {
                </div>
                {files.map((file) => (
                   <a
-                     key={file.name + file.path}
-                     href={`#diff-${file.name}`}
+                     key={file.path + '/' + file.name}
+                     href={`#${anchorId(file)}`}
                      className={cn(
                         'flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs hover:bg-accent/50 transition-colors'
                      )}
@@ -134,17 +142,36 @@ export function ReviewDiff({ review }: { review: Review }) {
                      No file diffs available.
                   </div>
                ) : (
-                  files.map((file) => (
-                     <div
-                        key={file.name + file.path}
-                        id={`diff-${file.name}`}
-                        className="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs bg-container"
-                     >
-                        <FileCode2 className="size-3.5 text-muted-foreground shrink-0" />
-                        <span className="font-medium">{file.name}</span>
-                        <span className="text-muted-foreground truncate">{file.path}</span>
-                     </div>
-                  ))
+                  files.map((file) => {
+                     const lines = patchToLines(file.patch);
+                     return (
+                        <div key={file.path + '/' + file.name} id={anchorId(file)}>
+                           {lines.length > 0 ? (
+                              <DiffView
+                                 diff={{
+                                    name: file.name,
+                                    path: file.path,
+                                    additions: file.additions,
+                                    deletions: file.deletions,
+                                    lines,
+                                 }}
+                              />
+                           ) : (
+                              // Sem patch (binário/arquivo grande): só o cabeçalho com o stat.
+                              <div className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm bg-container">
+                                 <FileCode2 className="size-4 text-muted-foreground shrink-0" />
+                                 <span className="font-medium">{file.name}</span>
+                                 <span className="text-xs text-muted-foreground truncate">
+                                    {file.path}
+                                 </span>
+                                 <span className="flex-1" />
+                                 <DiffStat additions={file.additions} deletions={file.deletions} />
+                                 <span className="text-xs text-muted-foreground">No diff</span>
+                              </div>
+                           )}
+                        </div>
+                     );
+                  })
                )}
             </div>
          </div>

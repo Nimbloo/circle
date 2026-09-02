@@ -9,7 +9,7 @@ export default async function ReviewDiffPage({
    const { reviewId } = await params;
    return (
       <MainLayout>
-         <Reviews selectedReviewId={reviewId} section="diff" />
+         <Reviews selectedReviewId={decodeURIComponent(reviewId)} section="diff" />
       </MainLayout>
    );
 }
