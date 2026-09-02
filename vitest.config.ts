@@ -2,9 +2,12 @@ import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
 
 export default defineConfig({
+   esbuild: {
+      jsx: 'automatic',
+   },
    test: {
       environment: 'node',
-      include: ['test/**/*.test.ts'],
+      include: ['test/**/*.test.{ts,tsx}'],
       testTimeout: 20000,
       hookTimeout: 20000,
       // Pool de forks: o pool de threads (default) sofre teardown flaky no Windows/CI
