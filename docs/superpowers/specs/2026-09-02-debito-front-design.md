@@ -2,7 +2,7 @@
 
 **Data:** 2026-09-02
 
-**Status:** em execução (5 grupos em paralelo, integrados na branch `danilo/debt-front-1-9`)
+**Status:** concluído (integrado em `danilo/debt-front-1-9`, PR para `develop` em 2026-09-02)
 
 Pedido: "resolva todos, não deixe débito, 1 ao 9". A lista veio da auditoria de
 `2026-09-02-sidebar-e-estado-design.md`. O Linear é o benchmark de comportamento.
