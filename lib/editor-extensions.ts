@@ -4,21 +4,28 @@
  * qualquer extensão que dependa de DOM/React vive só no componente.
  *
  * Blocos: paragraph, heading H1–H3, bullet/ordered/task list, code block, quote,
- * divider, imagem (com upload), vídeo (YouTube/Vimeo/Loom/mp4). Marks: bold, italic, code, link (autolink + colar URL).
+ * divider, imagem (com upload), vídeo (YouTube/Vimeo/Loom/mp4); inline: referência a
+ * issue (`#`). Marks: bold, italic, code, link (autolink + colar URL).
  * Os atalhos markdown (`# `, `- `, `1. `, `[ ] `, "```", `> `, `---`, `**x**`, `` `x` ``)
  * vêm do próprio StarterKit/list.
  */
-import type { Extensions } from '@tiptap/core';
+import type { AnyExtension, Extensions } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { Placeholder } from '@tiptap/extensions';
 import { ImageNode, ImageUpload, type ImageUploadOptions } from './editor-image';
 import { Video } from './editor-video';
+import { IssueRef } from './editor-issue-ref';
 
 export const DEFAULT_PLACEHOLDER = 'Add a description…';
 
 export interface EditorExtensionOptions extends ImageUploadOptions {
    placeholder?: string;
+   /**
+    * Nó de referência a issue já configurado pelo cliente (NodeView React + sugestões
+    * do `#`). Default: o `IssueRef` estático — suficiente para o servidor.
+    */
+   issueRef?: AnyExtension;
 }
 
 export function editorExtensions(options: EditorExtensionOptions = {}): Extensions {
@@ -40,5 +47,6 @@ export function editorExtensions(options: EditorExtensionOptions = {}): Extensio
       ImageNode,
       ImageUpload.configure({ upload: options.upload, onUploadError: options.onUploadError }),
       Video,
+      options.issueRef ?? IssueRef,
    ];
 }

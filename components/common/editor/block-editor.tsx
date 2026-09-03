@@ -4,8 +4,11 @@ import { api } from '@/lib/client';
 import { cn } from '@/lib/utils';
 import { EMPTY_DOC, type EditorDoc } from '@/lib/editor-doc';
 import { editorExtensions } from '@/lib/editor-extensions';
-import { EditorContent, useEditor, type Editor } from '@tiptap/react';
-import { exitSuggestion, type SuggestionProps } from '@tiptap/suggestion';
+import { IssueRef } from '@/lib/editor-issue-ref';
+import type { Issue } from '@/data/issues';
+import { useIssuesStore } from '@/store/issues-store';
+import { EditorContent, ReactNodeViewRenderer, useEditor, type Editor } from '@tiptap/react';
+import { exitSuggestion, type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion';
 import {
    Code,
    Heading1,
@@ -21,9 +24,10 @@ import {
    Video as VideoIcon,
    type LucideIcon,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
+import { IssueRefChip } from './issue-ref-chip';
 import { SlashCommand, type SlashItem } from './slash-command';
 
 export interface BlockEditorProps {
@@ -78,14 +82,79 @@ const SLASH_ICONS: Record<string, LucideIcon> = {
    video: VideoIcon,
 };
 
-interface SlashState {
-   items: SlashItem[];
-   index: number;
-   rect: DOMRect | null;
-   command: (item: SlashItem) => void;
+const MENU_HEIGHT = 340;
+const ISSUE_SUGGESTIONS_MAX = 8;
+
+/** Sugestões do `#`: identifier por prefixo ou título por texto, vindas do `issues-store`. */
+export function searchIssueRefs(query: string, issues: Issue[]): Issue[] {
+   const q = query.trim().toLowerCase();
+   const hits = q
+      ? issues.filter(
+           (i) => i.identifier.toLowerCase().startsWith(q) || i.title.toLowerCase().includes(q)
+        )
+      : issues;
+   return hits.slice(0, ISSUE_SUGGESTIONS_MAX);
 }
 
-const SLASH_MENU_HEIGHT = 340;
+/* ------------------------------ menu de sugestões ------------------------------ */
+
+interface MenuState<T> {
+   items: T[];
+   index: number;
+   rect: DOMRect | null;
+   command: (item: T) => void;
+}
+
+/**
+ * Estado React de um menu do Suggestion (`/` e `#`): o `render` alimenta o estado a partir
+ * dos hooks do plugin e trata teclado; é estável (refs) para o editor não ser recriado.
+ */
+function useSuggestionMenu<T>() {
+   const [state, setState] = useState<MenuState<T> | null>(null);
+   const stateRef = useRef<MenuState<T> | null>(null);
+   useEffect(() => {
+      stateRef.current = state;
+   }, [state]);
+
+   const render = useCallback((): ReturnType<NonNullable<SuggestionOptions<T, T>['render']>> => {
+      const sync = (props: SuggestionProps<T, T>) =>
+         setState({
+            items: props.items,
+            index: 0,
+            rect: props.clientRect?.() ?? null,
+            command: props.command,
+         });
+      return {
+         onStart: sync,
+         onUpdate: sync,
+         onExit: () => setState(null),
+         onKeyDown: ({ event, view }) => {
+            const current = stateRef.current;
+            if (!current || current.items.length === 0) return false;
+            const len = current.items.length;
+            if (event.key === 'ArrowDown') {
+               setState({ ...current, index: (current.index + 1) % len });
+               return true;
+            }
+            if (event.key === 'ArrowUp') {
+               setState({ ...current, index: (current.index - 1 + len) % len });
+               return true;
+            }
+            if (event.key === 'Enter') {
+               current.command(current.items[current.index]);
+               return true;
+            }
+            if (event.key === 'Escape') {
+               exitSuggestion(view);
+               return true;
+            }
+            return false;
+         },
+      };
+   }, []);
+
+   return { state, setState, render };
+}
 
 /**
  * Editor de blocos (#16) — Tiptap sobre ProseMirror, com o mesmo conjunto de extensões
@@ -138,12 +207,8 @@ export function BlockEditor({
    );
    useEffect(() => flush, [flush]);
 
-   // Menu "/" — estado em React, alimentado pelos hooks do Suggestion.
-   const [slash, setSlash] = useState<SlashState | null>(null);
-   const slashRef = useRef<SlashState | null>(null);
-   useEffect(() => {
-      slashRef.current = slash;
-   }, [slash]);
+   const slash = useSuggestionMenu<SlashItem>();
+   const issueMenu = useSuggestionMenu<Issue>();
 
    const extensions = useMemo(
       () => [
@@ -154,49 +219,32 @@ export function BlockEditor({
                const detail = error instanceof Error && error.message ? `: ${error.message}` : '';
                toast.error(`Falha ao enviar a imagem${detail}`);
             },
-         }),
-         SlashCommand.configure({
-            suggestion: {
-               render: () => {
-                  const sync = (props: SuggestionProps<SlashItem, SlashItem>) =>
-                     setSlash({
-                        items: props.items,
-                        index: 0,
-                        rect: props.clientRect?.() ?? null,
-                        command: props.command,
-                     });
-                  return {
-                     onStart: sync,
-                     onUpdate: sync,
-                     onExit: () => setSlash(null),
-                     onKeyDown: ({ event, view }) => {
-                        const state = slashRef.current;
-                        if (!state || state.items.length === 0) return false;
-                        const len = state.items.length;
-                        if (event.key === 'ArrowDown') {
-                           setSlash({ ...state, index: (state.index + 1) % len });
-                           return true;
-                        }
-                        if (event.key === 'ArrowUp') {
-                           setSlash({ ...state, index: (state.index - 1 + len) % len });
-                           return true;
-                        }
-                        if (event.key === 'Enter') {
-                           state.command(state.items[state.index]);
-                           return true;
-                        }
-                        if (event.key === 'Escape') {
-                           exitSuggestion(view);
-                           return true;
-                        }
-                        return false;
-                     },
-                  };
+            issueRef: IssueRef.extend({
+               addNodeView() {
+                  return ReactNodeViewRenderer(IssueRefChip);
                },
-            },
+            }).configure({
+               isKnownIdentifier: (identifier) =>
+                  useIssuesStore.getState().issues.some((i) => i.identifier === identifier),
+               suggestion: {
+                  char: '#',
+                  items: ({ query }) => searchIssueRefs(query, useIssuesStore.getState().issues),
+                  command: ({ editor, range, props }) =>
+                     editor
+                        .chain()
+                        .focus()
+                        .insertContentAt(range, [
+                           { type: 'issueRef', attrs: { identifier: props.identifier } },
+                           { type: 'text', text: ' ' },
+                        ])
+                        .run(),
+                  render: issueMenu.render as SuggestionOptions['render'],
+               },
+            }),
          }),
+         SlashCommand.configure({ suggestion: { render: slash.render } }),
       ],
-      [placeholder]
+      [placeholder, slash.render, issueMenu.render]
    );
 
    const editor = useEditor({
@@ -225,28 +273,82 @@ export function BlockEditor({
       editor.commands.setContent(doc, { emitUpdate: false });
    }, [editor, doc]);
 
-   const menuOpen = editable && slash !== null && slash.items.length > 0 && slash.rect !== null;
+   const canPortal = editable && typeof document !== 'undefined';
+   const slashOpen = canPortal && slash.state !== null && slash.state.items.length > 0;
+   const issueOpen = canPortal && issueMenu.state !== null && issueMenu.state.items.length > 0;
 
    return (
       <div className={cn('block-editor', className)} data-editable={editable}>
          <EditorContent editor={editor} />
-         {menuOpen && typeof document !== 'undefined'
-            ? createPortal(<SlashMenu state={slash} setState={setSlash} />, document.body)
+         {slashOpen
+            ? createPortal(
+                 <SuggestionMenu
+                    label="Insert block"
+                    state={slash.state!}
+                    setState={slash.setState}
+                    keyOf={(item) => item.id}
+                    renderItem={(item) => {
+                       const Icon = SLASH_ICONS[item.id] ?? Type;
+                       return (
+                          <>
+                             <Icon className="size-4 shrink-0 text-muted-foreground" />
+                             {item.title}
+                          </>
+                       );
+                    }}
+                 />,
+                 document.body
+              )
+            : null}
+         {issueOpen
+            ? createPortal(
+                 <SuggestionMenu
+                    label="Reference issue"
+                    className="w-80"
+                    state={issueMenu.state!}
+                    setState={issueMenu.setState}
+                    keyOf={(issue) => issue.id}
+                    renderItem={(issue) => {
+                       const StatusIcon = issue.status.icon;
+                       return (
+                          <>
+                             <span className="inline-flex size-4 shrink-0 items-center justify-center">
+                                <StatusIcon />
+                             </span>
+                             <span className="shrink-0 text-muted-foreground">
+                                {issue.identifier}
+                             </span>
+                             <span className="truncate">{issue.title}</span>
+                          </>
+                       );
+                    }}
+                 />,
+                 document.body
+              )
             : null}
       </div>
    );
 }
 
-function SlashMenu({
+function SuggestionMenu<T>({
+   label,
+   className,
    state,
    setState,
+   keyOf,
+   renderItem,
 }: {
-   state: SlashState;
-   setState: (next: SlashState) => void;
+   label: string;
+   className?: string;
+   state: MenuState<T>;
+   setState: (next: MenuState<T>) => void;
+   keyOf: (item: T) => string;
+   renderItem: (item: T, selected: boolean) => ReactNode;
 }) {
-   const rect = state.rect!;
-   // Abre abaixo do cursor; acima quando não cabe na viewport.
-   const flip = rect.bottom + SLASH_MENU_HEIGHT > window.innerHeight;
+   // Sem retângulo (jsdom/sem layout) o menu ancora no canto; abre abaixo do cursor e
+   // acima quando não cabe na viewport.
+   const rect = state.rect ?? { top: 0, bottom: 0, left: 0 };
+   const flip = rect.bottom + MENU_HEIGHT > window.innerHeight;
    const style = flip
       ? { position: 'fixed' as const, bottom: window.innerHeight - rect.top + 4, left: rect.left }
       : { position: 'fixed' as const, top: rect.bottom + 4, left: rect.left };
@@ -254,16 +356,18 @@ function SlashMenu({
    return (
       <div
          role="listbox"
-         aria-label="Insert block"
+         aria-label={label}
          style={style}
-         className="z-50 w-56 rounded-xl border border-[var(--popover-border)] bg-popover p-1 text-popover-foreground shadow-[var(--popover-shadow)]"
+         className={cn(
+            'z-50 w-56 rounded-xl border border-[var(--popover-border)] bg-popover p-1 text-popover-foreground shadow-[var(--popover-shadow)]',
+            className
+         )}
       >
          {state.items.map((item, i) => {
-            const Icon = SLASH_ICONS[item.id] ?? Type;
             const selected = i === state.index;
             return (
                <button
-                  key={item.id}
+                  key={keyOf(item)}
                   type="button"
                   role="option"
                   aria-selected={selected}
@@ -278,8 +382,7 @@ function SlashMenu({
                      selected && 'bg-accent text-accent-foreground'
                   )}
                >
-                  <Icon className="size-4 shrink-0 text-muted-foreground" />
-                  {item.title}
+                  {renderItem(item, selected)}
                </button>
             );
          })}

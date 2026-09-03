@@ -122,6 +122,24 @@ describe('docToText #16', () => {
       };
       expect(docToText(doc)).toBe('https://youtu.be/dQw4w9WgXcQ\n\nfim');
    });
+
+   it('referência a issue (inline) → identifier', () => {
+      const doc = {
+         type: 'doc',
+         content: [
+            {
+               type: 'paragraph',
+               content: [
+                  { type: 'text', text: 'Depende de ' },
+                  { type: 'issueRef', attrs: { identifier: 'ENG-12' } },
+                  { type: 'text', text: ' e ' },
+                  { type: 'issueRef', attrs: { identifier: 'ENG-13' } },
+               ],
+            },
+         ],
+      };
+      expect(docToText(doc)).toBe('Depende de ENG-12 e ENG-13');
+   });
 });
 
 describe('docHeadings #16', () => {

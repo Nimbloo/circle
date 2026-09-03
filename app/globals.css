@@ -515,6 +515,27 @@ html[data-underline-links='true'] a[href]:not([role='button']):not(.no-underline
    overflow: hidden;
    background: color-mix(in oklab, var(--accent) 40%, transparent);
 }
+.ProseMirror .issue-ref {
+   display: inline-flex;
+   max-width: 100%;
+   align-items: center;
+   gap: 0.25em;
+   vertical-align: baseline;
+   padding: 0 0.35em;
+   border-radius: 4px;
+   background: var(--accent);
+   color: var(--foreground);
+   font-size: 0.93em;
+   line-height: 1.5;
+   white-space: nowrap;
+}
+.ProseMirror .issue-ref a {
+   color: inherit;
+   text-decoration: none;
+}
+.ProseMirror .issue-ref:hover {
+   background: color-mix(in oklab, var(--accent) 70%, var(--primary) 30%);
+}
 .ProseMirror div[data-type='video'] > iframe,
 .ProseMirror div[data-type='video'] > video {
    position: absolute;

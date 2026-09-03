@@ -113,6 +113,10 @@ function inlineText(node: PmNode): string {
          out += '\n';
          return;
       }
+      if (child.type.name === 'issueRef') {
+         out += String(child.attrs.identifier ?? '');
+         return;
+      }
       if (!child.isText) {
          out += child.textContent;
          return;

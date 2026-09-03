@@ -7,6 +7,32 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '@tiptap/react';
 import { BlockEditor } from '@/components/common/editor/block-editor';
 import { blocksToDoc, type EditorDoc } from '@/lib/editor-doc';
+import type { Issue } from '@/data/issues';
+import { priorities } from '@/data/priorities';
+import { status } from '@/data/status';
+import { useIssuesStore } from '@/store/issues-store';
+
+vi.mock('next/navigation', () => ({
+   useParams: () => ({ orgId: 'nimbloo' }),
+}));
+
+const ISSUES = [
+   { id: 'i1', identifier: 'ENG-1', title: 'Login quebrado' },
+   { id: 'i2', identifier: 'ENG-2', title: 'Tela de billing' },
+   { id: 'i3', identifier: 'OPS-7', title: 'Rotação de chaves' },
+].map(
+   (i): Issue => ({
+      ...i,
+      description: '',
+      status: status[0],
+      priority: priorities[0],
+      assignee: null,
+      labels: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      cycleId: '',
+      rank: 'a',
+   })
+);
 
 const DOC: EditorDoc = blocksToDoc([
    { type: 'heading', text: 'Plano', level: 1 },
@@ -148,6 +174,56 @@ describe('BlockEditor #16', () => {
       const json = JSON.stringify(editor.getJSON());
       expect(json).toContain('"provider":"youtube"');
       expect(json).toContain('"provider":"file"');
+   });
+
+   it('referência: "#ENG" lista sugestões do store e selecionar insere o chip issueRef', async () => {
+      useIssuesStore.setState({ issues: ISSUES });
+      const { editor, container } = await mount({ doc: blocksToDoc([]) });
+      act(() => {
+         editor.chain().focus('end').insertContent('Ver #ENG').run();
+      });
+      const menu = await waitFor(() => {
+         const el = document.querySelector('[role="listbox"][aria-label="Reference issue"]');
+         expect(el).not.toBeNull();
+         return el!;
+      });
+      const options = menu.querySelectorAll('[role="option"]');
+      expect(options).toHaveLength(2);
+      expect(options[0].textContent).toContain('ENG-1');
+      expect(options[0].textContent).toContain('Login quebrado');
+      expect(menu.textContent).not.toContain('OPS-7');
+
+      act(() => {
+         fireEvent.mouseDown(options[1]);
+      });
+      const root = container.querySelector('.ProseMirror')!;
+      await waitFor(() => {
+         const chip = root.querySelector('.issue-ref[data-identifier="ENG-2"]');
+         expect(chip).not.toBeNull();
+         expect(chip!.textContent).toContain('ENG-2');
+         expect(chip!.textContent).toContain('Tela de billing');
+         expect(chip!.querySelector('a')?.getAttribute('href')).toBe('/nimbloo/issue/ENG-2');
+      });
+      expect(document.querySelector('[aria-label="Reference issue"]')).toBeNull();
+      const json = JSON.stringify(editor.getJSON());
+      expect(json).toContain('{"type":"issueRef","attrs":{"identifier":"ENG-2"}}');
+      expect(json).not.toContain('#ENG');
+   });
+
+   it('referência: colar "ENG-1" conhecido vira issueRef; identifier desconhecido fica texto', async () => {
+      useIssuesStore.setState({ issues: ISSUES });
+      const { editor, container } = await mount({ doc: blocksToDoc([]) });
+      act(() => {
+         editor.commands.focus('end');
+         // Colar de verdade (ProseMirror), com o ClipboardEvent do setup-dom.
+         editor.view.pasteText('Bloqueado por ENG-1 e UTF-8', new ClipboardEvent('paste'));
+      });
+      const root = container.querySelector('.ProseMirror')!;
+      await waitFor(() =>
+         expect(root.querySelector('.issue-ref[data-identifier="ENG-1"]')).not.toBeNull()
+      );
+      expect(root.querySelector('.issue-ref[data-identifier="UTF-8"]')).toBeNull();
+      expect(root.textContent).toContain('UTF-8');
    });
 
    it('doc externo novo substitui o conteúdo quando o editor não tem foco', async () => {
