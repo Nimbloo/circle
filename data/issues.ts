@@ -3,6 +3,7 @@ import type { Priority } from './priorities';
 import type { Project } from './projects';
 import type { Status, StatusCategory } from './status';
 import type { User } from './users';
+import type { EditorDoc } from '@/lib/editor-doc';
 
 export interface Issue {
    id: string;
@@ -10,6 +11,8 @@ export interface Issue {
    teamId?: string; // key do time dono (CORE, DESIGN) — usado p/ escopar as views por time
    title: string;
    description: string;
+   /** Doc do editor de blocos na criação (o servidor deriva `description`). */
+   descriptionDoc?: EditorDoc | null;
    status: Status;
    assignee: User | null;
    priority: Priority;

@@ -17,7 +17,8 @@
 - **Última verificação (2026-09-02, Claude):** parcial (1,2,3,5): typecheck/lint ok, 91
   arquivos / 553 testes; final com o grupo 4: typecheck ok, lint + suíte + build em execução
   (ver PR).
-- **Próximo passo:** smoke no Chrome, `docs/PENDENCIAS.md`, PR para `develop`, release.
+- **Próximo passo:** nenhum — plano **concluído**: mergeado em `develop` (#91) e em
+  produção na v0.26.0 (#92; migrations 0036–0038 aplicadas, rollout Synced/Healthy).
 - **Bloqueios / decisões pendentes:** nenhum.
 
 ## Task 1 — Débito 1–7 + contrato do item 5
@@ -45,4 +46,4 @@
 ## Task 6 — Integração e entrega
 
 - [x] Merge dos cinco; migrations consolidadas; typecheck/lint/test/build; smoke no Chrome.
-- [ ] `docs/PENDENCIAS.md`, PR para `develop`, release.
+- [x] `docs/PENDENCIAS.md`, PR para `develop`, release.

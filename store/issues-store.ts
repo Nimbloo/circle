@@ -143,6 +143,7 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
             '',
          title: issue.title,
          description: issue.description || null, // era descartado → issue nascia sem descrição
+         ...(issue.descriptionDoc ? { descriptionDoc: issue.descriptionDoc } : {}),
          statusId: issue.status.id,
          priorityId: issue.priority.id,
          assigneeId: issue.assignee?.id ?? null,
