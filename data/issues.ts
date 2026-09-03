@@ -14,7 +14,10 @@ export interface Issue {
    /** Doc do editor de blocos na criação (o servidor deriva `description`). */
    descriptionDoc?: EditorDoc | null;
    status: Status;
+   /** Responsável PRINCIPAL (= `assignees[0]`); mantido para tudo que é single-assignee. */
    assignee: User | null;
+   /** Todos os responsáveis (#96): principal primeiro, depois colaboradores. */
+   assignees: User[];
    priority: Priority;
    labels: LabelInterface[];
    createdAt: string;

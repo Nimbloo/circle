@@ -92,6 +92,7 @@ export function adaptIssue(dto: IssueDto): Issue {
       description: '',
       status: adaptStatus(dto.status),
       assignee: dto.assignee ? adaptUser(dto.assignee) : null,
+      assignees: (dto.assignees ?? []).map(adaptUser),
       priority: adaptPriority(dto.priority),
       labels: dto.labels,
       createdAt: dto.createdAt,

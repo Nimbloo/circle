@@ -53,7 +53,10 @@ interface IssuesState {
 
    updateIssueStatus: (issueId: string, newStatus: Status) => Promise<void>;
    updateIssuePriority: (issueId: string, newPriority: Priority) => Promise<void>;
+   /** Troca só o PRINCIPAL (mantém colaboradores) — caminho single-assignee legado. */
    updateIssueAssignee: (issueId: string, newAssignee: User | null) => Promise<void>;
+   /** Substitui o CONJUNTO de responsáveis; o 1º vira o principal. `[]` limpa todos. */
+   updateIssueAssignees: (issueId: string, assignees: User[]) => Promise<void>;
    addIssueLabel: (issueId: string, label: LabelInterface) => Promise<void>;
    removeIssueLabel: (issueId: string, labelId: string) => Promise<void>;
    updateIssueProject: (issueId: string, newProject: Project | undefined) => Promise<void>;
@@ -73,7 +76,10 @@ function toUpdateInput(updated: Partial<Issue>): UpdateIssueInput {
    if ('title' in updated) patch.title = updated.title;
    if ('status' in updated) patch.statusId = updated.status?.id;
    if ('priority' in updated) patch.priorityId = updated.priority?.id;
-   if ('assignee' in updated) patch.assigneeId = updated.assignee ? updated.assignee.id : null;
+   // Conjunto completo tem precedência (substitui todos); `assignee` sozinho troca só o
+   // principal no servidor e mantém os colaboradores.
+   if ('assignees' in updated) patch.assigneeIds = (updated.assignees ?? []).map((a) => a.id);
+   else if ('assignee' in updated) patch.assigneeId = updated.assignee ? updated.assignee.id : null;
    if ('project' in updated) patch.projectId = updated.project ? updated.project.id : null;
    if ('cycleId' in updated) patch.cycleId = updated.cycleId;
    if ('dueDate' in updated) patch.dueDate = updated.dueDate ?? null;
@@ -147,6 +153,12 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          statusId: issue.status.id,
          priorityId: issue.priority.id,
          assigneeId: issue.assignee?.id ?? null,
+         assigneeIds: (issue.assignees?.length
+            ? issue.assignees
+            : issue.assignee
+              ? [issue.assignee]
+              : []
+         ).map((a) => a.id),
          projectId: issue.project?.id ?? null,
          cycleId: issue.cycleId || null,
          labelIds: issue.labels.map((l) => l.id),
@@ -240,10 +252,11 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
 
    filterByStatus: (statusId) => get().issues.filter((i) => i.status.id === statusId),
    filterByPriority: (priorityId) => get().issues.filter((i) => i.priority.id === priorityId),
+   // Casa QUALQUER responsável (principal ou colaborador); sem responsável = conjunto vazio.
    filterByAssignee: (userId) =>
       userId === null
          ? get().issues.filter((i) => i.assignee === null)
-         : get().issues.filter((i) => i.assignee?.id === userId),
+         : get().issues.filter((i) => i.assignees.some((a) => a.id === userId)),
    filterByLabel: (labelId) => get().issues.filter((i) => i.labels.some((l) => l.id === labelId)),
    filterByProject: (projectId) => get().issues.filter((i) => i.project?.id === projectId),
    filterByCycle: (cycleId) => get().issues.filter((i) => i.cycleId === cycleId),
@@ -261,7 +274,7 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
       if (filters.assignee?.length) {
          out = out.filter((i) => {
             if (filters.assignee!.includes('unassigned') && i.assignee === null) return true;
-            return i.assignee && filters.assignee!.includes(i.assignee.id);
+            return i.assignees.some((a) => filters.assignee!.includes(a.id));
          });
       }
       if (filters.priority?.length)
@@ -284,8 +297,20 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
    updateIssueStatus: (issueId, newStatus) => get().updateIssue(issueId, { status: newStatus }),
    updateIssuePriority: (issueId, newPriority) =>
       get().updateIssue(issueId, { priority: newPriority }),
-   updateIssueAssignee: (issueId, newAssignee) =>
-      get().updateIssue(issueId, { assignee: newAssignee }),
+   // Espelha a regra do servidor no otimista: novo principal + colaboradores atuais (sem o
+   // principal anterior); sem novo principal, o 1º colaborador é promovido.
+   updateIssueAssignee: (issueId, newAssignee) => {
+      const current = get().getIssueById(issueId);
+      const collaborators = (current?.assignees ?? []).filter(
+         (a) => a.id !== current?.assignee?.id && a.id !== newAssignee?.id
+      );
+      const assignees = newAssignee ? [newAssignee, ...collaborators] : collaborators;
+      return get().updateIssue(issueId, { assignee: assignees[0] ?? null, assignees });
+   },
+   updateIssueAssignees: (issueId, assignees) => {
+      const unique = assignees.filter((a, i, arr) => arr.findIndex((b) => b.id === a.id) === i);
+      return get().updateIssue(issueId, { assignee: unique[0] ?? null, assignees: unique });
+   },
 
    addIssueLabel: (issueId, label) => {
       const issue = get().getIssueById(issueId);
