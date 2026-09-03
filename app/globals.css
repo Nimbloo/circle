@@ -375,6 +375,10 @@ html[data-underline-links='true'] a[href]:not([role='button']):not(.no-underline
 .ProseMirror > * + * {
    margin-top: 0.75em;
 }
+.block-editor[data-variant='compact'] .ProseMirror {
+   min-height: 4rem;
+   font-size: 14px;
+}
 .ProseMirror p.is-editor-empty:first-child::before {
    content: attr(data-placeholder);
    float: left;

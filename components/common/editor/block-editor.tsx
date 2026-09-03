@@ -44,6 +44,8 @@ export interface BlockEditorProps {
    onReady?: (editor: Editor) => void;
    /** Upload de imagem (arrastar/colar/menu "/"): devolve a URL. Default: `POST /uploads`. */
    onUpload?: (file: File) => Promise<string>;
+   /** `compact`: altura mínima e tipografia menores (modais de criação). */
+   variant?: 'default' | 'compact';
    className?: string;
 }
 
@@ -172,6 +174,7 @@ export function BlockEditor({
    saveDelayMs = 800,
    onReady,
    onUpload,
+   variant = 'default',
    className,
 }: BlockEditorProps) {
    // Callbacks em refs: o editor é criado uma vez e não deve ser recriado quando o pai
@@ -278,7 +281,11 @@ export function BlockEditor({
    const issueOpen = canPortal && issueMenu.state !== null && issueMenu.state.items.length > 0;
 
    return (
-      <div className={cn('block-editor', className)} data-editable={editable}>
+      <div
+         className={cn('block-editor', className)}
+         data-editable={editable}
+         data-variant={variant}
+      >
          <EditorContent editor={editor} />
          {slashOpen
             ? createPortal(
