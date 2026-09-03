@@ -42,6 +42,7 @@ import type { ViewDto, CreateViewInput, UpdateViewInput } from '@/lib/api/views'
 import type { WorkspaceBootstrap } from '@/lib/api/workspace';
 import type { NotificationDto } from '@/lib/api/notifications';
 import type { ReviewDetailDto, ReviewDto, ReviewGuideDto } from '@/lib/api/reviews';
+import type { AddReviewCommentInput, ReviewCommentDto } from '@/lib/api/review-comments';
 import type { FolderDto, DocumentDto } from '@/lib/api/documents';
 import type {
    IssueDetailDto,
@@ -449,5 +450,18 @@ export const api = {
       sync: () => post<{ started: boolean }>('/reviews/sync'),
       generateGuide: (id: string) =>
          post<ReviewGuideDto>(`/reviews/${encodeURIComponent(id)}/guide`),
+      listComments: (id: string) =>
+         get<ReviewCommentDto[]>(`/reviews/${encodeURIComponent(id)}/comments`),
+      addComment: (id: string, input: AddReviewCommentInput) =>
+         post<ReviewCommentDto>(`/reviews/${encodeURIComponent(id)}/comments`, input),
+      updateComment: (id: string, commentId: string, body: string) =>
+         patch<ReviewCommentDto>(
+            `/reviews/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`,
+            { body }
+         ),
+      removeComment: (id: string, commentId: string) =>
+         del<{ deleted: boolean }>(
+            `/reviews/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`
+         ),
    },
 };

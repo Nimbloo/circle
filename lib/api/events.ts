@@ -23,7 +23,9 @@ export type CircleEntity =
    | 'team'
    | 'member'
    | 'notification'
-   | 'document';
+   | 'document'
+   /** Comentário/veredito de review; `id` do evento é o do REVIEW (o cliente recarrega o aberto). */
+   | 'review_comment';
 
 import { randomUUID } from 'node:crypto';
 

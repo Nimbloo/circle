@@ -19,7 +19,8 @@ import type { CircleEntity } from '@/lib/api/events';
 /** Alvo de refetch por entidade. */
 type SyncTarget = 'issues' | 'workspace' | 'notifications';
 
-const TARGET_BY_ENTITY: Record<CircleEntity, SyncTarget> = {
+// `review_comment` não tem store: só o detalhe do review aberto reage (REVIEW_CHANGED_EVENT).
+const TARGET_BY_ENTITY: Partial<Record<CircleEntity, SyncTarget>> = {
    issue: 'issues',
    comment: 'issues',
    label: 'issues',
@@ -58,6 +59,11 @@ interface CircleEventLike {
 export const ISSUE_CHANGED_EVENT = 'circle:issue-changed';
 /** Entidades cujo evento também mexe no detalhe/feed de uma issue. */
 const DETAIL_ENTITIES = new Set<CircleEntity>(['issue', 'comment']);
+/**
+ * Evento de janela emitido quando a thread de um review muda (comentário/veredito de
+ * OUTRO usuário). `detail.id` é o id do review; o detalhe aberto compara e refaz o fetch.
+ */
+export const REVIEW_CHANGED_EVENT = 'circle:review-changed';
 
 export function useLiveSync(): void {
    useEffect(() => {
@@ -126,6 +132,12 @@ export function useLiveSync(): void {
                      .then(ws.applyInitiative)
                      .catch(() => scheduleHydrate('workspace'));
                }
+            } else if (entity === 'review_comment') {
+               // Sem store de reviews: o detalhe aberto (review-detail) escuta e recarrega
+               // só se for o mesmo review (o `id` do evento é o do review).
+               window.dispatchEvent(
+                  new CustomEvent(REVIEW_CHANGED_EVENT, { detail: { id: parsed.id } })
+               );
             } else if (entity !== 'comment') {
                // 'comment' (e reactions, que publicam como comment) NÃO mexem na lista do
                // board — só no detalhe/feed da issue aberta, que é atualizado via o
