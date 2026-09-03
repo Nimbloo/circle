@@ -14,7 +14,7 @@ interface Entry {
 /** Linha virtual: um header de grupo OU uma issue. */
 type Row =
    | { kind: 'header'; group: IssueGroupDescriptor; count: number }
-   | { kind: 'issue'; issue: Issue };
+   | { kind: 'issue'; issue: Issue; orderedIssues: Issue[] };
 
 export const ISSUE_GROUP_HEADER_HEIGHT = 36;
 export const ISSUE_ROW_HEIGHT = 44;
@@ -33,7 +33,7 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
       const out: Row[] = [];
       for (const e of entries) {
          out.push({ kind: 'header', group: e.group, count: e.issues.length });
-         for (const issue of e.issues) out.push({ kind: 'issue', issue });
+         for (const issue of e.issues) out.push({ kind: 'issue', issue, orderedIssues: e.issues });
       }
       return out;
    }, [entries]);
@@ -74,7 +74,11 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
                      ) : (
                         // layoutId=false: sem animação de layout do framer-motion (brigaria
                         // com o mount/unmount da virtualização).
-                        <IssueLine issue={row.issue} layoutId={false} />
+                        <IssueLine
+                           issue={row.issue}
+                           orderedIssues={row.orderedIssues}
+                           layoutId={false}
+                        />
                      )}
                   </div>
                );

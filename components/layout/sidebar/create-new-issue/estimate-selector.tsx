@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CheckIcon, Gauge } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { ESTIMATE_SCALES, estimateLabel, normalizeScale } from '@/data/estimate-scales';
 
@@ -22,9 +22,11 @@ interface EstimateSelectorProps {
    onChange: (estimate: number | undefined) => void;
    /** Time da issue — determina a escala de estimate (paridade Linear). */
    teamId?: string;
+   /** Trigger customizado (chip da linha de issue); default: botão com o valor. */
+   children?: ReactNode;
 }
 
-export function EstimateSelector({ estimate, onChange, teamId }: EstimateSelectorProps) {
+export function EstimateSelector({ estimate, onChange, teamId, children }: EstimateSelectorProps) {
    const id = useId();
    const [open, setOpen] = useState(false);
    // Escala do time (Fibonacci/Exponential/Linear/T-shirt); default Fibonacci.
@@ -43,17 +45,19 @@ export function EstimateSelector({ estimate, onChange, teamId }: EstimateSelecto
       <div className="*:not-first:mt-2">
          <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-               <Button
-                  id={id}
-                  className="flex items-center justify-center"
-                  size="xs"
-                  variant="secondary"
-                  role="combobox"
-                  aria-expanded={open}
-               >
-                  <Gauge className="text-muted-foreground size-4" />
-                  <span>{label}</span>
-               </Button>
+               {children ?? (
+                  <Button
+                     id={id}
+                     className="flex items-center justify-center"
+                     size="xs"
+                     variant="secondary"
+                     role="combobox"
+                     aria-expanded={open}
+                  >
+                     <Gauge className="text-muted-foreground size-4" />
+                     <span>{label}</span>
+                  </Button>
+               )}
             </PopoverTrigger>
             <PopoverContent
                className="border-input w-full min-w-[var(--radix-popper-anchor-width)] p-0"
