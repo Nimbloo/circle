@@ -18,7 +18,17 @@ import {
    CommandList,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Boxes, ChevronDown, PenLine, Plus, UserRound, X } from 'lucide-react';
+import {
+   ArrowRight,
+   Boxes,
+   CalendarClock,
+   ChevronDown,
+   PenLine,
+   Plus,
+   UserRound,
+   X,
+} from 'lucide-react';
+import { format, parseISO } from 'date-fns';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
@@ -37,6 +47,7 @@ import { InitiativeTargetPicker } from './initiative-target-picker';
 import { DetailSidePanel, DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 
 const TABS = ['overview', 'activity', 'projects'] as const;
+const formatDay = (iso: string) => format(parseISO(iso), 'MMM d, yyyy');
 
 /* ------------------------------ projects table ---------------------------- */
 
@@ -342,13 +353,27 @@ function PropertiesPanel({ initiative }: { initiative: Initiative }) {
             </Popover>
          </PropertyRow>
 
+         <PropertyRow label="Start">
+            <InitiativeTargetPicker
+               kind="start"
+               date={initiative.startDate ?? null}
+               onChange={({ date }) =>
+                  void patch(
+                     { startDate: date },
+                     date ? `Start → ${formatDay(date)}` : 'Start removido'
+                  )
+               }
+            />
+         </PropertyRow>
+
          <PropertyRow label="Target">
             <InitiativeTargetPicker
-               value={initiative.target ?? ''}
-               onChange={(target) =>
+               label={initiative.target ?? null}
+               date={initiative.targetDate ?? null}
+               onChange={({ label, date }) =>
                   void patch(
-                     { target: target || null },
-                     target ? `Target → ${target}` : 'Target removido'
+                     { target: label, targetDate: date },
+                     label ? `Target → ${label}` : 'Target removido'
                   )
                }
             />
@@ -372,9 +397,55 @@ function PropertiesPanel({ initiative }: { initiative: Initiative }) {
 }
 
 /**
- * `target` é varchar livre no schema (texto tipo "Q3 2026"), não uma data — por isso
- * é um input de texto e não um date picker. Datas reais exigiriam colunas novas.
+ * Período da initiative acima da timeline de projetos: usa `startDate`/`targetDate`
+ * reais (o rótulo `target` é só o nome do período). Some quando não há data nenhuma.
  */
+function InitiativePeriodBar({ initiative }: { initiative: Initiative }) {
+   const { startDate, targetDate, target } = initiative;
+   // "Hoje" só no cliente (SSR-safe), como a linha de hoje da timeline.
+   const [today, setToday] = useState<number | null>(null);
+   useEffect(() => setToday(Date.now()), []);
+
+   if (!startDate && !targetDate) return null;
+   let elapsed: number | null = null;
+   if (startDate && targetDate && today !== null) {
+      const start = parseISO(startDate).getTime();
+      const end = parseISO(targetDate).getTime();
+      if (end > start) elapsed = Math.min(1, Math.max(0, (today - start) / (end - start)));
+   }
+   const percent = elapsed === null ? null : Math.round(elapsed * 100);
+
+   return (
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b px-6 text-xs text-muted-foreground">
+         <CalendarClock className="size-3.5" />
+         <span>{startDate ? formatDay(startDate) : 'No start date'}</span>
+         <ArrowRight className="size-3" />
+         <span>
+            {targetDate ? formatDay(targetDate) : 'No target date'}
+            {targetDate && target && (
+               <span className="ml-1 text-muted-foreground/70">({target})</span>
+            )}
+         </span>
+         {percent !== null && (
+            <span className="ml-auto flex items-center gap-2">
+               <span
+                  className="h-1 w-24 overflow-hidden rounded-full bg-muted"
+                  role="progressbar"
+                  aria-label="Period elapsed"
+                  aria-valuenow={percent}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+               >
+                  <span className="block h-full bg-primary" style={{ width: `${percent}%` }} />
+               </span>
+               {percent}% of period elapsed
+            </span>
+         )}
+      </div>
+   );
+}
+
+/** Aside de propriedades, progresso e feed da initiative. */
 function InitiativeSidePanelContent({ initiative }: { initiative: Initiative }) {
    return (
       <div className="flex h-full w-full flex-col gap-2 overflow-y-auto">
@@ -687,7 +758,12 @@ export default function InitiativeDetails({ initiativeId }: { initiativeId: stri
       tab === 'activity' ? (
          <Activity initiativeId={initiativeId} />
       ) : tab === 'projects' ? (
-         <ProjectsTimeline groups={timelineGroups} />
+         <div className="flex h-full flex-col">
+            <InitiativePeriodBar initiative={initiative} />
+            <div className="min-h-0 flex-1">
+               <ProjectsTimeline groups={timelineGroups} />
+            </div>
+         </div>
       ) : (
          <Overview initiative={initiative} />
       );
