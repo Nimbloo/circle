@@ -206,6 +206,10 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
    // duplo-toast contraditório. O toast de erro segue fonte única aqui.
    updateIssue: (id: string, updatedIssue: Partial<Issue>) => {
       const snapshot = { issues: get().issues, issuesByStatus: get().issuesByStatus };
+      // Issue FORA do store (deep-link frio, ⌘K/context menu antes do hydrate): não há
+      // otimista possível, mas a API é chamada e o resultado entra por `applyRemote`
+      // (upsert) — a tela passa a ler do store e reflete a mudança.
+      const inStore = get().getIssueById(id) !== undefined;
       set((state) => {
          const newIssues = state.issues.map((issue) =>
             issue.id === id ? { ...issue, ...updatedIssue } : issue
@@ -219,7 +223,9 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
             toast.error('Falha ao atualizar a issue');
             throw e;
          })
-         .then(() => {});
+         .then(() => {
+            if (!inStore) return get().applyRemote(id);
+         });
    },
 
    deleteIssue: (id: string) => {
@@ -288,8 +294,8 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
       get().updateIssue(issueId, { assignee: newAssignee }),
 
    addIssueLabel: (issueId, label) => {
-      const issue = get().getIssueById(issueId);
-      if (!issue) return Promise.resolve();
+      // Fora do store: ainda persiste e entra por `applyRemote` (mesma regra do updateIssue).
+      const inStore = get().getIssueById(issueId) !== undefined;
       const snapshot = { issues: get().issues, issuesByStatus: get().issuesByStatus };
       set((state) => {
          const newIssues = state.issues.map((i) =>
@@ -304,10 +310,13 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
             toast.error('Falha ao adicionar a label');
             throw e;
          })
-         .then(() => {});
+         .then(() => {
+            if (!inStore) return get().applyRemote(issueId);
+         });
    },
 
    removeIssueLabel: (issueId, labelId) => {
+      const inStore = get().getIssueById(issueId) !== undefined;
       const snapshot = { issues: get().issues, issuesByStatus: get().issuesByStatus };
       set((state) => {
          const newIssues = state.issues.map((i) =>
@@ -322,7 +331,9 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
             toast.error('Falha ao remover a label');
             throw e;
          })
-         .then(() => {});
+         .then(() => {
+            if (!inStore) return get().applyRemote(issueId);
+         });
    },
 
    updateIssueProject: (issueId, newProject) => get().updateIssue(issueId, { project: newProject }),
