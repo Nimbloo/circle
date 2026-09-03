@@ -7,15 +7,17 @@
  * divider, imagem (com upload), vídeo (YouTube/Vimeo/Loom/mp4); inline: referência a
  * issue (`#`). Marks: bold, italic, code, link (autolink + colar URL).
  * Os atalhos markdown (`# `, `- `, `1. `, `[ ] `, "```", `> `, `---`, `**x**`, `` `x` ``)
- * vêm do próprio StarterKit/list.
+ * vêm do próprio StarterKit/list. Checklist: atalhos e conversão em sub-issue em
+ * `editor-tasks.ts`; colar texto com listas em `editor-paste-lists.ts`.
  */
 import type { AnyExtension, Extensions } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
-import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { Placeholder } from '@tiptap/extensions';
 import { ImageNode, ImageUpload, type ImageUploadOptions } from './editor-image';
 import { Video } from './editor-video';
 import { IssueRef } from './editor-issue-ref';
+import { PasteLists } from './editor-paste-lists';
+import { TaskItemExt, TaskListExt } from './editor-tasks';
 
 export const DEFAULT_PLACEHOLDER = 'Add a description…';
 
@@ -26,6 +28,11 @@ export interface EditorExtensionOptions extends ImageUploadOptions {
     * do `#`). Default: o `IssueRef` estático — suficiente para o servidor.
     */
    issueRef?: AnyExtension;
+   /**
+    * Task item já configurado pelo cliente (NodeView React + `onCreateSubIssue`).
+    * Default: o `TaskItemExt` sem NodeView — suficiente para o servidor.
+    */
+   taskItem?: AnyExtension;
 }
 
 export function editorExtensions(options: EditorExtensionOptions = {}): Extensions {
@@ -41,8 +48,9 @@ export function editorExtensions(options: EditorExtensionOptions = {}): Extensio
             defaultProtocol: 'https',
          },
       }),
-      TaskList,
-      TaskItem.configure({ nested: true }),
+      TaskListExt,
+      options.taskItem ?? TaskItemExt,
+      PasteLists,
       Placeholder.configure({ placeholder: options.placeholder ?? DEFAULT_PLACEHOLDER }),
       ImageNode,
       ImageUpload.configure({ upload: options.upload, onUploadError: options.onUploadError }),
