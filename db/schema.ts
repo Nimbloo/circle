@@ -440,6 +440,26 @@ export const issueSubscription = pgTable(
    ]
 );
 
+// Múltiplos responsáveis (#96): `issue.assignee_id` segue como o PRINCIPAL (contrato
+// atual intacto); esta tabela guarda o conjunto completo (principal incluído).
+// `created_at` dá a ordem de adição dos colaboradores.
+export const issueAssignee = pgTable(
+   'issue_assignee',
+   {
+      issueId: varchar('issue_id', { length: 36 })
+         .notNull()
+         .references(() => issue.id, { onDelete: 'cascade' }),
+      userId: varchar('user_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [
+      primaryKey({ columns: [t.issueId, t.userId] }),
+      index('idx_issue_assignee_user').on(t.userId),
+   ]
+);
+
 // Favoritos do usuário (paridade Linear): pin heterogêneo de issue/project/view
 // numa seção dedicada da sidebar. Integridade app-level (sem FK polimorfica) —
 // entidade removida é limpa no resolve/list. `position` p/ ordenação (drag futuro).

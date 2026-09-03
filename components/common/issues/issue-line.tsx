@@ -111,7 +111,7 @@ function IssueLineComponent({ issue, layoutId = false }: { issue: Issue; layoutI
                   )}
                   {/* Padrão Linear: avatar do assignee ANTES da data */}
                   {displayProperties.assignee && (
-                     <AssigneeUser user={issue.assignee} issueId={issue.id} />
+                     <AssigneeUser users={issue.assignees} issueId={issue.id} />
                   )}
                   {displayProperties.created && (
                      <span className="hidden w-12 shrink-0 text-right text-xs tabular-nums text-muted-foreground sm:inline-block">

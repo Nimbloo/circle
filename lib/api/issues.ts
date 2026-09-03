@@ -18,6 +18,7 @@ import {
    issueLabel,
    issueContent,
    issueSubscription,
+   issueAssignee,
    activityEvent,
    issueRelation,
    issuePrLink,
@@ -72,6 +73,9 @@ export interface IssueDto {
    status: StatusRow;
    priority: PriorityRow;
    assignee: UserRef | null;
+   /** Conjunto completo de responsáveis (#96): o principal (`assignee`) primeiro,
+    *  depois os colaboradores por ordem de adição. Vazio = sem responsável. */
+   assignees: UserRef[];
    createdBy: UserRef | null;
    project: ProjectRef | null;
    cycleId: string; // '' = sem ciclo (paridade com o front)
@@ -186,6 +190,19 @@ function statusIdsForCategories(cats: string[], statuses: Map<string, StatusRow>
    return [...statuses.values()].filter((s) => set.has(s.category)).map((s) => s.id);
 }
 
+/** Subquery: ids das issues em que QUALQUER um dos usuários é responsável (junção). */
+function assignedIssueIds(db: Db, userIds: string[]) {
+   return db
+      .select({ id: issueAssignee.issueId })
+      .from(issueAssignee)
+      .where(inArray(issueAssignee.userId, userIds));
+}
+
+/** Normaliza um conjunto de responsáveis: sem vazios, sem repetição, ordem preservada. */
+function normalizeAssigneeIds(ids: readonly (string | null | undefined)[]): string[] {
+   return [...new Set(ids.filter((id): id is string => Boolean(id)))];
+}
+
 function buildWhere(
    db: Db,
    opts: IssueFilter,
@@ -214,9 +231,12 @@ function buildWhere(
    }
    if (opts.assignee?.length) {
       const wantUnassigned = opts.assignee.includes('unassigned');
-      const ids = opts.assignee.filter((a) => a !== 'unassigned');
+      // `me` é resolvido em `assigneeMe` (parseIssueListOptions) — não é um id.
+      const ids = opts.assignee.filter((a) => a !== 'unassigned' && a !== 'me');
       const parts: SQL[] = [];
-      if (ids.length) parts.push(inArray(issue.assigneeId, ids));
+      // Casa QUALQUER responsável (principal ou colaborador) via junção (#96).
+      if (ids.length) parts.push(inArray(issue.id, assignedIssueIds(db, ids)));
+      // Sem responsável = principal nulo (o principal é derivado do conjunto: vazio ⇔ null).
       if (wantUnassigned) parts.push(isNull(issue.assigneeId));
       if (parts.length) conds.push(parts.length === 1 ? parts[0] : (or(...parts) as SQL));
    }
@@ -228,7 +248,7 @@ function buildWhere(
       if (wantNone) parts.push(isNull(issue.cycleId));
       if (parts.length) conds.push(parts.length === 1 ? parts[0] : (or(...parts) as SQL));
    }
-   if (opts.assigneeMe && meId) conds.push(eq(issue.assigneeId, meId));
+   if (opts.assigneeMe && meId) conds.push(inArray(issue.id, assignedIssueIds(db, [meId])));
    if (opts.createdByMe && meId) conds.push(eq(issue.createdById, meId));
    if (opts.q) {
       const like = `%${opts.q}%`;
@@ -264,8 +284,24 @@ async function assemble(
 ): Promise<IssueDto[]> {
    if (rows.length === 0) return [];
    const issueIds = rows.map((r) => r.id);
+   // Conjunto de responsáveis (#96): carregado antes para resolver todos os usuários
+   // (principal, colaboradores, criador) num único batch. Ordem = ordem de adição.
+   const assigneeLinks = await db
+      .select({ issueId: issueAssignee.issueId, userId: issueAssignee.userId })
+      .from(issueAssignee)
+      .where(inArray(issueAssignee.issueId, issueIds))
+      .orderBy(asc(issueAssignee.createdAt));
+   const assigneeIdsByIssue = new Map<string, string[]>();
+   for (const link of assigneeLinks) {
+      const arr = assigneeIdsByIssue.get(link.issueId) ?? [];
+      arr.push(link.userId);
+      assigneeIdsByIssue.set(link.issueId, arr);
+   }
    const userIds = [
-      ...new Set(rows.flatMap((r) => [r.assigneeId, r.createdById]).filter(Boolean) as string[]),
+      ...new Set([
+         ...(rows.flatMap((r) => [r.assigneeId, r.createdById]).filter(Boolean) as string[]),
+         ...assigneeLinks.map((l) => l.userId),
+      ]),
    ];
    const projectIds = [...new Set(rows.map((r) => r.projectId).filter(Boolean) as string[])];
    const parentIds = [...new Set(rows.map((r) => r.parentId).filter(Boolean) as string[])];
@@ -326,6 +362,10 @@ async function assemble(
       status: cat.statuses.get(r.statusId)!,
       priority: cat.priorities.get(r.priorityId)!,
       assignee: userRef(r.assigneeId ? userMap.get(r.assigneeId) : undefined),
+      // Principal primeiro, depois os colaboradores por ordem de adição.
+      assignees: normalizeAssigneeIds([r.assigneeId, ...(assigneeIdsByIssue.get(r.id) ?? [])])
+         .map((uid) => userRef(userMap.get(uid)))
+         .filter((u): u is UserRef => u !== null),
       createdBy: userRef(r.createdById ? userMap.get(r.createdById) : undefined),
       project:
          r.projectId && projectMap.get(r.projectId)
@@ -446,6 +486,8 @@ export interface CreateIssueInput {
     */
    parentId?: string | null;
    assigneeId?: string | null;
+   /** Conjunto de responsáveis (#96). Tem precedência sobre `assigneeId`; o primeiro é o principal. */
+   assigneeIds?: string[];
    projectId?: string | null;
    cycleId?: string | null;
    labelIds?: string[];
@@ -519,6 +561,9 @@ export async function createIssue(
 
    const id = randomUUID();
    const now = new Date();
+   // Responsáveis: `assigneeIds` (conjunto; o 1º é o principal) ou o `assigneeId` legado.
+   const assigneeIds = normalizeAssigneeIds(input.assigneeIds ?? (assigneeId ? [assigneeId] : []));
+   const principalId = assigneeIds[0] ?? null;
 
    // Atômico: incremento do contador + issue + content + labels + evento.
    await db.transaction(async (tx) => {
@@ -545,7 +590,7 @@ export async function createIssue(
          title: input.title,
          statusId,
          priorityId,
-         assigneeId,
+         assigneeId: principalId,
          createdById: actor.id,
          projectId,
          cycleId,
@@ -587,9 +632,15 @@ export async function createIssue(
          }))
       );
 
-      // auto-subscribe (Linear-style): criador + assignee inicial
-      const subscribers = new Set<string>([actor.id]);
-      if (assigneeId) subscribers.add(assigneeId);
+      if (assigneeIds.length) {
+         await tx
+            .insert(issueAssignee)
+            .values(assigneeIds.map((userId) => ({ issueId: id, userId, createdAt: now })))
+            .onConflictDoNothing();
+      }
+
+      // auto-subscribe (Linear-style): criador + todos os responsáveis iniciais
+      const subscribers = new Set<string>([actor.id, ...assigneeIds]);
       await tx
          .insert(issueSubscription)
          .values([...subscribers].map((userId) => ({ issueId: id, userId })))
@@ -614,7 +665,10 @@ export interface UpdateIssueInput {
    title?: string;
    statusId?: string;
    priorityId?: string;
+   /** Troca só o PRINCIPAL e mantém os colaboradores (`""`/null desatribui o principal). */
    assigneeId?: string | null;
+   /** Substitui o CONJUNTO de responsáveis (#96); o 1º vira o principal. `[]` limpa todos. */
+   assigneeIds?: string[];
    projectId?: string | null;
    cycleId?: string | null;
    dueDate?: string | null;
@@ -638,13 +692,42 @@ export async function updateIssue(
    const actor = await getOrCreateUser(db, actorEmail);
    const prev = existing[0];
 
+   // Responsáveis (#96): `assigneeIds` substitui o conjunto; `assigneeId` sozinho troca só
+   // o principal e mantém os colaboradores (`""` → sem principal, como cycleId). O
+   // principal gravado em `issue.assignee_id` é SEMPRE o 1º do conjunto resultante.
+   let nextAssigneeIds: string[] | null = null;
+   let prevAssigneeIds: string[] = [];
+   if (patch.assigneeIds !== undefined || patch.assigneeId !== undefined) {
+      const links = await db
+         .select({ userId: issueAssignee.userId })
+         .from(issueAssignee)
+         .where(eq(issueAssignee.issueId, id))
+         .orderBy(asc(issueAssignee.createdAt));
+      prevAssigneeIds = normalizeAssigneeIds([prev.assigneeId, ...links.map((l) => l.userId)]);
+      nextAssigneeIds =
+         patch.assigneeIds !== undefined
+            ? normalizeAssigneeIds(patch.assigneeIds)
+            : normalizeAssigneeIds([
+                 patch.assigneeId || null,
+                 ...prevAssigneeIds.filter((u) => u !== prev.assigneeId),
+              ]);
+   }
+   const addedAssigneeIds = nextAssigneeIds
+      ? nextAssigneeIds.filter((u) => !prevAssigneeIds.includes(u))
+      : [];
+   const removedAssigneeIds = nextAssigneeIds
+      ? prevAssigneeIds.filter((u) => !nextAssigneeIds!.includes(u))
+      : [];
+   const nextPrincipalId = nextAssigneeIds ? (nextAssigneeIds[0] ?? null) : prev.assigneeId;
+   const principalChanged = nextPrincipalId !== prev.assigneeId;
+
    const set: Record<string, unknown> = { updatedAt: new Date() };
    if (patch.title !== undefined) set.title = patch.title;
    if (patch.statusId !== undefined) set.statusId = patch.statusId;
    if (patch.priorityId !== undefined) set.priorityId = patch.priorityId;
+   if (nextAssigneeIds) set.assigneeId = nextPrincipalId;
    // `""` (limpar o campo) → null, consistente com cycleId: senão a FK vira 404
-   // "recurso não existe" em vez de desatribuir/desvincular.
-   if (patch.assigneeId !== undefined) set.assigneeId = patch.assigneeId || null;
+   // "recurso não existe" em vez de desvincular.
    if (patch.projectId !== undefined) set.projectId = patch.projectId || null;
    if (patch.cycleId !== undefined) set.cycleId = patch.cycleId || null;
    if (patch.dueDate !== undefined) set.dueDate = patch.dueDate;
@@ -719,7 +802,43 @@ export async function updateIssue(
    const autoAddedCycleId =
       set.cycleId !== undefined && patch.cycleId === undefined ? (set.cycleId as string) : null;
 
-   await db.update(issue).set(set).where(eq(issue.id, id));
+   // Atômico com a junção de responsáveis: o principal em `issue` e o conjunto em
+   // `issue_assignee` nunca ficam inconsistentes entre si.
+   await db.transaction(async (tx) => {
+      await tx.update(issue).set(set).where(eq(issue.id, id));
+      if (removedAssigneeIds.length) {
+         await tx
+            .delete(issueAssignee)
+            .where(
+               and(eq(issueAssignee.issueId, id), inArray(issueAssignee.userId, removedAssigneeIds))
+            );
+      }
+      if (addedAssigneeIds.length) {
+         await tx
+            .insert(issueAssignee)
+            .values(
+               addedAssigneeIds.map((userId) => ({
+                  issueId: id,
+                  userId,
+                  createdAt: set.updatedAt as Date,
+               }))
+            )
+            .onConflictDoNothing();
+      }
+   });
+
+   // Nomes p/ o histórico "added/removed assignee X" (um SELECT só quando houve mudança).
+   const changedAssigneeIds = [...addedAssigneeIds, ...removedAssigneeIds];
+   const assigneeNames = new Map<string, string>(
+      changedAssigneeIds.length
+         ? (
+              await db
+                 .select({ id: appUser.id, name: appUser.name })
+                 .from(appUser)
+                 .where(inArray(appUser.id, changedAssigneeIds))
+           ).map((u) => [u.id, u.name])
+         : []
+   );
 
    // eventos de atividade para transições relevantes
    const events: { event: string; text: string }[] = [];
@@ -739,8 +858,14 @@ export async function updateIssue(
          event: 'cycle',
          text: `added to cycle ${autoAddedCycleId} on start`,
       });
-   if (patch.assigneeId !== undefined && (patch.assigneeId || null) !== prev.assigneeId)
+   // Entradas/saídas do conjunto têm evento por pessoa; "changed assignee" fica só para
+   // a troca de principal sem ninguém entrar/sair (ex.: promover um colaborador).
+   if (principalChanged && !addedAssigneeIds.length && !removedAssigneeIds.length)
       events.push({ event: 'assignee', text: `changed assignee` });
+   for (const uid of addedAssigneeIds)
+      events.push({ event: 'assignee', text: `added assignee ${assigneeNames.get(uid) ?? uid}` });
+   for (const uid of removedAssigneeIds)
+      events.push({ event: 'assignee', text: `removed assignee ${assigneeNames.get(uid) ?? uid}` });
    if (patch.title !== undefined && patch.title !== prev.title)
       events.push({ event: 'title', text: `renamed the issue` });
    if (patch.projectId !== undefined && (patch.projectId || null) !== prev.projectId)
@@ -771,24 +896,17 @@ export async function updateIssue(
       );
    }
 
-   // auto-subscribe do novo responsável (Linear-style; inclui auto-atribuição)
-   if (patch.assigneeId !== undefined && patch.assigneeId && patch.assigneeId !== prev.assigneeId) {
-      await subscribeToIssue(db, id, patch.assigneeId);
-   }
-
-   // Notifica o novo responsável (in-app + Slack/Email best-effort)
-   if (
-      patch.assigneeId !== undefined &&
-      patch.assigneeId &&
-      patch.assigneeId !== prev.assigneeId &&
-      patch.assigneeId !== actor.id
-   ) {
+   // CADA novo responsável: auto-subscribe (Linear-style; inclui auto-atribuição) e
+   // notificação (in-app + Slack/Email best-effort) — exceto o próprio ator.
+   for (const uid of addedAssigneeIds) {
+      await subscribeToIssue(db, id, uid);
+      if (uid === actor.id) continue;
       // Fire-and-forget: notificação (Slack/SES) não bloqueia a resposta do PATCH.
       // `dispatchNotification` captura os próprios erros (loga, não lança).
       void dispatchNotification(db, {
          type: 'assignment',
          issueId: id,
-         recipientId: patch.assigneeId,
+         recipientId: uid,
          actorId: actor.id,
          content: `${actor.name} atribuiu esta issue a você`,
       });
@@ -828,8 +946,7 @@ export async function updateIssue(
             identifier: dto.identifier,
             title: dto.title,
          });
-      const assignedNow =
-         patch.assigneeId !== undefined && patch.assigneeId && patch.assigneeId !== prev.assigneeId;
+      const assignedNow = principalChanged && nextPrincipalId !== null;
       if (assignedNow && dto.assignee)
          void notifySlackEvent(db, {
             type: 'issue.assigned',
@@ -962,6 +1079,7 @@ export async function deleteIssue(db: Db, id: string): Promise<boolean> {
       await tx.delete(notification).where(eq(notification.issueId, id));
       await tx.delete(activityEvent).where(eq(activityEvent.issueId, id));
       await tx.delete(issueLabel).where(eq(issueLabel.issueId, id));
+      await tx.delete(issueAssignee).where(eq(issueAssignee.issueId, id));
       await tx.delete(issueSubscription).where(eq(issueSubscription.issueId, id));
       await tx.delete(issueContent).where(eq(issueContent.issueId, id));
       await tx.delete(issue).where(eq(issue.id, id));

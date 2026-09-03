@@ -225,7 +225,13 @@ function buildIssueFilterColumns(
       dtf
          .option()
          .id('assignee')
-         .accessor((i: Issue) => i.assignee?.id ?? 'unassigned')
+         // TODOS os responsáveis (#96): o filtro casa qualquer um (principal ou colaborador).
+         // Segue `option` (UI e filtros salvos inalterados); `applyIssueFilters` trata o array.
+         .accessor((i: Issue) => {
+            const ids = (i.assignees ?? []).map((a) => a.id);
+            if (!ids.length && i.assignee) ids.push(i.assignee.id);
+            return ids.length ? ids : ['unassigned'];
+         })
          .displayName('Assignee')
          .icon(CircleUserRound)
          .options(assigneeOptions(users))
@@ -329,8 +335,16 @@ export function applyIssueFilters(issues: Issue[], filters: FiltersState): Issue
          if (!column) return true;
          const value = column.accessor(issue);
          switch (filter.type) {
-            case 'option':
+            case 'option': {
+               // Coluna `option` com VÁRIOS valores (assignees): "is/is any of" casa se
+               // qualquer um casa; "is not/is none of" só se nenhum casa.
+               if (Array.isArray(value)) {
+                  const negative = filter.operator === 'is not' || filter.operator === 'is none of';
+                  const hits = value.map((v) => optionFilterFn(String(v ?? ''), filter) ?? true);
+                  return negative ? hits.every(Boolean) : hits.some(Boolean);
+               }
                return optionFilterFn(String(value ?? ''), filter) ?? true;
+            }
             case 'multiOption':
                return multiOptionFilterFn((value as string[]) ?? [], filter) ?? true;
             case 'date':

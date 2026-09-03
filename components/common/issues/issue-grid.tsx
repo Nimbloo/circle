@@ -47,7 +47,7 @@ function IssueDragPreview({ issue }: { issue: Issue }) {
                </div>
             </div>
             <div className="absolute right-0 top-0">
-               <AssigneeUser compact user={issue.assignee} issueId={issue.id} />
+               <AssigneeUser compact users={issue.assignees} issueId={issue.id} />
             </div>
          </div>
          <div className="flex min-h-6 flex-wrap items-center gap-1">
@@ -190,7 +190,7 @@ export function IssueGrid({ issue, orderedIssues, layout = true }: IssueGridProp
                   </div>
                   {displayProperties.assignee && (
                      <div className="absolute right-0 top-0">
-                        <AssigneeUser compact user={issue.assignee} issueId={issue.id} />
+                        <AssigneeUser compact users={issue.assignees} issueId={issue.id} />
                      </div>
                   )}
                </div>

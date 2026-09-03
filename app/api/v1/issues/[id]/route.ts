@@ -27,6 +27,7 @@ const UpdateSchema = z.object({
    statusId: z.string().min(1).max(64).optional(),
    priorityId: z.string().min(1).max(64).optional(),
    assigneeId: z.string().max(36).nullish(),
+   assigneeIds: z.array(z.string().min(1).max(36)).max(50).optional(),
    projectId: z.string().max(36).nullish(),
    cycleId: z.string().max(36).nullish(),
    dueDate: z.string().date().nullish(),
