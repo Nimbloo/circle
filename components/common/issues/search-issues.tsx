@@ -1,26 +1,33 @@
 'use client';
 
-import type { Issue } from '@/data/issues';
 import { api } from '@/lib/client';
-import { adaptIssues } from '@/lib/adapters';
+import { useIssuesStore } from '@/store/issues-store';
 import { useSearchStore } from '@/store/search-store';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { BulkActionsBar } from './bulk-actions-bar';
 import { IssueLine } from './issue-line';
 
 /**
  * Busca dedicada — usa a busca SERVER-SIDE (api.issues.list({ q })), que casa
  * título, identifier, descrição E comentários. Antes filtrava só o store local
  * (título/identifier), então descrição/comentário nunca eram alcançados aqui.
+ *
+ * O servidor devolve só os IDS relevantes; a linha renderiza a issue do `issues-store`
+ * (mesmo padrão do ⌘K), então a edição inline (status, prioridade, assignee…) reflete e
+ * persiste como em qualquer lista. Resultado que ainda não está no store entra por
+ * `applyRemote` (upsert), sem re-hidratar tudo.
  */
 export function SearchIssues() {
-   const [searchResults, setSearchResults] = useState<Issue[]>([]);
+   const [resultIds, setResultIds] = useState<string[]>([]);
    const [loading, setLoading] = useState(false);
    const { searchQuery, isSearchOpen } = useSearchStore();
+   const issues = useIssuesStore((s) => s.issues);
+   const applyRemote = useIssuesStore((s) => s.applyRemote);
 
    useEffect(() => {
       const q = searchQuery.trim();
       if (q === '') {
-         setSearchResults([]);
+         setResultIds([]);
          return;
       }
       let active = true;
@@ -30,10 +37,13 @@ export function SearchIssues() {
          api.issues
             .list({ q })
             .then((dtos) => {
-               if (active) setSearchResults(adaptIssues(dtos));
+               if (!active) return;
+               setResultIds(dtos.map((d) => d.id));
+               const known = new Set(useIssuesStore.getState().issues.map((i) => i.id));
+               dtos.filter((d) => !known.has(d.id)).forEach((d) => void applyRemote(d.id));
             })
             .catch(() => {
-               if (active) setSearchResults([]);
+               if (active) setResultIds([]);
             })
             .finally(() => {
                if (active) setLoading(false);
@@ -43,7 +53,13 @@ export function SearchIssues() {
          active = false;
          clearTimeout(t);
       };
-   }, [searchQuery]);
+   }, [searchQuery, applyRemote]);
+
+   // Ordem do servidor (relevância), resolvida contra o store vivo.
+   const searchResults = useMemo(() => {
+      const byId = new Map(issues.map((issue) => [issue.id, issue]));
+      return resultIds.map((id) => byId.get(id)).filter((issue) => issue !== undefined);
+   }, [resultIds, issues]);
 
    if (!isSearchOpen) {
       return null;
@@ -51,6 +67,7 @@ export function SearchIssues() {
 
    return (
       <div className="w-full">
+         <BulkActionsBar />
          {searchQuery.trim() !== '' && (
             <div>
                {searchResults.length > 0 ? (
