@@ -1,6 +1,6 @@
 # Pendências do Circle
 
-Estado em **2026-09-03**, com `main` e `develop` sincronizadas na v0.26.0.
+Estado em **2026-09-03**, com `main` e `develop` sincronizadas na v0.27.0.
 
 > **As [issues](https://github.com/Nimbloo/circle/issues) são a fonte da verdade** sobre
 > escopo. Este documento registra o que elas **não** capturam: bloqueios que vivem em
@@ -263,6 +263,11 @@ Restos conscientes da leva anterior, decididos e construídos (spec
 
 Fica de fora, consciente: item "Video" do menu "/" ainda pede a URL por `window.prompt`
 (UI inline depois); comentário em linha removida (`-`) não é ancorável.
+
+**Promovido para produção na release
+[v0.27.0](https://github.com/Nimbloo/circle/releases/tag/v0.27.0)** (PRs #103 e #104):
+migration 0039 aplicada no boot (40/40), rollout `Synced/Healthy`, `healthz`/`readyz` em
+`200`. Issue #16 fechada; #22 comentada (resta só Bedrock e PAT, que dependem de você).
 
 ## Decisões suas (não é falta de código)
 
