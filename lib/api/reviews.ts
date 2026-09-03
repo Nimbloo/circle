@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
-import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
+import type { GuideSection } from '@/data/reviews';
 import {
    review,
    reviewCommit,
@@ -146,10 +147,18 @@ export interface ReviewCommitDto {
    committedAt: string | null;
 }
 
-/** Detalhe do review: o PR + arquivos e commits ingeridos (aditivo ao `ReviewDto`). */
+/** Guia de review gerado a partir do diff (persistido em `review.guide` como JSON). */
+export interface ReviewGuideDto {
+   sections: GuideSection[];
+   generatedAt: string;
+   model: string;
+}
+
+/** Detalhe do review: o PR + arquivos, commits e guia (aditivo ao `ReviewDto`). */
 export interface ReviewDetailDto extends ReviewDto {
    files: ReviewFileDto[];
    commits: ReviewCommitDto[];
+   guide: ReviewGuideDto | null;
 }
 
 function toIso(d: Date | string | null): string | null {
@@ -157,19 +166,49 @@ function toIso(d: Date | string | null): string | null {
    return d instanceof Date ? d.toISOString() : String(d);
 }
 
-export async function getReview(db: Db, id: string): Promise<ReviewDetailDto | null> {
+/** Lê o JSON do guia; coluna vazia ou corrompida → null (a UI mostra o estado vazio). */
+export function parseGuide(raw: string | null): ReviewGuideDto | null {
+   if (!raw) return null;
+   try {
+      const g = JSON.parse(raw) as Partial<ReviewGuideDto>;
+      if (!g || !Array.isArray(g.sections) || typeof g.generatedAt !== 'string') return null;
+      return { sections: g.sections, generatedAt: g.generatedAt, model: String(g.model ?? '') };
+   } catch {
+      return null;
+   }
+}
+
+export interface GetReviewOptions {
+   token?: string;
+   fetchImpl?: FetchLike;
+}
+
+/**
+ * Detalhe do review. Se o PR nunca teve arquivos/commits buscados (`depthSyncedAt`
+ * nulo — caso dos PRs antigos, fechados antes da ingestão de profundidade) e há token,
+ * busca UMA vez do GitHub, persiste e devolve já preenchido. Nunca acontece no listing.
+ */
+export async function getReview(
+   db: Db,
+   id: string,
+   opts: GetReviewOptions = {}
+): Promise<ReviewDetailDto | null> {
    const rows = await db.select().from(review).where(eq(review.id, id)).limit(1);
    if (!rows.length) return null;
-   const [files, commits] = await Promise.all([
-      db.select().from(reviewFile).where(eq(reviewFile.reviewId, id)).orderBy(asc(reviewFile.path)),
-      db
-         .select()
-         .from(reviewCommit)
-         .where(eq(reviewCommit.reviewId, id))
-         .orderBy(asc(reviewCommit.committedAt), asc(reviewCommit.sha)),
-   ]);
+   let row = rows[0];
+   let [files, commits] = await loadDepth(db, id);
+
+   const token = opts.token ?? process.env.GITHUB_TOKEN;
+   if (files.length === 0 && commits.length === 0 && !row.depthSyncedAt && token) {
+      await hydrateDepthOnDemand(db, row, token, opts.fetchImpl ?? fetch);
+      const fresh = await db.select().from(review).where(eq(review.id, id)).limit(1);
+      if (fresh.length) row = fresh[0];
+      [files, commits] = await loadDepth(db, id);
+   }
+
    return {
-      ...toDto(rows[0]),
+      ...toDto(row),
+      guide: parseGuide(row.guide),
       files: files.map((f) => ({
          path: f.path,
          status: f.status,
@@ -184,6 +223,59 @@ export async function getReview(db: Db, id: string): Promise<ReviewDetailDto | n
          committedAt: toIso(c.committedAt),
       })),
    };
+}
+
+async function loadDepth(db: Db, id: string) {
+   return Promise.all([
+      db.select().from(reviewFile).where(eq(reviewFile.reviewId, id)).orderBy(asc(reviewFile.path)),
+      db
+         .select()
+         .from(reviewCommit)
+         .where(eq(reviewCommit.reviewId, id))
+         .orderBy(asc(reviewCommit.committedAt), asc(reviewCommit.sha)),
+   ]);
+}
+
+/**
+ * Busca arquivos/commits/checks de um PR que nunca os teve (GET individual do PR para
+ * obter o `head.sha` dos checks + `fetchPrDepth`). Best-effort: qualquer falha devolve
+ * sem lançar. `depthSyncedAt` é marcado MESMO em falha — senão cada abertura do detalhe
+ * bateria de novo na API do GitHub (rate-limit) sem chance de resultado diferente.
+ */
+async function hydrateDepthOnDemand(
+   db: Db,
+   row: ReviewRow,
+   token: string,
+   doFetch: FetchLike
+): Promise<void> {
+   try {
+      const pr = await ghGet<GitHubPr>(
+         `https://api.github.com/repos/${row.repo}/pulls/${row.prNumber}`,
+         token,
+         doFetch
+      );
+      const depth = await fetchPrDepth(
+         row.repo,
+         pr && typeof pr === 'object' ? pr : { number: row.prNumber },
+         token,
+         doFetch
+      );
+      if (depth.checks) {
+         await db
+            .update(review)
+            .set({ checksPassed: depth.checks.passed, checksTotal: depth.checks.total })
+            .where(eq(review.id, row.id));
+      }
+      await persistPrDepth(db, row.id, depth);
+   } catch (e) {
+      console.warn(`[circle] profundidade sob demanda falhou (${row.id}):`, (e as Error).message);
+   } finally {
+      // Marca a tentativa (persistPrDepth só marca quando gravou algo).
+      await db
+         .update(review)
+         .set({ depthSyncedAt: new Date() })
+         .where(and(eq(review.id, row.id), isNull(review.depthSyncedAt)));
+   }
 }
 
 // ── Ingestão do GitHub ────────────────────────────────────────────
@@ -425,7 +517,7 @@ async function fetchPrChecks(
 
 async function fetchPrDepth(
    repo: string,
-   pr: GitHubPr,
+   pr: Pick<GitHubPr, 'number' | 'head'>,
    token: string,
    doFetch: FetchLike
 ): Promise<PrDepth> {
@@ -438,12 +530,14 @@ async function fetchPrDepth(
 }
 
 /**
- * Substitui arquivos e commits do review (delete + insert na mesma transação). Só toca
- * no que foi buscado com sucesso — uma falha em /files não apaga a lista anterior.
+ * Substitui arquivos e commits do review (delete + insert na mesma transação) e marca
+ * `depthSyncedAt`. Só toca no que foi buscado com sucesso — uma falha em /files não
+ * apaga a lista anterior.
  */
 async function persistPrDepth(db: Db, reviewId: string, depth: PrDepth): Promise<void> {
    if (!depth.files && !depth.commits) return;
    await db.transaction(async (tx) => {
+      await tx.update(review).set({ depthSyncedAt: new Date() }).where(eq(review.id, reviewId));
       if (depth.files) {
          await tx.delete(reviewFile).where(eq(reviewFile.reviewId, reviewId));
          const seen = new Set<string>();

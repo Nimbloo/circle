@@ -700,6 +700,11 @@ export const review = pgTable(
       checksTotal: integer('checks_total').notNull().default(0),
       createdAt: timestamp('created_at').notNull().defaultNow(),
       syncedAt: timestamp('synced_at').notNull().defaultNow(),
+      // Quando arquivos/commits foram buscados (sync, webhook ou sob demanda no detalhe).
+      // Null = nunca tentou; a abertura do detalhe tenta UMA vez e marca, com ou sem sucesso.
+      depthSyncedAt: timestamp('depth_synced_at'),
+      // Guia de review gerado a partir do diff: JSON { sections, generatedAt, model }.
+      guide: text('guide'),
    },
    (t) => [index('idx_review_status').on(t.status)]
 );

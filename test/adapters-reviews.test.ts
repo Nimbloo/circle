@@ -73,6 +73,7 @@ describe('adapters-reviews: arquivos e commits', () => {
             },
          ],
          commits: [{ sha: 'abc', message: 'm', author: null, committedAt: null }],
+         guide: null,
       };
       const review = adaptReview(detail);
       expect(review.files).toHaveLength(1);
