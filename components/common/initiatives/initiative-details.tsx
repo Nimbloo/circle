@@ -18,16 +18,7 @@ import {
    CommandList,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import {
-   Boxes,
-   CalendarRange,
-   ChevronDown,
-   PanelRight,
-   PenLine,
-   Plus,
-   UserRound,
-   X,
-} from 'lucide-react';
+import { Boxes, ChevronDown, PenLine, Plus, UserRound, X } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
@@ -43,15 +34,7 @@ import { InitiativeStatusIcon } from './initiative-status-icon';
 import { InitiativeIconPicker } from './initiative-icon-picker';
 import { InitiativeLabelPicker } from './initiative-label-picker';
 import { InitiativeTargetPicker } from './initiative-target-picker';
-import { useInitiativeDetailsStore } from '@/store/initiative-details-store';
-import {
-   Sheet,
-   SheetContent,
-   SheetDescription,
-   SheetHeader,
-   SheetTitle,
-   SheetTrigger,
-} from '@/components/ui/sheet';
+import { DetailSidePanel, DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 
 const TABS = ['overview', 'activity', 'projects'] as const;
 
@@ -432,23 +415,7 @@ function Overview({ initiative }: { initiative: Initiative }) {
                   onColorChange={(iconColor) => void updateIcon({ iconColor })}
                />
                <div className="flex items-center gap-1.5">
-                  <Sheet>
-                     <SheetTrigger asChild>
-                        <Button size="xs" variant="outline" className="gap-1.5 xl:hidden">
-                           <PanelRight className="size-3.5" />
-                           Properties
-                        </Button>
-                     </SheetTrigger>
-                     <SheetContent className="w-[92vw] overflow-y-auto p-3 pt-12 sm:max-w-[400px]">
-                        <SheetHeader className="sr-only">
-                           <SheetTitle>Initiative properties</SheetTitle>
-                           <SheetDescription>
-                              View and edit the properties of this initiative.
-                           </SheetDescription>
-                        </SheetHeader>
-                        <InitiativeSidePanelContent initiative={initiative} />
-                     </SheetContent>
-                  </Sheet>
+                  <DetailSidePanelTrigger kind="initiative" />
                </div>
             </div>
             <div className="mt-3 flex flex-col gap-1">
@@ -458,53 +425,8 @@ function Overview({ initiative }: { initiative: Initiative }) {
                </p>
             </div>
 
-            <div className="mt-[19px] flex min-h-7 flex-wrap items-center gap-3 text-sm">
-               <h3 className="w-24 shrink-0 py-1.5 text-[13px] font-medium leading-4 text-muted-foreground">
-                  Properties
-               </h3>
-               <span className="inline-flex items-center gap-1.5">
-                  <InitiativeStatusIcon status={initiative.status} />
-                  {INITIATIVE_STATUS_META[initiative.status].label}
-               </span>
-               <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                  <initiative.priority.icon className="size-4" />
-                  {initiative.priority.name}
-               </span>
-               {initiative.owner ? (
-                  <span className="inline-flex items-center gap-1.5">
-                     <Avatar className="size-4">
-                        <AvatarImage
-                           src={initiative.owner.avatarUrl || undefined}
-                           alt={initiative.owner.name}
-                        />
-                        <AvatarFallback className="text-[8px]">
-                           {initiative.owner.name[0]}
-                        </AvatarFallback>
-                     </Avatar>
-                     {initiative.owner.name}
-                  </span>
-               ) : (
-                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                     <UserRound className="size-4" /> Owner
-                  </span>
-               )}
-               {initiative.target && (
-                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                     <CalendarRange className="size-4" />
-                     {initiative.target}
-                  </span>
-               )}
-               {initiative.labels.map((label) => (
-                  <span
-                     key={label.id}
-                     className="inline-flex items-center rounded border bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground"
-                  >
-                     {label.name}
-                  </span>
-               ))}
-            </div>
-
-            <div className="mt-3 flex min-h-7 items-center gap-3 text-sm">
+            {/* Propriedades só no painel lateral (como no Linear) — aqui fica só Resources. */}
+            <div className="mt-[19px] flex min-h-7 items-center gap-3 text-sm">
                <h3 className="w-24 shrink-0 py-1.5 text-[13px] font-medium leading-4 text-muted-foreground">
                   Resources
                </h3>
@@ -718,7 +640,6 @@ function Activity({ initiativeId }: { initiativeId: string }) {
 /** Initiative detail page: Overview / Activity / Projects tabs. */
 export default function InitiativeDetails({ initiativeId }: { initiativeId: string }) {
    const [tab] = useQueryState('tab', parseAsStringLiteral(TABS).withDefault('overview'));
-   const detailsOpen = useInitiativeDetailsStore((state) => state.open);
    // A chamada vai DENTRO do seletor: assinar `s.getInitiativeById` assinaria a
    // função (referência estável), e a tela nunca re-renderizaria depois de um
    // update — salvava no store e continuava mostrando o valor antigo.
@@ -770,14 +691,13 @@ export default function InitiativeDetails({ initiativeId }: { initiativeId: stri
    return (
       <div className="flex h-full w-full overflow-hidden">
          <div className="min-w-0 flex-1 overflow-hidden">{content}</div>
-         {detailsOpen && (
-            <aside
-               className="hidden h-full w-[400px] shrink-0 overflow-hidden pl-1 xl:flex"
-               aria-label="Initiative details"
-            >
-               <InitiativeSidePanelContent initiative={initiative} />
-            </aside>
-         )}
+         <DetailSidePanel
+            kind="initiative"
+            title="Initiative details"
+            description="View and edit the properties of this initiative."
+         >
+            <InitiativeSidePanelContent initiative={initiative} />
+         </DetailSidePanel>
       </div>
    );
 }
