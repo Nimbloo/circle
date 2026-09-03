@@ -100,7 +100,8 @@ function __FilterValue<TData, TType extends ColumnDataType>({
 interface FilterValueDisplayProps<TData, TType extends ColumnDataType> {
   filter: FilterModel<TType>
   column: Column<TData, TType>
-  actions: DataTableFilterActions
+  /** Só o display não usa; opcional para o chip somente leitura (ActiveFilter readOnly). */
+  actions?: DataTableFilterActions
   locale?: Locale
 }
 
@@ -203,8 +204,9 @@ export function FilterValueOptionDisplay<TData>({
       {hasOptionIcons &&
         take(selected, 3).map(({ value, icon }) => {
           const Icon = icon!
+          // Ícone já é um elemento (opções dos catálogos): precisa da key como no multiOption.
           return isValidElement(Icon) ? (
-            Icon
+            cloneElement(Icon, { key: value })
           ) : (
             <Icon key={value} className="size-4" />
           )
