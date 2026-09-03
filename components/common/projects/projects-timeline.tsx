@@ -10,8 +10,17 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { isValidProjectDate, projectDateRangeLabel } from '@/lib/project-dates';
+import {
+   type DateRange,
+   type RescheduleMode,
+   daysFromPixels,
+   keyboardRescheduleDelta,
+   rescheduleRange,
+   sameRange,
+} from '@/lib/timeline-reschedule';
 import { Project } from '@/data/projects';
 import { useProjectsDisplayStore } from '@/store/projects-display-store';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
 import { ArrowLeft, ArrowRight, Check, ChevronDown } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -172,47 +181,173 @@ function OutOfViewIndicator({
    );
 }
 
+interface ActiveDrag {
+   mode: RescheduleMode;
+   pointerId: number;
+   startX: number;
+   /** Só vira `true` após o primeiro snap (evita tratar um clique como arraste). */
+   moved: boolean;
+}
+
+/** Instrução de teclado dos leitores de tela (aria-describedby das barras). */
+const RESCHEDULE_HINT_ID = 'projects-timeline-reschedule-hint';
+
+/**
+ * Barra do projeto. Com as duas datas válidas ela é arrastável: o corpo desloca
+ * `startDate` e `targetDate` juntos, as alças mudam só uma ponta (snap por dia,
+ * PATCH ao soltar). Com a barra focada, ←/→ movem 1 dia e Shift+←/→ 7 dias.
+ * Sem target date a barra fica estática (estado honesto) — só abre o peek.
+ */
 function TimelineBar({
    project,
    monthWidth,
    selected,
    onSelect,
+   onReschedule,
 }: {
    project: Project;
    monthWidth: number;
    selected: boolean;
    onSelect: (projectId: string) => void;
+   onReschedule: (project: Project, next: DateRange) => void;
 }) {
    const { displayProperties } = useProjectsDisplayStore();
-   const left = offsetFor(project.startDate, monthWidth);
-   const right = offsetFor(
-      isValidProjectDate(project.targetDate) ? project.targetDate : project.startDate,
-      monthWidth
-   );
+   const reschedulable = isValidProjectDate(project.targetDate);
+   const base: DateRange = {
+      startDate: project.startDate,
+      targetDate: isValidProjectDate(project.targetDate) ? project.targetDate : project.startDate,
+   };
+   const [draft, setDraftState] = useState<DateRange | null>(null);
+   /** Espelho do `draft` lido no pointerup (o estado pode não ter re-renderizado ainda). */
+   const draftRef = useRef<DateRange | null>(null);
+   const setDraft = (next: DateRange | null) => {
+      draftRef.current = next;
+      setDraftState(next);
+   };
+   const dragRef = useRef<ActiveDrag | null>(null);
+   const wrapperRef = useRef<HTMLDivElement>(null);
+   /** Um arraste termina com um `click` nativo: não abrir o peek nesse caso. */
+   const suppressClickRef = useRef(false);
+
+   const range = draft ?? base;
+   const left = offsetFor(range.startDate, monthWidth);
+   const right = offsetFor(range.targetDate, monthWidth);
    const width = Math.max(right - left, 130);
+   const dayWidth = dayWidthOf(monthWidth);
+   const rangeLabel = projectDateRangeLabel(range.startDate, range.targetDate) ?? range.startDate;
+
+   const beginDrag = (mode: RescheduleMode) => (event: React.PointerEvent) => {
+      if (!reschedulable || event.button !== 0) return;
+      event.stopPropagation();
+      dragRef.current = { mode, pointerId: event.pointerId, startX: event.clientX, moved: false };
+      // Captura no wrapper: move/up chegam nele mesmo quando o ponteiro sai da alça.
+      wrapperRef.current?.setPointerCapture?.(event.pointerId);
+   };
+
+   const onPointerMove = (event: React.PointerEvent) => {
+      const drag = dragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      const delta = daysFromPixels(event.clientX - drag.startX, dayWidth);
+      if (delta !== 0) drag.moved = true;
+      if (drag.moved) setDraft(rescheduleRange(base, drag.mode, delta));
+   };
+
+   const endDrag = (event: React.PointerEvent, commit: boolean) => {
+      const drag = dragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      dragRef.current = null;
+      wrapperRef.current?.releasePointerCapture?.(event.pointerId);
+      suppressClickRef.current = drag.moved;
+      const next = draftRef.current;
+      setDraft(null);
+      if (commit && drag.moved && next && !sameRange(next, base)) onReschedule(project, next);
+   };
+
+   const onKeyDown = (event: React.KeyboardEvent) => {
+      if (!reschedulable) return;
+      const delta = keyboardRescheduleDelta(event);
+      if (delta === null) return;
+      event.preventDefault();
+      onReschedule(project, rescheduleRange(base, 'move', delta));
+   };
+
+   const onClick = () => {
+      if (suppressClickRef.current) {
+         suppressClickRef.current = false;
+         return;
+      }
+      onSelect(project.id);
+   };
 
    return (
       <div className="absolute inset-0">
-         <button
-            type="button"
-            onClick={() => onSelect(project.id)}
-            className={cn(
-               'absolute top-5 h-8 flex items-center gap-1.5 rounded-lg border bg-accent/40 hover:bg-accent px-2.5 text-xs transition-colors overflow-hidden',
-               selected && 'border-dashed border-violet-500 bg-accent'
-            )}
+         <div
+            ref={wrapperRef}
+            className={cn('group absolute top-5 h-8', draft !== null && 'select-none')}
             style={{ left, width }}
+            onPointerMove={onPointerMove}
+            onPointerUp={(event) => endDrag(event, true)}
+            onPointerCancel={(event) => endDrag(event, false)}
          >
-            <span className="truncate font-medium">{project.name}</span>
-            {displayProperties.lead && project.lead && (
-               <Avatar className="size-4 shrink-0">
-                  <AvatarImage src={project.lead.avatarUrl || undefined} alt={project.lead.name} />
-                  <AvatarFallback>{project.lead.name[0]}</AvatarFallback>
-               </Avatar>
+            <button
+               type="button"
+               onClick={onClick}
+               onPointerDown={beginDrag('move')}
+               onKeyDown={onKeyDown}
+               aria-label={`${project.name}, ${rangeLabel}`}
+               aria-describedby={reschedulable ? RESCHEDULE_HINT_ID : undefined}
+               aria-keyshortcuts={
+                  reschedulable
+                     ? 'ArrowLeft ArrowRight Shift+ArrowLeft Shift+ArrowRight'
+                     : undefined
+               }
+               data-reschedulable={reschedulable}
+               className={cn(
+                  'absolute inset-0 flex items-center gap-1.5 rounded-lg border bg-accent/40 hover:bg-accent px-2.5 text-xs transition-colors overflow-hidden',
+                  selected && 'border-dashed border-violet-500 bg-accent',
+                  reschedulable && (draft !== null ? 'cursor-grabbing' : 'cursor-grab'),
+                  draft !== null && 'border-primary/60 bg-accent'
+               )}
+            >
+               <span className="truncate font-medium">{project.name}</span>
+               {displayProperties.lead && project.lead && (
+                  <Avatar className="size-4 shrink-0">
+                     <AvatarImage
+                        src={project.lead.avatarUrl || undefined}
+                        alt={project.lead.name}
+                     />
+                     <AvatarFallback>{project.lead.name[0]}</AvatarFallback>
+                  </Avatar>
+               )}
+               {displayProperties.status && (
+                  <span className="text-muted-foreground shrink-0">{project.percentComplete}%</span>
+               )}
+            </button>
+            {reschedulable && (
+               <>
+                  <span
+                     aria-hidden="true"
+                     data-testid={`resize-start-${project.id}`}
+                     onPointerDown={beginDrag('start')}
+                     className="absolute inset-y-1 left-0 w-2 cursor-ew-resize rounded-l-lg bg-primary/40 opacity-0 transition-opacity group-hover:opacity-100"
+                  />
+                  <span
+                     aria-hidden="true"
+                     data-testid={`resize-end-${project.id}`}
+                     onPointerDown={beginDrag('end')}
+                     className="absolute inset-y-1 right-0 w-2 cursor-ew-resize rounded-r-lg bg-primary/40 opacity-0 transition-opacity group-hover:opacity-100"
+                  />
+               </>
             )}
-            {displayProperties.status && (
-               <span className="text-muted-foreground shrink-0">{project.percentComplete}%</span>
+            {draft !== null && (
+               <span
+                  role="tooltip"
+                  className="pointer-events-none absolute -top-7 left-0 z-20 whitespace-nowrap rounded-md border bg-popover px-2 py-0.5 text-[11px] font-medium text-popover-foreground shadow-md"
+               >
+                  {rangeLabel}
+               </span>
             )}
-         </button>
+         </div>
       </div>
    );
 }
@@ -225,6 +360,7 @@ function TimelineBar({
  */
 export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
    const { showProjectList, showWeekNumbers, displayProperties } = useProjectsDisplayStore();
+   const patchProject = useWorkspaceStore((s) => s.patchProject);
    const [todayIso, setTodayIso] = useState<string | null>(null);
    const [viewport, setViewport] = useState<Viewport | null>(null);
    const [zoom, setZoom] = useState<TimelineZoom>('year');
@@ -326,6 +462,14 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
       [listOffset]
    );
 
+   const reschedule = useCallback(
+      (project: Project, next: DateRange) => {
+         // O store já fez rollback + toast; a rejeição re-lançada não tem mais o que tratar.
+         void patchProject(project.id, next, next).catch(() => undefined);
+      },
+      [patchProject]
+   );
+
    const scrollToToday = () => {
       if (scrollRef.current && todayOffset !== null) {
          // Land today clear of the sticky project list, so on small screens
@@ -373,6 +517,10 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
             </DropdownMenu>
          </div>
 
+         <p id={RESCHEDULE_HINT_ID} className="sr-only">
+            Drag the bar to move the project, drag its edges to change one date. With the bar
+            focused, use the arrow keys to move by one day and Shift + arrow keys by one week.
+         </p>
          <div ref={scrollRef} onScroll={handleScroll} className="w-full h-full overflow-auto">
             <div style={{ width: totalWidth }} className="relative min-h-full">
                {/* Month scale: month names, weekly ticks and date labels */}
@@ -470,6 +618,7 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
                                              current === projectId ? null : projectId
                                           )
                                        }
+                                       onReschedule={reschedule}
                                     />
                                  )}
                                  {showProjectList && (
