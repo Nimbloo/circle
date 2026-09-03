@@ -94,7 +94,10 @@ describe('botões de opções', () => {
    it('não exibe no mobile o controle do painel desktop', () => {
       const panel = readFileSync(join(root, 'common/detail-side-panel.tsx'), 'utf8');
 
-      expect(panel).toContain('className="hidden size-7 xl:inline-flex"');
+      // Toggle desktop: `hidden` na base e só o degrau (xl / @3xl) o exibe.
+      expect(panel).toContain("className={cn('hidden size-7', LAYOUT_CLASSES[layout].toggle)}");
+      expect(panel).toContain("toggle: 'xl:inline-flex'");
+      expect(panel).toContain("toggle: '@3xl:inline-flex'");
       for (const file of [
          'layout/headers/initiative/header.tsx',
          'layout/headers/project/header.tsx',
