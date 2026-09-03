@@ -100,6 +100,17 @@ describe('docToText #16', () => {
    it('lança para nó fora do schema', () => {
       expect(() => docToText({ type: 'doc', content: [{ type: 'widget' }] })).toThrow();
    });
+
+   it('imagem → ![alt](url)', () => {
+      const doc = {
+         type: 'doc',
+         content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'Veja:' }] },
+            { type: 'image', attrs: { src: 'https://cdn.test/uploads/a.png', alt: 'Tela' } },
+         ],
+      };
+      expect(docToText(doc)).toBe('Veja:\n\n![Tela](https://cdn.test/uploads/a.png)');
+   });
 });
 
 describe('docHeadings #16', () => {

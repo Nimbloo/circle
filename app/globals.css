@@ -498,3 +498,12 @@ html[data-underline-links='true'] a[href]:not([role='button']):not(.no-underline
    outline: 2px solid color-mix(in oklab, var(--primary) 50%, transparent);
    border-radius: 4px;
 }
+.ProseMirror img {
+   display: block;
+   max-width: 100%;
+   height: auto;
+   border-radius: 6px;
+}
+.ProseMirror img[data-uploading] {
+   opacity: 0.4;
+}

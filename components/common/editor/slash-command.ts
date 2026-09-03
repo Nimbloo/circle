@@ -78,6 +78,15 @@ export const SLASH_ITEMS: SlashItem[] = [
       keywords: ['divider', 'rule', 'hr', 'separator', 'line'],
       run: (editor, range) => editor.chain().focus().deleteRange(range).setHorizontalRule().run(),
    },
+   {
+      id: 'image',
+      title: 'Image',
+      keywords: ['image', 'photo', 'picture', 'upload', 'img'],
+      run: (editor, range) => {
+         editor.chain().focus().deleteRange(range).run();
+         editor.commands.pickImage();
+      },
+   },
 ];
 
 export function filterSlashItems(query: string): SlashItem[] {

@@ -178,6 +178,7 @@ const TEXT_SERIALIZERS: Record<string, Serializer> = {
       return lines.join('\n');
    },
    horizontalRule: () => '---',
+   image: ({ node }) => `![${node.attrs.alt ?? ''}](${node.attrs.src ?? ''})`,
 };
 
 /**

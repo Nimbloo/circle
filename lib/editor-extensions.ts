@@ -4,18 +4,23 @@
  * qualquer extensão que dependa de DOM/React vive só no componente.
  *
  * Blocos: paragraph, heading H1–H3, bullet/ordered/task list, code block, quote,
- * divider. Marks: bold, italic, code, link (autolink + colar URL). Os atalhos
- * markdown (`# `, `- `, `1. `, `[ ] `, "```", `> `, `---`, `**x**`, `` `x` ``) vêm
- * do próprio StarterKit/list.
+ * divider, imagem (com upload). Marks: bold, italic, code, link (autolink + colar URL).
+ * Os atalhos markdown (`# `, `- `, `1. `, `[ ] `, "```", `> `, `---`, `**x**`, `` `x` ``)
+ * vêm do próprio StarterKit/list.
  */
 import type { Extensions } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { Placeholder } from '@tiptap/extensions';
+import { ImageNode, ImageUpload, type ImageUploadOptions } from './editor-image';
 
 export const DEFAULT_PLACEHOLDER = 'Add a description…';
 
-export function editorExtensions(options: { placeholder?: string } = {}): Extensions {
+export interface EditorExtensionOptions extends ImageUploadOptions {
+   placeholder?: string;
+}
+
+export function editorExtensions(options: EditorExtensionOptions = {}): Extensions {
    return [
       StarterKit.configure({
          heading: { levels: [1, 2, 3] },
@@ -31,5 +36,7 @@ export function editorExtensions(options: { placeholder?: string } = {}): Extens
       TaskList,
       TaskItem.configure({ nested: true }),
       Placeholder.configure({ placeholder: options.placeholder ?? DEFAULT_PLACEHOLDER }),
+      ImageNode,
+      ImageUpload.configure({ upload: options.upload, onUploadError: options.onUploadError }),
    ];
 }

@@ -89,6 +89,40 @@ describe('BlockEditor #16', () => {
       expect(root.querySelector('[data-placeholder]')).toBeNull();
    });
 
+   it('imagem: placeholder durante o upload, URL final ao concluir', async () => {
+      Object.assign(URL, { createObjectURL: () => 'blob:placeholder', revokeObjectURL: () => {} });
+      let resolve!: (url: string) => void;
+      const onUpload = vi.fn(() => new Promise<string>((r) => (resolve = r)));
+      const { editor, container } = await mount({ onUpload });
+      act(() => {
+         editor.commands.uploadImages([new File(['x'], 'tela.png', { type: 'image/png' })]);
+      });
+      const root = container.querySelector('.ProseMirror')!;
+      await waitFor(() => expect(root.querySelector('img[data-uploading]')).not.toBeNull());
+      expect(onUpload).toHaveBeenCalledTimes(1);
+      await act(async () => resolve('https://cdn.test/uploads/tela.png'));
+      await waitFor(() => {
+         const img = root.querySelector('img')!;
+         expect(img.getAttribute('src')).toBe('https://cdn.test/uploads/tela.png');
+         expect(img.hasAttribute('data-uploading')).toBe(false);
+      });
+      expect(JSON.stringify(editor.getJSON())).toContain('"type":"image"');
+   });
+
+   it('imagem: erro no upload remove o nó', async () => {
+      Object.assign(URL, { createObjectURL: () => 'blob:placeholder', revokeObjectURL: () => {} });
+      const onUpload = vi.fn(async () => {
+         throw new Error('boom');
+      });
+      const { editor, container } = await mount({ onUpload });
+      act(() => {
+         editor.commands.uploadImages([new File(['x'], 'tela.png', { type: 'image/png' })]);
+      });
+      const root = container.querySelector('.ProseMirror')!;
+      await waitFor(() => expect(root.querySelector('img')).toBeNull());
+      expect(JSON.stringify(editor.getJSON())).not.toContain('"type":"image"');
+   });
+
    it('doc externo novo substitui o conteúdo quando o editor não tem foco', async () => {
       const { container, rerender } = await mount();
       rerender(

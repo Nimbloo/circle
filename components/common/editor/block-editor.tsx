@@ -1,5 +1,6 @@
 'use client';
 
+import { api } from '@/lib/client';
 import { cn } from '@/lib/utils';
 import { EMPTY_DOC, type EditorDoc } from '@/lib/editor-doc';
 import { editorExtensions } from '@/lib/editor-extensions';
@@ -10,6 +11,7 @@ import {
    Heading1,
    Heading2,
    Heading3,
+   Image as ImageIcon,
    List,
    ListChecks,
    ListOrdered,
@@ -20,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { toast } from 'sonner';
 import { SlashCommand, type SlashItem } from './slash-command';
 
 export interface BlockEditorProps {
@@ -34,7 +37,29 @@ export interface BlockEditorProps {
    saveDelayMs?: number;
    /** Editor pronto (foco programático, testes). */
    onReady?: (editor: Editor) => void;
+   /** Upload de imagem (arrastar/colar/menu "/"): devolve a URL. Default: `POST /uploads`. */
+   onUpload?: (file: File) => Promise<string>;
    className?: string;
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+   return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+   });
+}
+
+/** Upload padrão: S3 + CDN via a API (5 MB, `image/*`). */
+async function uploadViaApi(file: File): Promise<string> {
+   const dataUrl = await fileToDataUrl(file);
+   const { url } = await api.uploads.create({
+      dataUrl,
+      contentType: file.type,
+      fileName: file.name,
+   });
+   return url;
 }
 
 const SLASH_ICONS: Record<string, LucideIcon> = {
@@ -48,6 +73,7 @@ const SLASH_ICONS: Record<string, LucideIcon> = {
    codeBlock: Code,
    blockquote: TextQuote,
    divider: Minus,
+   image: ImageIcon,
 };
 
 interface SlashState {
@@ -74,6 +100,7 @@ export function BlockEditor({
    onSave,
    saveDelayMs = 800,
    onReady,
+   onUpload,
    className,
 }: BlockEditorProps) {
    // Callbacks em refs: o editor é criado uma vez e não deve ser recriado quando o pai
@@ -81,10 +108,12 @@ export function BlockEditor({
    const onChangeRef = useRef(onChange);
    const onSaveRef = useRef(onSave);
    const onReadyRef = useRef(onReady);
+   const onUploadRef = useRef(onUpload);
    useEffect(() => {
       onChangeRef.current = onChange;
       onSaveRef.current = onSave;
       onReadyRef.current = onReady;
+      onUploadRef.current = onUpload;
    });
 
    // Debounce do save + flush (blur/unmount) para não perder a última edição.
@@ -116,7 +145,14 @@ export function BlockEditor({
 
    const extensions = useMemo(
       () => [
-         ...editorExtensions({ placeholder }),
+         ...editorExtensions({
+            placeholder,
+            upload: (file) => (onUploadRef.current ?? uploadViaApi)(file),
+            onUploadError: (error) => {
+               const detail = error instanceof Error && error.message ? `: ${error.message}` : '';
+               toast.error(`Falha ao enviar a imagem${detail}`);
+            },
+         }),
          SlashCommand.configure({
             suggestion: {
                render: () => {
