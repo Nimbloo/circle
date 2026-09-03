@@ -198,6 +198,16 @@ fine-grained sem a permissão **Checks: Read-only** (`/check-runs` devolve 403 "
 not accessible by personal access token"; `/files` e `/commits` funcionam). Ajustar as
 permissões do token no GitHub e rodar o sync de novo — nada a mudar no código.
 
+**Produção — Bedrock (agent chat e Guide das reviews) fora do ar.** Toda chamada ao
+modelo `us.anthropic.claude-sonnet-4-5-20250929-v1:0` devolve
+`ResourceNotFoundException: Model use case details have not been submitted for this
+account` — a conta AWS `967587831433` ainda não preencheu o formulário de caso de uso da
+Anthropic no Bedrock (console → Bedrock → Model access → Anthropic → "Submit use case
+details"). A IRSA `circle-role-nimbloo-eks` já tem `bedrock:InvokeModel` no foundation
+model e nos inference profiles; é só o formulário. Efeito: `POST /api/v1/agent/chats`
+responde 500 e `POST /api/v1/reviews/{id}/guide` responde 503 com mensagem honesta.
+Pré-existente à v0.25.0 (o agent já falhava); nada a mudar no código.
+
 ## Decisões suas (não é falta de código)
 
 ### Datas reais em iniciativas
