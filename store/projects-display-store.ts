@@ -71,7 +71,7 @@ interface ProjectsDisplayState {
 
 const DEFAULTS = {
    viewTypes: { all: 'list', active: 'timeline' } as Record<ProjectsTab, ProjectsViewType>,
-   grouping: 'team' as ProjectsGrouping,
+   grouping: 'status' as ProjectsGrouping,
    ordering: 'start-date' as ProjectsOrdering,
    closedProjects: 'all' as ClosedProjectsFilter,
    showEmptyGroups: false,

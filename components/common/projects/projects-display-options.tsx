@@ -96,7 +96,7 @@ export function ProjectsDisplayOptions() {
    const viewType = viewTypes[tab];
    const isDefault =
       viewType === (tab === 'all' ? 'list' : 'timeline') &&
-      grouping === 'none' &&
+      grouping === 'status' &&
       ordering === 'start-date' &&
       closedProjects === 'all' &&
       !showEmptyGroups &&

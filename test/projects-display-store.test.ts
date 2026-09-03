@@ -24,8 +24,8 @@ describe('projects display store', () => {
       useProjectsDisplayStore.getState().resetDisplaySettings();
    });
 
-   it('agrupa projetos por time por padrão', () => {
-      expect(useProjectsDisplayStore.getState().grouping).toBe('team');
+   it('agrupa projetos por status por padrão', () => {
+      expect(useProjectsDisplayStore.getState().grouping).toBe('status');
    });
 
    it('não altera a preferência de grupos vazios ao trocar de visualização', () => {
