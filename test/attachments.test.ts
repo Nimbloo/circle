@@ -3,8 +3,11 @@ import { eq } from 'drizzle-orm';
 
 // Mocka o storage S3/CDN — testamos serviço e rota sem rede.
 const s3 = vi.hoisted(() => ({
-   putAsset: vi.fn(async (key: string) => `https://cdn.test/${key}`),
-   deleteAsset: vi.fn(async () => undefined),
+   putAsset: vi.fn(
+      async (key: string, _body: Buffer, _contentType: string, _options?: unknown) =>
+         `https://cdn.test/${key}`
+   ),
+   deleteAsset: vi.fn(async (_key: string) => undefined),
 }));
 vi.mock('@/lib/api/s3-assets', () => ({
    assetsConfigured: () => true,
