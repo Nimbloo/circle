@@ -123,6 +123,33 @@ describe('BlockEditor #16', () => {
       expect(JSON.stringify(editor.getJSON())).not.toContain('"type":"image"');
    });
 
+   it('vídeo: YouTube vira iframe; .mp4 vira <video controls>; URL comum é recusada', async () => {
+      const { editor, container } = await mount();
+      const root = container.querySelector('.ProseMirror')!;
+      act(() => {
+         editor
+            .chain()
+            .focus('end')
+            .setVideo({ src: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' })
+            .run();
+      });
+      const iframe = root.querySelector('div[data-type="video"][data-provider="youtube"] iframe')!;
+      expect(iframe.getAttribute('src')).toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ');
+      expect(iframe.hasAttribute('allowfullscreen')).toBe(true);
+
+      act(() => {
+         editor.chain().focus('end').setVideo({ src: 'https://cdn.test/demo.mp4' }).run();
+      });
+      const video = root.querySelector('div[data-type="video"][data-provider="file"] video')!;
+      expect(video.getAttribute('src')).toBe('https://cdn.test/demo.mp4');
+      expect(video.hasAttribute('controls')).toBe(true);
+
+      expect(editor.commands.setVideo({ src: 'https://example.com/page' })).toBe(false);
+      const json = JSON.stringify(editor.getJSON());
+      expect(json).toContain('"provider":"youtube"');
+      expect(json).toContain('"provider":"file"');
+   });
+
    it('doc externo novo substitui o conteúdo quando o editor não tem foco', async () => {
       const { container, rerender } = await mount();
       rerender(

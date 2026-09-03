@@ -18,6 +18,7 @@ import {
    Minus,
    TextQuote,
    Type,
+   Video as VideoIcon,
    type LucideIcon,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -74,6 +75,7 @@ const SLASH_ICONS: Record<string, LucideIcon> = {
    blockquote: TextQuote,
    divider: Minus,
    image: ImageIcon,
+   video: VideoIcon,
 };
 
 interface SlashState {

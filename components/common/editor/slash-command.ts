@@ -1,6 +1,7 @@
 import { Extension, type Editor, type Range } from '@tiptap/core';
 import { PluginKey } from '@tiptap/pm/state';
 import Suggestion, { type SuggestionOptions } from '@tiptap/suggestion';
+import { toast } from 'sonner';
 
 /**
  * Menu "/" mínimo do editor de blocos (#16): lista os blocos disponíveis e troca o
@@ -85,6 +86,17 @@ export const SLASH_ITEMS: SlashItem[] = [
       run: (editor, range) => {
          editor.chain().focus().deleteRange(range).run();
          editor.commands.pickImage();
+      },
+   },
+   {
+      id: 'video',
+      title: 'Video',
+      keywords: ['video', 'youtube', 'vimeo', 'loom', 'embed', 'mp4'],
+      run: (editor, range) => {
+         const url = window.prompt('Video URL (YouTube, Vimeo, Loom, .mp4 or .webm)');
+         editor.chain().focus().deleteRange(range).run();
+         if (!url?.trim()) return;
+         if (!editor.commands.setVideo({ src: url })) toast.error('URL de vídeo não suportada');
       },
    },
 ];

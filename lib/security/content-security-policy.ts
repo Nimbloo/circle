@@ -17,6 +17,9 @@ export function buildContentSecurityPolicy({
       `img-src 'self' data: blob: ${cdnUrl}`,
       "font-src 'self' data:",
       "connect-src 'self' https://*.ingest.us.sentry.io",
+      // Vídeos do editor de blocos: players embutidos (iframe) e arquivos .mp4/.webm por URL.
+      'frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://www.loom.com',
+      "media-src 'self' https:",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",

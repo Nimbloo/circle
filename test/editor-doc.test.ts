@@ -111,6 +111,17 @@ describe('docToText #16', () => {
       };
       expect(docToText(doc)).toBe('Veja:\n\n![Tela](https://cdn.test/uploads/a.png)');
    });
+
+   it('vídeo → URL', () => {
+      const doc = {
+         type: 'doc',
+         content: [
+            { type: 'video', attrs: { src: 'https://youtu.be/dQw4w9WgXcQ', provider: 'youtube' } },
+            { type: 'paragraph', content: [{ type: 'text', text: 'fim' }] },
+         ],
+      };
+      expect(docToText(doc)).toBe('https://youtu.be/dQw4w9WgXcQ\n\nfim');
+   });
 });
 
 describe('docHeadings #16', () => {

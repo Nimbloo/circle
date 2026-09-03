@@ -507,3 +507,19 @@ html[data-underline-links='true'] a[href]:not([role='button']):not(.no-underline
 .ProseMirror img[data-uploading] {
    opacity: 0.4;
 }
+.ProseMirror div[data-type='video'] {
+   position: relative;
+   aspect-ratio: 16 / 9;
+   max-width: 100%;
+   border-radius: 6px;
+   overflow: hidden;
+   background: color-mix(in oklab, var(--accent) 40%, transparent);
+}
+.ProseMirror div[data-type='video'] > iframe,
+.ProseMirror div[data-type='video'] > video {
+   position: absolute;
+   inset: 0;
+   width: 100%;
+   height: 100%;
+   border: 0;
+}

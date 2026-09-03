@@ -179,6 +179,7 @@ const TEXT_SERIALIZERS: Record<string, Serializer> = {
    },
    horizontalRule: () => '---',
    image: ({ node }) => `![${node.attrs.alt ?? ''}](${node.attrs.src ?? ''})`,
+   video: ({ node }) => String(node.attrs.src ?? ''),
 };
 
 /**
