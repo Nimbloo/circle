@@ -13,11 +13,17 @@ import { cn } from '@/lib/utils';
 import { patchToLines } from '@/lib/diff-patch';
 import type { Review, ReviewFileStat } from '@/data/reviews';
 import { DiffView } from './diff-view';
+import type { ReviewCommentsHandle } from './review-comments';
 import { DiffStat } from './review-shared';
+
+/** Caminho completo do arquivo — é a âncora `path` dos comentários (como veio do GitHub). */
+function fullPath(file: ReviewFileStat): string {
+   return file.path ? `${file.path}/${file.name}` : file.name;
+}
 
 /** Âncora estável por caminho completo (dois arquivos podem ter o mesmo nome). */
 function anchorId(file: ReviewFileStat): string {
-   return `diff-${encodeURIComponent(file.path ? `${file.path}/${file.name}` : file.name)}`;
+   return `diff-${encodeURIComponent(fullPath(file))}`;
 }
 import {
    Check,
@@ -29,8 +35,8 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
-/** Diff tab: Files / Commits toolbar, file list and stacked unified diffs. */
-export function ReviewDiff({ review }: { review: Review }) {
+/** Diff tab: Files / Commits toolbar, file list and stacked unified diffs (comentáveis). */
+export function ReviewDiff({ review, handle }: { review: Review; handle: ReviewCommentsHandle }) {
    const [query, setQuery] = useState('');
    const [showFileTree, setShowFileTree] = useState(true);
 
@@ -144,8 +150,9 @@ export function ReviewDiff({ review }: { review: Review }) {
                ) : (
                   files.map((file) => {
                      const lines = patchToLines(file.patch);
+                     const path = fullPath(file);
                      return (
-                        <div key={file.path + '/' + file.name} id={anchorId(file)}>
+                        <div key={path} id={anchorId(file)}>
                            {lines.length > 0 ? (
                               <DiffView
                                  diff={{
@@ -155,6 +162,9 @@ export function ReviewDiff({ review }: { review: Review }) {
                                     deletions: file.deletions,
                                     lines,
                                  }}
+                                 filePath={path}
+                                 comments={review.comments.filter((c) => c.path === path)}
+                                 handle={handle}
                               />
                            ) : (
                               // Sem patch (binário/arquivo grande): só o cabeçalho com o stat.

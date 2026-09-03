@@ -3,21 +3,28 @@
  *
  * O backend sincroniza o PR do GitHub (`ReviewDto`: título, status, branches,
  * contadores, checks) e, no detalhe (`ReviewDetailDto`), os arquivos com patch, os
- * commits e o guide gerado a partir do diff. A UI usa o tipo rico `Review`
- * (`data/reviews.ts`); só `summary`, `testPlan`, `deployment` e `reviewNote` seguem
- * sem fonte no contrato e saem vazios — nada é inventado, os componentes degradam
+ * commits, o guide gerado a partir do diff, a thread de comentários e o veredito. A UI
+ * usa o tipo rico `Review` (`data/reviews.ts`); só `summary`, `testPlan` e `deployment`
+ * seguem sem fonte no contrato e saem vazios — nada é inventado, os componentes degradam
  * pra estado vazio.
  *
  * Os fetchers usam o cliente tipado global (`api.reviews`, em lib/client.ts).
  */
 import type {
    Review,
+   ReviewComment,
    ReviewCommit,
    ReviewFileStat,
    ReviewGuide,
    ReviewStatus,
+   ReviewVerdict,
 } from '@/data/reviews';
 import type { ReviewCommitDto, ReviewDetailDto, ReviewDto, ReviewFileDto } from '@/lib/api/reviews';
+import type {
+   AddReviewCommentInput,
+   ReviewCommentDto,
+   ReviewVerdictDto,
+} from '@/lib/api/review-comments';
 import { api, ApiError } from '@/lib/client';
 
 const VALID_STATUS: readonly ReviewStatus[] = ['open', 'merged', 'closed'];
@@ -70,15 +77,44 @@ export function adaptReviewCommit(commit: ReviewCommitDto): ReviewCommit {
    };
 }
 
+export function adaptReviewComment(dto: ReviewCommentDto): ReviewComment {
+   return {
+      id: dto.id,
+      author: dto.author,
+      path: dto.path,
+      line: dto.line,
+      kind: dto.kind,
+      body: dto.body,
+      createdAt: dto.createdAt,
+      timeAgo: relativeTime(dto.createdAt),
+   };
+}
+
+export function adaptReviewVerdict(dto: ReviewVerdictDto | null): ReviewVerdict | null {
+   return dto ? { ...dto, timeAgo: relativeTime(dto.createdAt) } : null;
+}
+
+/** Veredito corrente a partir da thread já adaptada (recalculado após mutação local). */
+export function latestVerdict(comments: ReviewComment[]): ReviewVerdict | null {
+   for (let i = comments.length - 1; i >= 0; i--) {
+      const c = comments[i];
+      if (c.kind !== 'comment')
+         return { kind: c.kind, author: c.author, createdAt: c.createdAt, timeAgo: c.timeAgo };
+   }
+   return null;
+}
+
 /**
- * ReviewDto (backend, PR cru) -> Review (tipo rico da UI). Arquivos, commits e guide só
- * vêm no detalhe (`ReviewDetailDto`); na lista saem vazios. `summary`/`testPlan` seguem
- * vazios (sem fonte de dados) e `list` é neutro ('for-you').
+ * ReviewDto (backend, PR cru) -> Review (tipo rico da UI). Arquivos, commits, guide e a
+ * thread só vêm no detalhe (`ReviewDetailDto`); na lista saem vazios. `summary`/`testPlan`
+ * seguem vazios (sem fonte de dados) e `list` é neutro ('for-you').
  */
 export function adaptReview(dto: ReviewDto | ReviewDetailDto): Review {
    const files = 'files' in dto ? dto.files.map(adaptReviewFile) : [];
    const commits = 'commits' in dto ? dto.commits.map(adaptReviewCommit) : [];
    const guide = 'guide' in dto ? dto.guide : null;
+   const comments = 'comments' in dto ? dto.comments.map(adaptReviewComment) : [];
+   const verdict = 'verdict' in dto ? adaptReviewVerdict(dto.verdict) : null;
    return {
       id: dto.id,
       title: dto.title,
@@ -99,6 +135,8 @@ export function adaptReview(dto: ReviewDto | ReviewDetailDto): Review {
       summary: [],
       testPlan: [],
       guide,
+      comments,
+      verdict,
    };
 }
 
@@ -146,4 +184,26 @@ export async function generateReviewGuide(id: string): Promise<ReviewGuide> {
 /** POST /reviews/sync — dispara a ingestão de PRs do GitHub (roda em background no servidor). */
 export async function syncReviews(): Promise<void> {
    await api.reviews.sync();
+}
+
+/** POST /reviews/{id}/comments — comentário (geral/arquivo/linha) ou veredito, já adaptado. */
+export async function addReviewComment(
+   id: string,
+   input: AddReviewCommentInput
+): Promise<ReviewComment> {
+   return adaptReviewComment(await api.reviews.addComment(id, input));
+}
+
+/** PATCH /reviews/{id}/comments/{commentId} — edita o texto (só o autor). */
+export async function updateReviewComment(
+   id: string,
+   commentId: string,
+   body: string
+): Promise<ReviewComment> {
+   return adaptReviewComment(await api.reviews.updateComment(id, commentId, body));
+}
+
+/** DELETE /reviews/{id}/comments/{commentId} — autor ou admin. */
+export async function removeReviewComment(id: string, commentId: string): Promise<void> {
+   await api.reviews.removeComment(id, commentId);
 }

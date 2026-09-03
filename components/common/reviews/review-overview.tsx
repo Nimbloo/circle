@@ -6,6 +6,7 @@ import { Review, ReviewFileCategory } from '@/data/reviews';
 import { ChevronDown, ChevronRight, FileCode2, GitCommitHorizontal, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { ReviewCommentsSection, type ReviewCommentsHandle } from './review-comments';
 import { DiffStat, InlineText, IssueCheckIcon, PrIcon } from './review-shared';
 
 const CATEGORY_LABELS: Record<ReviewFileCategory, string> = {
@@ -58,8 +59,14 @@ function FilesPanel({ review }: { review: Review }) {
    );
 }
 
-/** Overview tab: description + timeline on the left, properties on the right. */
-export function ReviewOverview({ review }: { review: Review }) {
+/** Overview tab: description + comments on the left, properties on the right. */
+export function ReviewOverview({
+   review,
+   handle,
+}: {
+   review: Review;
+   handle: ReviewCommentsHandle;
+}) {
    const { orgId } = useParams<{ orgId: string }>();
 
    return (
@@ -162,50 +169,7 @@ export function ReviewOverview({ review }: { review: Review }) {
                   </div>
                )}
 
-               {review.reviewNote && (
-                  <div className="rounded-lg border p-4 flex flex-col gap-3">
-                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span className="size-5 rounded-full bg-muted inline-block" />
-                        <span className="font-medium text-foreground">
-                           {review.reviewNote.author}
-                        </span>
-                        {review.reviewNote.timeAgo}
-                     </div>
-                     <h3 className="text-base font-semibold">Review results</h3>
-                     <blockquote className="border-l-2 border-emerald-500 pl-3 text-sm leading-relaxed">
-                        {review.reviewNote.verdictLine}
-                     </blockquote>
-                     <p className="text-sm text-muted-foreground leading-relaxed">
-                        {review.reviewNote.profileLine}
-                     </p>
-                     <div className="rounded-md border overflow-hidden text-sm">
-                        <div className="grid grid-cols-5 gap-2 px-3 py-1.5 border-b bg-sidebar/50 text-xs text-muted-foreground">
-                           <span>Review</span>
-                           <span>Verdict</span>
-                           <span>Critical</span>
-                           <span>High</span>
-                           <span>Medium</span>
-                        </div>
-                        {review.reviewNote.rows.map((row) => (
-                           <div
-                              key={row.review}
-                              className="grid grid-cols-5 gap-2 px-3 py-2 border-b last:border-b-0 text-xs items-start"
-                           >
-                              <span className="font-medium">{row.review}</span>
-                              <span>{row.verdict}</span>
-                              <span>{row.critical}</span>
-                              <span>{row.high}</span>
-                              <span>{row.medium}</span>
-                           </div>
-                        ))}
-                     </div>
-                     {review.reviewNote.footer && (
-                        <p className="text-sm text-muted-foreground leading-relaxed">
-                           {review.reviewNote.footer}
-                        </p>
-                     )}
-                  </div>
-               )}
+               <ReviewCommentsSection review={review} handle={handle} />
             </div>
          </div>
 

@@ -61,21 +61,34 @@ export interface ReviewGuide {
    model: string;
 }
 
-export interface ReviewVerdictRow {
-   review: string;
-   verdict: string;
-   critical: string;
-   high: string;
-   medium: string;
+export type ReviewCommentKind = 'comment' | 'approve' | 'request_changes';
+export type ReviewVerdictKind = Exclude<ReviewCommentKind, 'comment'>;
+
+export interface ReviewCommentAuthor {
+   id: string;
+   name: string;
+   avatarUrl: string | null;
 }
 
-export interface ReviewNote {
-   author: string;
+/** Comentário da thread do review: geral, por arquivo (`path`) ou por linha (`path` + `line`). */
+export interface ReviewComment {
+   id: string;
+   author: ReviewCommentAuthor | null;
+   path: string | null;
+   /** Linha do arquivo NOVO no diff; null = comentário do arquivo inteiro. */
+   line: number | null;
+   kind: ReviewCommentKind;
+   body: string;
+   createdAt: string;
    timeAgo: string;
-   verdictLine: string;
-   profileLine: string;
-   rows: ReviewVerdictRow[];
-   footer?: string;
+}
+
+/** Último veredito registrado na thread (Approved / Changes requested). */
+export interface ReviewVerdict {
+   kind: ReviewVerdictKind;
+   author: ReviewCommentAuthor | null;
+   createdAt: string;
+   timeAgo: string;
 }
 
 export interface Review {
@@ -101,7 +114,10 @@ export interface Review {
    summary: string[];
    testPlan: { text: string; checked: boolean }[];
    deployment?: { project: string; state: string; action: string };
-   reviewNote?: ReviewNote;
+   /** Thread de comentários (só vem no detalhe; na lista sai vazia). */
+   comments: ReviewComment[];
+   /** Veredito corrente — último `approve`/`request_changes` da thread; null sem veredito. */
+   verdict: ReviewVerdict | null;
    /** Guide gerado; `null` quando ainda não foi gerado (só vem no detalhe). */
    guide?: ReviewGuide | null;
 }
