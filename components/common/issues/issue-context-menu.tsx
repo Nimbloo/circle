@@ -215,6 +215,10 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
    // Cycles do time da issue (Linear lista os cycles do time da própria issue).
    const issue = issueId ? getIssueById(issueId) : undefined;
    const teamCycles = issue?.teamId ? allCycles.filter((c) => c.teamId === issue.teamId) : [];
+   const [projectQuery, setProjectQuery] = useState('');
+   const filteredProjects = projectQuery.trim()
+      ? projects.filter((p) => p.name.toLowerCase().includes(projectQuery.trim().toLowerCase()))
+      : projects;
 
    return (
       <>
@@ -334,17 +338,41 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
                      <Folder className="mr-2 size-4" /> Project
                   </ContextMenuSubTrigger>
                   <ContextMenuSubContent className="w-64">
-                     <ContextMenuItem onClick={() => handleProjectChange(null)}>
-                        <Folder className="size-4" /> No Project
-                     </ContextMenuItem>
-                     {projects.slice(0, 5).map((project) => (
-                        <ContextMenuItem
-                           key={project.id}
-                           onClick={() => handleProjectChange(project.id)}
-                        >
-                           <project.icon className="size-4" /> {project.name}
+                     {/* Todos os projetos, com busca e scroll (antes: só os 5 primeiros).
+                         O keydown do input não sobe ao menu (typeahead/roving focus do
+                         Radix roubariam o foco a cada letra); Esc segue fechando o menu. */}
+                     <div className="px-2 pb-1 pt-1">
+                        <input
+                           type="text"
+                           value={projectQuery}
+                           onChange={(e) => setProjectQuery(e.target.value)}
+                           onKeyDown={(e) => {
+                              if (e.key !== 'Escape') e.stopPropagation();
+                           }}
+                           placeholder="Set project..."
+                           aria-label="Search projects"
+                           className="h-7 w-full rounded-md border border-input bg-transparent px-2 text-sm outline-none placeholder:text-muted-foreground"
+                        />
+                     </div>
+                     <div className="max-h-64 overflow-y-auto">
+                        <ContextMenuItem onClick={() => handleProjectChange(null)}>
+                           <Folder className="size-4" /> No Project
                         </ContextMenuItem>
-                     ))}
+                        {filteredProjects.map((project) => (
+                           <ContextMenuItem
+                              key={project.id}
+                              onClick={() => handleProjectChange(project.id)}
+                           >
+                              <project.icon className="size-4" /> {project.name}
+                              {issue?.project?.id === project.id && (
+                                 <CheckCircle2 className="ml-auto size-3.5" />
+                              )}
+                           </ContextMenuItem>
+                        ))}
+                        {filteredProjects.length === 0 && (
+                           <ContextMenuItem disabled>No projects found.</ContextMenuItem>
+                        )}
+                     </div>
                   </ContextMenuSubContent>
                </ContextMenuSub>
 

@@ -1,6 +1,7 @@
 import { Issue } from './issues';
 import { User, users } from './users';
 import type { EditorDoc } from '@/lib/editor-doc';
+import type { SubIssueRef } from '@/lib/api/issue-detail';
 
 /* -------------------------------------------------------------------------- */
 /*                         Rich content block model                           */
@@ -29,6 +30,19 @@ export interface CommentReaction {
    reactedByMe?: boolean;
 }
 
+/** Anexo de issue ou de comentário (arquivo no S3/CDN; metadados no banco). */
+export interface Attachment {
+   id: string;
+   url: string;
+   fileName: string;
+   contentType: string;
+   size: number;
+   /** null = anexo da issue; senão, do comentário. */
+   commentId: string | null;
+   uploadedById: string | null;
+   createdAt: string;
+}
+
 export type ActivityItem =
    | {
         kind: 'event';
@@ -47,7 +61,13 @@ export type ActivityItem =
         body: ContentBlock[];
         /** Comentário-pai (threading). undefined/null = raiz. */
         parentId?: string | null;
+        /** Última edição (ISO); a UI mostra "edited" quando existe. */
+        updatedAt?: string | null;
+        /** Thread resolvida (só na raiz). */
+        resolvedAt?: string | null;
+        resolvedBy?: User | null;
         reactions?: CommentReaction[];
+        attachments?: Attachment[];
      };
 
 export interface PrLink {
@@ -62,12 +82,18 @@ export interface IssueDetail {
    /** Doc do editor de blocos; null = derivar de `description` (`blocksToDoc`). */
    descriptionDoc?: EditorDoc | null;
    activity: ActivityItem[];
+   /** Pai canônico (#95) — alimenta o breadcrumb e a propriedade Parent. */
+   parent?: { id: string; identifier: string; title: string } | null;
+   /** Filhas diretas resolvidas pelo servidor (a UI não cruza com o issues-store). */
+   subIssues?: SubIssueRef[];
    subIssueIds?: string[];
    relatedIds?: string[];
    blockedByIds?: string[];
    blockingIds?: string[];
    duplicateIds?: string[];
    prLinks?: PrLink[];
+   /** Anexos da issue (os de comentário vêm em cada comentário do feed). */
+   attachments?: Attachment[];
    /** Milestone livre (legado). Novo fluxo usa milestoneId/milestoneName estruturados. */
    milestone?: string;
    milestoneId?: string | null;

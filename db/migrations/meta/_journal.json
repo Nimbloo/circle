@@ -281,6 +281,27 @@
          "when": 1788444903273,
          "tag": "0039_review_comment",
          "breakpoints": true
+      },
+      {
+         "idx": 40,
+         "version": "7",
+         "when": 1788471147009,
+         "tag": "0040_sub_issues_threads_assignees",
+         "breakpoints": true
+      },
+      {
+         "idx": 41,
+         "version": "7",
+         "when": 1788471162172,
+         "tag": "0041_backfill_issue_parent",
+         "breakpoints": true
+      },
+      {
+         "idx": 42,
+         "version": "7",
+         "when": 1788471164859,
+         "tag": "0042_backfill_issue_assignee",
+         "breakpoints": true
       }
    ]
 }

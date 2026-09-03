@@ -58,12 +58,14 @@ export function DisplayOptions() {
       orderCompletedByRecency,
       completedIssues,
       showEmptyGroups,
+      showSubIssues,
       displayProperties,
       setGrouping,
       setOrdering,
       setOrderCompletedByRecency,
       setCompletedIssues,
       setShowEmptyGroups,
+      setShowSubIssues,
       toggleDisplayProperty,
       resetDisplaySettings,
    } = useDisplaySettings();
@@ -76,6 +78,7 @@ export function DisplayOptions() {
       orderCompletedByRecency,
       completedIssues,
       showEmptyGroups,
+      showSubIssues,
       displayProperties,
    });
 
@@ -219,7 +222,7 @@ export function DisplayOptions() {
                </div>
             </div>
 
-            <div className="flex h-56 flex-col gap-2.5 border-t px-4 py-3">
+            <div className="flex min-h-56 flex-col gap-2.5 border-t px-4 py-3">
                <span className="text-xs font-medium">
                   {viewType === 'grid' ? 'Board options' : 'List options'}
                </span>
@@ -234,6 +237,19 @@ export function DisplayOptions() {
                      id="show-empty-groups"
                      checked={showEmptyGroups}
                      onCheckedChange={setShowEmptyGroups}
+                  />
+               </div>
+               <div className="flex items-center justify-between">
+                  <Label
+                     htmlFor="show-sub-issues"
+                     className="text-xs text-muted-foreground font-normal"
+                  >
+                     Show sub-issues
+                  </Label>
+                  <Switch
+                     id="show-sub-issues"
+                     checked={showSubIssues}
+                     onCheckedChange={setShowSubIssues}
                   />
                </div>
 

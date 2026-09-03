@@ -3,11 +3,14 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/client';
+import { ATTACHMENT_ACCEPT } from '@/lib/attachment-types';
+import { attachmentRejection, filesOf, uploadAttachmentFiles } from '@/lib/attachments-client';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { Plus } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { Paperclip } from 'lucide-react';
+import { useMemo, useRef, useState, type DragEvent } from 'react';
 import { toast } from 'sonner';
+import { AttachmentChip } from './attachment-chip';
 
 /** Slug do usuário: o real (do backend) quando disponível, senão o prefixo do e-mail. */
 function slugOf(user: { email: string; slug?: string }): string {
@@ -22,10 +25,16 @@ function mentionTokenAt(text: string, caret: number): { query: string; start: nu
    return { query: match[1].toLowerCase(), start: caret - match[0].length };
 }
 
+interface PendingFile {
+   id: string;
+   file: File;
+}
+
 /**
- * Composer de comentário com autocomplete de @menção: ao digitar "@" sugere
- * membros do workspace (por nome/slug); selecionar insere "@slug". Posta via
- * api.issues.addComment e chama onPosted (o pai refetch o feed).
+ * Composer de comentário com autocomplete de @menção (ao digitar "@" sugere membros do
+ * workspace; selecionar insere "@slug") e anexos: clipe, Ctrl/Cmd+Shift+A, arrastar e
+ * colar arquivo — os chips ficam no composer até enviar. Posta via api.issues.addComment,
+ * sobe os anexos ligados ao comentário criado e chama onPosted (o pai refetch o feed).
  */
 export function CommentComposer({
    issueId,
@@ -48,7 +57,11 @@ export function CommentComposer({
    const [submitting, setSubmitting] = useState(false);
    const [mention, setMention] = useState<{ query: string; start: number } | null>(null);
    const [active, setActive] = useState(0);
+   const [files, setFiles] = useState<PendingFile[]>([]);
+   const [dragging, setDragging] = useState(false);
    const ref = useRef<HTMLTextAreaElement>(null);
+   const fileInputRef = useRef<HTMLInputElement>(null);
+   const seq = useRef(0);
 
    const suggestions = useMemo(() => {
       if (!mention) return [];
@@ -84,13 +97,40 @@ export function CommentComposer({
       });
    };
 
+   /** Valida localmente (mesma allow-list do servidor) e enfileira como chip. */
+   const addFiles = (incoming: File[]) => {
+      const accepted: PendingFile[] = [];
+      for (const file of incoming) {
+         const reason = attachmentRejection(file);
+         if (reason) toast.error(reason);
+         else accepted.push({ id: `f${++seq.current}`, file });
+      }
+      if (accepted.length) setFiles((f) => [...f, ...accepted]);
+   };
+
+   const onDrop = (e: DragEvent) => {
+      e.preventDefault();
+      setDragging(false);
+      const dropped = filesOf(e.dataTransfer?.files);
+      if (dropped.length) addFiles(dropped);
+   };
+
    const submit = async () => {
       const text = draft.trim();
       if (!text || submitting) return;
       setSubmitting(true);
       try {
-         await api.issues.addComment(issueId, text, parentId);
+         const created = await api.issues.addComment(issueId, text, parentId);
+         if (files.length) {
+            const { failed } = await uploadAttachmentFiles(
+               issueId,
+               files.map((f) => f.file),
+               created.id
+            );
+            for (const f of failed) toast.error(`${f.file.name}: ${f.error}`);
+         }
          setDraft('');
+         setFiles([]);
          setMention(null);
          onPosted();
       } catch {
@@ -101,7 +141,20 @@ export function CommentComposer({
    };
 
    return (
-      <div className="mt-3 rounded-lg border border-border/60 bg-container p-3 flex flex-col gap-2 relative">
+      <div
+         onDragOver={(e) => {
+            if (e.dataTransfer?.types.includes('Files')) {
+               e.preventDefault();
+               setDragging(true);
+            }
+         }}
+         onDragLeave={() => setDragging(false)}
+         onDrop={onDrop}
+         className={cn(
+            'mt-3 rounded-lg border border-border/60 bg-container p-3 flex flex-col gap-2 relative transition-colors',
+            dragging && 'border-primary/50 bg-accent/40'
+         )}
+      >
          {mention && suggestions.length > 0 && (
             <div className="absolute bottom-full left-3 mb-1 w-64 max-h-56 overflow-y-auto rounded-lg border bg-popover shadow-lg z-20 py-1">
                {suggestions.map((user, index) => (
@@ -134,6 +187,13 @@ export function CommentComposer({
             autoFocus={autoFocus}
             value={draft}
             onChange={(event) => sync(event.target.value)}
+            onPaste={(event) => {
+               const pasted = filesOf(event.clipboardData?.files);
+               if (pasted.length) {
+                  event.preventDefault();
+                  addFiles(pasted);
+               }
+            }}
             onKeyDown={(event) => {
                if (mention && suggestions.length > 0) {
                   if (event.key === 'ArrowDown') {
@@ -157,6 +217,15 @@ export function CommentComposer({
                      return;
                   }
                }
+               if (
+                  (event.metaKey || event.ctrlKey) &&
+                  event.shiftKey &&
+                  event.key.toLowerCase() === 'a'
+               ) {
+                  event.preventDefault();
+                  fileInputRef.current?.click();
+                  return;
+               }
                if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
                   void submit();
                }
@@ -166,8 +235,47 @@ export function CommentComposer({
             disabled={submitting}
             className="w-full resize-none bg-transparent outline-none text-sm placeholder:text-muted-foreground disabled:opacity-60"
          />
+         {files.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+               {files.map((f) => (
+                  <AttachmentChip
+                     key={f.id}
+                     item={{
+                        id: f.id,
+                        fileName: f.file.name,
+                        contentType: f.file.type,
+                        size: f.file.size,
+                     }}
+                     confirmRemove={false}
+                     onRemove={() => setFiles((cur) => cur.filter((x) => x.id !== f.id))}
+                  />
+               ))}
+            </div>
+         )}
          <div className="flex items-center justify-between">
-            <Plus className="size-4 text-muted-foreground" />
+            <button
+               type="button"
+               onClick={() => fileInputRef.current?.click()}
+               disabled={submitting}
+               aria-label="Attach file"
+               title="Attach file (Ctrl+Shift+A)"
+               className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+            >
+               <Paperclip className="size-4" />
+            </button>
+            <input
+               ref={fileInputRef}
+               type="file"
+               multiple
+               accept={ATTACHMENT_ACCEPT}
+               className="hidden"
+               aria-label="Attach file"
+               onChange={(event) => {
+                  const picked = filesOf(event.target.files);
+                  event.target.value = '';
+                  if (picked.length) addFiles(picked);
+               }}
+            />
             <div className="flex items-center gap-2">
                {onCancel && (
                   <Button size="xs" variant="ghost" onClick={onCancel} disabled={submitting}>

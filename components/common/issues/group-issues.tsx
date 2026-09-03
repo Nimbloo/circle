@@ -170,7 +170,7 @@ export function GroupIssues({ group, issues, count }: GroupIssuesProps) {
          {viewType === 'list' ? (
             <div className="space-y-0">
                {issues.map((issue) => (
-                  <IssueLine key={issue.id} issue={issue} layoutId={true} />
+                  <IssueLine key={issue.id} issue={issue} orderedIssues={issues} layoutId={true} />
                ))}
             </div>
          ) : (

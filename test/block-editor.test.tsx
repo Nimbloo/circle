@@ -27,6 +27,7 @@ const ISSUES = [
       status: status[0],
       priority: priorities[0],
       assignee: null,
+      assignees: [],
       labels: [],
       createdAt: '2026-01-01T00:00:00.000Z',
       cycleId: '',

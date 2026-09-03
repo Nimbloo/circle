@@ -58,6 +58,14 @@ import type { AuditLogDto } from '@/lib/api/audit';
 import type { InviteDto } from '@/lib/api/invites';
 import type { FavoriteDto, FavoriteEntityType } from '@/lib/api/favorites';
 import type { SlackConfigDto } from '@/lib/api/integrations/slack';
+import type { AttachmentDto } from '@/lib/api/attachments';
+
+/**
+ * `parentId` é o contrato compartilhado da spec de sub-issues (cria a issue já vinculada
+ * ao pai). Só a tipagem do cliente o conhece por enquanto — o servidor passa a aceitá-lo
+ * quando o bloco de sub-issues entrar.
+ */
+export type CreateIssueClientInput = CreateIssueInput & { parentId?: string | null };
 
 export class ApiError extends Error {
    constructor(
@@ -93,6 +101,17 @@ async function requestEnvelope<T>(path: string): Promise<{ data: T; meta?: unkno
       throw new ApiError(res.status, String(detail), json);
    }
    return { data: (json?.data ?? json) as T, meta: json?.meta };
+}
+
+/** POST multipart (upload de arquivo): o navegador define o content-type com o boundary. */
+async function postForm<T>(path: string, form: FormData): Promise<T> {
+   const res = await fetch(`/api/v1${path}`, { method: 'POST', body: form });
+   const json = await res.json().catch(() => null);
+   if (!res.ok) {
+      const detail = (json && (json.detail || json.title)) || res.statusText;
+      throw new ApiError(res.status, String(detail), json);
+   }
+   return (json?.data ?? json) as T;
 }
 
 const get = <T>(p: string) => request<T>('GET', p);
@@ -196,6 +215,18 @@ export const api = {
    uploads: {
       create: (input: UploadInput) => post<UploadDto>('/uploads', input),
    },
+   /** Anexos de issue/comentário (#98): multipart pro S3/CDN + linha em `attachment`. */
+   attachments: {
+      upload: (issueId: string, file: File, commentId?: string | null) => {
+         const form = new FormData();
+         form.set('file', file, file.name);
+         form.set('issueId', issueId);
+         if (commentId) form.set('commentId', commentId);
+         return postForm<AttachmentDto>('/attachments', form);
+      },
+      list: (issueId: string) => get<AttachmentDto[]>(`/issues/${issueId}/attachments`),
+      remove: (id: string) => del<{ deleted: boolean }>(`/attachments/${id}`),
+   },
    priorities: () =>
       get<{ id: string; name: string; position: number; sortRank: number }[]>('/priorities'),
    labels: {
@@ -214,7 +245,7 @@ export const api = {
    issues: {
       list: (opts?: IssueListOptions) => get<IssueDto[]>(`/issues${issueQuery(opts)}`),
       get: (id: string) => get<IssueDto>(`/issues/${id}`),
-      create: (input: CreateIssueInput) => post<IssueDto>('/issues', input),
+      create: (input: CreateIssueClientInput) => post<IssueDto>('/issues', input),
       update: (id: string, patchInput: UpdateIssueInput) =>
          patch<IssueDto>(`/issues/${id}`, patchInput),
       remove: (id: string) => del<{ deleted: boolean }>(`/issues/${id}`),
@@ -258,6 +289,8 @@ export const api = {
             color?: string | null;
             estimateScale?: string;
             cycleCooldownDays?: number;
+            autoCloseParent?: boolean;
+            autoCloseChildren?: boolean;
          }
       ) => patch<TeamDto>(`/teams/${key}`, body),
       remove: (key: string) => del<{ deleted: boolean }>(`/teams/${key}`),
@@ -377,6 +410,9 @@ export const api = {
 
    comments: {
       update: (id: string, body: string) => patch<CommentDto>(`/comments/${id}`, { body }),
+      /** Resolve (`true`) ou reabre (`false`) a thread do comentário-raiz. */
+      resolve: (id: string, resolved: boolean) =>
+         patch<CommentDto>(`/comments/${id}`, { resolved }),
       remove: (id: string) => del<{ deleted: boolean }>(`/comments/${id}`),
       addReaction: (id: string, emoji: string) =>
          post<{ ok: boolean }>(`/comments/${id}/reactions`, { emoji }),

@@ -121,6 +121,8 @@ function makeTeam(id: string, name: string, projects: Project[] = []): Team {
       color: '#000',
       estimateScale: 'fibonacci',
       cycleCooldownDays: 0,
+      autoCloseParent: false,
+      autoCloseChildren: false,
       members: [],
       projects,
    };
