@@ -99,6 +99,7 @@ describe('botões de opções', () => {
          'layout/headers/initiative/header.tsx',
          'layout/headers/project/header.tsx',
          'layout/headers/issue/header-nav.tsx',
+         'layout/headers/profile/header.tsx',
       ]) {
          expect(readFileSync(join(root, file), 'utf8')).toMatch(
             /<DetailPanelToggle kind="\w+" \/>/

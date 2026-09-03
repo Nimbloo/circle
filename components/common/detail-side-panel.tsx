@@ -34,6 +34,7 @@ const KIND_LABEL: Record<DetailPanelKind, string> = {
    initiative: 'Initiative',
    project: 'Project',
    issue: 'Issue',
+   member: 'Member',
 };
 
 interface DetailSidePanelProps {
