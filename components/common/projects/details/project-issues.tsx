@@ -10,6 +10,7 @@ import type { ProjectDetail } from '@/data/project-details';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
 import { useIssuesStore } from '@/store/issues-store';
+import { useViewStore } from '@/store/view-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useEffect, useMemo, useState } from 'react';
 import { DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
@@ -26,8 +27,15 @@ export default function ProjectIssues({ projectId }: ProjectIssuesProps) {
    const allIssues = useIssuesStore((s) => s.issues);
    const { filters } = useFilterStore();
    const displayOrderedStatus = useDisplayOrderedStatuses();
+   // Layout list/board da view (o "Display" do header) — antes a lista era fixa.
+   const { viewType } = useViewStore();
+   const loading = useIssuesStore((s) => s.loading);
+   const error = useIssuesStore((s) => s.error);
+   const hydrate = useIssuesStore((s) => s.hydrate);
 
    const [detail, setDetail] = useState<ProjectDetail>(() => emptyProjectDetail(projectId));
+   // Refetch do detalhe após mutação no painel (milestones) — sem ele o painel é read-only.
+   const [reloadKey, setReloadKey] = useState(0);
    useEffect(() => {
       let active = true;
       api.projects
@@ -41,7 +49,7 @@ export default function ProjectIssues({ projectId }: ProjectIssuesProps) {
       return () => {
          active = false;
       };
-   }, [projectId]);
+   }, [projectId, reloadKey]);
 
    const issues = useMemo(
       () => allIssues.filter((issue) => issue.project?.id === projectId),
@@ -73,7 +81,10 @@ export default function ProjectIssues({ projectId }: ProjectIssuesProps) {
                   issues={displayedIssues}
                   totalIssues={issues}
                   statuses={displayOrderedStatus}
-                  isViewTypeGrid={false}
+                  isViewTypeGrid={viewType === 'grid'}
+                  loading={loading}
+                  error={error}
+                  onRetry={() => hydrate()}
                />
             </div>
             <ProjectSidePanel
@@ -81,6 +92,8 @@ export default function ProjectIssues({ projectId }: ProjectIssuesProps) {
                detail={detail}
                issues={issues}
                insightsIssues={displayedIssues}
+               projectId={projectId}
+               onChanged={() => setReloadKey((k) => k + 1)}
             />
          </div>
       </div>
