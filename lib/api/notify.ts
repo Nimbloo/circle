@@ -5,6 +5,7 @@ import { createNotification } from './notifications';
 import { getUserSettings } from './settings';
 import { sendSlack } from './integrations/slack';
 import { sendEmail } from './integrations/mailer';
+import { notificationEmailHtml } from './integrations/email-templates';
 
 /** Escapa dados de usuário antes de interpolar em HTML (previne injeção). */
 export function escapeHtml(input: string): string {
@@ -22,6 +23,8 @@ export interface NotifyInput {
    recipientId: string;
    actorId?: string | null;
    content?: string | null;
+   /** Texto citado no e-mail como contexto (ex.: comentário-raiz de uma resposta). */
+   contextText?: string | null;
 }
 
 /**
@@ -50,7 +53,12 @@ export async function dispatchNotification(db: Db, input: NotifyInput): Promise<
 
       const rawContent = input.content ?? input.type;
       const summary = `[Circle] ${iss.identifier}: ${rawContent}`;
-      const html = `<p>${escapeHtml(rawContent)}</p><p><strong>${escapeHtml(iss.identifier)}</strong> — ${escapeHtml(iss.title)}</p><p><a href="https://circle.nimbloo.ai">Abrir no Circle</a></p>`;
+      const html = notificationEmailHtml({
+         content: rawContent,
+         identifier: iss.identifier,
+         issueTitle: iss.title,
+         contextText: input.contextText,
+      });
 
       // Respeita as preferências do destinatário (`settings.notifications.*`). O in-app
       // (createNotification acima) já gravou — é o histórico e ignora as prefs. Fail-open:

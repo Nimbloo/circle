@@ -20,6 +20,39 @@ export interface EmailCta {
    footnote?: string;
 }
 
+export interface NotificationEmail {
+   /** Frase da notificação ("Ana respondeu ao seu comentário"). */
+   content: string;
+   identifier: string;
+   issueTitle: string;
+   /** Texto citado como contexto (ex.: o comentário-raiz numa resposta). Opcional. */
+   contextText?: string | null;
+   url?: string;
+}
+
+const CONTEXT_MAX_CHARS = 600;
+
+/**
+ * E-mail de notificação de issue (comentário, menção, atribuição…). Quando é resposta
+ * numa thread, cita o comentário-raiz num bloco destacado — quem recebe entende a
+ * conversa sem abrir o Circle. Texto de usuário sempre escapado.
+ */
+export function notificationEmailHtml({
+   content,
+   identifier,
+   issueTitle,
+   contextText,
+   url = 'https://circle.nimbloo.ai',
+}: NotificationEmail): string {
+   const trimmed = (contextText ?? '').trim();
+   const quoted =
+      trimmed.length > CONTEXT_MAX_CHARS ? `${trimmed.slice(0, CONTEXT_MAX_CHARS)}…` : trimmed;
+   const context = quoted
+      ? `<blockquote style="margin:0 0 16px 0;padding:10px 14px;border-left:3px solid ${BRAND};background:#f7f6fa;color:#4a4754;font-size:13px;line-height:1.55;white-space:pre-wrap;">${escapeHtml(quoted)}</blockquote>`
+      : '';
+   return `<p>${escapeHtml(content)}</p>${context}<p><strong>${escapeHtml(identifier)}</strong> — ${escapeHtml(issueTitle)}</p><p><a href="${escapeHtml(url)}">Abrir no Circle</a></p>`;
+}
+
 /** Monta um e-mail HTML com header de marca + CTA em botão + fallback de link. */
 export function ctaEmailHtml({ title, intro, buttonLabel, buttonUrl, footnote }: EmailCta): string {
    const url = escapeHtml(buttonUrl);
