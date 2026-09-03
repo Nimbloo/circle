@@ -1,6 +1,6 @@
 # Pendências do Circle
 
-Estado em **2026-09-02**, com `main` e `develop` sincronizadas na v0.25.0.
+Estado em **2026-09-03**, com `main` e `develop` sincronizadas na v0.26.0.
 
 > **As [issues](https://github.com/Nimbloo/circle/issues) são a fonte da verdade** sobre
 > escopo. Este documento registra o que elas **não** capturam: bloqueios que vivem em
@@ -230,6 +230,11 @@ Também quitados os sete itens miúdos restantes da auditoria: código morto de 
 perfil de membro no `DetailSidePanel`, painel de issue no Inbox por container query, chips
 em views de projeto, `decideJoinRequest`/`postInitiativeUpdate` devolvendo a entidade,
 `vitest.config` com workers por CPU e timeout de 60 s, guards de `size` dinâmico e motion.
+
+**Promovido para produção na release
+[v0.26.0](https://github.com/Nimbloo/circle/releases/tag/v0.26.0)** (PRs #91 e #92):
+migrations 0036–0038 aplicadas no boot (39/39, incluindo o backfill de `target_date`),
+rollout `Synced/Healthy`, `healthz`/`readyz` em `200`.
 
 ## Decisões suas (não é falta de código)
 
