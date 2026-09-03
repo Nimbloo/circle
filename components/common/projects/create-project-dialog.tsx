@@ -69,7 +69,7 @@ function Chip({ active, children }: { active?: boolean; children: React.ReactNod
  * (summary/description) e `addMilestone` (cada milestone).
  */
 export function CreateProjectButton() {
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const applyProject = useWorkspaceStore((s) => s.applyProject);
    const teams = useWorkspaceStore((s) => s.teams);
    const users = useWorkspaceStore((s) => s.users);
    const initiatives = useWorkspaceStore((s) => s.initiatives);
@@ -203,7 +203,7 @@ export function CreateProjectButton() {
                   targetDate: m.targetDate || null,
                });
          }
-         await hydrate();
+         applyProject(project);
          // Fecha PRIMEIRO (o reset durante a animação de fechamento evita o flash
          // do formulário limpo antes do modal sumir).
          setOpen(false);

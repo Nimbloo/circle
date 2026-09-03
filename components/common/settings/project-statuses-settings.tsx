@@ -31,7 +31,7 @@ import { api } from '@/lib/client';
 import { cn } from '@/lib/utils';
 import { ApiError } from '@/lib/api/errors';
 import type { StatusCategory } from '@/data/status';
-import { useStatuses } from '@/store/catalog-store';
+import { useCatalogStore, useStatuses } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -92,9 +92,10 @@ function StatusDialog({
       if (!name.trim() || busy) return;
       setBusy(true);
       try {
-         if (editing) await api.statuses.update(editing.id, { name: name.trim(), color, category });
-         else await api.statuses.create({ name: name.trim(), color, category });
-         await useWorkspaceStore.getState().hydrate();
+         const dto = editing
+            ? await api.statuses.update(editing.id, { name: name.trim(), color, category })
+            : await api.statuses.create({ name: name.trim(), color, category });
+         useCatalogStore.getState().applyStatus(dto);
          onOpenChange(false);
          onSaved();
          toast.success(editing ? 'Status atualizado' : 'Status criado');
@@ -191,8 +192,7 @@ export default function ProjectStatusesSettings() {
       let cursor = 0;
       const ids = statuses.map((x) => (groupIds.has(x.id) ? movedIds[cursor++] : x.id));
       try {
-         await api.statuses.reorder(ids);
-         await useWorkspaceStore.getState().hydrate();
+         useCatalogStore.getState().setStatuses(await api.statuses.reorder(ids));
          toast.success('Ordem atualizada');
       } catch {
          toast.error('Não foi possível reordenar');
@@ -214,7 +214,7 @@ export default function ProjectStatusesSettings() {
       setDeleteBusy(true);
       try {
          await api.statuses.remove(toDelete.id);
-         await useWorkspaceStore.getState().hydrate();
+         useCatalogStore.getState().removeStatus(toDelete.id);
          setToDelete(null);
          toast.success('Status excluído');
       } catch (e) {

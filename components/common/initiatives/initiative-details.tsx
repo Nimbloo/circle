@@ -71,7 +71,7 @@ const GROUP_ORDER: { key: string; label: string; match: (project: Project) => bo
 function ProjectsSection({ initiative }: { initiative: Initiative }) {
    const { orgId } = useParams<{ orgId: string }>();
    const allProjects = useWorkspaceStore((s) => s.projects);
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const applyInitiative = useWorkspaceStore((s) => s.applyInitiative);
    const linked = new Set(initiative.projectIds);
    const projects = allProjects.filter((p) => linked.has(p.id));
    const groups = GROUP_ORDER.map((group) => ({
@@ -85,8 +85,7 @@ function ProjectsSection({ initiative }: { initiative: Initiative }) {
 
    const setProjects = async (projectIds: string[]) => {
       try {
-         await api.initiatives.update(initiative.id, { projectIds });
-         await hydrate();
+         applyInitiative(await api.initiatives.update(initiative.id, { projectIds }));
       } catch {
          toast.error('Could not update the projects');
       }

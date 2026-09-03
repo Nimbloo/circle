@@ -26,11 +26,11 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 /**
- * Cria um cycle via api.cycles.create e re-hidrata o workspace.
+ * Cria um cycle via api.cycles.create e aplica o DTO no workspace.
  * Campos obrigatórios da rota: name, startDate, endDate (team vem da rota/seleção).
  */
 export function CreateCycleButton({ defaultTeamId }: { defaultTeamId?: string }) {
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const applyCycle = useWorkspaceStore((s) => s.applyCycle);
    const teams = useWorkspaceStore((s) => s.teams);
 
    const [open, setOpen] = useState(false);
@@ -52,8 +52,9 @@ export function CreateCycleButton({ defaultTeamId }: { defaultTeamId?: string })
       }
       setBusy(true);
       try {
-         await api.cycles.create(teamId, { teamId, name: name.trim(), startDate, endDate });
-         await hydrate();
+         applyCycle(
+            await api.cycles.create(teamId, { teamId, name: name.trim(), startDate, endDate })
+         );
          setName('');
          setStartDate('');
          setEndDate('');

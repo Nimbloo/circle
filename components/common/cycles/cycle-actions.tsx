@@ -51,7 +51,7 @@ function EditCycleDialog({
    open: boolean;
    onOpenChange: (v: boolean) => void;
 }) {
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const applyCycle = useWorkspaceStore((s) => s.applyCycle);
    const [busy, setBusy] = useState(false);
    const [name, setName] = useState(cycle.name);
    const [status, setStatus] = useState<CycleStatus>(cycle.status);
@@ -60,7 +60,7 @@ function EditCycleDialog({
    const [capacity, setCapacity] = useState(String(cycle.capacity));
 
    // Ressincroniza o form com o cycle atual ao (re)abrir — o useState inicial só
-   // roda no mount, então sem isto reabrir após hydrate mostraria valores stale.
+   // roda no mount, então sem isto reabrir após o apply mostraria valores stale.
    useEffect(() => {
       if (open) {
          setName(cycle.name);
@@ -79,14 +79,14 @@ function EditCycleDialog({
       }
       setBusy(true);
       try {
-         await api.cycles.update(cycle.id, {
+         const dto = await api.cycles.update(cycle.id, {
             name: name.trim(),
             status,
             startDate,
             endDate,
             capacity: Number(capacity) || 0,
          });
-         await hydrate();
+         applyCycle(dto);
          onOpenChange(false);
          toast.success('Cycle updated');
       } catch {
@@ -171,7 +171,7 @@ function EditCycleDialog({
 
 /** Dropdown de ações (editar / deletar) de um cycle. */
 export function CycleActions({ cycle }: { cycle: Cycle }) {
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const removeCycleLocal = useWorkspaceStore((s) => s.removeCycleLocal);
    const [editOpen, setEditOpen] = useState(false);
    const [confirmOpen, setConfirmOpen] = useState(false);
    const [busy, setBusy] = useState(false);
@@ -181,7 +181,7 @@ export function CycleActions({ cycle }: { cycle: Cycle }) {
       setBusy(true);
       try {
          await api.cycles.remove(cycle.id);
-         await hydrate();
+         removeCycleLocal(cycle.id);
          toast.success('Cycle deleted');
          setConfirmOpen(false);
       } catch {
