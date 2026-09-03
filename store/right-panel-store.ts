@@ -7,15 +7,10 @@ import { useViewKey } from '@/lib/view-key';
  * - 'insights': analytics panel (issue count by status, segmented by priority)
  * - 'cycle-details': current cycle summary (progress chart + breakdowns)
  * - 'breakdown': Labels/Priority/Projects/Teams counters (My issues)
- * - 'hidden': used by pages whose default panel is visible (profile pages)
- *   to collapse the side panel entirely
+ * Painéis de propriedades das páginas de detalhe (initiative/project/issue/member)
+ * vivem no `detail-panel-store`, não aqui.
  */
-export type RightPanelType =
-   | 'insights'
-   | 'cycle-details'
-   | 'breakdown'
-   | 'initiatives-breakdown'
-   | 'hidden';
+export type RightPanelType = 'insights' | 'cycle-details' | 'breakdown' | 'initiatives-breakdown';
 
 /** API pública, já escopada à rota atual (ver `useRightPanelStore`). */
 export interface RightPanelState {

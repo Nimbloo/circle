@@ -13,10 +13,21 @@ describe('initiative updates (paridade Linear)', () => {
       const [before] = await db.select().from(initiative).where(eq(initiative.id, fx.initiativeId));
       expect(before.healthId).toBe('on-track'); // fixture
 
-      await postInitiativeUpdate(db, fx.initiativeId, fx.ownerId, {
-         health: 'off-track',
-         blocks: [{ type: 'paragraph', text: 'atrasou' }],
-      });
+      const { update, initiative: dto } = await postInitiativeUpdate(
+         db,
+         fx.initiativeId,
+         fx.ownerId,
+         {
+            health: 'off-track',
+            blocks: [{ type: 'paragraph', text: 'atrasou' }],
+         }
+      );
+      // Devolve o update E a initiative já com o health propagado (o cliente aplica no
+      // store sem re-hidratar o workspace).
+      expect(update.health).toBe('off-track');
+      expect(update.author?.id).toBe(fx.ownerId);
+      expect(dto.id).toBe(fx.initiativeId);
+      expect(dto.health.id).toBe('off-track');
 
       const [after] = await db.select().from(initiative).where(eq(initiative.id, fx.initiativeId));
       expect(after.healthId).toBe('off-track'); // veio do último update

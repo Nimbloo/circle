@@ -1,5 +1,6 @@
 'use client';
 
+import { DetailPanelToggle, DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 import { IssueFilterTrigger } from '@/components/common/issues/issue-filter-trigger';
 import {
    HeaderActions,
@@ -16,7 +17,7 @@ import { cn } from '@/lib/utils';
 import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useSearchStore } from '@/store/search-store';
-import { BarChart3, ChevronRight, PanelRight, SearchIcon } from 'lucide-react';
+import { BarChart3, ChevronRight, SearchIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseAsString, useQueryState } from 'nuqs';
@@ -172,16 +173,8 @@ export default function Header({ member }: { member: User }) {
                >
                   <BarChart3 className="size-4" />
                </Button>
-               <Button
-                  size="xs"
-                  variant={
-                     openPanel !== 'hidden' && openPanel !== 'insights' ? 'secondary' : 'ghost'
-                  }
-                  onClick={() => togglePanel('hidden')}
-                  aria-label="Toggle profile panel"
-               >
-                  <PanelRight className="size-4" />
-               </Button>
+               <DetailPanelToggle kind="member" />
+               <DetailSidePanelTrigger kind="member" />
                <DisplayOptions />
             </HeaderActions>
          </ViewBar>

@@ -102,6 +102,28 @@ export function viewFilterToFilters(filter: ViewFilter): FiltersState {
    return filters;
 }
 
+/**
+ * Versão para PROJECT views: só o que `filterProjectsForView` honra (status, tipo de
+ * status, prioridade, labels) — alimenta os chips somente leitura com as colunas de
+ * `project-filter-columns`. `hasProject`/`unassigned` não se aplicam a projeto.
+ */
+export function projectViewFilterToFilters(filter: ViewFilter): FiltersState {
+   const filters: FiltersState = [
+      ...optionFilter('status', filter.statusIds),
+      ...optionFilter('statusType', filter.statusCategories),
+      ...optionFilter('priority', filter.priorityIds),
+   ];
+   if (filter.labelIds?.length) {
+      filters.push({
+         columnId: 'labels',
+         type: 'multiOption',
+         operator: filter.labelIds.length > 1 ? 'include any of' : 'include',
+         values: [...filter.labelIds],
+      });
+   }
+   return filters;
+}
+
 /** Apply an issue view's declarative filter to the issue list (same engine as the filter bar). */
 export function filterIssuesForView(view: View, source: Issue[] = issues): Issue[] {
    return applyIssueFilters(source, viewFilterToFilters(view.filter));

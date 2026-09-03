@@ -603,7 +603,7 @@ function Activity({ initiativeId }: { initiativeId: string }) {
    const [health, setHealth] = useState<'on-track' | 'at-risk' | 'off-track'>('on-track');
    const [text, setText] = useState('');
    const [busy, setBusy] = useState(false);
-   const hydrateWs = useWorkspaceStore((s) => s.hydrate);
+   const applyInitiative = useWorkspaceStore((s) => s.applyInitiative);
 
    useEffect(() => {
       let active = true;
@@ -621,10 +621,13 @@ function Activity({ initiativeId }: { initiativeId: string }) {
       setBusy(true);
       try {
          const blocks = text.trim() ? [{ type: 'paragraph' as const, text: text.trim() }] : [];
-         const dto = await api.initiatives.postUpdate(initiativeId, { health, blocks });
-         setUpdates((prev) => [dto, ...prev]);
+         const { update, initiative } = await api.initiatives.postUpdate(initiativeId, {
+            health,
+            blocks,
+         });
+         setUpdates((prev) => [update, ...prev]);
          setText('');
-         await hydrateWs(); // reflete o novo health da initiative no workspace
+         applyInitiative(initiative); // reflete o novo health da initiative no workspace
          toast.success('Update publicado');
       } catch {
          toast.error('Não foi possível publicar o update');

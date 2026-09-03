@@ -20,7 +20,7 @@ const layout = {
       visibility: { inbox: 'always', reviews: 'badged', members: 'never' },
       order: { personal: ['inbox', 'my-issues', 'reviews'], workspace: ['projects', 'teams'] },
    },
-   detailPanels: { openByKind: { initiative: true, project: false, issue: true } },
+   detailPanels: { openByKind: { initiative: true, project: false, issue: true, member: true } },
    inboxListWidth: 360,
 };
 

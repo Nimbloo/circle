@@ -58,6 +58,11 @@ export function LabelSelector({ selectedLabels, onChange }: LabelSelectorProps) 
                   variant="secondary"
                   role="combobox"
                   aria-expanded={open}
+                  aria-label={
+                     selectedLabels.length > 0
+                        ? `Labels: ${selectedLabels.map((label) => label.name).join(', ')}`
+                        : 'Add labels'
+                  }
                >
                   <TagIcon className="size-4" />
                   {selectedLabels.length > 0 && (

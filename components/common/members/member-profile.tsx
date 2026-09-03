@@ -1,5 +1,6 @@
 'use client';
 
+import { DetailSidePanel } from '@/components/common/detail-side-panel';
 import { applyIssueFilters } from '@/components/common/issues/issue-filter-columns';
 import { GroupedIssuesView } from '@/components/common/issues/grouped-issues-view';
 import { InsightsPanel } from '@/components/common/issues/insights-panel';
@@ -95,7 +96,9 @@ function useClientTimes(member: User) {
 /**
  * Member profile (Linear-style): assigned / created issues grouped by
  * status, with a right panel showing identity, teams, projects and
- * per-label / priority / project / team breakdowns.
+ * per-label / priority / project / team breakdowns. O painel é o `DetailSidePanel`
+ * compartilhado (`kind="member"`): 400 px no desktop, Sheet no mobile, aberto/fechado
+ * pelo `detail-panel-store` — o Insights (`right-panel-store`) o substitui enquanto ativo.
  */
 export default function MemberProfile({ member }: { member: User }) {
    const issues = useIssuesStore((s) => s.issues);
@@ -231,111 +234,121 @@ export default function MemberProfile({ member }: { member: User }) {
             )}
 
             {/* Profile panel */}
-            {openPanel !== 'hidden' && openPanel !== 'insights' && (
-               <aside className="hidden lg:flex flex-col w-[340px] shrink-0 border-l h-full overflow-y-auto bg-container">
-                  <div className="px-5 pt-5 pb-4 border-b">
-                     <div className="flex items-center gap-3">
-                        <div className="relative">
-                           <Avatar className="size-11">
-                              <AvatarImage src={member.avatarUrl || undefined} alt={member.name} />
-                              <AvatarFallback>{member.name[0]}</AvatarFallback>
-                           </Avatar>
-                           <span
-                              className="border-background absolute -end-0.5 -bottom-0.5 size-3 rounded-full border-2"
-                              style={{ backgroundColor: statusUserColors[member.status] }}
-                           />
-                        </div>
-                        <div className="min-w-0">
-                           <h2 className="text-base font-semibold truncate">{member.name}</h2>
-                           <p className="text-xs text-muted-foreground truncate">
-                              {member.name} · {presenceLabel[member.status]}
-                           </p>
-                        </div>
-                     </div>
-                  </div>
-
-                  <div className="px-5 py-4 border-b flex flex-col gap-2.5 text-sm">
-                     <div className="flex items-start justify-between gap-4">
-                        <span className="text-muted-foreground shrink-0">Email</span>
-                        <span className="truncate">{member.email}</span>
-                     </div>
-                     <div className="flex items-start justify-between gap-4">
-                        <span className="text-muted-foreground shrink-0">Local time</span>
-                        <span>{localTime ?? '—'}</span>
-                     </div>
-                     <div className="flex items-start justify-between gap-4">
-                        <span className="text-muted-foreground shrink-0">Joined</span>
-                        <span>{joinedAgo ?? '—'}</span>
-                     </div>
-                     <div className="flex items-center justify-between gap-4">
-                        <span className="text-muted-foreground shrink-0">Role</span>
-                        <RoleControl userId={member.id} role={member.role} />
-                     </div>
-                     <div className="flex items-start justify-between gap-4">
-                        <span className="text-muted-foreground shrink-0 pt-0.5">Teams</span>
-                        <div className="flex flex-wrap justify-end gap-1.5">
-                           {memberTeams.map((team) => (
+            {openPanel !== 'insights' && (
+               <DetailSidePanel
+                  kind="member"
+                  title="Member profile"
+                  description="Identity, teams, projects and issue breakdowns of this member."
+                  className="flex-col"
+               >
+                  <div className="flex h-full w-full flex-col overflow-y-auto">
+                     <div className="px-5 pt-5 pb-4 border-b">
+                        <div className="flex items-center gap-3">
+                           <div className="relative">
+                              <Avatar className="size-11">
+                                 <AvatarImage
+                                    src={member.avatarUrl || undefined}
+                                    alt={member.name}
+                                 />
+                                 <AvatarFallback>{member.name[0]}</AvatarFallback>
+                              </Avatar>
                               <span
-                                 key={team.id}
-                                 className="inline-flex items-center gap-1 text-xs bg-accent rounded-md px-1.5 py-0.5"
-                              >
-                                 {team.icon} {team.name}
-                              </span>
-                           ))}
+                                 className="border-background absolute -end-0.5 -bottom-0.5 size-3 rounded-full border-2"
+                                 style={{ backgroundColor: statusUserColors[member.status] }}
+                              />
+                           </div>
+                           <div className="min-w-0">
+                              <h2 className="text-base font-semibold truncate">{member.name}</h2>
+                              <p className="text-xs text-muted-foreground truncate">
+                                 {member.name} · {presenceLabel[member.status]}
+                              </p>
+                           </div>
                         </div>
                      </div>
-                     <div className="flex items-start justify-between gap-4">
-                        <span className="text-muted-foreground shrink-0 pt-0.5">Projects</span>
-                        <div className="flex flex-col items-end gap-1 min-w-0">
-                           {memberProjects.slice(0, 4).map((project) => (
-                              <span
-                                 key={project.id}
-                                 className="inline-flex items-center gap-1.5 text-xs min-w-0"
-                              >
-                                 <project.icon className="size-3.5 text-muted-foreground shrink-0" />
-                                 <span className="truncate max-w-44">{project.name}</span>
-                              </span>
-                           ))}
-                           {memberProjects.length > 4 && (
-                              <span className="text-xs text-muted-foreground">
-                                 +{memberProjects.length - 4} more
-                              </span>
-                           )}
-                        </div>
-                     </div>
-                  </div>
 
-                  <div className="px-5 py-4">
-                     <Tabs defaultValue="labels">
-                        <TabsList className="h-8 bg-transparent gap-1 p-0">
-                           <TabsTrigger value="labels" className="text-xs px-2.5 rounded-full">
-                              Labels
-                           </TabsTrigger>
-                           <TabsTrigger value="priority" className="text-xs px-2.5 rounded-full">
-                              Priority
-                           </TabsTrigger>
-                           <TabsTrigger value="projects" className="text-xs px-2.5 rounded-full">
-                              Projects
-                           </TabsTrigger>
-                           <TabsTrigger value="teams" className="text-xs px-2.5 rounded-full">
-                              Teams
-                           </TabsTrigger>
-                        </TabsList>
-                        <TabsContent value="labels">
-                           <BreakdownList rows={labelRows} />
-                        </TabsContent>
-                        <TabsContent value="priority">
-                           <BreakdownList rows={priorityRows} />
-                        </TabsContent>
-                        <TabsContent value="projects">
-                           <BreakdownList rows={projectRows} />
-                        </TabsContent>
-                        <TabsContent value="teams">
-                           <BreakdownList rows={teamRows} />
-                        </TabsContent>
-                     </Tabs>
+                     <div className="px-5 py-4 border-b flex flex-col gap-2.5 text-sm">
+                        <div className="flex items-start justify-between gap-4">
+                           <span className="text-muted-foreground shrink-0">Email</span>
+                           <span className="truncate">{member.email}</span>
+                        </div>
+                        <div className="flex items-start justify-between gap-4">
+                           <span className="text-muted-foreground shrink-0">Local time</span>
+                           <span>{localTime ?? '—'}</span>
+                        </div>
+                        <div className="flex items-start justify-between gap-4">
+                           <span className="text-muted-foreground shrink-0">Joined</span>
+                           <span>{joinedAgo ?? '—'}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                           <span className="text-muted-foreground shrink-0">Role</span>
+                           <RoleControl userId={member.id} role={member.role} />
+                        </div>
+                        <div className="flex items-start justify-between gap-4">
+                           <span className="text-muted-foreground shrink-0 pt-0.5">Teams</span>
+                           <div className="flex flex-wrap justify-end gap-1.5">
+                              {memberTeams.map((team) => (
+                                 <span
+                                    key={team.id}
+                                    className="inline-flex items-center gap-1 text-xs bg-accent rounded-md px-1.5 py-0.5"
+                                 >
+                                    {team.icon} {team.name}
+                                 </span>
+                              ))}
+                           </div>
+                        </div>
+                        <div className="flex items-start justify-between gap-4">
+                           <span className="text-muted-foreground shrink-0 pt-0.5">Projects</span>
+                           <div className="flex flex-col items-end gap-1 min-w-0">
+                              {memberProjects.slice(0, 4).map((project) => (
+                                 <span
+                                    key={project.id}
+                                    className="inline-flex items-center gap-1.5 text-xs min-w-0"
+                                 >
+                                    <project.icon className="size-3.5 text-muted-foreground shrink-0" />
+                                    <span className="truncate max-w-44">{project.name}</span>
+                                 </span>
+                              ))}
+                              {memberProjects.length > 4 && (
+                                 <span className="text-xs text-muted-foreground">
+                                    +{memberProjects.length - 4} more
+                                 </span>
+                              )}
+                           </div>
+                        </div>
+                     </div>
+
+                     <div className="px-5 py-4">
+                        <Tabs defaultValue="labels">
+                           <TabsList className="h-8 bg-transparent gap-1 p-0">
+                              <TabsTrigger value="labels" className="text-xs px-2.5 rounded-full">
+                                 Labels
+                              </TabsTrigger>
+                              <TabsTrigger value="priority" className="text-xs px-2.5 rounded-full">
+                                 Priority
+                              </TabsTrigger>
+                              <TabsTrigger value="projects" className="text-xs px-2.5 rounded-full">
+                                 Projects
+                              </TabsTrigger>
+                              <TabsTrigger value="teams" className="text-xs px-2.5 rounded-full">
+                                 Teams
+                              </TabsTrigger>
+                           </TabsList>
+                           <TabsContent value="labels">
+                              <BreakdownList rows={labelRows} />
+                           </TabsContent>
+                           <TabsContent value="priority">
+                              <BreakdownList rows={priorityRows} />
+                           </TabsContent>
+                           <TabsContent value="projects">
+                              <BreakdownList rows={projectRows} />
+                           </TabsContent>
+                           <TabsContent value="teams">
+                              <BreakdownList rows={teamRows} />
+                           </TabsContent>
+                        </Tabs>
+                     </div>
                   </div>
-               </aside>
+               </DetailSidePanel>
             )}
          </div>
       </div>

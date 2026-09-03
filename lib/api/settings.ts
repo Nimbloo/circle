@@ -4,6 +4,7 @@ import type { Db } from '@/db';
 import { userSettings } from '@/db/schema';
 import { ApiError } from './errors';
 import { MAX_SETTINGS_BYTES } from '@/lib/settings-limits';
+import type { DetailPanelKind } from '@/store/detail-panel-store';
 
 export { MAX_SETTINGS_BYTES };
 
@@ -125,6 +126,14 @@ const ViewDisplaySchema = z
 
 const SidebarVisibilitySchema = z.enum(['always', 'badged', 'never']);
 
+/** Espelha `DetailPanelKind` (store/detail-panel-store.ts); chave nova entra nos dois. */
+const DetailPanelKindSchema = z.enum([
+   'initiative',
+   'project',
+   'issue',
+   'member',
+] as const satisfies readonly DetailPanelKind[]);
+
 const LayoutSchema = z
    .object({
       displayByView: z.record(z.string(), ViewDisplaySchema).optional(),
@@ -142,7 +151,7 @@ const LayoutSchema = z
          .strict()
          .optional(),
       detailPanels: z
-         .object({ openByKind: z.record(z.string(), z.boolean()) })
+         .object({ openByKind: z.record(DetailPanelKindSchema, z.boolean()) })
          .strict()
          .optional(),
       inboxListWidth: z.number().nonnegative().optional(),
