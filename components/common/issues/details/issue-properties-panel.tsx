@@ -30,6 +30,7 @@ import { LabelSelector } from '@/components/layout/sidebar/create-new-issue/labe
 import { EstimateSelector } from '@/components/layout/sidebar/create-new-issue/estimate-selector';
 import { DueDateSelector } from '@/components/layout/sidebar/create-new-issue/due-date-selector';
 import { IssueRefRow } from './content-blocks';
+import { ParentIssueProperty } from './parent-issue';
 import { RelationEditor } from './relation-editor';
 
 /** Selector de ciclo do time da issue (reusa updateIssue({cycleId}) do store). */
@@ -251,6 +252,20 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
                </div>
             </div>
          </Section>
+
+         {(onChanged || detail.parent) && (
+            <Section title="Parent">
+               {onChanged ? (
+                  <ParentIssueProperty
+                     issue={issue}
+                     parent={detail.parent ?? null}
+                     onChanged={onChanged}
+                  />
+               ) : (
+                  detail.parent && <IssueRefRow identifier={detail.parent.identifier} />
+               )}
+            </Section>
+         )}
 
          <Section title="Labels">
             <div className="flex items-center flex-wrap gap-1.5">

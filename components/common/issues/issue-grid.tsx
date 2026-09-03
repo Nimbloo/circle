@@ -16,6 +16,7 @@ import { PrioritySelector } from './priority-selector';
 import { ProjectBadge } from './project-badge';
 import { StatusSelector } from './status-selector';
 import { SubIssueProgress } from './sub-issue-progress';
+import { ParentIssueChip } from './parent-issue-chip';
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { IssueContextMenu } from './issue-context-menu';
 
@@ -179,6 +180,9 @@ export function IssueGrid({ issue, orderedIssues, layout = true }: IssueGridProp
                            className="min-w-0"
                         >
                            <h3 className="line-clamp-2 text-[13px] font-medium leading-4">
+                              {issue.parentIdentifier && (
+                                 <ParentIssueChip identifier={issue.parentIdentifier} />
+                              )}
                               {issue.title}
                            </h3>
                         </Link>

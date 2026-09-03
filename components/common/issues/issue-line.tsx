@@ -15,6 +15,7 @@ import { PrioritySelector } from './priority-selector';
 import { ProjectBadge } from './project-badge';
 import { StatusSelector } from './status-selector';
 import { SubIssueProgress } from './sub-issue-progress';
+import { ParentIssueChip } from './parent-issue-chip';
 import { estimateLabel, normalizeScale } from '@/data/estimate-scales';
 import { motion } from 'motion/react';
 import { memo } from 'react';
@@ -79,6 +80,9 @@ function IssueLineComponent({ issue, layoutId = false }: { issue: Issue; layoutI
                   href={`/${orgId ?? 'nimbloo'}/issue/${issue.identifier}`}
                   className="min-w-0 flex items-center justify-start mr-1 ml-0.5"
                >
+                  {issue.parentIdentifier && (
+                     <ParentIssueChip identifier={issue.parentIdentifier} />
+                  )}
                   <span className="truncate text-[13px] font-medium">{issue.title}</span>
                </Link>
                <div className="flex items-center justify-end gap-2 ml-auto sm:w-fit">

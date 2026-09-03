@@ -8,23 +8,72 @@ import { api } from '@/lib/client';
 import { blocksToDoc, type EditorDoc } from '@/lib/editor-doc';
 import { ISSUE_CHANGED_EVENT } from '@/lib/use-live-sync';
 import { useIssuesStore } from '@/store/issues-store';
+import { useCurrentIssueStore } from '@/store/current-issue-store';
+import { useStatuses } from '@/store/catalog-store';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { Plus } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DetailSidePanel, DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 import { BlockEditor } from '@/components/common/editor/block-editor';
-import { AssigneeUser } from '../assignee-user';
 import { ActivityFeed } from './activity-feed';
 import { IssuePropertiesPanel } from './issue-properties-panel';
 import { IssueDetailSkeleton } from './issue-detail-skeleton';
-import { RelationEditor } from './relation-editor';
+import { IssuePicker } from './issue-picker';
+import { useParentCandidatesExclusion, useSetParent } from './parent-issue';
 import { SubIssueCreate } from './sub-issue-create';
+import { SubIssueProgress } from '../sub-issue-progress';
 
 interface IssueDetailViewProps {
    issue: Issue;
    /** Conteúdo extra no topo da coluna principal (ex.: contexto da notificação no inbox). */
    banner?: ReactNode;
+   /** Notifica cada detail carregado (a página publica no current-issue-store p/ o header). */
+   onDetailLoaded?: (detail: IssueDetail) => void;
+}
+
+/**
+ * "Add existing issue" (#95): escolhe uma issue (store + busca no servidor) e a torna
+ * filha desta — `parentId` na escolhida. Exclui a própria issue, as filhas atuais e as
+ * descendentes conhecidas (o servidor ainda barra ciclo com 400).
+ */
+function AddExistingSubIssue({
+   issue,
+   childIds,
+   onChanged,
+}: {
+   issue: Issue;
+   childIds: string[];
+   onChanged: () => void;
+}) {
+   const [open, setOpen] = useState(false);
+   const setParent = useSetParent();
+   const excludeIds = useParentCandidatesExclusion(issue.id, childIds);
+   return (
+      <Popover open={open} onOpenChange={setOpen}>
+         <PopoverTrigger asChild>
+            <button
+               type="button"
+               className="flex items-center gap-1.5 h-8 px-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+               <Plus className="size-4" />
+               Add existing issue
+            </button>
+         </PopoverTrigger>
+         <PopoverContent className="border-input w-80 p-0" align="start">
+            <IssuePicker
+               excludeIds={excludeIds}
+               onSelect={async (child) => {
+                  setOpen(false);
+                  if (await setParent(child.id, issue.id)) onChanged();
+               }}
+            />
+         </PopoverContent>
+      </Popover>
+   );
 }
 
 /**
@@ -37,10 +86,10 @@ interface IssueDetailViewProps {
  * aberto/fechado pelo `detail-panel-store`), o mesmo de initiative e project; o
  * conteúdo ocupa a largura restante, centralizado nos 791px medidos no Linear.
  */
-export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
+export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailViewProps) {
    const { orgId } = useParams<{ orgId: string }>();
-   const issues = useIssuesStore((s) => s.issues);
    const inStore = useIssuesStore((s) => s.issues.some((i) => i.id === issue.id));
+   const statuses = useStatuses();
 
    const [detail, setDetail] = useState<IssueDetail | null>(null);
    const [loading, setLoading] = useState(true);
@@ -76,7 +125,9 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
       Promise.all([api.issues.detail(detailIssueId), api.issues.activity(detailIssueId)])
          .then(([detailDto, activity]) => {
             if (active) {
-               setDetail(adaptIssueDetail(detailDto, activity));
+               const adapted = adaptIssueDetail(detailDto, activity);
+               setDetail(adapted);
+               onDetailLoaded?.(adapted);
                setDescriptionDoc(
                   detailDto.descriptionDoc ?? blocksToDoc(textToBlocks(detailDto.description))
                );
@@ -91,6 +142,7 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
       return () => {
          active = false;
       };
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- onDetailLoaded é callback estável do pai
    }, [detailIssueId, reloadKey]);
 
    // Realtime: quando o SSE avisa que esta issue mudou (comment/reaction/relation de
@@ -116,9 +168,13 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
       );
    }
 
-   const subIssues = (detail.subIssueIds ?? [])
-      .map((id) => issues.find((candidate) => candidate.id === id))
-      .filter((candidate) => candidate !== undefined);
+   // Filhas vêm resolvidas do servidor (detail.subIssues) — sem cruzar com o store, então
+   // uma filha fora do board (outro time, não hidratado) também aparece.
+   const subIssues = detail.subIssues ?? [];
+   const statusById = new Map(statuses.map((s) => [s.id, s]));
+   const doneCount = subIssues.filter(
+      (s) => statusById.get(s.statusId)?.category === 'completed'
+   ).length;
 
    // Persiste o título: pelo store (optimistic+rollback) quando a issue está no board,
    // ou direto na API + override local quando é deep-link frio (fora do store).
@@ -196,60 +252,66 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
                   />
                </div>
 
-               {/* Sub-issues */}
-               <div className="mt-8">
+               {/* Sub-issues (#95) */}
+               <section className="mt-8" aria-label="Sub-issues">
                   {subIssues.length > 0 && (
                      <>
-                        <h2 className="text-sm font-medium mb-1">
-                           Sub-issues{' '}
-                           <span className="text-muted-foreground">
-                              {
-                                 subIssues.filter(
-                                    (subIssue) => subIssue.status.category === 'completed'
-                                 ).length
-                              }
-                              /{subIssues.length}
-                           </span>
+                        <h2 className="mb-1 flex items-center gap-2 text-sm font-medium">
+                           Sub-issues
+                           <SubIssueProgress count={subIssues.length} done={doneCount} />
                         </h2>
                         <div className="flex flex-col border-t border-border/50 mb-2">
-                           {subIssues.map((subIssue) => (
-                              <Link
-                                 key={subIssue.id}
-                                 href={`/${orgId ?? 'nimbloo'}/issue/${subIssue.identifier}`}
-                                 className="flex items-center gap-2.5 h-10 px-1 border-b border-border/50 hover:bg-sidebar/50 text-sm min-w-0"
-                              >
-                                 <subIssue.status.icon />
-                                 <span className="text-muted-foreground shrink-0 text-xs font-medium">
-                                    {subIssue.identifier}
-                                 </span>
-                                 <span className="truncate font-medium">{subIssue.title}</span>
-                                 <span className="ml-auto shrink-0">
-                                    <AssigneeUser user={subIssue.assignee} issueId={subIssue.id} />
-                                 </span>
-                              </Link>
-                           ))}
+                           {subIssues.map((subIssue) => {
+                              const status = statusById.get(subIssue.statusId);
+                              const StatusIcon = status?.icon;
+                              return (
+                                 <Link
+                                    key={subIssue.id}
+                                    href={`/${orgId ?? 'nimbloo'}/issue/${subIssue.identifier}`}
+                                    className="flex items-center gap-2.5 h-10 px-1 border-b border-border/50 hover:bg-sidebar/50 text-sm min-w-0"
+                                 >
+                                    {StatusIcon ? (
+                                       <StatusIcon />
+                                    ) : (
+                                       <span className="size-3.5 rounded-full border border-border shrink-0" />
+                                    )}
+                                    <span className="text-muted-foreground shrink-0 text-xs font-medium tabular-nums">
+                                       {subIssue.identifier}
+                                    </span>
+                                    <span className="truncate font-medium">{subIssue.title}</span>
+                                    <span className="ml-auto shrink-0">
+                                       {subIssue.assignee ? (
+                                          <Avatar className="size-5" title={subIssue.assignee.name}>
+                                             <AvatarImage
+                                                src={subIssue.assignee.avatarUrl ?? undefined}
+                                                alt={subIssue.assignee.name}
+                                             />
+                                             <AvatarFallback className="text-[10px]">
+                                                {subIssue.assignee.name[0]}
+                                             </AvatarFallback>
+                                          </Avatar>
+                                       ) : (
+                                          <span className="block size-5 rounded-full border border-dashed border-border" />
+                                       )}
+                                    </span>
+                                 </Link>
+                              );
+                           })}
                         </div>
                      </>
                   )}
-                  {/* Add-only: a lista rica acima já exibe os subs; o picker cria a relação
-                      `sub` (filtrando os já vinculados via relatedIds) e refetch no onChanged. */}
                   <div className="flex flex-col gap-0.5">
                      <SubIssueCreate
                         parentId={issue.id}
-                        teamId={issue.teamId}
-                        projectId={issue.project?.id ?? null}
                         onCreated={() => setReloadKey((k) => k + 1)}
                      />
-                     <RelationEditor
-                        issueId={issue.id}
-                        kind="sub"
-                        relatedIds={detail.subIssueIds ?? []}
-                        addLabel="Link existing issue"
-                        renderList={false}
+                     <AddExistingSubIssue
+                        issue={issue}
+                        childIds={subIssues.map((s) => s.id)}
                         onChanged={() => setReloadKey((k) => k + 1)}
                      />
                   </div>
-               </div>
+               </section>
 
                <div className="border-t border-border/60 mt-8" />
 
@@ -286,6 +348,8 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
 export default function IssueDetails() {
    const { orgId, issueId } = useParams<{ orgId: string; issueId: string }>();
    const issues = useIssuesStore((s) => s.issues);
+   const setCurrent = useCurrentIssueStore((s) => s.setCurrent);
+   const clearCurrent = useCurrentIssueStore((s) => s.clear);
 
    // Issue do store (se já hidratado) — reusa sem request.
    const storeIssue = useMemo(
@@ -298,6 +362,13 @@ export default function IssueDetails() {
    const [fetchedIssue, setFetchedIssue] = useState<Issue | null | undefined>(undefined);
    const issue = storeIssue ?? fetchedIssue ?? undefined;
    const resolvingIssue = !storeIssue && fetchedIssue === undefined;
+
+   // Publica a issue atual para o header (breadcrumb com pai, título, ações) — mesma
+   // fonte que a página usa; limpa ao sair da rota.
+   useEffect(() => {
+      if (issue) setCurrent(issue, useCurrentIssueStore.getState().detail);
+   }, [issue, setCurrent]);
+   useEffect(() => () => clearCurrent(), [clearCurrent]);
 
    useEffect(() => {
       if (storeIssue) return; // já temos a issue no store
@@ -331,5 +402,5 @@ export default function IssueDetails() {
       );
    }
 
-   return <IssueDetailView issue={issue} />;
+   return <IssueDetailView issue={issue} onDetailLoaded={(detail) => setCurrent(issue, detail)} />;
 }
