@@ -21,7 +21,8 @@
 - **Última verificação (2026-09-02, Claude):** cada grupo verde isolado (typecheck, lint,
   suíte); integrado A+B+C+E: 82 arquivos / 464 testes verdes; após D: typecheck ok, suíte +
   build finais em execução (ver PR).
-- **Próximo passo:** smoke no Chrome, `docs/PENDENCIAS.md`, PR para `develop`, release.
+- **Próximo passo:** nenhum — plano **concluído**: mergeado em `develop` (#87) e em
+  produção na v0.25.0 (#88; migration 0035 aplicada, rollout Synced/Healthy).
 - **Bloqueios / decisões pendentes:** nenhum.
 
 ## Task A — Display por view, layout no servidor, perf (itens 1, 4, 7)
@@ -55,4 +56,4 @@
 ## Task F — Integração e entrega
 
 - [x] Merge dos cinco branches; typecheck/lint/test/build; smoke no Chrome.
-- [ ] `docs/PENDENCIAS.md`, PR para `develop`, release.
+- [x] `docs/PENDENCIAS.md`, PR para `develop`, release.
