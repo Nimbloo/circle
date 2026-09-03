@@ -51,7 +51,7 @@ function RenameViewDialog({
    open: boolean;
    onOpenChange: (v: boolean) => void;
 }) {
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const applyView = useWorkspaceStore((s) => s.applyView);
    const [busy, setBusy] = useState(false);
    const [name, setName] = useState(view.name);
    const [description, setDescription] = useState(view.description ?? '');
@@ -61,12 +61,12 @@ function RenameViewDialog({
       if (!name.trim() || busy) return;
       setBusy(true);
       try {
-         await api.views.update(view.id, {
+         const dto = await api.views.update(view.id, {
             name: name.trim(),
             description: description.trim() || null,
             filter,
          });
-         await hydrate();
+         applyView(dto);
          onOpenChange(false);
          toast.success('View updated');
       } catch (e) {
@@ -116,7 +116,8 @@ function RenameViewDialog({
 
 /** Dropdown de ações (renomear / deletar) de uma saved view. */
 export function ViewActions({ view }: { view: View }) {
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const applyView = useWorkspaceStore((s) => s.applyView);
+   const removeViewLocal = useWorkspaceStore((s) => s.removeViewLocal);
    const teams = useWorkspaceStore((s) => s.teams);
    const { orgId } = useParams<{ orgId: string }>();
 
@@ -126,8 +127,7 @@ export function ViewActions({ view }: { view: View }) {
     */
    const share = async (teamId: string | null, msg: string) => {
       try {
-         await api.views.update(view.id, { teamId });
-         await hydrate();
+         applyView(await api.views.update(view.id, { teamId }));
          toast.success(msg);
       } catch (e) {
          toast.error(errMsg(e, 'Não foi possível alterar o compartilhamento'));
@@ -147,7 +147,7 @@ export function ViewActions({ view }: { view: View }) {
       setBusy(true);
       try {
          await api.views.remove(view.id);
-         await hydrate();
+         removeViewLocal(view.id);
          toast.success('View deleted');
          setConfirmOpen(false);
       } catch (e) {

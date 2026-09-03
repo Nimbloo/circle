@@ -43,7 +43,7 @@ async function resizeToDataUrl(file: File): Promise<{ dataUrl: string; contentTy
 /** Personal "Profile" settings. */
 export default function Profile() {
    const me = useWorkspaceStore((s) => s.me);
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const applyMe = useWorkspaceStore((s) => s.applyMe);
    const [name, setName] = useState(me?.name ?? '');
    const [gh, setGh] = useState(me?.githubLogin ?? '');
    const [saving, setSaving] = useState(false);
@@ -70,8 +70,7 @@ export default function Profile() {
       if (!me || saving || next === (me.githubLogin ?? '')) return;
       setSaving(true);
       try {
-         await api.me.update({ githubLogin: next || null });
-         await hydrate();
+         applyMe(await api.me.update({ githubLogin: next || null }));
          toast.success(next ? 'GitHub handle updated' : 'GitHub handle removed');
       } catch {
          toast.error('Could not update your GitHub handle');
@@ -86,8 +85,7 @@ export default function Profile() {
       if (!me || saving || !next || next === me.name) return;
       setSaving(true);
       try {
-         await api.me.update({ name: next });
-         await hydrate();
+         applyMe(await api.me.update({ name: next }));
          toast.success('Name updated');
       } catch {
          toast.error('Could not update your name');
@@ -105,8 +103,7 @@ export default function Profile() {
       try {
          const { dataUrl, contentType } = await resizeToDataUrl(file);
          setPreview(dataUrl); // preview otimista imediato
-         await api.me.uploadAvatar(dataUrl, contentType);
-         await hydrate(); // re-hidrata → avatar novo no org-switcher/inbox
+         applyMe(await api.me.uploadAvatar(dataUrl, contentType)); // avatar novo no org-switcher/inbox
          toast.success('Profile picture updated');
       } catch {
          setPreview(null);
@@ -120,8 +117,7 @@ export default function Profile() {
       if (uploading) return;
       setUploading(true);
       try {
-         await api.me.removeAvatar();
-         await hydrate();
+         applyMe(await api.me.removeAvatar());
          setPreview(null);
          toast.success('Profile picture removed');
       } catch {

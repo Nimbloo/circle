@@ -12,7 +12,7 @@ import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './sha
 
 /** "Join or create a team" settings page. */
 export default function NewTeam() {
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const applyTeam = useWorkspaceStore((s) => s.applyTeam);
 
    // Fonte autoritativa: a API traz `joined` + `requested` + contagens (o store adaptado
    // não carrega o `requested`). Settings não é hot-path — um fetch dedicado é ok e correto.
@@ -40,8 +40,8 @@ export default function NewTeam() {
       if (!id || !name.trim() || busy) return;
       setBusy(true);
       try {
-         await api.teams.create({ id, name: name.trim() });
-         await Promise.all([hydrate(), refresh()]);
+         applyTeam(await api.teams.create({ id, name: name.trim() }));
+         await refresh();
          setKey('');
          setName('');
          toast.success(`Time ${id} criado — você já é membro`);

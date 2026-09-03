@@ -36,7 +36,7 @@ function slugify(v: string): string {
 }
 
 /**
- * Cria uma saved view via api.views.create e re-hidrata o workspace.
+ * Cria uma saved view via api.views.create e aplica o DTO no workspace.
  * Campos obrigatórios da rota: slug, name, type, filter (começa vazio).
  */
 export function CreateViewButton({
@@ -48,7 +48,7 @@ export function CreateViewButton({
    label?: string;
    variant?: 'default' | 'ghost';
 } = {}) {
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const applyView = useWorkspaceStore((s) => s.applyView);
 
    const [open, setOpen] = useState(false);
    const [busy, setBusy] = useState(false);
@@ -63,7 +63,7 @@ export function CreateViewButton({
       if (!name.trim() || !effectiveSlug || busy) return;
       setBusy(true);
       try {
-         await api.views.create({
+         const dto = await api.views.create({
             slug: effectiveSlug,
             name: name.trim(),
             type,
@@ -72,7 +72,7 @@ export function CreateViewButton({
             // workspace-level e sumia da lista filtrada por time).
             teamId: teamId ?? null,
          });
-         await hydrate();
+         applyView(dto);
          setName('');
          setSlug('');
          setFilter({});

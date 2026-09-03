@@ -9,9 +9,9 @@ import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
-/** Cria um time (key + nome) via api.teams.create e re-hidrata o workspace. */
+/** Cria um time (key + nome) via api.teams.create e aplica o DTO no workspace. */
 export function NewTeamButton() {
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const applyTeam = useWorkspaceStore((s) => s.applyTeam);
    const [open, setOpen] = useState(false);
    const [key, setKey] = useState('');
    const [name, setName] = useState('');
@@ -22,8 +22,7 @@ export function NewTeamButton() {
       if (!id || !name.trim() || busy) return;
       setBusy(true);
       try {
-         await api.teams.create({ id, name: name.trim() });
-         await hydrate();
+         applyTeam(await api.teams.create({ id, name: name.trim() }));
          setKey('');
          setName('');
          setOpen(false);
