@@ -1,7 +1,7 @@
 'use client';
 
 import { Issue } from '@/data/issues';
-import { useDisplaySettingsStore } from '@/store/display-settings-store';
+import { useDisplaySetting } from '@/store/display-settings-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { format } from 'date-fns';
 import Link from 'next/link';
@@ -92,7 +92,7 @@ export function CustomDragLayer() {
 export function IssueGrid({ issue, orderedIssues, layout = true }: IssueGridProps) {
    const ref = useRef<HTMLDivElement>(null);
    const { orgId } = useParams<{ orgId: string }>();
-   const displayProperties = useDisplaySettingsStore((s) => s.displayProperties);
+   const displayProperties = useDisplaySetting('displayProperties');
    const reorderIssue = useIssuesStore((s) => s.reorderIssue);
    const updateIssueStatus = useIssuesStore((s) => s.updateIssueStatus);
 

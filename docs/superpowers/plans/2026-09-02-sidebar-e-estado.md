@@ -17,9 +17,9 @@
   removido (sem sub-issues no domínio).
 - **Última verificação (2026-09-02, Claude):** `pnpm typecheck` ok · `pnpm lint` ok ·
   suíte completa e `pnpm build` (ver PR) · guard do dev seam vazio.
-- **Próximo passo:** PR para `develop` e release. Fora da fatia (em PENDENCIAS): display
-  settings por view, painel lateral unificado, right-panel por rota, de-para pixel do
-  painel de initiatives (precisa de `linear.app` liberado na extensão).
+- **Próximo passo:** nenhum nesta fatia — mergeada em `develop` (#84) e em produção na
+  v0.24.0 (#85). Fora da fatia (em PENDENCIAS): display settings por view, painel lateral
+  unificado, right-panel por rota, de-para pixel do painel de initiatives.
 - **Bloqueios / decisões pendentes:** de-para pixel do painel de initiatives exige liberar
   `linear.app` na extensão Claude-in-Chrome (navegação bloqueada nesta sessão).
 

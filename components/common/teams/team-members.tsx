@@ -21,6 +21,7 @@ export default function TeamMembers() {
    const { teamId } = useParams<{ orgId: string; teamId: string }>();
    const teams = useWorkspaceStore((s) => s.teams);
    const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const applyTeamMembers = useWorkspaceStore((s) => s.applyTeamMembers);
    const isAdmin = useWorkspaceStore((s) => s.me?.admin ?? false);
    const loaded = useWorkspaceStore((s) => s.loaded);
    // Sem fallback `?? teams[0]`: id inválido deve dar not-found, não o primeiro time.
@@ -49,6 +50,8 @@ export default function TeamMembers() {
       setBusy(true);
       try {
          await api.teams.decideJoinRequest(teamId, id, decision);
+         // A rota devolve as solicitações (JoinRequestDto[]), não os membros do time:
+         // aprovar muda a membership, então aqui ainda re-hidrata.
          await Promise.all([refreshRequests(), hydrate()]);
          toast.success(decision === 'approved' ? 'Solicitação aprovada' : 'Solicitação negada');
       } catch {
@@ -75,8 +78,7 @@ export default function TeamMembers() {
    const removeMember = async (id: string, name: string) => {
       setBusy(true);
       try {
-         await api.teams.removeMember(team.id, id);
-         await hydrate();
+         applyTeamMembers(team.id, await api.teams.removeMember(team.id, id));
          toast.success(`${name} removed from ${team.name}`);
       } catch {
          toast.error('Could not remove the member');

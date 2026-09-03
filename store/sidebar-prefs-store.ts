@@ -16,15 +16,24 @@ export type SidebarItemKey =
 
 export type SidebarSection = 'personal' | 'workspace';
 
-interface SidebarPrefsState {
+/** Fatia persistida/sincronizada das preferências da sidebar. */
+export interface SidebarPrefs {
    badgeStyle: SidebarBadgeStyle;
    visibility: Record<SidebarItemKey, SidebarVisibility>;
    /** Item order per section (drag & drop in the Customize sidebar modal). */
    order: Record<SidebarSection, SidebarItemKey[]>;
+}
+
+interface SidebarPrefsState extends SidebarPrefs {
    setBadgeStyle: (style: SidebarBadgeStyle) => void;
    setVisibility: (item: SidebarItemKey, visibility: SidebarVisibility) => void;
    moveItem: (section: SidebarSection, from: number, to: number) => void;
+   /** Aplica um patch vindo do servidor (só chaves/valores conhecidos). */
+   hydratePrefs: (patch: Partial<SidebarPrefs>) => void;
 }
+
+const BADGE_STYLES: readonly SidebarBadgeStyle[] = ['count', 'dot'];
+const VISIBILITIES: readonly SidebarVisibility[] = ['always', 'badged', 'never'];
 
 const DEFAULT_VISIBILITY: Record<SidebarItemKey, SidebarVisibility> = {
    'inbox': 'always',
@@ -63,6 +72,32 @@ export const useSidebarPrefsStore = create<SidebarPrefsState>()(
                const [moved] = keys.splice(from, 1);
                keys.splice(to, 0, moved);
                return { order: { ...state.order, [section]: keys } };
+            }),
+         hydratePrefs: (patch) =>
+            set((state) => {
+               const next: Partial<SidebarPrefs> = {};
+               if (patch.badgeStyle && BADGE_STYLES.includes(patch.badgeStyle)) {
+                  next.badgeStyle = patch.badgeStyle;
+               }
+               if (patch.visibility && typeof patch.visibility === 'object') {
+                  const visibility = { ...state.visibility };
+                  (Object.keys(DEFAULT_VISIBILITY) as SidebarItemKey[]).forEach((key) => {
+                     const value = patch.visibility?.[key];
+                     if (value && VISIBILITIES.includes(value)) visibility[key] = value;
+                  });
+                  next.visibility = visibility;
+               }
+               if (patch.order && typeof patch.order === 'object') {
+                  const order = { ...state.order };
+                  (Object.keys(DEFAULT_ORDER) as SidebarSection[]).forEach((section) => {
+                     const stored = patch.order?.[section];
+                     if (Array.isArray(stored)) {
+                        order[section] = resolveOrder(stored, DEFAULT_ORDER[section]);
+                     }
+                  });
+                  next.order = order;
+               }
+               return next;
             }),
       }),
       { name: 'sidebar-prefs' }

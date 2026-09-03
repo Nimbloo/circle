@@ -1,15 +1,14 @@
 'use client';
 
+import { DetailSidePanel, DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 import { ContentBlocks } from '@/components/common/issues/details/content-blocks';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { adaptProjectDetail, emptyProjectDetail } from '@/lib/adapters-project-detail';
 import { api } from '@/lib/client';
 import type { ProjectDetail } from '@/data/project-details';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { format, parseISO } from 'date-fns';
-import { ArrowRight, ChevronDown, PenLine } from 'lucide-react';
+import { ChevronDown, PenLine } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -23,16 +22,12 @@ interface ProjectOverviewProps {
    projectId: string;
 }
 
-const formatDay = (iso?: string) => (iso ? format(parseISO(iso), 'MMM do') : '—');
-
 /** Project "Overview" tab: description column + properties side panel. */
 export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    const project = useWorkspaceStore((s) => s.getProjectById(projectId));
    const loaded = useWorkspaceStore((s) => s.loaded);
-   const initiatives = useWorkspaceStore((s) => s.initiatives);
    const allIssues = useIssuesStore((s) => s.issues);
    const { orgId } = useParams<{ orgId: string }>();
-   const teams = useWorkspaceStore((s) => s.teams);
    const scrollRef = useRef<HTMLDivElement>(null);
 
    const [detail, setDetail] = useState<ProjectDetail>(() => emptyProjectDetail(projectId));
@@ -79,7 +74,6 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
       () => allIssues.filter((issue) => issue.project?.id === projectId),
       [allIssues, projectId]
    );
-   const team = teams.find((candidate) => candidate.id === project?.teamId);
    const outlineItems = useMemo(() => getOutlineItems(detail.description), [detail.description]);
 
    if (!project) {
@@ -94,14 +88,14 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                      <Skeleton className="h-4 w-3/4" />
                   </div>
                </div>
-               <div className="hidden w-[400px] shrink-0 flex-col gap-2 overflow-hidden pl-1 xl:flex">
+               <DetailSidePanel kind="project" title="Project details" className="flex-col gap-2">
                   {Array.from({ length: 5 }).map((_, i) => (
                      <div key={i} className="flex flex-col gap-2 rounded-[10px] border bg-card p-3">
                         <Skeleton className="h-3 w-16" />
                         <Skeleton className="h-6 w-32" />
                      </div>
                   ))}
-               </div>
+               </DetailSidePanel>
             </div>
          );
       }
@@ -119,8 +113,11 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
             <DocumentOutline items={outlineItems} scrollRef={scrollRef} />
             <div ref={scrollRef} className="h-full overflow-y-auto">
                <div className="mx-auto max-w-[869px] px-8 pt-16 pb-10">
-                  <div className="mb-3 inline-flex size-8 items-center justify-center rounded-md bg-muted/50">
-                     <project.icon className="size-5" />
+                  <div className="mb-3 flex items-start justify-between">
+                     <div className="inline-flex size-8 items-center justify-center rounded-md bg-muted/50">
+                        <project.icon className="size-5" />
+                     </div>
+                     <DetailSidePanelTrigger kind="project" />
                   </div>
                   <h1 className="text-2xl font-semibold leading-8 tracking-tight">
                      {project.name}
@@ -153,86 +150,8 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                      </button>
                   )}
 
-                  {/* Inline properties */}
+                  {/* Propriedades só no painel lateral (como no Linear) — aqui fica só Resources. */}
                   <div className="mt-[19px] flex flex-col gap-3 text-sm">
-                     <div className="flex min-h-7 items-center gap-3">
-                        <h3 className="w-24 shrink-0 py-1.5 text-[13px] font-medium leading-4 text-muted-foreground">
-                           Properties
-                        </h3>
-                        <div className="flex items-center gap-3 flex-wrap">
-                           <span className="inline-flex items-center gap-1.5">
-                              <project.status.icon />
-                              {project.status.name}
-                           </span>
-                           <span className="inline-flex items-center gap-1.5">
-                              <project.priority.icon className="size-3.5 text-muted-foreground" />
-                              {project.priority.name}
-                           </span>
-                           <span className="inline-flex items-center gap-1.5">
-                              {project.lead && (
-                                 <Avatar className="size-4">
-                                    <AvatarImage
-                                       src={project.lead.avatarUrl || undefined}
-                                       alt={project.lead.name}
-                                    />
-                                    <AvatarFallback>{project.lead.name[0]}</AvatarFallback>
-                                 </Avatar>
-                              )}
-                              {project.lead?.name ?? '—'}
-                           </span>
-                           <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                              {formatDay(project.startDate)}
-                              <ArrowRight className="size-3" />
-                              {formatDay(project.targetDate)}
-                           </span>
-                           {team && (
-                              <span className="inline-flex items-center gap-1.5">
-                                 {team.icon} {team.name}
-                              </span>
-                           )}
-                        </div>
-                     </div>
-
-                     {project.initiative && (
-                        <div className="flex items-center gap-3">
-                           <span className="w-24 text-muted-foreground shrink-0">Initiatives</span>
-                           <span className="inline-flex items-center gap-1.5">
-                              {(() => {
-                                 const init = initiatives.find((i) => i.id === project.initiative);
-                                 return (
-                                    <>
-                                       <span>{init?.icon ?? '🎯'}</span>
-                                       {init?.name ?? project.initiative}
-                                    </>
-                                 );
-                              })()}
-                           </span>
-                        </div>
-                     )}
-
-                     {project.labels.length > 0 && (
-                        <div className="flex min-h-7 items-center gap-3">
-                           <h3 className="w-24 shrink-0 py-1.5 text-[13px] font-medium leading-4 text-muted-foreground">
-                              Labels
-                           </h3>
-                           <div className="flex items-center gap-1.5">
-                              {project.labels.map((label) => (
-                                 <span
-                                    key={label.id}
-                                    className="inline-flex items-center gap-1 text-xs border rounded-full px-2 py-0.5"
-                                 >
-                                    <span
-                                       className="size-2 rounded-full"
-                                       style={{ backgroundColor: label.color }}
-                                    />
-                                    {label.name}
-                                    <ChevronDown className="size-3 text-muted-foreground" />
-                                 </span>
-                              ))}
-                           </div>
-                        </div>
-                     )}
-
                      <ProjectResources
                         projectId={projectId}
                         resources={detail.resources}

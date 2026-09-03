@@ -6,6 +6,8 @@ import { priorities as mockPriorities, Priority } from '@/data/priorities';
 import { LabelInterface, labels as mockLabels } from '@/data/labels';
 import { Health, health as mockHealth } from '@/data/projects';
 import type { WorkspaceBootstrap } from '@/lib/api/workspace';
+import type { StatusDto } from '@/lib/api/statuses';
+import type { LabelDto } from '@/lib/api/labels';
 
 /**
  * Catálogos (status/priority/label/health) vindos da API. A API carrega os DADOS
@@ -32,7 +34,7 @@ const iconByCategory = new Map<StatusCategory, Status['icon']>();
 for (const s of mockStatuses)
    if (!iconByCategory.has(s.category)) iconByCategory.set(s.category, s.icon);
 
-function toStatus(row: CatalogBootstrap['statuses'][number]): Status {
+function toStatus(row: { id: string; name: string; color: string; category: string }): Status {
    return {
       id: row.id,
       name: row.name,
@@ -62,7 +64,7 @@ function toPriority(row: CatalogBootstrap['priorities'][number]): Priority {
    };
 }
 
-function toLabel(row: CatalogBootstrap['labels'][number]): LabelInterface {
+function toLabel(row: LabelDto & { groupId?: string | null }): LabelInterface {
    return { id: row.id, name: row.name, color: row.color, groupId: row.groupId };
 }
 
@@ -125,6 +127,20 @@ interface CatalogState {
    healthStates: Health[];
    /** Substitui os catálogos seed pelos dados vivos do bootstrap do workspace. */
    setCatalogs: (data: CatalogBootstrap) => void;
+   /** Splice de UM item a partir do DTO devolvido pela mutação, em vez de re-hidratar o
+    * workspace inteiro. Cada um mexe SÓ na sua coleção. */
+   applyLabel: (dto: LabelDto) => void;
+   removeLabel: (id: string) => void;
+   applyStatus: (dto: StatusDto) => void;
+   /** Lista inteira já ordenada (retorno do reorder). */
+   setStatuses: (dtos: StatusDto[]) => void;
+   removeStatus: (id: string) => void;
+}
+
+function upsert<T extends { id: string }>(list: T[], item: T): T[] {
+   return list.some((x) => x.id === item.id)
+      ? list.map((x) => (x.id === item.id ? item : x))
+      : [...list, item];
 }
 
 export const useCatalogStore = create<CatalogState>((set) => ({
@@ -144,6 +160,19 @@ export const useCatalogStore = create<CatalogState>((set) => ({
          healthStates: data.healthStates.map(toHealth),
          loaded: true,
       }),
+   applyLabel: (dto) =>
+      set((s) => {
+         // LabelDto não traz groupId: preserva o do item já carregado. A API lista por
+         // nome, então o upsert re-ordena igual para o novo/renomeado cair no lugar certo.
+         const prev = s.labels.find((l) => l.id === dto.id);
+         const next = toLabel({ ...dto, groupId: prev?.groupId });
+         return { labels: upsert(s.labels, next).sort((a, b) => a.name.localeCompare(b.name)) };
+      }),
+   removeLabel: (id) => set((s) => ({ labels: s.labels.filter((l) => l.id !== id) })),
+   // Status criado recebe a maior position (vai pro fim); editado fica na mesma casa.
+   applyStatus: (dto) => set((s) => ({ statuses: upsert(s.statuses, toStatus(dto)) })),
+   setStatuses: (dtos) => set({ statuses: dtos.map(toStatus) }),
+   removeStatus: (id) => set((s) => ({ statuses: s.statuses.filter((st) => st.id !== id) })),
 }));
 
 /* --------------------------- Hooks de conveniência -------------------------- */

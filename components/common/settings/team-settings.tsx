@@ -60,7 +60,7 @@ function EditTeamDialog({
    open: boolean;
    onOpenChange: (v: boolean) => void;
 }) {
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const applyTeam = useWorkspaceStore((s) => s.applyTeam);
    const teamFromStore = useWorkspaceStore((s) => s.getTeamById(team.id));
    const [busy, setBusy] = useState(false);
    const [name, setName] = useState(team.name);
@@ -79,12 +79,12 @@ function EditTeamDialog({
       if (!name.trim() || busy) return;
       setBusy(true);
       try {
-         await api.teams.update(team.id, {
+         const dto = await api.teams.update(team.id, {
             name: name.trim(),
             icon: icon.trim() || null,
             estimateScale: scale,
          });
-         await hydrate();
+         applyTeam(dto);
          onOpenChange(false);
          toast.success('Time atualizado');
       } catch {
@@ -151,7 +151,8 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
    const router = useRouter();
    const teams = useWorkspaceStore((s) => s.teams);
    const me = useWorkspaceStore((s) => s.me);
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const applyTeamMembers = useWorkspaceStore((s) => s.applyTeamMembers);
+   const removeTeamLocal = useWorkspaceStore((s) => s.removeTeamLocal);
    // Deriva da fatia assinada: `getCyclesByTeam` devolve array NOVO a cada leitura,
    // entao nao pode ir dentro do seletor (referencia nova = re-render infinito).
    const allCycles = useWorkspaceStore((s) => s.cycles);
@@ -176,8 +177,7 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
       if (busy) return;
       setBusy(true);
       try {
-         await api.teams.leave(team.id);
-         await hydrate();
+         applyTeamMembers(team.id, await api.teams.leave(team.id));
          toast.success('Você saiu do time');
          router.push(`/${orgId}`);
       } catch {
@@ -191,7 +191,7 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
       setBusy(true);
       try {
          await api.teams.remove(team.id);
-         await hydrate();
+         removeTeamLocal(team.id);
          toast.success('Time excluído');
          router.push(`/${orgId}`);
       } catch {

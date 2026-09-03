@@ -100,7 +100,8 @@ function __FilterValue<TData, TType extends ColumnDataType>({
 interface FilterValueDisplayProps<TData, TType extends ColumnDataType> {
   filter: FilterModel<TType>
   column: Column<TData, TType>
-  actions: DataTableFilterActions
+  /** Só o display não usa; opcional para o chip somente leitura (ActiveFilter readOnly). */
+  actions?: DataTableFilterActions
   locale?: Locale
 }
 
@@ -194,7 +195,12 @@ export function FilterValueOptionDisplay<TData>({
   }
   const name = column.displayName.toLowerCase()
   // TODO: Better pluralization for different languages
-  const pluralName = name.endsWith('s') ? `${name}es` : `${name}s`
+  // Plural em inglês: priority → priorities, status → statuses, label → labels.
+  const pluralName = /[^aeiou]y$/.test(name)
+    ? `${name.slice(0, -1)}ies`
+    : name.endsWith('s')
+      ? `${name}es`
+      : `${name}s`
 
   const hasOptionIcons = !options?.some((o) => !o.icon)
 
@@ -203,8 +209,9 @@ export function FilterValueOptionDisplay<TData>({
       {hasOptionIcons &&
         take(selected, 3).map(({ value, icon }) => {
           const Icon = icon!
+          // Ícone já é um elemento (opções dos catálogos): precisa da key como no multiOption.
           return isValidElement(Icon) ? (
-            Icon
+            cloneElement(Icon, { key: value })
           ) : (
             <Icon key={value} className="size-4" />
           )

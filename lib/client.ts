@@ -41,7 +41,7 @@ import type {
 import type { ViewDto, CreateViewInput, UpdateViewInput } from '@/lib/api/views';
 import type { WorkspaceBootstrap } from '@/lib/api/workspace';
 import type { NotificationDto } from '@/lib/api/notifications';
-import type { ReviewDetailDto, ReviewDto } from '@/lib/api/reviews';
+import type { ReviewDetailDto, ReviewDto, ReviewGuideDto } from '@/lib/api/reviews';
 import type { FolderDto, DocumentDto } from '@/lib/api/documents';
 import type {
    IssueDetailDto,
@@ -440,5 +440,7 @@ export const api = {
       },
       get: (id: string) => get<ReviewDetailDto>(`/reviews/${encodeURIComponent(id)}`),
       sync: () => post<{ started: boolean }>('/reviews/sync'),
+      generateGuide: (id: string) =>
+         post<ReviewGuideDto>(`/reviews/${encodeURIComponent(id)}/guide`),
    },
 };

@@ -1,5 +1,6 @@
 'use client';
 
+import { DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 import { ContentBlocks } from '@/components/common/issues/details/content-blocks';
 import { ListSkeleton } from '@/components/common/list-skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -149,6 +150,9 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
       <div className="relative w-full h-full flex overflow-hidden">
          <div className="flex-1 min-w-0 h-full overflow-y-auto">
             <div className="max-w-3xl mx-auto px-6 lg:px-10 py-8">
+               <div className="mb-3 flex justify-end xl:hidden">
+                  <DetailSidePanelTrigger kind="project" />
+               </div>
                {/* Composer */}
                <div className="border rounded-lg p-4">
                   <div className="flex items-center gap-2">

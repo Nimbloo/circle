@@ -28,13 +28,36 @@ import { getCachedCatalogs } from './catalogs';
  * ao SES. Requer `bedrock:InvokeModel` na role e model access habilitado.
  */
 const REGION = process.env.AWS_REGION ?? 'us-east-1';
-const MODEL_ID = process.env.BEDROCK_MODEL_ID ?? 'us.anthropic.claude-sonnet-4-5-20250929-v1:0';
+export const MODEL_ID =
+   process.env.BEDROCK_MODEL_ID ?? 'us.anthropic.claude-sonnet-4-5-20250929-v1:0';
 const MAX_TOOL_ROUNDS = 6;
 
 let _client: BedrockRuntimeClient | null = null;
 function client(): BedrockRuntimeClient {
    _client ??= new BedrockRuntimeClient({ region: REGION });
    return _client;
+}
+
+/**
+ * Uma chamada de texto, sem ferramentas nem histórico (mesmo client/modelo do agent).
+ * Usado por geradores one-shot (ex.: guia de review). Lança se o Bedrock não responder.
+ */
+export async function invokeText(
+   prompt: string,
+   opts: { system?: string; maxTokens?: number } = {}
+): Promise<string> {
+   const res = await client().send(
+      new ConverseCommand({
+         modelId: MODEL_ID,
+         system: opts.system ? [{ text: opts.system }] : undefined,
+         messages: [{ role: 'user', content: [{ text: prompt }] }],
+         inferenceConfig: { maxTokens: opts.maxTokens ?? 4096, temperature: 0.2 },
+      })
+   );
+   return (res.output?.message?.content ?? [])
+      .map((b) => b.text ?? '')
+      .join('')
+      .trim();
 }
 
 export interface AgentChatMessage {

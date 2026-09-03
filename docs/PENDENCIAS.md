@@ -1,6 +1,6 @@
 # Pendências do Circle
 
-Estado em **2026-09-02**, com `main` e `develop` sincronizadas na v0.23.0.
+Estado em **2026-09-02**, com `main` e `develop` sincronizadas na v0.24.0.
 
 > **As [issues](https://github.com/Nimbloo/circle/issues) são a fonte da verdade** sobre
 > escopo. Este documento registra o que elas **não** capturam: bloqueios que vivem em
@@ -158,30 +158,35 @@ implementação original, corrigido, mas a pegadinha continua valendo para qualq
 ### Front — estado, filtros e sidebar (auditoria de 02/09/2026)
 
 Auditoria read-only da arquitetura de estado (spec
-`docs/superpowers/specs/2026-09-02-sidebar-e-estado-design.md`). O que saiu na mesma leva:
-collapse da sidebar animado e persistido por time; `workspace.hydrate` coalescido (uma
-chamada concorrente não é mais descartada) e auto-rollover de cycles só no boot (antes, ~25
-refetches pós-mutação disparavam a escrita); filtros `is not` corretos para issue sem
-projeto/criador/data, opções "No project"/"No creator", tabs preservando `?filters=`;
-"Show sub-issues" removido do Display (o domínio não tem sub-issues).
+`docs/superpowers/specs/2026-09-02-sidebar-e-estado-design.md`) e, na sequência, a
+quitação dos nove itens de débito (spec `2026-09-02-debito-front-design.md`, plano
+`2026-09-02-debito-front.md`):
 
-**Ficou para depois, em ordem de valor:**
+1. **Display settings por view** — grouping/ordering/propriedades e list/board são por
+   rota (`lib/view-key.ts`), com migração do localStorage antigo.
+2. **Painel lateral unificado** (`DetailSidePanel`) em initiative, project e issue:
+   400 px, toggle 28 × 28 persistido por tipo, Sheet mobile único; "Properties" inline
+   removido do overview (só no painel, como no Linear).
+3. **`right-panel-store` por rota** (Insights de uma página não vaza para outra).
+4. **Preferências de layout no servidor** (`SettingsSchema.layout`): display por view,
+   list/board, times expandidos, sidebar customizada, painéis de detalhe, largura do Inbox.
+5. **Um motor de filtro**: views salvas convertem `ViewFilter` → `FiltersState` e passam
+   por `applyIssueFilters`; a página da view mostra os chips somente leitura.
+6. **Splice por entidade** (team, cycle, view, user, labels, statuses) no lugar do
+   re-hydrate; ficaram com `hydrate()` só `team-members` (decisão de join-request devolve
+   requests, não membros) e o health update da initiative (devolve o update, não a
+   initiative).
+7. **Perf miúda**: `groupByKey` linear, selectors individuais no `GroupedIssuesView`,
+   `ProjectsSection` memoizado, `isDefault` do Display completo.
+8. **Guide das reviews** gerado a partir do diff via Bedrock (`POST
+/api/v1/reviews/{id}/guide`, persistido em `review.guide`), com "Generate"/"Regenerate"
+   e mensagem honesta sem modelo configurado.
+9. **PRs antigos** ganham arquivos/commits/checks sob demanda ao abrir o detalhe
+   (`review.depth_synced_at`, uma tentativa por PR).
 
-- **Display settings por view.** Hoje grouping/ordering/propriedades são um conjunto
-  global em localStorage: escolher no board do time A vaza para cycle, project e
-  my-issues. Linear é por view. Chavear o persist por rota (ou salvar no servidor por
-  view).
-- **Painel lateral unificado (`DetailSidePanel`).** Initiative, project e issue divergem:
-  toggle persistido só na initiative, larguras/breakpoints diferentes (aside `xl`
-  400 px vs container query `@7xl`), Sheet mobile com paddings e triggers distintos, e
-  "Properties" duplicado inline + aside em initiative e project.
-- **`right-panel-store` por rota.** Abrir Insights na lista de issues e navegar para um
-  projeto mostra Insights no lugar de Properties; não há reset na troca de rota.
-- **Preferências de layout no servidor.** Só theme/notifications/preferences sincronizam;
-  display, view-store, sidebar e initiative-details ficam por dispositivo.
-- **De-para pixel do painel de initiatives com o Linear.** Bloqueado: a extensão
-  Claude-in-Chrome está sem permissão para `linear.app` (navegação recusada). Liberar o
-  domínio na extensão para medir hover/spacing/tipografia ao vivo.
+**Ainda em aberto:** de-para pixel do painel de initiatives com o Linear — a extensão
+Claude-in-Chrome está sem permissão para `linear.app`; liberar o domínio para medir
+hover/spacing/tipografia ao vivo.
 
 **Produção — checks dos PRs em 0/0.** O `GITHUB_TOKEN` do Secrets Manager é um PAT
 fine-grained sem a permissão **Checks: Read-only** (`/check-runs` devolve 403 "Resource

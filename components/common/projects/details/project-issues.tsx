@@ -12,6 +12,7 @@ import { useFilterStore } from '@/store/filter-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useEffect, useMemo, useState } from 'react';
+import { DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 import { ProjectSidePanel } from './project-side-panel';
 
 interface ProjectIssuesProps {
@@ -63,6 +64,9 @@ export default function ProjectIssues({ projectId }: ProjectIssuesProps) {
    return (
       <div className="w-full h-full flex flex-col overflow-hidden">
          <IssueFilterBar />
+         <div className="flex justify-end px-2.5 pt-2 xl:hidden">
+            <DetailSidePanelTrigger kind="project" />
+         </div>
          <div className="relative flex-1 min-h-0 w-full flex overflow-hidden">
             <div className="flex-1 min-w-0 h-full overflow-hidden">
                <GroupedIssuesView

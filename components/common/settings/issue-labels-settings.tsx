@@ -22,9 +22,8 @@ import { Input } from '@/components/ui/input';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { api, ApiError } from '@/lib/client';
 import type { LabelInterface } from '@/data/labels';
-import { useLabels } from '@/store/catalog-store';
+import { useCatalogStore, useLabels } from '@/store/catalog-store';
 import { useIssuesStore } from '@/store/issues-store';
-import { useWorkspaceStore } from '@/store/workspace-store';
 import { Pencil, Pipette, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -163,7 +162,8 @@ export default function IssueLabelsSettings() {
    const [query, setQuery] = useState('');
    const issues = useIssuesStore((s) => s.issues);
    const labels = useLabels();
-   const refresh = () => useWorkspaceStore.getState().hydrate();
+   const applyLabel = useCatalogStore((s) => s.applyLabel);
+   const removeLabel = useCatalogStore((s) => s.removeLabel);
 
    const [dialogOpen, setDialogOpen] = useState(false);
    const [editing, setEditing] = useState<LabelInterface | null>(null);
@@ -195,13 +195,12 @@ export default function IssueLabelsSettings() {
    const submitLabel = async (name: string, color: string) => {
       try {
          if (editing) {
-            await api.labels.update(editing.id, { name, color });
+            applyLabel(await api.labels.update(editing.id, { name, color }));
             toast.success(`Label "${name}" updated`);
          } else {
-            await api.labels.create({ name, color });
+            applyLabel(await api.labels.create({ name, color }));
             toast.success(`Label "${name}" created`);
          }
-         await refresh();
       } catch (err) {
          const msg =
             err instanceof ApiError && err.status === 409
@@ -219,7 +218,7 @@ export default function IssueLabelsSettings() {
       setDeleteBusy(true);
       try {
          await api.labels.remove(deleting.id);
-         await refresh();
+         removeLabel(deleting.id);
          toast.success(`Label "${deleting.name}" deleted`);
          setDeleting(null);
       } catch {

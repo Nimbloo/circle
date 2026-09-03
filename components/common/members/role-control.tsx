@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 
 /**
  * Controle de role de um membro. Admin (me.admin) edita via Select
- * (api.members.updateRole → re-hidrata o workspace); não-admin vê texto estático.
+ * (api.members.updateRole → aplica o MemberDto no workspace); não-admin vê texto estático.
  */
 export function RoleControl({
    userId,
@@ -27,7 +27,7 @@ export function RoleControl({
    className?: string;
 }) {
    const isAdmin = useWorkspaceStore((s) => s.me?.admin ?? false);
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const applyUser = useWorkspaceStore((s) => s.applyUser);
    const [busy, setBusy] = useState(false);
 
    if (!isAdmin) {
@@ -38,8 +38,7 @@ export function RoleControl({
       if (next === role || busy) return;
       setBusy(true);
       try {
-         await api.members.updateRole(userId, next);
-         await hydrate();
+         applyUser(await api.members.updateRole(userId, next));
          toast.success(`Role updated to ${next}`);
       } catch {
          toast.error('Could not update the role');

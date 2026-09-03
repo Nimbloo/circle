@@ -6,6 +6,7 @@ import { InsightsPanel } from '@/components/common/issues/insights-panel';
 import ProjectsList from '@/components/common/projects/projects-list';
 import { ProjectGroup } from '@/components/common/projects/projects';
 import { filterIssuesForView, filterProjectsForView, View } from '@/data/views';
+import { ViewFilterChips } from './view-filter-chips';
 import { useStatuses } from '@/store/catalog-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
@@ -21,6 +22,7 @@ function IssueViewBody({ view }: { view: View }) {
 
    return (
       <div className="w-full h-full flex flex-col overflow-hidden">
+         <ViewFilterChips view={view} />
          <div className="flex-1 min-h-0 w-full flex overflow-hidden">
             <div className="flex-1 min-w-0 h-full overflow-hidden">
                <GroupedIssuesView

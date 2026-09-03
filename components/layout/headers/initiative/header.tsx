@@ -9,11 +9,9 @@ import {
 } from '@/components/layout/header-primitives';
 import { InitiativeActions } from '@/components/common/initiatives/initiative-actions';
 import { InitiativeGlyph } from '@/components/common/initiatives/initiative-glyph';
-import { Button } from '@/components/ui/button';
+import { DetailPanelToggle } from '@/components/common/detail-side-panel';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { useInitiativeDetailsStore } from '@/store/initiative-details-store';
-import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
 
@@ -23,8 +21,6 @@ export default function Header() {
    const { initiativeId } = useParams<{ initiativeId: string }>();
    const initiative = useWorkspaceStore((s) => s.getInitiativeById(initiativeId));
    const [tab, setTab] = useQueryState('tab', parseAsStringLiteral(TABS).withDefault('overview'));
-   const detailsOpen = useInitiativeDetailsStore((state) => state.open);
-   const toggleDetails = useInitiativeDetailsStore((state) => state.toggle);
 
    if (!initiative) return null;
 
@@ -58,21 +54,7 @@ export default function Header() {
                   </button>
                ))}
             </div>
-            <Button
-               type="button"
-               size="icon"
-               variant="ghost"
-               className="hidden size-7 xl:inline-flex"
-               onClick={toggleDetails}
-               aria-label={detailsOpen ? 'Close Initiative details' : 'Open Initiative details'}
-               aria-expanded={detailsOpen}
-            >
-               {detailsOpen ? (
-                  <PanelRightClose className="size-4" />
-               ) : (
-                  <PanelRightOpen className="size-4" />
-               )}
-            </Button>
+            <DetailPanelToggle kind="initiative" />
          </ViewBar>
       </>
    );

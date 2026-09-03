@@ -2,7 +2,7 @@
 
 import { Issue } from '@/data/issues';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { useDisplaySettingsStore } from '@/store/display-settings-store';
+import { useDisplaySetting } from '@/store/display-settings-store';
 import { useBulkSelectionStore } from '@/store/bulk-selection-store';
 import { cn } from '@/lib/utils';
 import { Check } from 'lucide-react';
@@ -26,7 +26,7 @@ function IssueLineComponent({ issue, layoutId = false }: { issue: Issue; layoutI
    const { orgId } = useParams<{ orgId: string }>();
    // Selector estreito: assina só displayProperties (não o store inteiro) — senão toda
    // linha memoizada re-renderiza a qualquer mudança do display-store (ex.: showEmptyGroups).
-   const displayProperties = useDisplaySettingsStore((s) => s.displayProperties);
+   const displayProperties = useDisplaySetting('displayProperties');
    // Chamada DENTRO do seletor (referencia estavel: `find`), senao a linha nao
    // acorda quando o ciclo muda.
    const cycle = useWorkspaceStore((s) =>
