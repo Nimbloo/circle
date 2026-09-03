@@ -5,7 +5,10 @@ import { viewKeyFromPathname } from '@/lib/view-key';
 import { useRightPanelBaseStore, useRightPanelStore } from '@/store/right-panel-store';
 
 const nav = vi.hoisted(() => ({ pathname: '/nimbloo/team/ENG/all' }));
-vi.mock('next/navigation', () => ({ usePathname: () => nav.pathname }));
+vi.mock('next/navigation', () => ({
+   usePathname: () => nav.pathname,
+   useParams: () => ({ orgId: 'nimbloo' }),
+}));
 
 describe('view-key', () => {
    it('remove o prefixo do org do pathname', () => {
