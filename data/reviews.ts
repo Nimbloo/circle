@@ -54,6 +54,13 @@ export interface GuideSection {
    diffName: string;
 }
 
+/** Guide gerado a partir do diff (persistido no backend). */
+export interface ReviewGuide {
+   sections: GuideSection[];
+   generatedAt: string;
+   model: string;
+}
+
 export interface ReviewVerdictRow {
    review: string;
    verdict: string;
@@ -95,6 +102,8 @@ export interface Review {
    testPlan: { text: string; checked: boolean }[];
    deployment?: { project: string; state: string; action: string };
    reviewNote?: ReviewNote;
+   /** Guide gerado; `null` quando ainda não foi gerado (só vem no detalhe). */
+   guide?: ReviewGuide | null;
 }
 
 /* -------------------------------------------------------------------------- */
