@@ -253,6 +253,27 @@
          "when": 1788394688622,
          "tag": "0035_reviews_depth_synced_guide",
          "breakpoints": true
+      },
+      {
+         "idx": 36,
+         "version": "7",
+         "when": 1788402524708,
+         "tag": "0036_initiative_dates_cycle_cooldown_snapshots",
+         "breakpoints": true
+      },
+      {
+         "idx": 37,
+         "version": "7",
+         "when": 1788402527108,
+         "tag": "0037_backfill_initiative_dates",
+         "breakpoints": true
+      },
+      {
+         "idx": 38,
+         "version": "7",
+         "when": 1788403291292,
+         "tag": "0038_description_doc",
+         "breakpoints": true
       }
    ]
 }

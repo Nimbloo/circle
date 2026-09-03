@@ -8,10 +8,13 @@ import {
    HeaderTitle,
    LocationBar,
 } from '@/components/layout/header-primitives';
+import { cooldownUntil, todayIso } from '@/data/cycles';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { format, parseISO } from 'date-fns';
 import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { useMemo } from 'react';
 import { CycleView } from '@/components/common/issues/cycle-issues';
 
 export default function HeaderNav({ cycleView }: { cycleView: CycleView }) {
@@ -19,6 +22,18 @@ export default function HeaderNav({ cycleView }: { cycleView: CycleView }) {
    const teams = useWorkspaceStore((s) => s.teams);
    const cycle = useWorkspaceStore((s) =>
       cycleView === 'active' ? s.getCurrentCycle(teamId) : s.getUpcomingCycle(teamId)
+   );
+   const allCycles = useWorkspaceStore((s) => s.cycles);
+   // Cool-down (#24): sem cycle current, o header do cycle ativo mostra até quando.
+   const until = useMemo(
+      () =>
+         cycleView === 'active' && !cycle
+            ? cooldownUntil(
+                 allCycles.filter((c) => c.teamId === teamId),
+                 todayIso()
+              )
+            : null,
+      [cycleView, cycle, allCycles, teamId]
    );
    const team = teams.find((t) => t.id === teamId) ?? teams[0];
    if (!team) return <LocationBar />;
@@ -45,7 +60,10 @@ export default function HeaderNav({ cycleView }: { cycleView: CycleView }) {
             <ChevronRight className="size-3.5 text-muted-foreground shrink-0" />
             <div className="flex items-center gap-1.5 min-w-0">
                <CyclePlayIcon className="size-3.5" />
-               <HeaderTitle>{cycle?.name}</HeaderTitle>
+               <HeaderTitle>
+                  {cycle?.name ??
+                     (until ? `Cool-down até ${format(parseISO(until), 'MMM d')}` : '')}
+               </HeaderTitle>
             </div>
          </HeaderGroup>
          {cycle && (

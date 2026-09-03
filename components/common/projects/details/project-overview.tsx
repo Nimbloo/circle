@@ -1,10 +1,11 @@
 'use client';
 
 import { DetailSidePanel, DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
-import { ContentBlocks } from '@/components/common/issues/details/content-blocks';
+import { BlockEditor } from '@/components/common/editor/block-editor';
 import { Button } from '@/components/ui/button';
 import { adaptProjectDetail, emptyProjectDetail } from '@/lib/adapters-project-detail';
 import { api } from '@/lib/client';
+import { blocksToDoc, docHeadings, type EditorDoc } from '@/lib/editor-doc';
 import type { ProjectDetail } from '@/data/project-details';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -13,7 +14,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { DocumentOutline, getOutlineItems } from './document-outline';
+import { DocumentOutline, type OutlineItem } from './document-outline';
 import { ProjectResources } from './project-resources';
 import { ProjectSidePanel } from './project-side-panel';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -32,6 +33,9 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
 
    const [detail, setDetail] = useState<ProjectDetail>(() => emptyProjectDetail(projectId));
    const [summaryDraft, setSummaryDraft] = useState<string | null>(null);
+   // O editor só monta depois da 1ª carga: montar vazio e receber o doc depois
+   // arriscaria o usuário começar a digitar sobre o vazio e sobrescrever a descrição.
+   const [detailReady, setDetailReady] = useState(false);
    const reload = useCallback(async () => {
       try {
          setDetail(adaptProjectDetail(await api.projects.detail(projectId)));
@@ -50,6 +54,9 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
          })
          .catch(() => {
             if (active) setDetail(emptyProjectDetail(projectId));
+         })
+         .finally(() => {
+            if (active) setDetailReady(true);
          });
       return () => {
          active = false;
@@ -74,7 +81,41 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
       () => allIssues.filter((issue) => issue.project?.id === projectId),
       [allIssues, projectId]
    );
-   const outlineItems = useMemo(() => getOutlineItems(detail.description), [detail.description]);
+
+   // Descrição: doc do servidor ou conversão da projeção em blocos. `liveDoc` acompanha o
+   // que está no editor (antes do save) para o outline reagir enquanto se digita.
+   const doc = useMemo(
+      () => detail.descriptionDoc ?? blocksToDoc(detail.description),
+      [detail.descriptionDoc, detail.description]
+   );
+   const [liveDoc, setLiveDoc] = useState<EditorDoc | null>(null);
+   const outlineItems = useMemo<OutlineItem[]>(
+      () =>
+         docHeadings(liveDoc ?? doc).map((h, index) => ({
+            id: `doc-h-${index}`,
+            text: h.text,
+            level: h.level > 1 ? 2 : 1,
+         })),
+      [liveDoc, doc]
+   );
+   // O outline navega por `#doc-h-N`; o ProseMirror não emite ids, então marcamos os
+   // headings renderizados (re-marcados a cada mudança de doc).
+   const markHeadings = useCallback(() => {
+      scrollRef.current
+         ?.querySelectorAll<HTMLElement>('.ProseMirror h1, .ProseMirror h2, .ProseMirror h3')
+         .forEach((el, index) => {
+            el.id = `doc-h-${index}`;
+         });
+   }, []);
+   useEffect(markHeadings, [markHeadings, outlineItems]);
+
+   const saveDescription = async (next: EditorDoc) => {
+      try {
+         await api.projects.updateDetail(projectId, { descriptionDoc: next });
+      } catch {
+         toast.error('Could not save the description');
+      }
+   };
 
    if (!project) {
       // Ainda carregando → skeleton; carregado sem projeto → not found.
@@ -174,9 +215,18 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                         Description
                         <ChevronDown className="size-3.5" />
                      </div>
-                     <div className="text-[15px] leading-6">
-                        <ContentBlocks blocks={detail.description} />
-                     </div>
+                     {detailReady ? (
+                        <BlockEditor
+                           key={projectId}
+                           doc={doc}
+                           placeholder="Add a description…"
+                           onChange={setLiveDoc}
+                           onSave={saveDescription}
+                           onReady={markHeadings}
+                        />
+                     ) : (
+                        <Skeleton className="h-4 w-2/3" />
+                     )}
                   </div>
                </div>
             </div>

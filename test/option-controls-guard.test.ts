@@ -32,14 +32,18 @@ describe('botões de opções', () => {
       expect(violations).toEqual([]);
    });
 
-   it('dá nome acessível a todo Button de ícone', () => {
+   // `size="icon"` fixo OU `size={...}` cuja expressão pode resolver em 'icon'
+   // (ex.: `size={showName ? 'sm' : 'icon'}`): o botão pode renderizar só o ícone.
+   const MAYBE_ICON_SIZE = /size="icon"|size=\{[^}]*['"]icon['"][^}]*\}/;
+
+   it('dá nome acessível a todo Button de ícone, inclusive com size dinâmico', () => {
       const violations: string[] = [];
 
       for (const file of tsxFiles(root)) {
          const source = readFileSync(file, 'utf8');
          for (const match of source.matchAll(/<Button\b[\s\S]*?<\/Button>/g)) {
             const block = match[0];
-            if (!block.includes('size="icon"')) continue;
+            if (!MAYBE_ICON_SIZE.test(block)) continue;
             if (!/aria-label=|className="sr-only"/.test(block)) {
                violations.push(
                   `${relative(process.cwd(), file)}:${source.slice(0, match.index).split('\n').length}`
@@ -55,11 +59,27 @@ describe('botões de opções', () => {
       const themeToggle = readFileSync(join(root, 'layout/theme-toggle.tsx'), 'utf8');
       const assignee = readFileSync(join(root, 'common/issues/assignee-user.tsx'), 'utf8');
       const snooze = readFileSync(join(root, 'common/inbox/issue-line.tsx'), 'utf8');
+      const prioritySelector = readFileSync(
+         join(root, 'common/issues/priority-selector.tsx'),
+         'utf8'
+      );
+      const labelSelector = readFileSync(
+         join(root, 'layout/sidebar/create-new-issue/label-selector.tsx'),
+         'utf8'
+      );
 
       expect(themeToggle).toContain('aria-label={`Theme: ${mode}`}');
       expect(assignee).toContain('aria-label={');
       expect(assignee).toContain('type="button"');
       expect(snooze).toContain('className="flex size-7');
+      // Size dinâmico: só ícone quando `showName` é falso → o nome vem do aria-label,
+      // que some quando o texto visível já nomeia o botão.
+      expect(prioritySelector).toContain("size={showName ? 'sm' : 'icon'}");
+      expect(prioritySelector).toContain(
+         "aria-label={showName ? undefined : `Change priority: ${priority?.name ?? 'none'}`}"
+      );
+      expect(labelSelector).toContain("size={selectedLabels.length > 0 ? 'xs' : 'icon'}");
+      expect(labelSelector).toContain('aria-label={');
    });
 
    it('não deixa opções visuais de reviews sem comportamento', () => {
@@ -94,11 +114,15 @@ describe('botões de opções', () => {
    it('não exibe no mobile o controle do painel desktop', () => {
       const panel = readFileSync(join(root, 'common/detail-side-panel.tsx'), 'utf8');
 
-      expect(panel).toContain('className="hidden size-7 xl:inline-flex"');
+      // Toggle desktop: `hidden` na base e só o degrau (xl / @3xl) o exibe.
+      expect(panel).toContain("className={cn('hidden size-7', LAYOUT_CLASSES[layout].toggle)}");
+      expect(panel).toContain("toggle: 'xl:inline-flex'");
+      expect(panel).toContain("toggle: '@3xl:inline-flex'");
       for (const file of [
          'layout/headers/initiative/header.tsx',
          'layout/headers/project/header.tsx',
          'layout/headers/issue/header-nav.tsx',
+         'layout/headers/profile/header.tsx',
       ]) {
          expect(readFileSync(join(root, file), 'utf8')).toMatch(
             /<DetailPanelToggle kind="\w+" \/>/

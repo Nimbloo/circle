@@ -13,6 +13,7 @@ import {
    appUser,
    label as labelT,
 } from '@/db/schema';
+import { targetDateFromLabel } from '@/lib/initiative-period';
 import { ApiError } from './errors';
 import { publish } from './events';
 import { getOrCreateUser } from './users';
@@ -34,7 +35,10 @@ export interface InitiativeDto {
    priority: PriorityRow;
    health: HealthRow;
    owner: UserRef | null;
+   /** Rótulo humano do período alvo ("Q3 2026"); `targetDate` é a data real dele. */
    target: string | null;
+   startDate: string | null;
+   targetDate: string | null;
    labels: LabelRow[];
    projectIds: string[];
    projectCount: number;
@@ -145,6 +149,8 @@ async function assemble(db: Db, rows: InitiativeRow[], maps: Maps): Promise<Init
               }
             : null,
          target: r.target,
+         startDate: r.startDate,
+         targetDate: r.targetDate,
          labels: (labelIdsByInitiative.get(r.id) ?? [])
             .map((labelId) => maps.labels.get(labelId))
             .filter((label): label is LabelRow => Boolean(label)),
@@ -195,6 +201,9 @@ export interface CreateInitiativeInput {
    iconColor?: string | null;
    ownerId?: string | null;
    target?: string | null;
+   /** ISO `YYYY-MM-DD`. Quando só `target` vier, `targetDate` é derivada do rótulo. */
+   startDate?: string | null;
+   targetDate?: string | null;
    projectIds?: string[];
    labelIds?: string[];
 }
@@ -226,6 +235,9 @@ export async function createInitiative(
          priorityId: input.priorityId,
          ownerId: input.ownerId ?? null,
          target: input.target ?? null,
+         startDate: input.startDate ?? null,
+         targetDate:
+            input.targetDate !== undefined ? input.targetDate : targetDateFromLabel(input.target),
          healthId: input.healthId,
          createdAt: new Date(),
       });
@@ -260,6 +272,8 @@ export interface UpdateInitiativeInput {
    healthId?: string;
    ownerId?: string | null;
    target?: string | null;
+   startDate?: string | null;
+   targetDate?: string | null;
    projectIds?: string[];
    labelIds?: string[];
 }
@@ -272,6 +286,9 @@ const INITIATIVE_FIELD_LABELS: Partial<Record<keyof UpdateInitiativeInput, strin
    healthId: 'health',
    ownerId: 'owner',
    target: 'target',
+   startDate: 'start date',
+   // O picker manda rótulo e data juntos: os dois viram um único "target" no feed.
+   targetDate: 'target',
    projectIds: 'projects',
    labelIds: 'labels',
 };
@@ -288,9 +305,13 @@ export async function updateInitiative(
 
    // Campos alterados que entram no feed, resolvidos ANTES da transação: o ator precisa
    // de uma consulta própria, e consultar `db` de dentro da `tx` trava (a conexão é uma só).
-   const changed = (Object.keys(patch) as (keyof UpdateInitiativeInput)[])
-      .filter((k) => patch[k] !== undefined && INITIATIVE_FIELD_LABELS[k])
-      .map((k) => INITIATIVE_FIELD_LABELS[k]);
+   const changed = [
+      ...new Set(
+         (Object.keys(patch) as (keyof UpdateInitiativeInput)[])
+            .filter((k) => patch[k] !== undefined && INITIATIVE_FIELD_LABELS[k])
+            .map((k) => INITIATIVE_FIELD_LABELS[k])
+      ),
+   ];
    const actorId =
       actorEmail && changed.length > 0 ? (await getOrCreateUser(db, actorEmail)).id : null;
 
@@ -305,8 +326,14 @@ export async function updateInitiative(
       'healthId',
       'ownerId',
       'target',
+      'startDate',
+      'targetDate',
    ] as const) {
       if (patch[k] !== undefined) set[k] = patch[k];
+   }
+   // Cliente antigo (só o rótulo): mantém a data coerente com ele.
+   if (patch.target !== undefined && patch.targetDate === undefined) {
+      set.targetDate = targetDateFromLabel(patch.target);
    }
    await db.transaction(async (tx) => {
       if (Object.keys(set).length) await tx.update(initT).set(set).where(eq(initT.id, id));

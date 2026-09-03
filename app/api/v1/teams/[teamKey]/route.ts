@@ -28,6 +28,7 @@ const UpdateSchema = z.object({
    icon: z.string().nullish(),
    color: z.string().nullish(),
    estimateScale: z.enum(['fibonacci', 'exponential', 'linear', 'tshirt']).optional(),
+   cycleCooldownDays: z.number().int().min(0).max(14).optional(),
 });
 
 export async function PATCH(req: Request, { params }: Params) {

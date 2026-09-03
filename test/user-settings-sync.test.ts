@@ -75,6 +75,7 @@ describe('user-settings-sync (layout)', () => {
          initiative: true,
          project: false,
          issue: true,
+         member: true,
       });
       expect(useInboxLayoutStore.getState().listWidth).toBe(420);
 
@@ -110,7 +111,9 @@ describe('user-settings-sync (layout)', () => {
             visibility: useSidebarPrefsStore.getState().visibility,
             order: useSidebarPrefsStore.getState().order,
          },
-         detailPanels: { openByKind: { initiative: true, project: false, issue: false } },
+         detailPanels: {
+            openByKind: { initiative: true, project: false, issue: false, member: true },
+         },
          inboxListWidth: 420,
       });
       // O que o cliente manda passa no schema fechado do servidor.

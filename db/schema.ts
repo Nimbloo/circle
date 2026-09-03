@@ -6,6 +6,7 @@ import {
    date,
    timestamp,
    text,
+   jsonb,
    primaryKey,
    index,
    unique,
@@ -120,6 +121,9 @@ export const team = pgTable('team', {
    issueSeq: integer('issue_seq').notNull().default(0), // contador p/ identifier <KEY>-<n>
    // Escala de estimate do time (paridade Linear): fibonacci|exponential|linear|tshirt.
    estimateScale: varchar('estimate_scale', { length: 16 }).notNull().default('fibonacci'),
+   // Cool-down (#24): dias entre o fim de um cycle e o início do próximo, sem cycle
+   // `current` no meio (paridade Linear). 0 = sem cool-down.
+   cycleCooldownDays: integer('cycle_cooldown_days').notNull().default(0),
 });
 
 export const teamMember = pgTable(
@@ -178,7 +182,12 @@ export const initiative = pgTable('initiative', {
       .notNull()
       .references(() => priority.id),
    ownerId: varchar('owner_id', { length: 36 }).references(() => appUser.id),
+   /** Rótulo humano do período alvo ("Q3 2026", "H2 2026", "2026", "Sep 2026"). */
    target: varchar('target', { length: 64 }),
+   // Datas reais do período: `targetDate` é o fim do período do rótulo (derivada por
+   // `targetDateFromLabel`, backfill em 0036_backfill_initiative_dates.sql).
+   startDate: date('start_date'),
+   targetDate: date('target_date'),
    healthId: varchar('health_id', { length: 64 })
       .notNull()
       .references(() => health.id),
@@ -282,6 +291,23 @@ export const cycle = pgTable(
    ]
 );
 
+// Snapshot diário do cycle (#24): matéria-prima do burn-up real e do `scopeDelta`.
+// Sem job — o upsert do dia acontece no rollover (boot) e no GET do detalhe do cycle.
+// 1 linha por (cycle, dia); dias sem acesso são interpolados na leitura.
+export const cycleSnapshot = pgTable(
+   'cycle_snapshot',
+   {
+      cycleId: varchar('cycle_id', { length: 36 })
+         .notNull()
+         .references(() => cycle.id, { onDelete: 'cascade' }),
+      date: date('date').notNull(),
+      scope: integer('scope').notNull(),
+      started: integer('started').notNull(),
+      completed: integer('completed').notNull(),
+   },
+   (t) => [primaryKey({ columns: [t.cycleId, t.date] })]
+);
+
 export const issue = pgTable(
    'issue',
    {
@@ -351,7 +377,9 @@ export const issueContent = pgTable('issue_content', {
    issueId: varchar('issue_id', { length: 36 })
       .primaryKey()
       .references(() => issue.id),
-   description: text('description'), // ContentBlock[] (json)
+   description: text('description'), // projeção em texto (markdown) — busca, API antiga
+   // Documento ProseMirror (JSON) do editor de blocos. NULL = só há a projeção em texto.
+   descriptionDoc: jsonb('description_doc').$type<Record<string, unknown>>(),
    milestone: varchar('milestone', { length: 196 }),
 });
 
@@ -664,7 +692,9 @@ export const projectDetail = pgTable('project_detail', {
       .primaryKey()
       .references(() => project.id),
    summary: varchar('summary', { length: 1024 }),
-   description: text('description'),
+   description: text('description'), // ContentBlock[] (json) — projeção legada
+   // Documento ProseMirror (JSON) do editor de blocos. NULL = só há a projeção em blocos.
+   descriptionDoc: jsonb('description_doc').$type<Record<string, unknown>>(),
 });
 
 export const documentFolder = pgTable('document_folder', {

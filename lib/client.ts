@@ -48,6 +48,7 @@ import type {
    CommentDto,
    ActivityItem,
    MyActivityItemDto,
+   UpdateIssueContentInput,
 } from '@/lib/api/issue-detail';
 import type { IssueMatrix, ProjectProgress, TimeMetrics } from '@/lib/api/aggregations';
 import type { MeDto } from '@/lib/api/users';
@@ -218,10 +219,8 @@ export const api = {
       removeLabel: (id: string, labelId: string) =>
          del<IssueDto>(`/issues/${id}/labels/${labelId}`),
       detail: (id: string) => get<IssueDetailDto>(`/issues/${id}/detail`),
-      updateDetail: (
-         id: string,
-         body: { description?: string | null; milestone?: string | null }
-      ) => patch<IssueDetailDto>(`/issues/${id}/detail`, body),
+      updateDetail: (id: string, body: UpdateIssueContentInput) =>
+         patch<IssueDetailDto>(`/issues/${id}/detail`, body),
       addRelation: (id: string, relatedId: string, kind: string) =>
          post<IssueDetailDto>(`/issues/${id}/relations`, { relatedId, kind }),
       removeRelation: (id: string, relatedId: string, kind: string) =>
@@ -252,6 +251,7 @@ export const api = {
             icon?: string | null;
             color?: string | null;
             estimateScale?: string;
+            cycleCooldownDays?: number;
          }
       ) => patch<TeamDto>(`/teams/${key}`, body),
       remove: (key: string) => del<{ deleted: boolean }>(`/teams/${key}`),
@@ -266,9 +266,12 @@ export const api = {
       requestJoin: (key: string) => post<{ status: string }>(`/teams/${key}/join-requests`, {}),
       /** Solicitações pendentes do time (admin). */
       joinRequests: (key: string) => get<JoinRequestDto[]>(`/teams/${key}/join-requests`),
-      /** Admin aprova/nega uma solicitação. */
+      /** Admin aprova/nega uma solicitação; devolve a fila pendente e os membros do time. */
       decideJoinRequest: (key: string, id: string, decision: 'approved' | 'denied') =>
-         post<JoinRequestDto[]>(`/teams/${key}/join-requests/${id}`, { decision }),
+         post<{ requests: JoinRequestDto[]; members: MemberDto[] }>(
+            `/teams/${key}/join-requests/${id}`,
+            { decision }
+         ),
       issues: (key: string, opts?: IssueListOptions) =>
          get<IssueDto[]>(`/teams/${key}/issues${issueQuery(opts)}`),
       cycles: (key: string) => get<CycleDto[]>(`/teams/${key}/cycles`),
@@ -383,8 +386,12 @@ export const api = {
          patch<InitiativeDto>(`/initiatives/${id}`, body),
       remove: (id: string) => del<{ deleted: boolean }>(`/initiatives/${id}`),
       updates: (id: string) => get<InitiativeUpdateDto[]>(`/initiatives/${id}/updates`),
+      /** Posta um update; devolve o update e a initiative já com o health propagado. */
       postUpdate: (id: string, body: PostInitiativeUpdateInput) =>
-         post<InitiativeUpdateDto>(`/initiatives/${id}/updates`, body),
+         post<{ update: InitiativeUpdateDto; initiative: InitiativeDto }>(
+            `/initiatives/${id}/updates`,
+            body
+         ),
       /** Feed de alterações (campos mudados) — não confundir com `updates`. */
       activity: (id: string) => get<InitiativeActivityDto[]>(`/initiatives/${id}/activity`),
    },

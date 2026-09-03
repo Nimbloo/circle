@@ -126,6 +126,7 @@ export function adaptTeam(t: TeamFull): Team {
       joined: t.joined,
       color: t.color ?? '#8f9299',
       estimateScale: t.estimateScale,
+      cycleCooldownDays: t.cycleCooldownDays,
       members: t.members.map(adaptMemberToUser),
       projects: t.projects.map(adaptProject),
    };
@@ -161,6 +162,8 @@ export function adaptInitiative(i: InitiativeDto, users: Map<string, User>): Ini
       priority: toPriority(i.priority),
       owner: i.owner ? users.get(i.owner.id) : undefined,
       target: i.target ?? undefined,
+      startDate: i.startDate ?? undefined,
+      targetDate: i.targetDate ?? undefined,
       health: toHealth(i.health),
       labels: i.labels,
       projectIds: i.projectIds,

@@ -16,6 +16,9 @@ import { ApiError } from './errors';
 import { publish } from './events';
 import type { UserRef } from './issues';
 import type { ContentBlock } from '@/data/issue-details';
+import type { EditorDoc } from '@/lib/editor-doc';
+import { textToBlocks } from '@/lib/text-blocks';
+import { projectDescriptionDoc } from './description-doc';
 
 /* -------------------------------------------------------------------------- */
 /*                                    DTOs                                     */
@@ -57,7 +60,10 @@ export interface ProjectActivityDto {
 export interface ProjectDetailDto {
    projectId: string;
    summary: string;
+   /** Projeção em blocos da descrição (contrato legado; derivada do doc quando ele existe). */
    description: ContentBlock[];
+   /** Documento do editor de blocos (JSON do ProseMirror). null = só há a projeção. */
+   descriptionDoc: EditorDoc | null;
    milestones: ProjectMilestoneDto[];
    resources: ProjectResourceDto[];
    updates: ProjectUpdateDto[];
@@ -222,6 +228,7 @@ export async function getProjectDetail(
       projectId,
       summary: detailRow[0]?.summary ?? '',
       description: parseBlocks(detailRow[0]?.description ?? null),
+      descriptionDoc: (detailRow[0]?.descriptionDoc as EditorDoc | null | undefined) ?? null,
       milestones,
       resources,
       updates,
@@ -235,7 +242,10 @@ export async function getProjectDetail(
 
 export interface UpdateDetailInput {
    summary?: string | null;
+   /** Blocos (cliente antigo): grava a projeção e ZERA o doc. */
    description?: ContentBlock[] | null;
+   /** Doc do editor: grava o doc e DERIVA a projeção em blocos. Tem precedência. */
+   descriptionDoc?: EditorDoc | null;
 }
 
 /** Upsert do summary/description em project_detail. Retorna o detalhe completo. */
@@ -246,10 +256,16 @@ export async function updateProjectDetail(
 ): Promise<ProjectDetailDto | null> {
    await assertProject(db, projectId);
 
-   const set: { summary?: string | null; description?: string | null } = {};
+   const set: Partial<typeof projectDetail.$inferInsert> = {};
    if (patch.summary !== undefined) set.summary = patch.summary;
-   if (patch.description !== undefined)
+   if (patch.descriptionDoc !== undefined) {
+      const derived = projectDescriptionDoc(patch.descriptionDoc);
+      set.description = derived.text === null ? null : JSON.stringify(textToBlocks(derived.text));
+      set.descriptionDoc = derived.doc;
+   } else if (patch.description !== undefined) {
       set.description = patch.description === null ? null : JSON.stringify(patch.description);
+      set.descriptionDoc = null;
+   }
 
    if (Object.keys(set).length > 0) {
       await db
@@ -258,6 +274,7 @@ export async function updateProjectDetail(
             projectId,
             summary: set.summary ?? null,
             description: set.description ?? null,
+            descriptionDoc: set.descriptionDoc ?? null,
          })
          .onConflictDoUpdate({ target: projectDetail.projectId, set });
    }

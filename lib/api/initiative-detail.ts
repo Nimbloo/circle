@@ -4,6 +4,7 @@ import type { Db } from '@/db';
 import { initiative as initT, initiativeUpdate, appUser } from '@/db/schema';
 import { ApiError } from './errors';
 import { publish } from './events';
+import { getInitiative, type InitiativeDto } from './initiatives';
 import type { UserRef } from './issues';
 import type { ContentBlock } from '@/data/issue-details';
 
@@ -81,14 +82,15 @@ export async function listInitiativeUpdates(
 /**
  * Posta um update de initiative e PROPAGA o health pro initiative.healthId (paridade
  * Linear: health = último update). Os valores on-track/at-risk/off-track são ids do
- * catálogo health. Antes o healthId era estático e a aba Activity era stub.
+ * catálogo health. Devolve o update e a initiative já atualizada, pro cliente aplicar
+ * no store (`applyInitiative`) sem re-hidratar o workspace.
  */
 export async function postInitiativeUpdate(
    db: Db,
    initiativeId: string,
    authorId: string,
    input: PostInitiativeUpdateInput
-): Promise<InitiativeUpdateDto> {
+): Promise<{ update: InitiativeUpdateDto; initiative: InitiativeDto }> {
    await assertInitiative(db, initiativeId);
    if (!UPDATE_HEALTHS.includes(input.health)) throw new ApiError(400, 'health inválido');
    const id = randomUUID();
@@ -102,13 +104,20 @@ export async function postInitiativeUpdate(
       createdAt: now,
    });
    await db.update(initT).set({ healthId: input.health }).where(eq(initT.id, initiativeId));
-   const users = await loadUsers(db, [authorId]);
+   const [users, initiative] = await Promise.all([
+      loadUsers(db, [authorId]),
+      getInitiative(db, initiativeId),
+   ]);
+   if (!initiative) throw new ApiError(404, `Initiative '${initiativeId}' não encontrada`);
    publish({ entity: 'initiative', action: 'updated', id: initiativeId });
    return {
-      id,
-      author: userRef(users.get(authorId)),
-      health: input.health,
-      blocks: input.blocks ?? [],
-      createdAt: now.toISOString(),
+      update: {
+         id,
+         author: userRef(users.get(authorId)),
+         health: input.health,
+         blocks: input.blocks ?? [],
+         createdAt: now.toISOString(),
+      },
+      initiative,
    };
 }

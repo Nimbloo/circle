@@ -17,6 +17,9 @@ export interface Initiative {
    owner?: User;
    /** Target label shown in the list ("Q3 2026", "Sep 30th", …). */
    target?: string;
+   /** ISO `YYYY-MM-DD`; `targetDate` is the real end of the `target` period. */
+   startDate?: string;
+   targetDate?: string;
    health: Health;
    labels: LabelInterface[];
    projectIds: string[];

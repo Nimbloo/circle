@@ -27,6 +27,7 @@ export interface TeamDto {
    icon: string | null;
    color: string | null;
    estimateScale: string; // fibonacci|exponential|linear|tshirt
+   cycleCooldownDays: number; // dias sem cycle current entre um cycle e o próximo (0-14)
    memberCount: number;
    projectCount: number;
    joined: boolean;
@@ -70,6 +71,7 @@ function toDto(
       icon: t.icon,
       color: t.color,
       estimateScale: t.estimateScale,
+      cycleCooldownDays: t.cycleCooldownDays,
       memberCount: counts.members.get(t.id) ?? 0,
       projectCount: counts.projects.get(t.id) ?? 0,
       joined: joined.has(t.id),
@@ -329,14 +331,21 @@ export async function listJoinRequests(db: Db, teamId: string): Promise<JoinRequ
    }));
 }
 
-/** Aprova/nega uma solicitação (admin). Aprovar insere o team_member (idempotente). */
+/**
+ * Aprova/nega uma solicitação (admin). Aprovar insere o team_member (idempotente).
+ * Devolve a fila pendente E os membros do time: aprovar muda a membership, e o
+ * cliente aplica os dois no store (`applyTeamMembers`) sem re-hidratar o workspace.
+ */
 export async function decideJoinRequest(
    db: Db,
    teamId: string,
    requestId: string,
    decision: 'approved' | 'denied',
    deciderId: string
-): Promise<void> {
+): Promise<{
+   requests: JoinRequestDto[];
+   members: Awaited<ReturnType<typeof listTeamMembers>>;
+}> {
    const rows = await db
       .select()
       .from(teamJoinRequest)
@@ -355,6 +364,11 @@ export async function decideJoinRequest(
       .set({ status: decision, decidedAt: new Date(), decidedBy: deciderId })
       .where(eq(teamJoinRequest.id, requestId));
    publish({ entity: 'member', action: 'updated', id: rows[0].userId });
+   const [requests, members] = await Promise.all([
+      listJoinRequests(db, teamId),
+      listTeamMembers(db, teamId),
+   ]);
+   return { requests, members };
 }
 
 /** teamIds com solicitação PENDENTE do usuário — pra UI mostrar "Solicitado". */
@@ -389,9 +403,10 @@ export interface UpdateTeamInput {
    icon?: string | null;
    color?: string | null;
    estimateScale?: string;
+   cycleCooldownDays?: number;
 }
 
-/** Atualização parcial (name/icon/color). Retorna o TeamDto ou null se não existir. */
+/** Atualização parcial (name/icon/color/estimateScale/cycleCooldownDays). Retorna o TeamDto ou null se não existir. */
 export async function updateTeam(
    db: Db,
    id: string,
@@ -404,6 +419,7 @@ export async function updateTeam(
    if (patch.icon !== undefined) set.icon = patch.icon;
    if (patch.color !== undefined) set.color = patch.color;
    if (patch.estimateScale !== undefined) set.estimateScale = patch.estimateScale;
+   if (patch.cycleCooldownDays !== undefined) set.cycleCooldownDays = patch.cycleCooldownDays;
    if (Object.keys(set).length) await db.update(teamT).set(set).where(eq(teamT.id, id));
    publish({ entity: 'team', action: 'updated', id });
    return getTeam(db, id);
