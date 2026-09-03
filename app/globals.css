@@ -464,6 +464,47 @@ html[data-underline-links='true'] a[href]:not([role='button']):not(.no-underline
    color: var(--muted-foreground);
    text-decoration: line-through;
 }
+/* NodeView React (editor com contexto de issue): o wrapper assume o layout do <li>. */
+.ProseMirror ul[data-type='taskList'] > li > [data-node-view-wrapper] {
+   display: flex;
+   flex: 1 1 auto;
+   align-items: flex-start;
+   gap: 0.6em;
+   min-width: 0;
+}
+.ProseMirror ul[data-type='taskList'] > li > [data-node-view-wrapper] > label {
+   flex: 0 0 auto;
+   display: flex;
+   align-items: center;
+   height: 1.6em;
+}
+.ProseMirror
+   ul[data-type='taskList']
+   > li
+   > [data-node-view-wrapper]
+   > label
+   input[type='checkbox'] {
+   width: 1em;
+   height: 1em;
+   margin: 0;
+   accent-color: var(--primary);
+   cursor: pointer;
+}
+.ProseMirror ul[data-type='taskList'] > li > [data-node-view-wrapper] > label input:disabled {
+   cursor: default;
+}
+.ProseMirror ul[data-type='taskList'] > li > [data-node-view-wrapper] > [data-node-view-content] {
+   flex: 1 1 auto;
+   min-width: 0;
+}
+.ProseMirror
+   ul[data-type='taskList']
+   > li
+   > [data-node-view-wrapper][data-checked='true']
+   > [data-node-view-content] {
+   color: var(--muted-foreground);
+   text-decoration: line-through;
+}
 .ProseMirror code {
    font-family: var(--font-mono), ui-monospace, monospace;
    font-size: 0.85em;

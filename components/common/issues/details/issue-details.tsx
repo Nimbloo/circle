@@ -193,6 +193,15 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
                      doc={descriptionDoc}
                      placeholder="Add a description…"
                      onSave={saveDescription}
+                     context={
+                        issue.teamId
+                           ? {
+                                issueId: issue.id,
+                                teamId: issue.teamId,
+                                projectId: issue.project?.id ?? null,
+                             }
+                           : undefined
+                     }
                   />
                </div>
 

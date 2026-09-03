@@ -5,7 +5,9 @@ import { cn } from '@/lib/utils';
 import { EMPTY_DOC, type EditorDoc } from '@/lib/editor-doc';
 import { editorExtensions } from '@/lib/editor-extensions';
 import { IssueRef } from '@/lib/editor-issue-ref';
+import { TaskItemExt, linkedIssueIdentifier } from '@/lib/editor-tasks';
 import type { Issue } from '@/data/issues';
+import { useCatalogStore } from '@/store/catalog-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { EditorContent, ReactNodeViewRenderer, useEditor, type Editor } from '@tiptap/react';
 import { exitSuggestion, type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion';
@@ -29,6 +31,14 @@ import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { IssueRefChip } from './issue-ref-chip';
 import { SlashCommand, type SlashItem } from './slash-command';
+import { TaskItemView } from './task-item-view';
+
+/** Issue dona do documento — habilita converter item da checklist em sub-issue. */
+export interface BlockEditorContext {
+   issueId: string;
+   teamId: string;
+   projectId?: string | null;
+}
 
 export interface BlockEditorProps {
    /** Documento a exibir. Trocas EXTERNAS (refetch) só entram enquanto o editor não tem foco. */
@@ -47,6 +57,12 @@ export interface BlockEditorProps {
    /** `compact`: altura mínima e tipografia menores (modais de criação). */
    variant?: 'default' | 'compact';
    className?: string;
+   /**
+    * Contexto da issue (detalhe): com ele, cada task item ganha "Create sub-issue"
+    * (hover ou `Mod-Shift-O`) e o check de um item já convertido reflete a sub-issue.
+    * Fixo por montagem — o editor não é recriado quando muda.
+    */
+   context?: BlockEditorContext;
 }
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -176,6 +192,7 @@ export function BlockEditor({
    onUpload,
    variant = 'default',
    className,
+   context,
 }: BlockEditorProps) {
    // Callbacks em refs: o editor é criado uma vez e não deve ser recriado quando o pai
    // re-renderiza com closures novas.
@@ -183,12 +200,15 @@ export function BlockEditor({
    const onSaveRef = useRef(onSave);
    const onReadyRef = useRef(onReady);
    const onUploadRef = useRef(onUpload);
+   const contextRef = useRef(context);
    useEffect(() => {
       onChangeRef.current = onChange;
       onSaveRef.current = onSave;
       onReadyRef.current = onReady;
       onUploadRef.current = onUpload;
+      contextRef.current = context;
    });
+   const editorRef = useRef<Editor | null>(null);
 
    // Debounce do save + flush (blur/unmount) para não perder a última edição.
    const pendingRef = useRef<EditorDoc | null>(null);
@@ -210,6 +230,81 @@ export function BlockEditor({
    );
    useEffect(() => flush, [flush]);
 
+   // Task item → sub-issue: cria a issue filha com o texto do item e troca o conteúdo
+   // do item pelo chip `issueRef` (o check passa a seguir o status dela). O save
+   // pendente é descarregado ANTES, para a descrição não voltar sem o item.
+   const createSubIssueFromTaskItem = useCallback(
+      async (pos: number) => {
+         const editor = editorRef.current;
+         const ctx = contextRef.current;
+         if (!editor || !ctx) return;
+         const item = editor.state.doc.nodeAt(pos);
+         if (!item || item.type.name !== 'taskItem' || linkedIssueIdentifier(item)) return;
+         const title = item.firstChild?.textContent.trim() ?? '';
+         if (!title) {
+            toast.error('Escreva o texto da tarefa antes de criar a sub-issue');
+            return;
+         }
+         flush();
+         try {
+            const { statuses, priorities } = useCatalogStore.getState();
+            const status =
+               statuses.find((s) => s.id === 'to-do') ??
+               statuses.find((s) => s.category === 'unstarted') ??
+               statuses[0];
+            const priority =
+               priorities.find((p) => p.id === 'no-priority') ?? priorities[priorities.length - 1];
+            const dto = await api.issues.create({
+               teamId: ctx.teamId,
+               projectId: ctx.projectId ?? null,
+               parentId: ctx.issueId,
+               title,
+               statusId: status?.id ?? 'to-do',
+               priorityId: priority?.id ?? 'no-priority',
+            });
+            await useIssuesStore.getState().applyRemote(dto.id);
+
+            // O documento pode ter mudado enquanto a API respondia: reencontra o item
+            // (mesma posição, senão o primeiro item não vinculado com o mesmo texto).
+            const { doc } = editor.state;
+            let target: { pos: number; node: typeof item } | null = null;
+            const at = doc.nodeAt(pos);
+            if (at?.type.name === 'taskItem' && at.firstChild?.textContent.trim() === title) {
+               target = { pos, node: at };
+            } else {
+               doc.descendants((node, nodePos) => {
+                  if (target) return false;
+                  if (
+                     node.type.name === 'taskItem' &&
+                     !linkedIssueIdentifier(node) &&
+                     node.firstChild?.textContent.trim() === title
+                  ) {
+                     target = { pos: nodePos, node };
+                     return false;
+                  }
+                  return true;
+               });
+            }
+            if (!target) return;
+            const found: { pos: number; node: typeof item } = target;
+            const paragraph = found.node.firstChild!;
+            const from = found.pos + 2; // item + parágrafo: início do texto do 1º parágrafo
+            const chip = editor.schema.nodes.issueRef.create({ identifier: dto.identifier });
+            editor.view.dispatch(
+               editor.state.tr.replaceWith(from, from + paragraph.content.size, chip)
+            );
+         } catch {
+            toast.error('Falha ao criar sub-issue');
+         }
+      },
+      [flush]
+   );
+   const createSubIssueRef = useRef(createSubIssueFromTaskItem);
+   useEffect(() => {
+      createSubIssueRef.current = createSubIssueFromTaskItem;
+   }, [createSubIssueFromTaskItem]);
+   const hasContext = context !== undefined;
+
    const slash = useSuggestionMenu<SlashItem>();
    const issueMenu = useSuggestionMenu<Issue>();
 
@@ -222,6 +317,23 @@ export function BlockEditor({
                const detail = error instanceof Error && error.message ? `: ${error.message}` : '';
                toast.error(`Falha ao enviar a imagem${detail}`);
             },
+            // NodeView React só com contexto de issue (é onde a conversão faz sentido);
+            // sem ele, o NodeView padrão do Tiptap.
+            taskItem: hasContext
+               ? TaskItemExt.extend({
+                    addNodeView() {
+                       return ReactNodeViewRenderer(TaskItemView, {
+                          as: 'li',
+                          attrs: ({ node }) => ({
+                             'data-type': 'taskItem',
+                             'data-checked': String(Boolean(node.attrs.checked)),
+                          }),
+                       });
+                    },
+                 }).configure({
+                    onCreateSubIssue: (pos) => void createSubIssueRef.current(pos),
+                 })
+               : undefined,
             issueRef: IssueRef.extend({
                addNodeView() {
                   return ReactNodeViewRenderer(IssueRefChip);
@@ -247,7 +359,7 @@ export function BlockEditor({
          }),
          SlashCommand.configure({ suggestion: { render: slash.render } }),
       ],
-      [placeholder, slash.render, issueMenu.render]
+      [placeholder, slash.render, issueMenu.render, hasContext]
    );
 
    const editor = useEditor({
@@ -255,7 +367,10 @@ export function BlockEditor({
       content: doc ?? EMPTY_DOC,
       editable,
       immediatelyRender: false,
-      onCreate: ({ editor: created }) => onReadyRef.current?.(created),
+      onCreate: ({ editor: created }) => {
+         editorRef.current = created;
+         onReadyRef.current?.(created);
+      },
       onUpdate: ({ editor: updated }) => {
          const json = updated.getJSON();
          onChangeRef.current?.(json);

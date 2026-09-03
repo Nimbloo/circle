@@ -214,7 +214,9 @@ export const api = {
    issues: {
       list: (opts?: IssueListOptions) => get<IssueDto[]>(`/issues${issueQuery(opts)}`),
       get: (id: string) => get<IssueDto>(`/issues/${id}`),
-      create: (input: CreateIssueInput) => post<IssueDto>('/issues', input),
+      // `parentId`: contrato de sub-issues (cria já vinculada ao pai) — tipado aqui até
+      // o servidor aceitá-lo; hoje o schema da rota ignora a chave.
+      create: (input: CreateIssueInput & { parentId?: string }) => post<IssueDto>('/issues', input),
       update: (id: string, patchInput: UpdateIssueInput) =>
          patch<IssueDto>(`/issues/${id}`, patchInput),
       remove: (id: string) => del<{ deleted: boolean }>(`/issues/${id}`),
