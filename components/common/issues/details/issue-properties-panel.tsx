@@ -204,7 +204,7 @@ function MilestoneSelector({
  */
 export function IssuePropertiesPanel({ issue, detail, onChanged }: IssuePropertiesPanelProps) {
    const updateIssue = useIssuesStore((s) => s.updateIssue);
-   const updateIssueAssignee = useIssuesStore((s) => s.updateIssueAssignee);
+   const updateIssueAssignees = useIssuesStore((s) => s.updateIssueAssignees);
    const addIssueLabel = useIssuesStore((s) => s.addIssueLabel);
    const removeIssueLabel = useIssuesStore((s) => s.removeIssueLabel);
    // Diff entre a seleção do LabelSelector e as labels atuais → add/remove no store.
@@ -229,8 +229,8 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
                </div>
                <div className="flex items-center gap-1.5 -ml-0.5 mt-0.5">
                   <AssigneeSelector
-                     assignee={issue.assignee}
-                     onChange={(assignee) => updateIssueAssignee(issue.id, assignee)}
+                     assignees={issue.assignees}
+                     onChange={(assignees) => updateIssueAssignees(issue.id, assignees)}
                   />
                </div>
                <div className="mt-0.5">
