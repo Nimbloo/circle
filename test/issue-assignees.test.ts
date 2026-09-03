@@ -189,7 +189,7 @@ describe('múltiplos responsáveis (#96)', () => {
          assigneeId: null,
          rank: 'zzz',
       });
-      const migration = readFileSync('db/migrations/0040_issue_assignee.sql', 'utf8');
+      const migration = readFileSync('db/migrations/0042_backfill_issue_assignee.sql', 'utf8');
       const backfill = migration.split('--> statement-breakpoint').at(-1)!;
 
       await db.execute(sql.raw(backfill));

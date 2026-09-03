@@ -58,6 +58,7 @@ const child: Issue = {
    description: '',
    status: status[0],
    assignee: null,
+   assignees: [],
    priority: priorities[0],
    labels: [],
    createdAt: '2026-09-01T00:00:00Z',

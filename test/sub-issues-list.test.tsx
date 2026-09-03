@@ -59,6 +59,7 @@ function issue(partial: Partial<Issue> & { id: string; title: string }): Issue {
       description: '',
       status: todo,
       assignee: null,
+      assignees: [],
       priority: priorities[0],
       labels: [],
       createdAt: '2026-09-01T00:00:00Z',
