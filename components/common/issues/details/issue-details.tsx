@@ -14,12 +14,12 @@ import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { DetailSidePanel, DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 import { BlockEditor } from '@/components/common/editor/block-editor';
-import { AssigneeUser } from '../assignee-user';
 import { ActivityFeed } from './activity-feed';
 import { IssuePropertiesPanel } from './issue-properties-panel';
 import { IssueDetailSkeleton } from './issue-detail-skeleton';
 import { RelationEditor } from './relation-editor';
 import { SubIssueCreate } from './sub-issue-create';
+import { SubIssueRow } from './sub-issue-row';
 
 interface IssueDetailViewProps {
    issue: Issue;
@@ -222,20 +222,15 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
                         </h2>
                         <div className="flex flex-col border-t border-border/50 mb-2">
                            {subIssues.map((subIssue) => (
-                              <Link
+                              <SubIssueRow
                                  key={subIssue.id}
-                                 href={`/${orgId ?? 'nimbloo'}/issue/${subIssue.identifier}`}
-                                 className="flex items-center gap-2.5 h-10 px-1 border-b border-border/50 hover:bg-sidebar/50 text-sm min-w-0"
-                              >
-                                 <subIssue.status.icon />
-                                 <span className="text-muted-foreground shrink-0 text-xs font-medium">
-                                    {subIssue.identifier}
-                                 </span>
-                                 <span className="truncate font-medium">{subIssue.title}</span>
-                                 <span className="ml-auto shrink-0">
-                                    <AssigneeUser user={subIssue.assignee} issueId={subIssue.id} />
-                                 </span>
-                              </Link>
+                                 id={subIssue.id}
+                                 identifier={subIssue.identifier}
+                                 title={subIssue.title}
+                                 status={subIssue.status}
+                                 assignee={subIssue.assignee}
+                                 orgId={orgId ?? 'nimbloo'}
+                              />
                            ))}
                         </div>
                      </>

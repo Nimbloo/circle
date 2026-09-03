@@ -5,8 +5,10 @@ import { describe, expect, it } from 'vitest';
 import MainLayout from '@/components/layout/main-layout';
 import { HeaderGroup } from '@/components/layout/header-primitives';
 import { InitiativeProjectRow } from '@/components/common/initiatives/initiative-project-row';
+import { SubIssueRow } from '@/components/common/issues/details/sub-issue-row';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import type { Project } from '@/data/projects';
+import { status } from '@/data/status';
 
 describe('semântica da interface', () => {
    it('expõe um único landmark principal no frame da página', () => {
@@ -62,5 +64,27 @@ describe('semântica da interface', () => {
       expect(buttonStart).toBeGreaterThan(anchorEnd);
       expect(html.slice(0, anchorEnd)).not.toContain('<button');
       expect(html).toContain('aria-label="Remove Projeto Atlas from initiative"');
+   });
+
+   it('mantém status e assignee da sub-issue fora do link da linha', () => {
+      const html = renderToStaticMarkup(
+         createElement(SubIssueRow, {
+            id: 'sub-1',
+            identifier: 'ENG-12',
+            title: 'Sub-issue Atlas',
+            status: status[0],
+            assignee: null,
+            orgId: 'nimbloo',
+         })
+      );
+      const anchorStart = html.indexOf('<a ');
+      const anchorEnd = html.indexOf('</a>');
+
+      expect(anchorStart).toBeGreaterThan(-1);
+      expect(html.slice(anchorStart, anchorEnd)).not.toContain('<button');
+      // Seletores vivos dos dois lados do link: status antes, assignee depois.
+      expect(html.slice(0, anchorStart)).toContain('aria-label="Set status"');
+      expect(html.slice(anchorEnd)).toContain('aria-label="Assign issue"');
+      expect(html).toContain('href="/nimbloo/issue/ENG-12"');
    });
 });
