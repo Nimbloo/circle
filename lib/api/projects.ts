@@ -16,6 +16,7 @@ import {
    priority as priorityT,
    health as healthT,
    label as labelT,
+   team as teamT,
    appUser,
 } from '@/db/schema';
 import { ApiError } from './errors';
@@ -290,6 +291,8 @@ export interface UpdateProjectInput {
    startDate?: string | null;
    targetDate?: string | null;
    initiativeId?: string | null;
+   /** Move o projeto para outro time (as issues do projeto NÃO mudam de time). */
+   teamId?: string;
 }
 
 /** Rótulos legíveis dos campos, para o feed de atividade do projeto. */
@@ -302,6 +305,7 @@ const PROJECT_FIELD_LABELS: Partial<Record<keyof UpdateProjectInput, string>> = 
    startDate: 'start date',
    targetDate: 'target date',
    initiativeId: 'initiative',
+   teamId: 'team',
 };
 
 export async function updateProject(
@@ -316,6 +320,14 @@ export async function updateProject(
       .where(eq(projectT.id, id))
       .limit(1);
    if (existing.length === 0) return null;
+   if (patch.teamId !== undefined) {
+      const found = await db
+         .select({ id: teamT.id })
+         .from(teamT)
+         .where(eq(teamT.id, patch.teamId))
+         .limit(1);
+      if (found.length === 0) throw new ApiError(400, `team '${patch.teamId}' inválido`);
+   }
 
    // Resolvido ANTES da transação: o ator exige consulta própria, e consultar `db` de
    // dentro da `tx` trava quando a conexão é única (é o caso do PGlite nos testes).
@@ -337,6 +349,7 @@ export async function updateProject(
       'startDate',
       'targetDate',
       'initiativeId',
+      'teamId',
    ] as const) {
       if (patch[k] !== undefined) set[k] = patch[k];
    }
