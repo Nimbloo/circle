@@ -8,10 +8,12 @@ import {
    LocationBar,
    ViewBar,
 } from '@/components/layout/header-primitives';
+import { DetailPanelToggle } from '@/components/common/detail-side-panel';
 import { cn } from '@/lib/utils';
+import { useDetailPanelStore } from '@/store/detail-panel-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { BarChart3, PanelRight } from 'lucide-react';
+import { BarChart3 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, usePathname } from 'next/navigation';
 
@@ -52,25 +54,25 @@ function ProjectTabs({ projectId }: { projectId: string }) {
 
 function PanelToggles() {
    const { openPanel, togglePanel } = useRightPanelStore();
+   const panelOpen = useDetailPanelStore((s) => s.openByKind.project);
+   const setPanelOpen = useDetailPanelStore((s) => s.setOpen);
 
    return (
       <div className="hidden items-center gap-1 xl:flex">
          <Button
             size="xs"
             variant={openPanel === 'insights' ? 'secondary' : 'ghost'}
-            onClick={() => togglePanel('insights')}
+            onClick={() => {
+               togglePanel('insights');
+               // Ligar o Insights com o painel fechado não mostraria nada: abre o painel.
+               if (openPanel !== 'insights' && !panelOpen) setPanelOpen('project', true);
+            }}
             aria-label="Toggle insights panel"
+            aria-pressed={openPanel === 'insights'}
          >
             <BarChart3 className="size-4" />
          </Button>
-         <Button
-            size="xs"
-            variant={openPanel === 'hidden' ? 'ghost' : 'secondary'}
-            onClick={() => togglePanel('hidden')}
-            aria-label="Toggle side panel"
-         >
-            <PanelRight className="size-4" />
-         </Button>
+         <DetailPanelToggle kind="project" />
       </div>
    );
 }

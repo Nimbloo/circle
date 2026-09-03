@@ -26,9 +26,9 @@
 
 ## Task B — Painel lateral unificado e right-panel por rota (itens 2, 3)
 
-- [ ] `DetailSidePanel` + toggle no header de initiative, project e issue; inline
+- [x] `DetailSidePanel` + toggle no header de initiative, project e issue; inline
       Properties removido; `initiative-details-store` apagado.
-- [ ] `right-panel-store` por rota com a mesma API; teste.
+- [x] `right-panel-store` por rota com a mesma API; teste.
 
 ## Task C — Um motor de filtro para views (item 5)
 
