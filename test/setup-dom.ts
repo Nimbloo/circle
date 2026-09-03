@@ -33,4 +33,36 @@ for (const proto of [Range.prototype, Element.prototype]) {
    }
 }
 
+// O Tiptap simula o colar (paste rules via `insertContent(..., { applyPasteRules })`) com
+// ClipboardEvent + DataTransfer, que o jsdom não implementa.
+if (typeof DataTransfer === 'undefined') {
+   class DataTransferStub {
+      private data = new Map<string, string>();
+      files = [] as unknown as FileList;
+      setData(type: string, value: string) {
+         this.data.set(type, value);
+      }
+      getData(type: string) {
+         return this.data.get(type) ?? '';
+      }
+   }
+   Object.defineProperty(globalThis, 'DataTransfer', {
+      configurable: true,
+      value: DataTransferStub,
+   });
+}
+if (typeof ClipboardEvent === 'undefined') {
+   class ClipboardEventStub extends Event {
+      clipboardData: DataTransfer | null;
+      constructor(type: string, init?: ClipboardEventInit) {
+         super(type, init);
+         this.clipboardData = init?.clipboardData ?? null;
+      }
+   }
+   Object.defineProperty(globalThis, 'ClipboardEvent', {
+      configurable: true,
+      value: ClipboardEventStub,
+   });
+}
+
 afterEach(cleanup);

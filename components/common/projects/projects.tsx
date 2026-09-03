@@ -19,7 +19,10 @@ export interface ProjectGroup {
    id: string;
    name: string;
    icon?: string;
+   /** Presente quando o grupo é uma coluna/seção de status (drop no board → `statusId`). */
    status?: Status;
+   /** Presente quando o grupo é um time (drop no board → `teamId`). */
+   teamId?: string;
    projects: Project[];
 }
 
@@ -79,7 +82,12 @@ export default function Projects({ teamId }: { teamId?: string }) {
    }, [allProjects, tab, closedProjects, filters, ordering, teamId]);
 
    const groups = useMemo<ProjectGroup[]>(() => {
-      if (viewType === 'board') {
+      // O board não tem coluna "todos": sem agrupamento, cai em colunas por status.
+      const effective = viewType === 'board' && grouping === 'none' ? 'status' : grouping;
+      if (effective === 'none') {
+         return [{ id: 'all', name: 'All projects', projects: displayed }];
+      }
+      if (effective === 'status') {
          return projectStatuses
             .map((status) => ({
                id: status.id,
@@ -89,14 +97,12 @@ export default function Projects({ teamId }: { teamId?: string }) {
             }))
             .filter((group) => showEmptyGroups || group.projects.length > 0);
       }
-      if (grouping === 'none') {
-         return [{ id: 'all', name: 'All projects', projects: displayed }];
-      }
       return teams
          .map((team) => ({
             id: team.id,
             name: team.name,
             icon: team.icon,
+            teamId: team.id,
             projects: displayed.filter((project) => project.teamId === team.id),
          }))
          .filter((group) => showEmptyGroups || group.projects.length > 0);

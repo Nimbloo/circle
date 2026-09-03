@@ -12,6 +12,12 @@ import {
 } from '@/db/schema';
 import { ApiError } from './errors';
 import { notifySlackEvent } from './integrations/slack';
+import {
+   latestVerdict,
+   listReviewComments,
+   type ReviewCommentDto,
+   type ReviewVerdictDto,
+} from './review-comments';
 
 /** Status do review (open|merged|closed) → status do link de PR na issue (open|merged|draft). */
 function prLinkStatus(reviewStatus: string): string {
@@ -154,11 +160,16 @@ export interface ReviewGuideDto {
    model: string;
 }
 
-/** Detalhe do review: o PR + arquivos, commits e guia (aditivo ao `ReviewDto`). */
+/**
+ * Detalhe do review: o PR + arquivos, commits, guia, a thread de comentários e o veredito
+ * corrente (último `approve`/`request_changes`) — aditivo ao `ReviewDto`.
+ */
 export interface ReviewDetailDto extends ReviewDto {
    files: ReviewFileDto[];
    commits: ReviewCommitDto[];
    guide: ReviewGuideDto | null;
+   comments: ReviewCommentDto[];
+   verdict: ReviewVerdictDto | null;
 }
 
 function toIso(d: Date | string | null): string | null {
@@ -197,6 +208,7 @@ export async function getReview(
    if (!rows.length) return null;
    let row = rows[0];
    let [files, commits] = await loadDepth(db, id);
+   const comments = await listReviewComments(db, id);
 
    const token = opts.token ?? process.env.GITHUB_TOKEN;
    if (files.length === 0 && commits.length === 0 && !row.depthSyncedAt && token) {
@@ -222,6 +234,8 @@ export async function getReview(
          author: c.author,
          committedAt: toIso(c.committedAt),
       })),
+      comments,
+      verdict: latestVerdict(comments),
    };
 }
 

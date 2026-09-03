@@ -40,6 +40,8 @@ import { dispatchNotification } from './notify';
 import { getCachedCatalogs } from './catalogs';
 import { publish } from './events';
 import { notifySlackEvent } from './integrations/slack';
+import { projectDescriptionDoc } from './description-doc';
+import type { EditorDoc } from '@/lib/editor-doc';
 
 /** Teto default de linhas nas listagens (proteção; paginação por cursor fica p/ depois). */
 const DEFAULT_LIST_LIMIT = 500;
@@ -388,6 +390,8 @@ export interface CreateIssueInput {
    dueDate?: string | null;
    estimate?: number | null;
    description?: string | null;
+   /** Doc do editor de blocos (#16): tem precedência — o servidor deriva `description`. */
+   descriptionDoc?: EditorDoc | null;
    /** Origem Sentry (dedup): id da issue do Sentry. Único no banco. */
    sentryIssueId?: string | null;
 }
@@ -412,6 +416,13 @@ export async function createIssue(
    const startCat = statusRow.category;
    if (!catalogs.priorities.get(input.priorityId))
       throw new ApiError(400, `Priority '${input.priorityId}' não existe`);
+
+   // Descrição: o doc do editor (derivando a projeção em texto, 400 se inválido) ou o
+   // texto puro do cliente antigo.
+   const content =
+      input.descriptionDoc !== undefined
+         ? projectDescriptionDoc(input.descriptionDoc)
+         : { text: input.description || null, doc: null };
 
    const id = randomUUID();
    const now = new Date();
@@ -455,10 +466,13 @@ export async function createIssue(
          updatedAt: now,
       });
 
-      if (input.description) {
-         await tx
-            .insert(issueContent)
-            .values({ issueId: id, description: input.description, milestone: null });
+      if (content.text) {
+         await tx.insert(issueContent).values({
+            issueId: id,
+            description: content.text,
+            descriptionDoc: content.doc,
+            milestone: null,
+         });
       }
       if (input.labelIds?.length) {
          await tx

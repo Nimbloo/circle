@@ -236,6 +236,34 @@ em views de projeto, `decideJoinRequest`/`postInitiativeUpdate` devolvendo a ent
 migrations 0036–0038 aplicadas no boot (39/39, incluindo o backfill de `target_date`),
 rollout `Synced/Healthy`, `healthz`/`readyz` em `200`.
 
+### Produto — editor completo, comentários de review, board por time, épico fatiado (03/09/2026)
+
+Restos conscientes da leva anterior, decididos e construídos (spec
+`docs/superpowers/specs/2026-09-03-produto-restos-design.md`, três grupos em paralelo):
+
+- **Editor (#16), agora completo:** imagens com upload (`POST /api/v1/uploads`, mesmo S3/CDN
+  dos avatares, png/jpeg/webp/gif até 5 MB, placeholder enquanto sobe, 503 honesto sem
+  bucket configurado), vídeo por URL (YouTube/Vimeo/Loom em `iframe` 16:9, `.mp4/.webm` em
+  `<video>`), referência a issue com `#` (chip vivo com status e título, colar `ENG-12`
+  converte só identifiers conhecidos) e os modais de criar issue/projeto usam o
+  `BlockEditor` enviando `descriptionDoc`. `docToText` conhece os três nós. **CSP** ganhou
+  `frame-src` dos três players e `media-src 'self' https:`.
+- **Reviews (#22), comentários e veredito:** tabela `review_comment` (migration 0039),
+  `GET/POST /reviews/{id}/comments` e `PATCH/DELETE .../{commentId}` (edita só o autor;
+  exclui autor ou admin), evento realtime `review_comment`. UI: thread no Overview, composer
+  inline por linha e por arquivo no Diff, "Approve" / "Request changes" com badge do último
+  veredito no cabeçalho. Só linhas do arquivo novo são ancoráveis.
+- **Projetos (#19), board por time:** `PATCH /projects/{id}` aceita `teamId` (aditivo; 400
+  para time inválido; activity "changed team"; issues não mudam de time). Grouping do
+  Display ganhou `status`, agora o **padrão** da lista e do board (como no Linear); o board
+  solta o card por status ou por time conforme o grouping. Popover de Display cresce com o
+  conteúdo (o Reset sobrepunha "Labels" na variante Timeline).
+- **Épico #25 fatiado** em nove issues por tema (#94–#102), cada uma com por quê, escopo,
+  fora do escopo e aceitação; o épico segue aberto só com o checklist.
+
+Fica de fora, consciente: item "Video" do menu "/" ainda pede a URL por `window.prompt`
+(UI inline depois); comentário em linha removida (`-`) não é ancorável.
+
 ## Decisões suas (não é falta de código)
 
 Nenhuma pendente em 02/09/2026: datas de initiatives, snapshot de cycles e editor de blocos
@@ -245,13 +273,13 @@ foram decididos e entregues (seção acima).
 
 Roadmap, não limpeza. Priorize por valor.
 
-| Issue                                              | O que falta de verdade                                                                                                                                                                                                                                             |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [#19](https://github.com/Nimbloo/circle/issues/19) | **Fechada na prática**: DnD no board (por status) e reschedule na timeline saíram em 02/09; health, resources e milestones já estavam prontos. Falta só fechar a issue no GitHub.                                                                                  |
-| [#22](https://github.com/Nimbloo/circle/issues/22) | Webhook, "For you/Created" e **arquivos/commits/diff + checks reais já saíram** (tabelas `review_file`/`review_commit`, Checks API, abas Overview/Guide/Diff, webhook `check_run`). Restam: Guide narrado (sem fonte de dados hoje) e notas/comentários de review. |
-| [#24](https://github.com/Nimbloo/circle/issues/24) | **Fechada na prática**: cool-down e snapshots (upsert lazy) saíram em 02/09; burn-up e scopeDelta agora vêm do histórico. Falta só fechar a issue no GitHub.                                                                                                       |
-| [#16](https://github.com/Nimbloo/circle/issues/16) | **Entregue o núcleo**: editor Tiptap com blocos, listas, tarefas, código e links em issue e project. Resta: imagens/vídeo, referência a issue e o modal de criação (ainda textarea).                                                                               |
-| [#25](https://github.com/Nimbloo/circle/issues/25) | Épico de paridade com o Linear. Serve para **fatiar**, não para executar.                                                                                                                                                                                          |
+| Issue                                              | O que falta de verdade                                                                                                                                                                                                                                         |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [#19](https://github.com/Nimbloo/circle/issues/19) | **Fechada**: DnD no board por status, reschedule na timeline e agora board por time (`teamId` no PATCH) saíram em 02–03/09; health, resources e milestones já estavam prontos.                                                                                 |
+| [#22](https://github.com/Nimbloo/circle/issues/22) | Webhook, "For you/Created", arquivos/commits/diff, checks reais, **Guide narrado e comentários/veredito de review** saíram (02–03/09). Resta só o que depende de você: Bedrock (use case) e PAT com `Checks:read` para o Guide e os checks em produção.        |
+| [#24](https://github.com/Nimbloo/circle/issues/24) | **Fechada na prática**: cool-down e snapshots (upsert lazy) saíram em 02/09; burn-up e scopeDelta agora vêm do histórico. Falta só fechar a issue no GitHub.                                                                                                   |
+| [#16](https://github.com/Nimbloo/circle/issues/16) | **Completo**: blocos, listas, tarefas, código, links, imagens com upload, vídeo por URL, referência a issue com `#` e editor nos modais de criação. Resta polir o item "Video" do menu "/" (hoje `window.prompt`).                                             |
+| [#25](https://github.com/Nimbloo/circle/issues/25) | Épico de paridade com o Linear, **fatiado em 03/09** nas issues #94–#102 (triage com IA, sub-issues, múltiplos responsáveis, SLAs/automações, threads/anexos, busca, organização, import/export/API/webhooks, roadmap). Executar pelas issues, não pelo épico. |
 
 ---
 

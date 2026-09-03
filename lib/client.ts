@@ -27,6 +27,7 @@ import type { CycleDto, CreateCycleInput, UpdateCycleInput } from '@/lib/api/cyc
 import type { TemplateDto, CreateTemplateInput, UpdateTemplateInput } from '@/lib/api/templates';
 import type { StatusDto, CreateStatusInput, UpdateStatusInput } from '@/lib/api/statuses';
 import type { EmojiDto } from '@/lib/api/emojis';
+import type { UploadDto, UploadInput } from '@/lib/api/uploads';
 import type {
    ProjectTemplateDto,
    CreateProjectTemplateInput,
@@ -42,6 +43,7 @@ import type { ViewDto, CreateViewInput, UpdateViewInput } from '@/lib/api/views'
 import type { WorkspaceBootstrap } from '@/lib/api/workspace';
 import type { NotificationDto } from '@/lib/api/notifications';
 import type { ReviewDetailDto, ReviewDto, ReviewGuideDto } from '@/lib/api/reviews';
+import type { AddReviewCommentInput, ReviewCommentDto } from '@/lib/api/review-comments';
 import type { FolderDto, DocumentDto } from '@/lib/api/documents';
 import type {
    IssueDetailDto,
@@ -189,6 +191,10 @@ export const api = {
       create: (input: { shortcode: string; dataUrl: string; contentType: string }) =>
          post<EmojiDto>('/emojis', input),
       remove: (id: string) => del<{ deleted: boolean }>(`/emojis/${id}`),
+   },
+   /** Imagens do editor de blocos (S3/CDN). Devolve a URL pública. */
+   uploads: {
+      create: (input: UploadInput) => post<UploadDto>('/uploads', input),
    },
    priorities: () =>
       get<{ id: string; name: string; position: number; sortRank: number }[]>('/priorities'),
@@ -449,5 +455,18 @@ export const api = {
       sync: () => post<{ started: boolean }>('/reviews/sync'),
       generateGuide: (id: string) =>
          post<ReviewGuideDto>(`/reviews/${encodeURIComponent(id)}/guide`),
+      listComments: (id: string) =>
+         get<ReviewCommentDto[]>(`/reviews/${encodeURIComponent(id)}/comments`),
+      addComment: (id: string, input: AddReviewCommentInput) =>
+         post<ReviewCommentDto>(`/reviews/${encodeURIComponent(id)}/comments`, input),
+      updateComment: (id: string, commentId: string, body: string) =>
+         patch<ReviewCommentDto>(
+            `/reviews/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`,
+            { body }
+         ),
+      removeComment: (id: string, commentId: string) =>
+         del<{ deleted: boolean }>(
+            `/reviews/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`
+         ),
    },
 };

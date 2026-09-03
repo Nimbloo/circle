@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { toast } from 'sonner';
 import ProjectsBoard from '@/components/common/projects/projects-board';
 import type { ProjectGroup } from '@/components/common/projects/projects';
+import type { Project } from '@/data/projects';
+import type { Team } from '@/data/teams';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { lastTestBackend } from './helpers/dnd-test-backend';
 import { makeProject, statusOf, toProjectDto } from './helpers/project-fixture';
@@ -106,5 +108,92 @@ describe('ProjectsBoard — drag and drop entre colunas', () => {
       expect(card.getAttribute('aria-grabbed')).toBe('false');
       const hint = document.getElementById(card.getAttribute('aria-describedby')!);
       expect(hint?.textContent).toContain('change its status');
+   });
+});
+
+/** Times mínimos do store; `projects` é a cópia derivada que precisa seguir o projeto. */
+function makeTeam(id: string, name: string, projects: Project[] = []): Team {
+   return {
+      id,
+      name,
+      icon: '🛠️',
+      joined: true,
+      color: '#000',
+      estimateScale: 'fibonacci',
+      cycleCooldownDays: 0,
+      members: [],
+      projects,
+   };
+}
+
+/** Mesmo recorte que `Projects` faz para o board agrupado por time: uma coluna por time. */
+function TeamHarness() {
+   const projects = useWorkspaceStore((s) => s.projects);
+   const teams = useWorkspaceStore((s) => s.teams);
+   const groups: ProjectGroup[] = teams.map((team) => ({
+      id: team.id,
+      name: team.name,
+      icon: team.icon,
+      teamId: team.id,
+      projects: projects.filter((p) => p.teamId === team.id),
+   }));
+   return <ProjectsBoard groups={groups} />;
+}
+
+describe('ProjectsBoard — agrupado por time', () => {
+   beforeEach(() => {
+      vi.clearAllMocks();
+      const alpha = makeProject({ id: 'p1', name: 'Alpha', teamId: 'CORE' });
+      useWorkspaceStore.setState({
+         projects: [alpha],
+         teams: [makeTeam('CORE', 'Core', [alpha]), makeTeam('DESIGN', 'Design')],
+      });
+   });
+
+   it('soltar o card na coluna de outro time faz PATCH do teamId e mantém teams[].projects coerente', async () => {
+      apiMocks.update.mockImplementation(async (_id: string, body: { teamId: string }) =>
+         toProjectDto(makeProject({ id: 'p1', name: 'Alpha', teamId: body.teamId }))
+      );
+      render(<TeamHarness />);
+      expect(within(column('Core')).getByText('Alpha')).toBeTruthy();
+
+      const card = cardIn('Core');
+      act(() => lastTestBackend!.simulateDragDrop(card, column('Design')));
+
+      // Otimista: o card já está na coluna do time novo antes da resposta.
+      expect(within(column('Design')).getByText('Alpha')).toBeTruthy();
+      expect(within(column('Core')).queryByText('Alpha')).toBeNull();
+      expect(apiMocks.update).toHaveBeenCalledWith('p1', { teamId: 'DESIGN' });
+
+      await waitFor(() => expect(useWorkspaceStore.getState().projects[0].teamId).toBe('DESIGN'));
+      const teams = useWorkspaceStore.getState().teams;
+      expect(teams.find((t) => t.id === 'CORE')?.projects).toHaveLength(0);
+      expect(teams.find((t) => t.id === 'DESIGN')?.projects.map((p) => p.id)).toEqual(['p1']);
+      expect(toast.error).not.toHaveBeenCalled();
+   });
+
+   it('quando o PATCH falha, volta o card para o time original e avisa', async () => {
+      apiMocks.update.mockRejectedValue(new Error('boom'));
+      render(<TeamHarness />);
+
+      act(() => lastTestBackend!.simulateDragDrop(cardIn('Core'), column('Design')));
+      expect(within(column('Design')).getByText('Alpha')).toBeTruthy();
+
+      await waitFor(() => expect(within(column('Core')).getByText('Alpha')).toBeTruthy());
+      expect(within(column('Design')).queryByText('Alpha')).toBeNull();
+      expect(useWorkspaceStore.getState().projects[0].teamId).toBe('CORE');
+      expect(
+         useWorkspaceStore.getState().teams.find((t) => t.id === 'CORE')?.projects
+      ).toHaveLength(1);
+      expect(toast.error).toHaveBeenCalledTimes(1);
+   });
+
+   it('soltar no próprio time não chama a API e a instrução fala em time', () => {
+      render(<TeamHarness />);
+      const card = cardIn('Core');
+      act(() => lastTestBackend!.simulateDragDrop(card, column('Core')));
+      expect(apiMocks.update).not.toHaveBeenCalled();
+      const hint = document.getElementById(card.getAttribute('aria-describedby')!);
+      expect(hint?.textContent).toContain('change its team');
    });
 });

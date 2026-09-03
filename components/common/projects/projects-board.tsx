@@ -3,7 +3,6 @@
 import { CapacityRing } from '@/components/common/cycles/capacity-ring';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Project } from '@/data/projects';
-import type { Status } from '@/data/status';
 import { cn } from '@/lib/utils';
 import { useProjectsDisplayStore } from '@/store/projects-display-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -126,22 +125,21 @@ function BoardColumn({
    onDropProject,
 }: {
    group: ProjectGroup;
-   onDropProject: (project: Project, status: Status) => void;
+   onDropProject: (project: Project, group: ProjectGroup) => void;
 }) {
    const ref = useRef<HTMLDivElement>(null);
-   const status = group.status;
+   const { status, teamId } = group;
 
-   // Drop na coluna → o projeto adota o status da coluna (só faz sentido entre colunas).
+   // Drop na coluna → o projeto adota o status (ou o time) da coluna; só entre colunas.
    const [{ isOver, canDrop }, drop] = useDrop(
       () => ({
          accept: ProjectDragType,
-         canDrop: (item: Project) => status !== undefined && item.status.id !== status.id,
-         drop: (item: Project) => {
-            if (status) onDropProject(item, status);
-         },
+         canDrop: (item: Project) =>
+            status ? item.status.id !== status.id : teamId !== undefined && item.teamId !== teamId,
+         drop: (item: Project) => onDropProject(item, group),
          collect: (monitor) => ({ isOver: monitor.isOver(), canDrop: monitor.canDrop() }),
       }),
-      [status, onDropProject]
+      [group, status, teamId, onDropProject]
    );
    drop(ref);
 
@@ -179,17 +177,27 @@ function BoardColumn({
 }
 
 /**
- * Projects "Board" view: one 354px column per project status. Arrastar um card
- * para outra coluna muda o status (PATCH otimista; o store faz rollback + toast
- * no erro). A ordem dentro da coluna segue a ordenação do Display.
+ * Projects "Board" view: one 354px column per group — status (padrão) ou time,
+ * conforme o grouping do Display. Arrastar um card para outra coluna muda o
+ * status (`statusId`) ou o time (`teamId`) do projeto (PATCH otimista; o store faz
+ * rollback + toast no erro). A ordem dentro da coluna segue a ordenação do Display.
  */
 export default function ProjectsBoard({ groups }: { groups: ProjectGroup[] }) {
    const patchProject = useWorkspaceStore((s) => s.patchProject);
+   const byTeam = groups.some((group) => group.teamId !== undefined);
 
-   const moveToStatus = useCallback(
-      (project: Project, status: Status) => {
+   const moveToGroup = useCallback(
+      (project: Project, group: ProjectGroup) => {
          // O store já fez rollback + toast; a rejeição re-lançada não tem mais o que tratar.
-         void patchProject(project.id, { status }, { statusId: status.id }).catch(() => undefined);
+         if (group.status) {
+            const status = group.status;
+            void patchProject(project.id, { status }, { statusId: status.id }).catch(
+               () => undefined
+            );
+         } else if (group.teamId) {
+            const teamId = group.teamId;
+            void patchProject(project.id, { teamId }, { teamId }).catch(() => undefined);
+         }
       },
       [patchProject]
    );
@@ -198,11 +206,11 @@ export default function ProjectsBoard({ groups }: { groups: ProjectGroup[] }) {
       <DndProvider backend={HTML5Backend}>
          <div className="h-full w-full overflow-x-auto">
             <p id={DRAG_HINT_ID} className="sr-only">
-               Drag a project card to another column to change its status.
+               Drag a project card to another column to change its {byTeam ? 'team' : 'status'}.
             </p>
             <div className="flex h-full min-w-max gap-0 px-1">
                {groups.map((group) => (
-                  <BoardColumn key={group.id} group={group} onDropProject={moveToStatus} />
+                  <BoardColumn key={group.id} group={group} onDropProject={moveToGroup} />
                ))}
             </div>
          </div>

@@ -29,6 +29,7 @@ const UpdateSchema = z.object({
    startDate: z.string().date().nullish(),
    targetDate: z.string().date().nullish(),
    initiativeId: z.string().max(36).nullish(),
+   teamId: z.string().min(1).max(16).optional(),
 });
 
 export async function PATCH(req: Request, { params }: Params) {

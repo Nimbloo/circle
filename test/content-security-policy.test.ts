@@ -16,4 +16,15 @@ describe('content security policy', () => {
       expect(production).toContain("script-src 'self' 'unsafe-inline'");
       expect(production).not.toContain("'unsafe-eval'");
    });
+
+   it('libera os players de vídeo do editor (iframe) e mídia por URL', () => {
+      const csp = buildContentSecurityPolicy({
+         cdnUrl: 'https://cdn.example.com',
+         isDevelopment: false,
+      });
+      expect(csp).toContain(
+         'frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://www.loom.com'
+      );
+      expect(csp).toContain("media-src 'self' https:");
+   });
 });

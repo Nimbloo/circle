@@ -88,6 +88,43 @@ describe('PATCH descriptionDoc (issue) #16', () => {
    });
 });
 
+describe('POST descriptionDoc (create issue) #16', () => {
+   const base = { teamId: 'CORE', statusId: 'to-do', priorityId: 'low' };
+
+   it('grava o doc e deriva a projeção em texto na criação', async () => {
+      const db = await makeTestDb();
+      await seedTeam(db, 'CORE');
+      const issue = await createIssue(db, { ...base, title: 'X', descriptionDoc: DOC }, ME);
+      const detail = await getIssueDetail(db, issue.id);
+      expect(detail?.descriptionDoc).toEqual(DOC);
+      expect(detail?.description).toBe('# Plano\n\nTexto **forte**\n\n- [x] feito');
+   });
+
+   it('doc vazio na criação → sem descrição; `description` (cliente antigo) segue valendo', async () => {
+      const db = await makeTestDb();
+      await seedTeam(db, 'CORE');
+      const empty = await createIssue(db, { ...base, title: 'A', descriptionDoc: EMPTY_DOC }, ME);
+      expect((await getIssueDetail(db, empty.id))?.description).toBeNull();
+
+      const legacy = await createIssue(db, { ...base, title: 'B', description: 'texto' }, ME);
+      const detail = await getIssueDetail(db, legacy.id);
+      expect(detail?.description).toBe('texto');
+      expect(detail?.descriptionDoc).toBeNull();
+   });
+
+   it('doc inválido na criação → 400 (nada é criado)', async () => {
+      const db = await makeTestDb();
+      await seedTeam(db, 'CORE');
+      await expect(
+         createIssue(
+            db,
+            { ...base, title: 'X', descriptionDoc: { type: 'doc', content: [{ type: 'widget' }] } },
+            ME
+         )
+      ).rejects.toMatchObject({ status: 400 } satisfies Partial<ApiError>);
+   });
+});
+
 describe('PATCH descriptionDoc (project) #16', () => {
    const base = {
       statusId: 'proj-in-progress',

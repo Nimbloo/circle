@@ -113,6 +113,10 @@ function inlineText(node: PmNode): string {
          out += '\n';
          return;
       }
+      if (child.type.name === 'issueRef') {
+         out += String(child.attrs.identifier ?? '');
+         return;
+      }
       if (!child.isText) {
          out += child.textContent;
          return;
@@ -178,6 +182,8 @@ const TEXT_SERIALIZERS: Record<string, Serializer> = {
       return lines.join('\n');
    },
    horizontalRule: () => '---',
+   image: ({ node }) => `![${node.attrs.alt ?? ''}](${node.attrs.src ?? ''})`,
+   video: ({ node }) => String(node.attrs.src ?? ''),
 };
 
 /**
