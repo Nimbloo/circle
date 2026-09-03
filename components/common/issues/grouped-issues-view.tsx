@@ -113,9 +113,12 @@ const sortIssues = (issues: Issue[], ordering: string, completedByRecency = fals
 
 const groupByKey = (issues: Issue[], keyOf: (issue: Issue) => string): Map<string, Issue[]> => {
    const map = new Map<string, Issue[]>();
+   // Push no array do grupo (O(n)); o spread por issue era O(n²) em listas grandes.
    for (const issue of issues) {
       const key = keyOf(issue);
-      map.set(key, [...(map.get(key) ?? []), issue]);
+      const bucket = map.get(key);
+      if (bucket) bucket.push(issue);
+      else map.set(key, [issue]);
    }
    return map;
 };

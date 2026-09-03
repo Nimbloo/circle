@@ -17,6 +17,7 @@ import {
    DISPLAY_PROPERTIES,
    GroupingKey,
    OrderingKey,
+   isDefaultDisplaySettings,
    useDisplaySettings,
 } from '@/store/display-settings-store';
 import { useViewStore } from '@/store/view-store';
@@ -67,11 +68,16 @@ export function DisplayOptions() {
       resetDisplaySettings,
    } = useDisplaySettings();
 
-   const isDefault =
-      grouping === 'status' &&
-      ordering === 'priority' &&
-      completedIssues === 'all' &&
-      !showEmptyGroups;
+   // Compara com o default completo (inclui orderCompletedByRecency e displayProperties):
+   // o ponto no botão acende para QUALQUER desvio, e o Reset volta tudo.
+   const isDefault = isDefaultDisplaySettings({
+      grouping,
+      ordering,
+      orderCompletedByRecency,
+      completedIssues,
+      showEmptyGroups,
+      displayProperties,
+   });
 
    return (
       <Popover>

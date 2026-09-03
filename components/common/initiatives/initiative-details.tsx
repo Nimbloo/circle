@@ -72,16 +72,21 @@ function ProjectsSection({ initiative }: { initiative: Initiative }) {
    const { orgId } = useParams<{ orgId: string }>();
    const allProjects = useWorkspaceStore((s) => s.projects);
    const hydrate = useWorkspaceStore((s) => s.hydrate);
-   const linked = new Set(initiative.projectIds);
-   const projects = allProjects.filter((p) => linked.has(p.id));
-   const groups = GROUP_ORDER.map((group) => ({
-      ...group,
-      projects: projects.filter(group.match),
-   })).filter((group) => group.projects.length > 0);
+   // Derivados memoizados: só recalculam quando os projetos do workspace ou os
+   // vínculos da iniciativa mudam (não a cada re-render da página).
+   const { groups, available } = useMemo(() => {
+      const linked = new Set(initiative.projectIds);
+      const projects = allProjects.filter((p) => linked.has(p.id));
+      return {
+         groups: GROUP_ORDER.map((group) => ({
+            ...group,
+            projects: projects.filter(group.match),
+         })).filter((group) => group.projects.length > 0),
+         available: allProjects.filter((p) => !linked.has(p.id)),
+      };
+   }, [allProjects, initiative.projectIds]);
 
    const [pickerOpen, setPickerOpen] = useState(false);
-   const linkedIds = new Set(initiative.projectIds);
-   const available = allProjects.filter((p) => !linkedIds.has(p.id));
 
    const setProjects = async (projectIds: string[]) => {
       try {
