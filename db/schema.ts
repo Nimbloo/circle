@@ -774,6 +774,32 @@ export const reviewCommit = pgTable(
    (t) => [primaryKey({ columns: [t.reviewId, t.sha] })]
 );
 
+/**
+ * Comentários de review (thread do PR no Circle): gerais (`path`/`line` nulos), por
+ * arquivo (`path` preenchido) ou ancorados numa linha do diff (`path` + `line`, linha do
+ * arquivo NOVO). `kind` registra o veredito — `approve`/`request_changes` são comentários
+ * com peso de decisão; o último deles é o veredito corrente do review.
+ */
+export const reviewComment = pgTable(
+   'review_comment',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      reviewId: varchar('review_id', { length: 128 })
+         .notNull()
+         .references(() => review.id, { onDelete: 'cascade' }),
+      authorId: varchar('author_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      path: varchar('path', { length: 512 }),
+      line: integer('line'),
+      kind: varchar('kind', { length: 16 }).notNull().default('comment'), // comment|approve|request_changes
+      body: text('body').notNull(),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+      updatedAt: timestamp('updated_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_review_comment_review').on(t.reviewId)]
+);
+
 export const teamDocument = pgTable('team_document', {
    id: varchar('id', { length: 36 }).primaryKey(),
    folderId: varchar('folder_id', { length: 64 })
