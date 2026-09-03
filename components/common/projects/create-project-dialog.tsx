@@ -1,5 +1,6 @@
 'use client';
 
+import { BlockEditor } from '@/components/common/editor/block-editor';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,6 +15,7 @@ import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { api } from '@/lib/client';
 import type { ProjectTemplateDto } from '@/lib/api/project-templates';
+import { EMPTY_DOC, type EditorDoc } from '@/lib/editor-doc';
 import { cn } from '@/lib/utils';
 import {
    useLabels,
@@ -83,7 +85,8 @@ export function CreateProjectButton() {
 
    const [name, setName] = useState('');
    const [summary, setSummary] = useState('');
-   const [description, setDescription] = useState('');
+   const [descriptionDoc, setDescriptionDoc] = useState<EditorDoc | null>(null);
+   const [editorKey, setEditorKey] = useState(0);
    const [teamId, setTeamId] = useState('');
    const [statusId, setStatusId] = useState('');
    const [priorityId, setPriorityId] = useState('');
@@ -141,7 +144,8 @@ export function CreateProjectButton() {
    const reset = () => {
       setName('');
       setSummary('');
-      setDescription('');
+      setDescriptionDoc(null);
+      setEditorKey((k) => k + 1);
       setStatusId('');
       setPriorityId('');
       setLeadId(null);
@@ -188,12 +192,11 @@ export function CreateProjectButton() {
             labelIds,
          });
          // Conteúdo editorial (summary + description) e milestones em chamadas dedicadas.
-         if (summary.trim() || description.trim()) {
+         // O servidor deriva a projeção em blocos do doc (e zera quando o doc está vazio).
+         if (summary.trim() || descriptionDoc) {
             await api.projects.updateDetail(project.id, {
                summary: summary.trim() || null,
-               description: description.trim()
-                  ? [{ type: 'paragraph', text: description.trim() }]
-                  : null,
+               descriptionDoc: descriptionDoc ?? null,
             });
          }
          for (const m of milestones) {
@@ -585,13 +588,15 @@ export function CreateProjectButton() {
                </div>
 
                {/* Descrição */}
-               <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Write a description, a project brief, or collect ideas…"
-                  rows={4}
-                  className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/70 resize-none border-t pt-3 mt-1"
-               />
+               <div className="border-t pt-3 mt-1">
+                  <BlockEditor
+                     key={editorKey}
+                     variant="compact"
+                     doc={EMPTY_DOC}
+                     placeholder="Write a description, a project brief, or collect ideas…"
+                     onChange={setDescriptionDoc}
+                  />
+               </div>
 
                {/* Milestones */}
                <div className="border-t pt-3">

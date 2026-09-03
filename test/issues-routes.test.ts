@@ -41,6 +41,25 @@ describe('issues routes (end-to-end via handlers)', () => {
       expect(ljson.data[0].title).toBe('Rota');
    });
 
+   it('POST accepts descriptionDoc (editor de blocos) and rejects an invalid doc with 400', async () => {
+      const base = { teamId: 'CORE', title: 'Doc', statusId: 'to-do', priorityId: 'high' };
+      const ok = await createIssue(
+         post({
+            ...base,
+            descriptionDoc: {
+               type: 'doc',
+               content: [{ type: 'paragraph', content: [{ type: 'text', text: 'oi' }] }],
+            },
+         })
+      );
+      expect(ok.status).toBe(200);
+
+      const bad = await createIssue(
+         post({ ...base, descriptionDoc: { type: 'doc', content: [{ type: 'widget' }] } })
+      );
+      expect(bad.status).toBe(400);
+   });
+
    it('POST without auth header returns 401 problem+json', async () => {
       const res = await createIssue(
          new Request('http://x/api/v1/issues', {

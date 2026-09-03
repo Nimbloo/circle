@@ -27,6 +27,7 @@ import type { CycleDto, CreateCycleInput, UpdateCycleInput } from '@/lib/api/cyc
 import type { TemplateDto, CreateTemplateInput, UpdateTemplateInput } from '@/lib/api/templates';
 import type { StatusDto, CreateStatusInput, UpdateStatusInput } from '@/lib/api/statuses';
 import type { EmojiDto } from '@/lib/api/emojis';
+import type { UploadDto, UploadInput } from '@/lib/api/uploads';
 import type {
    ProjectTemplateDto,
    CreateProjectTemplateInput,
@@ -190,6 +191,10 @@ export const api = {
       create: (input: { shortcode: string; dataUrl: string; contentType: string }) =>
          post<EmojiDto>('/emojis', input),
       remove: (id: string) => del<{ deleted: boolean }>(`/emojis/${id}`),
+   },
+   /** Imagens do editor de blocos (S3/CDN). Devolve a URL pública. */
+   uploads: {
+      create: (input: UploadInput) => post<UploadDto>('/uploads', input),
    },
    priorities: () =>
       get<{ id: string; name: string; position: number; sortRank: number }[]>('/priorities'),

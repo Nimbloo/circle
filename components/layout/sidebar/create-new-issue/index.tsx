@@ -1,7 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { SquarePen } from 'lucide-react';
@@ -25,6 +24,9 @@ import { DialogTitle } from '@radix-ui/react-dialog';
 import { useParams } from 'next/navigation';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import type { TemplateDto } from '@/lib/api/templates';
+import { BlockEditor } from '@/components/common/editor/block-editor';
+import { blocksToDoc, EMPTY_DOC } from '@/lib/editor-doc';
+import { textToBlocks } from '@/lib/text-blocks';
 
 export function CreateNewIssue() {
    const [createMore, setCreateMore] = useState<boolean>(false);
@@ -59,6 +61,7 @@ export function CreateNewIssue() {
          identifier: `LNUI-${identifier}`,
          title: '',
          description: '',
+         descriptionDoc: null,
          status: defaultStatus || status.find((s) => s.id === 'to-do')!,
          assignee: null,
          priority: priorities.find((p) => p.id === 'no-priority')!,
@@ -82,17 +85,23 @@ export function CreateNewIssue() {
    }, [createDefaultData]);
 
    const [submitting, setSubmitting] = useState(false);
+   // Remonta o editor quando o formulário é trocado por fora (template, reset pós-create).
+   const [editorKey, setEditorKey] = useState(0);
 
    const applyTemplate = (t: TemplateDto) => {
       setAddIssueForm((f) => ({
          ...f,
          title: t.title || f.title,
-         description: t.description || f.description,
+         // Template em texto → doc do editor (`blocksToDoc`), como na abertura da issue.
+         descriptionDoc: t.description
+            ? blocksToDoc(textToBlocks(t.description))
+            : f.descriptionDoc,
          status: t.statusId ? (status.find((s) => s.id === t.statusId) ?? f.status) : f.status,
          priority: t.priorityId
             ? (priorities.find((p) => p.id === t.priorityId) ?? f.priority)
             : f.priority,
       }));
+      setEditorKey((k) => k + 1);
       toast.success(`Template "${t.name}" aplicado`);
    };
 
@@ -111,6 +120,7 @@ export function CreateNewIssue() {
             closeModal();
          }
          setAddIssueForm(createDefaultData());
+         setEditorKey((k) => k + 1);
       } catch {
          // A issue otimista já foi revertida no store; mantém o modal aberto p/ retry.
          toast.error('Falha ao criar a issue');
@@ -144,13 +154,12 @@ export function CreateNewIssue() {
                   onChange={(e) => setAddIssueForm({ ...addIssueForm, title: e.target.value })}
                />
 
-               <Textarea
-                  className="border-none w-full shadow-none outline-none resize-none px-0 min-h-16 focus-visible:ring-0 break-words whitespace-normal overflow-wrap"
-                  placeholder="Add description..."
-                  value={addIssueForm.description}
-                  onChange={(e) =>
-                     setAddIssueForm({ ...addIssueForm, description: e.target.value })
-                  }
+               <BlockEditor
+                  key={editorKey}
+                  variant="compact"
+                  doc={addIssueForm.descriptionDoc ?? EMPTY_DOC}
+                  placeholder="Add description…"
+                  onChange={(doc) => setAddIssueForm((f) => ({ ...f, descriptionDoc: doc }))}
                />
 
                <div className="w-full flex items-center justify-start gap-1.5 flex-wrap">

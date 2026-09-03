@@ -100,6 +100,46 @@ describe('docToText #16', () => {
    it('lança para nó fora do schema', () => {
       expect(() => docToText({ type: 'doc', content: [{ type: 'widget' }] })).toThrow();
    });
+
+   it('imagem → ![alt](url)', () => {
+      const doc = {
+         type: 'doc',
+         content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'Veja:' }] },
+            { type: 'image', attrs: { src: 'https://cdn.test/uploads/a.png', alt: 'Tela' } },
+         ],
+      };
+      expect(docToText(doc)).toBe('Veja:\n\n![Tela](https://cdn.test/uploads/a.png)');
+   });
+
+   it('vídeo → URL', () => {
+      const doc = {
+         type: 'doc',
+         content: [
+            { type: 'video', attrs: { src: 'https://youtu.be/dQw4w9WgXcQ', provider: 'youtube' } },
+            { type: 'paragraph', content: [{ type: 'text', text: 'fim' }] },
+         ],
+      };
+      expect(docToText(doc)).toBe('https://youtu.be/dQw4w9WgXcQ\n\nfim');
+   });
+
+   it('referência a issue (inline) → identifier', () => {
+      const doc = {
+         type: 'doc',
+         content: [
+            {
+               type: 'paragraph',
+               content: [
+                  { type: 'text', text: 'Depende de ' },
+                  { type: 'issueRef', attrs: { identifier: 'ENG-12' } },
+                  { type: 'text', text: ' e ' },
+                  { type: 'issueRef', attrs: { identifier: 'ENG-13' } },
+               ],
+            },
+         ],
+      };
+      expect(docToText(doc)).toBe('Depende de ENG-12 e ENG-13');
+   });
 });
 
 describe('docHeadings #16', () => {
