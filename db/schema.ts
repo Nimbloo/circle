@@ -6,6 +6,7 @@ import {
    date,
    timestamp,
    text,
+   jsonb,
    primaryKey,
    index,
    unique,
@@ -351,7 +352,9 @@ export const issueContent = pgTable('issue_content', {
    issueId: varchar('issue_id', { length: 36 })
       .primaryKey()
       .references(() => issue.id),
-   description: text('description'), // ContentBlock[] (json)
+   description: text('description'), // projeção em texto (markdown) — busca, API antiga
+   // Documento ProseMirror (JSON) do editor de blocos. NULL = só há a projeção em texto.
+   descriptionDoc: jsonb('description_doc').$type<Record<string, unknown>>(),
    milestone: varchar('milestone', { length: 196 }),
 });
 
@@ -664,7 +667,9 @@ export const projectDetail = pgTable('project_detail', {
       .primaryKey()
       .references(() => project.id),
    summary: varchar('summary', { length: 1024 }),
-   description: text('description'),
+   description: text('description'), // ContentBlock[] (json) — projeção legada
+   // Documento ProseMirror (JSON) do editor de blocos. NULL = só há a projeção em blocos.
+   descriptionDoc: jsonb('description_doc').$type<Record<string, unknown>>(),
 });
 
 export const documentFolder = pgTable('document_folder', {
