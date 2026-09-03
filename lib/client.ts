@@ -252,6 +252,7 @@ export const api = {
             icon?: string | null;
             color?: string | null;
             estimateScale?: string;
+            cycleCooldownDays?: number;
          }
       ) => patch<TeamDto>(`/teams/${key}`, body),
       remove: (key: string) => del<{ deleted: boolean }>(`/teams/${key}`),

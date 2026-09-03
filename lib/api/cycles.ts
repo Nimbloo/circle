@@ -6,6 +6,7 @@ import { ApiError } from './errors';
 import { publish } from './events';
 
 type CycleRow = typeof cycleT.$inferSelect;
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 export interface BurnupPoint {
    date: string;
@@ -76,6 +77,22 @@ async function aggregatesByCycle(db: Db, cycleIds: string[]): Promise<Map<string
       agg.items.push({ points, startedAt: i.startedAt, completedAt: i.completedAt });
    }
    return result;
+}
+
+const isoDay = (d: Date) => d.toISOString().slice(0, 10);
+
+/** `iso` + `n` dias (UTC), em `YYYY-MM-DD`. */
+function addDays(iso: string, n: number): string {
+   const d = new Date(`${iso}T00:00:00Z`);
+   d.setUTCDate(d.getUTCDate() + n);
+   return isoDay(d);
+}
+
+/** Dias inteiros entre dois ISO (`to - from`). */
+function diffDays(from: string, to: string): number {
+   return Math.round(
+      (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000
+   );
 }
 
 /** Dias (ISO `YYYY-MM-DD`) de `from` até `to`, inclusive. Cap de 120 por segurança. */
@@ -162,48 +179,105 @@ function toDto(row: CycleRow, agg: Agg): CycleDto {
 /**
  * Auto-rollover (#24): quando o cycle 'current' de um time vence (endDate < hoje),
  * fecha ele, carrega as issues INCOMPLETAS (não completed/canceled) pro próximo
- * 'upcoming', e promove esse próximo a 'current' se já começou. Idempotente e lazy
- * (rodado ao listar os cycles do time; o app não tem scheduler).
+ * 'upcoming' — criado aqui se não existir, começando em `fim do anterior + cool-down`
+ * do time (`team.cycle_cooldown_days`) e com a mesma duração — e promove o próximo a
+ * 'current' quando a data de início chega. Durante o cool-down NENHUM cycle é
+ * current (paridade Linear). Idempotente e lazy (rodado no boot da página e ao listar
+ * os cycles do time; o app não tem scheduler). `now` é injetável para os testes.
+ *
+ * Transacional com lock no cycle current: dois boots concorrentes no mesmo time não
+ * criam o próximo cycle em dobro (o 2º espera o lock e já vê o current fechado).
  */
-export async function rolloverCyclesForTeam(db: Db, teamId: string): Promise<void> {
-   const today = new Date().toISOString().slice(0, 10);
-   const [current] = await db
-      .select()
-      .from(cycleT)
-      .where(and(eq(cycleT.teamId, teamId), eq(cycleT.status, 'current')))
-      .limit(1);
-   if (!current || current.endDate >= today) return; // sem current ou ainda em andamento
+export async function rolloverCyclesForTeam(
+   db: Db,
+   teamId: string,
+   now: Date = new Date()
+): Promise<void> {
+   const today = isoDay(now);
+   await db.transaction(async (tx) => {
+      const [current] = await tx
+         .select()
+         .from(cycleT)
+         .where(and(eq(cycleT.teamId, teamId), eq(cycleT.status, 'current')))
+         .limit(1)
+         .for('update');
 
-   const [next] = await db
-      .select()
-      .from(cycleT)
-      .where(and(eq(cycleT.teamId, teamId), eq(cycleT.status, 'upcoming')))
-      .orderBy(asc(cycleT.number))
-      .limit(1);
+      if (current && current.endDate < today) {
+         let [next] = await tx
+            .select()
+            .from(cycleT)
+            .where(and(eq(cycleT.teamId, teamId), eq(cycleT.status, 'upcoming')))
+            .orderBy(asc(cycleT.startDate))
+            .limit(1);
+         if (!next) next = await createNextCycle(tx, teamId, current);
 
-   const statuses = await db.select().from(statusT);
-   // Paridade Linear: só issues "em aberto" (unstarted/started) rolam pro próximo ciclo.
-   // Backlog, triage, completed e canceled NÃO são carregadas (a doc do Linear exclui
-   // explicitamente backlog+triage, além de completed/canceled).
-   const noCarry = new Set(['backlog', 'triage', 'completed', 'canceled']);
-   const excludeIds = statuses.filter((s) => noCarry.has(s.category)).map((s) => s.id);
+         const statuses = await tx.select().from(statusT);
+         // Paridade Linear: só issues "em aberto" (unstarted/started) rolam pro próximo ciclo.
+         // Backlog, triage, completed e canceled NÃO são carregadas (a doc do Linear exclui
+         // explicitamente backlog+triage, além de completed/canceled).
+         const noCarry = new Set(['backlog', 'triage', 'completed', 'canceled']);
+         const excludeIds = statuses.filter((s) => noCarry.has(s.category)).map((s) => s.id);
+         await tx
+            .update(issueT)
+            .set({ cycleId: next.id, updatedAt: new Date() })
+            .where(
+               and(
+                  eq(issueT.cycleId, current.id),
+                  excludeIds.length ? notInArray(issueT.statusId, excludeIds) : sql`true`
+               )
+            );
+         await tx.update(cycleT).set({ status: 'completed' }).where(eq(cycleT.id, current.id));
+      }
 
-   if (next) {
-      // carrega as issues em aberto do current pro próximo cycle
-      await db
-         .update(issueT)
-         .set({ cycleId: next.id, updatedAt: new Date() })
-         .where(
-            and(
-               eq(issueT.cycleId, current.id),
-               excludeIds.length ? notInArray(issueT.statusId, excludeIds) : sql`true`
+      // Sem current (recém-fechado ou cool-down que acabou): promove o upcoming cuja data
+      // de início já chegou. Durante o cool-down (startDate > hoje) fica sem current.
+      if (!current || current.endDate < today) {
+         const [due] = await tx
+            .select({ id: cycleT.id })
+            .from(cycleT)
+            .where(
+               and(
+                  eq(cycleT.teamId, teamId),
+                  eq(cycleT.status, 'upcoming'),
+                  sql`${cycleT.startDate} <= ${today}`
+               )
             )
-         );
-   }
-   await db.update(cycleT).set({ status: 'completed' }).where(eq(cycleT.id, current.id));
-   if (next && next.startDate <= today) {
-      await db.update(cycleT).set({ status: 'current' }).where(eq(cycleT.id, next.id));
-   }
+            .orderBy(asc(cycleT.startDate))
+            .limit(1);
+         if (due) await tx.update(cycleT).set({ status: 'current' }).where(eq(cycleT.id, due.id));
+      }
+   });
+}
+
+/** Próximo cycle após `prev`: começa em `prev.endDate + 1 + cool-down`, mesma duração. */
+async function createNextCycle(tx: Tx, teamId: string, prev: CycleRow): Promise<CycleRow> {
+   const [team] = await tx
+      .select({ cooldown: teamT.cycleCooldownDays })
+      .from(teamT)
+      .where(eq(teamT.id, teamId))
+      .limit(1);
+   const [max] = await tx
+      .select({ m: sql<number | null>`max(${cycleT.number})` })
+      .from(cycleT)
+      .where(eq(cycleT.teamId, teamId));
+   const number = (max?.m ?? 0) + 1;
+   const startDate = addDays(prev.endDate, 1 + (team?.cooldown ?? 0));
+   const endDate = addDays(startDate, diffDays(prev.startDate, prev.endDate));
+   const [row] = await tx
+      .insert(cycleT)
+      .values({
+         id: randomUUID(),
+         number,
+         name: `Cycle ${number}`,
+         teamId,
+         status: 'upcoming',
+         startDate,
+         endDate,
+         capacity: prev.capacity,
+      })
+      .returning();
+   publish({ entity: 'cycle', action: 'created', id: row.id });
+   return row;
 }
 
 export async function listCyclesByTeam(db: Db, teamId: string): Promise<CycleDto[]> {

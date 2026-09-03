@@ -105,6 +105,7 @@ function team(id: string, members: User[], projects: Project[] = []): Team {
       joined: false,
       color: '#000',
       estimateScale: 'fibonacci',
+      cycleCooldownDays: 0,
       members,
       projects,
    };
@@ -117,6 +118,7 @@ function teamDto(id: string, extra: Partial<TeamDto> = {}): TeamDto {
       icon: null,
       color: null,
       estimateScale: 'fibonacci',
+      cycleCooldownDays: 0,
       memberCount: 1,
       projectCount: 0,
       joined: true,
