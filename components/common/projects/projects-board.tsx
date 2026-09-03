@@ -3,23 +3,53 @@
 import { CapacityRing } from '@/components/common/cycles/capacity-ring';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Project } from '@/data/projects';
+import type { Status } from '@/data/status';
+import { cn } from '@/lib/utils';
 import { useProjectsDisplayStore } from '@/store/projects-display-store';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
 import { Calendar } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { useCallback, useRef } from 'react';
+import { DndProvider, useDrag, useDrop } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
 import { ProjectGroup } from './projects';
 import { ProjectContextMenu } from './project-context-menu';
+
+export const ProjectDragType = 'PROJECT';
+/** Instrução de DnD lida por leitores de tela (aria-describedby dos cards). */
+const DRAG_HINT_ID = 'projects-board-drag-hint';
 
 function ProjectCard({ project }: { project: Project }) {
    const { orgId } = useParams<{ orgId: string }>();
    const displayProperties = useProjectsDisplayStore((state) => state.displayProperties);
+   const ref = useRef<HTMLDivElement>(null);
    // % de conclusão vem pronto do backend (assemble calcula por agregação).
    const percentComplete = project.percentComplete;
 
+   const [{ isDragging }, drag] = useDrag(
+      () => ({
+         type: ProjectDragType,
+         item: project,
+         collect: (monitor) => ({ isDragging: monitor.isDragging() }),
+      }),
+      [project]
+   );
+   drag(ref);
+
    return (
       <ProjectContextMenu project={project}>
-         <div className="min-h-[94px] rounded-lg bg-card px-1.5 py-[5px] shadow-[var(--card-shadow)] transition-colors hover:bg-accent/30">
+         <div
+            ref={ref}
+            role="listitem"
+            aria-grabbed={isDragging}
+            aria-describedby={DRAG_HINT_ID}
+            className={cn(
+               'min-h-[94px] rounded-lg bg-card px-1.5 py-[5px] shadow-[var(--card-shadow)] transition-colors hover:bg-accent/30',
+               isDragging ? 'cursor-grabbing opacity-50' : 'cursor-grab'
+            )}
+         >
             <div className="flex h-7 items-center gap-4">
                <project.icon className="size-4 shrink-0" />
                <Link
@@ -91,35 +121,91 @@ function ProjectCard({ project }: { project: Project }) {
    );
 }
 
-/** Projects "Board" view: one 354px column per project status. */
-export default function ProjectsBoard({ groups }: { groups: ProjectGroup[] }) {
+function BoardColumn({
+   group,
+   onDropProject,
+}: {
+   group: ProjectGroup;
+   onDropProject: (project: Project, status: Status) => void;
+}) {
+   const ref = useRef<HTMLDivElement>(null);
+   const status = group.status;
+
+   // Drop na coluna → o projeto adota o status da coluna (só faz sentido entre colunas).
+   const [{ isOver, canDrop }, drop] = useDrop(
+      () => ({
+         accept: ProjectDragType,
+         canDrop: (item: Project) => status !== undefined && item.status.id !== status.id,
+         drop: (item: Project) => {
+            if (status) onDropProject(item, status);
+         },
+         collect: (monitor) => ({ isOver: monitor.isOver(), canDrop: monitor.canDrop() }),
+      }),
+      [status, onDropProject]
+   );
+   drop(ref);
+
    return (
-      <div className="h-full w-full overflow-x-auto">
-         <div className="flex h-full min-w-max gap-0 px-1">
-            {groups.map((group) => (
-               <div key={group.id} className="flex h-full w-[354px] shrink-0 flex-col">
-                  <div className="flex h-[50px] shrink-0 items-center gap-2 px-[18px] pt-0.5 text-[13px] font-medium">
-                     {group.status ? (
-                        <span
-                           className="size-4 shrink-0 [&_svg]:size-4"
-                           style={{ color: group.status.color }}
-                        >
-                           <group.status.icon />
-                        </span>
-                     ) : (
-                        group.icon && <span>{group.icon}</span>
-                     )}
-                     <span>{group.name}</span>
-                     <span className="text-xs text-muted-foreground">{group.projects.length}</span>
-                  </div>
-                  <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-4 pl-[13px] pr-4 pt-[9px]">
-                     {group.projects.map((project) => (
-                        <ProjectCard key={project.id} project={project} />
-                     ))}
-                  </div>
-               </div>
+      <div className="flex h-full w-[354px] shrink-0 flex-col">
+         <div className="flex h-[50px] shrink-0 items-center gap-2 px-[18px] pt-0.5 text-[13px] font-medium">
+            {group.status ? (
+               <span
+                  className="size-4 shrink-0 [&_svg]:size-4"
+                  style={{ color: group.status.color }}
+               >
+                  <group.status.icon />
+               </span>
+            ) : (
+               group.icon && <span>{group.icon}</span>
+            )}
+            <span>{group.name}</span>
+            <span className="text-xs text-muted-foreground">{group.projects.length}</span>
+         </div>
+         <div
+            ref={ref}
+            role="list"
+            aria-label={group.name}
+            className={cn(
+               'flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto rounded-lg pb-4 pl-[13px] pr-4 pt-[9px] transition-colors',
+               isOver && canDrop && 'bg-accent/40 ring-1 ring-inset ring-primary/40'
+            )}
+         >
+            {group.projects.map((project) => (
+               <ProjectCard key={project.id} project={project} />
             ))}
          </div>
       </div>
+   );
+}
+
+/**
+ * Projects "Board" view: one 354px column per project status. Arrastar um card
+ * para outra coluna muda o status (PATCH otimista; o store faz rollback + toast
+ * no erro). A ordem dentro da coluna segue a ordenação do Display.
+ */
+export default function ProjectsBoard({ groups }: { groups: ProjectGroup[] }) {
+   const patchProject = useWorkspaceStore((s) => s.patchProject);
+
+   const moveToStatus = useCallback(
+      (project: Project, status: Status) => {
+         // O store já fez rollback + toast; a rejeição re-lançada não tem mais o que tratar.
+         void patchProject(project.id, { status }, { statusId: status.id }).catch(() => undefined);
+      },
+      [patchProject]
+   );
+
+   return (
+      <DndProvider backend={HTML5Backend}>
+         <div className="h-full w-full overflow-x-auto">
+            <p id={DRAG_HINT_ID} className="sr-only">
+               Drag a project card to another column to change its status.
+            </p>
+            <div className="flex h-full min-w-max gap-0 px-1">
+               {groups.map((group) => (
+                  <BoardColumn key={group.id} group={group} onDropProject={moveToStatus} />
+               ))}
+            </div>
+         </div>
+      </DndProvider>
    );
 }
