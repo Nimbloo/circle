@@ -253,6 +253,20 @@
          "when": 1788394688622,
          "tag": "0035_reviews_depth_synced_guide",
          "breakpoints": true
+      },
+      {
+         "idx": 36,
+         "version": "7",
+         "when": 1788401706799,
+         "tag": "0036_initiative_dates",
+         "breakpoints": true
+      },
+      {
+         "idx": 37,
+         "version": "7",
+         "when": 1788401710851,
+         "tag": "0037_backfill_initiative_dates",
+         "breakpoints": true
       }
    ]
 }

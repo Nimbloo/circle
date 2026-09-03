@@ -1,7 +1,9 @@
+import { readFileSync } from 'node:fs';
+import { eq, sql } from 'drizzle-orm';
 import { describe, it, expect } from 'vitest';
 import { makeTestDb } from './helpers/db';
 import { seedTeam } from './helpers/fixtures';
-import { initiativeProject } from '@/db/schema';
+import { initiative as initiativeT, initiativeProject } from '@/db/schema';
 import { createProject, getProject, updateProject } from '@/lib/api/projects';
 import {
    createInitiative,
@@ -225,6 +227,47 @@ describe('initiatives', () => {
       expect(feed[0].text).toContain('name'); // mais recente primeiro
       expect(feed[1].text).toContain('status');
       expect(feed[0].user?.email).toBe(actor);
+   });
+
+   /**
+    * A migration custom 0037 deriva `target_date` do rótulo `target` já gravado. O
+    * `makeTestDb` roda as migrations num banco vazio, então o teste insere o rótulo
+    * direto e reaplica o SQL (idempotente: só toca linhas com target_date nulo).
+    */
+   it('backfill deriva target_date do rótulo target já existente', async () => {
+      const db = await setup();
+      const rows = [
+         ['q3', 'Q3 2026', '2026-09-30'],
+         ['h1', 'H1 2026', '2026-06-30'],
+         ['year', '2026', '2026-12-31'],
+         ['month', 'Sep 2026', '2026-09-30'],
+         ['iso-month', '2026-09', '2026-09-30'],
+         ['iso', '2026-09-15', '2026-09-15'],
+         ['free', 'Sep 30th', null],
+      ] as const;
+      await db.insert(initiativeT).values(
+         rows.map(([id, target]) => ({
+            id,
+            slug: id,
+            name: id,
+            status: 'planned',
+            priorityId: 'high',
+            healthId: 'on-track',
+            target,
+         }))
+      );
+
+      await db.execute(
+         sql.raw(readFileSync('db/migrations/0037_backfill_initiative_dates.sql', 'utf8'))
+      );
+
+      for (const [id, , expected] of rows) {
+         const [row] = await db
+            .select({ targetDate: initiativeT.targetDate })
+            .from(initiativeT)
+            .where(eq(initiativeT.id, id));
+         expect([id, row.targetDate]).toEqual([id, expected]);
+      }
    });
 
    it('nao grava feed sem ator, nem para campo que nao e rastreado', async () => {

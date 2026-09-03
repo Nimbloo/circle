@@ -178,7 +178,12 @@ export const initiative = pgTable('initiative', {
       .notNull()
       .references(() => priority.id),
    ownerId: varchar('owner_id', { length: 36 }).references(() => appUser.id),
+   /** Rótulo humano do período alvo ("Q3 2026", "H2 2026", "2026", "Sep 2026"). */
    target: varchar('target', { length: 64 }),
+   // Datas reais do período: `targetDate` é o fim do período do rótulo (derivada por
+   // `targetDateFromLabel`, backfill em 0036_backfill_initiative_dates.sql).
+   startDate: date('start_date'),
+   targetDate: date('target_date'),
    healthId: varchar('health_id', { length: 64 })
       .notNull()
       .references(() => health.id),
