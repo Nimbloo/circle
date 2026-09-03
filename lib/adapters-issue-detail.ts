@@ -5,7 +5,7 @@
  */
 import { adaptUser } from '@/lib/adapters';
 import type { User } from '@/data/users';
-import type { ContentBlock, ActivityItem, IssueDetail, PrLink } from '@/data/issue-details';
+import type { ActivityItem, IssueDetail, PrLink } from '@/data/issue-details';
 import type { IssueDetailDto, ActivityItem as ActivityDto } from '@/lib/api/issue-detail';
 import { textToBlocks } from '@/lib/text-blocks';
 
