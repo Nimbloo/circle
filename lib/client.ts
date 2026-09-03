@@ -258,6 +258,8 @@ export const api = {
             color?: string | null;
             estimateScale?: string;
             cycleCooldownDays?: number;
+            autoCloseParent?: boolean;
+            autoCloseChildren?: boolean;
          }
       ) => patch<TeamDto>(`/teams/${key}`, body),
       remove: (key: string) => del<{ deleted: boolean }>(`/teams/${key}`),

@@ -24,20 +24,27 @@ const DocSchema = z
    .object({ type: z.literal('doc'), content: z.array(z.record(z.unknown())).optional() })
    .transform((doc) => doc as EditorDoc);
 
-const CreateSchema = z.object({
-   teamId: z.string().min(1).max(16),
-   title: z.string().min(1).max(512),
-   statusId: z.string().min(1).max(64),
-   priorityId: z.string().min(1).max(64),
-   assigneeId: z.string().max(36).nullish(),
-   projectId: z.string().max(36).nullish(),
-   cycleId: z.string().max(36).nullish(),
-   labelIds: z.array(z.string().max(64)).optional(),
-   dueDate: z.string().date().nullish(),
-   estimate: z.number().int().min(0).max(1000).nullish(),
-   description: z.string().max(10000).nullish(),
-   descriptionDoc: DocSchema.nullish(),
-});
+// teamId/statusId/priorityId podem faltar SÓ quando há `parentId` (herdam do pai, #95);
+// sem pai continuam obrigatórios — o serviço devolve 400 se faltarem.
+const CreateSchema = z
+   .object({
+      teamId: z.string().min(1).max(16).optional(),
+      title: z.string().min(1).max(512),
+      statusId: z.string().min(1).max(64).optional(),
+      priorityId: z.string().min(1).max(64).optional(),
+      parentId: z.string().max(36).nullish(),
+      assigneeId: z.string().max(36).nullish(),
+      projectId: z.string().max(36).nullish(),
+      cycleId: z.string().max(36).nullish(),
+      labelIds: z.array(z.string().max(64)).optional(),
+      dueDate: z.string().date().nullish(),
+      estimate: z.number().int().min(0).max(1000).nullish(),
+      description: z.string().max(10000).nullish(),
+      descriptionDoc: DocSchema.nullish(),
+   })
+   .refine((v) => Boolean(v.parentId) || (v.teamId && v.statusId && v.priorityId), {
+      message: 'teamId, statusId e priorityId são obrigatórios sem parentId',
+   });
 
 export async function POST(req: Request) {
    return handle(async () => {

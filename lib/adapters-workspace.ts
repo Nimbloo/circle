@@ -127,6 +127,8 @@ export function adaptTeam(t: TeamFull): Team {
       color: t.color ?? '#8f9299',
       estimateScale: t.estimateScale,
       cycleCooldownDays: t.cycleCooldownDays,
+      autoCloseParent: t.autoCloseParent,
+      autoCloseChildren: t.autoCloseChildren,
       members: t.members.map(adaptMemberToUser),
       projects: t.projects.map(adaptProject),
    };

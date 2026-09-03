@@ -17,7 +17,7 @@ import { getOrCreateUser } from './users';
 import { dispatchNotification } from './notify';
 import { ApiError } from './errors';
 import { publish } from './events';
-import type { UserRef } from './issues';
+import { updateIssue, type UserRef } from './issues';
 import { projectDescriptionDoc } from './description-doc';
 import type { EditorDoc } from '@/lib/editor-doc';
 
@@ -59,6 +59,14 @@ export interface ActivityItem {
    reactions?: ReactionDto[];
 }
 
+export interface SubIssueRef {
+   id: string;
+   identifier: string;
+   title: string;
+   statusId: string;
+   assignee: UserRef | null;
+}
+
 export interface IssueDetailDto {
    identifier: string;
    /** Projeção em texto (markdown) da descrição — busca, API antiga, e-mails. */
@@ -70,6 +78,11 @@ export interface IssueDetailDto {
    /** Milestone estruturada (FK project_milestone) + nome resolvido. */
    milestoneId: string | null;
    milestoneName: string | null;
+   /** Pai canônico (#95) resolvido — o header/breadcrumb e a propriedade Parent leem daqui. */
+   parent: { id: string; identifier: string; title: string } | null;
+   /** Filhas diretas (por rank), auto-contidas: o detalhe não depende do issues-store. */
+   subIssues: SubIssueRef[];
+   /** Ids das filhas (compat: mesma lista de `subIssues`). */
    subIssueIds: string[];
    relatedIds: string[];
    blockedByIds: string[];
@@ -119,7 +132,7 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
    const rows = await db.select().from(issueT).where(eq(issueT.id, issueId)).limit(1);
    if (rows.length === 0) return null;
    const iss = rows[0];
-   const [content, relations, blocking, prs, ms] = await Promise.all([
+   const [content, relations, blocking, prs, ms, parentRows, children] = await Promise.all([
       db.select().from(issueContent).where(eq(issueContent.issueId, issueId)).limit(1),
       db.select().from(issueRelation).where(eq(issueRelation.issueId, issueId)),
       // Lado inverso: outras issues que declaram ESTA como blocked_by → ESTA as bloqueia.
@@ -135,7 +148,36 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
               .where(eq(projectMilestone.id, iss.milestoneId))
               .limit(1)
          : Promise.resolve([]),
+      iss.parentId
+         ? db
+              .select({ id: issueT.id, identifier: issueT.identifier, title: issueT.title })
+              .from(issueT)
+              .where(eq(issueT.id, iss.parentId))
+              .limit(1)
+         : Promise.resolve([]),
+      db
+         .select({
+            id: issueT.id,
+            identifier: issueT.identifier,
+            title: issueT.title,
+            statusId: issueT.statusId,
+            assigneeId: issueT.assigneeId,
+         })
+         .from(issueT)
+         .where(eq(issueT.parentId, issueId))
+         .orderBy(asc(issueT.rank)),
    ]);
+   const assignees = await loadUsers(
+      db,
+      children.map((c) => c.assigneeId ?? '')
+   );
+   const subIssues: SubIssueRef[] = children.map((c) => ({
+      id: c.id,
+      identifier: c.identifier,
+      title: c.title,
+      statusId: c.statusId,
+      assignee: userRef(c.assigneeId ? assignees.get(c.assigneeId) : undefined),
+   }));
    return {
       identifier: iss.identifier,
       description: content[0]?.description ?? null,
@@ -143,7 +185,9 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
       milestone: content[0]?.milestone ?? null,
       milestoneId: iss.milestoneId ?? null,
       milestoneName: ms[0]?.name ?? null,
-      subIssueIds: relations.filter((r) => r.kind === 'sub').map((r) => r.relatedId),
+      parent: parentRows[0] ?? null,
+      subIssues,
+      subIssueIds: subIssues.map((s) => s.id),
       relatedIds: relations.filter((r) => r.kind === 'related').map((r) => r.relatedId),
       blockedByIds: relations.filter((r) => r.kind === 'blocked_by').map((r) => r.relatedId),
       blockingIds: blocking.map((b) => b.issueId),
@@ -255,6 +299,19 @@ export async function addRelation(
 ): Promise<IssueDetailDto | null> {
    if (issueId === relatedId)
       throw new ApiError(400, 'Uma issue não pode se relacionar consigo mesma');
+   // Compat do cliente antigo: `sub` agora é o pai canônico (issue.parent_id, #95).
+   if (kind === 'sub') {
+      if (!actorEmail) throw new ApiError(400, 'Ator obrigatório para vincular sub-issue');
+      const exists = await db
+         .select({ id: issueT.id })
+         .from(issueT)
+         .where(eq(issueT.id, issueId))
+         .limit(1);
+      if (exists.length === 0) return null;
+      const child = await updateIssue(db, relatedId, { parentId: issueId }, actorEmail);
+      if (!child) throw new ApiError(404, `Issue relacionada '${relatedId}' não existe`);
+      return getIssueDetail(db, issueId);
+   }
    const [a, b] = await Promise.all([
       db.select({ id: issueT.id }).from(issueT).where(eq(issueT.id, issueId)).limit(1),
       db.select({ id: issueT.id }).from(issueT).where(eq(issueT.id, relatedId)).limit(1),
@@ -289,6 +346,18 @@ export async function removeRelation(
    kind: RelationKind,
    actorEmail?: string
 ): Promise<IssueDetailDto | null> {
+   // Compat: remover `sub` = tirar o pai da filha (só se o pai for ESTA issue).
+   if (kind === 'sub') {
+      if (!actorEmail) throw new ApiError(400, 'Ator obrigatório para desvincular sub-issue');
+      const [child] = await db
+         .select({ parentId: issueT.parentId })
+         .from(issueT)
+         .where(eq(issueT.id, relatedId))
+         .limit(1);
+      if (child?.parentId === issueId)
+         await updateIssue(db, relatedId, { parentId: null }, actorEmail);
+      return getIssueDetail(db, issueId);
+   }
    const deleted = await db
       .delete(issueRelation)
       .where(

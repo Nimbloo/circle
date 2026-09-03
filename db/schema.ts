@@ -10,6 +10,7 @@ import {
    primaryKey,
    index,
    unique,
+   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
 // ─────────────────────────────────────────────────────────────
@@ -124,6 +125,10 @@ export const team = pgTable('team', {
    // Cool-down (#24): dias entre o fim de um cycle e o início do próximo, sem cycle
    // `current` no meio (paridade Linear). 0 = sem cool-down.
    cycleCooldownDays: integer('cycle_cooldown_days').notNull().default(0),
+   // Automações de sub-issues (#95, paridade Linear): concluir todas as filhas conclui
+   // o pai; concluir o pai conclui as filhas restantes. Ambos desligados por default.
+   autoCloseParent: boolean('auto_close_parent').notNull().default(false),
+   autoCloseChildren: boolean('auto_close_children').notNull().default(false),
 });
 
 export const teamMember = pgTable(
@@ -342,11 +347,16 @@ export const issue = pgTable(
       // Card originado de um erro do Sentry: id da issue do Sentry (dedup/idempotência).
       // Nullable (issues normais = null); único → replay/retry do Sentry não duplica card.
       sentryIssueId: varchar('sentry_issue_id', { length: 128 }),
+      // Pai canônico da sub-issue (#95). NULL = issue de topo. Substitui a relação
+      // `issue_relation kind='sub'` (sem pai único nem guarda de ciclo); a guarda de
+      // ciclo/auto-pai é app-level (updateIssue). Profundidade livre.
+      parentId: varchar('parent_id', { length: 36 }).references((): AnyPgColumn => issue.id),
       createdAt: timestamp('created_at').notNull().defaultNow(),
       updatedAt: timestamp('updated_at').notNull().defaultNow(),
    },
    (t) => [
       index('idx_issue_team').on(t.teamId),
+      index('idx_issue_parent').on(t.parentId),
       index('idx_issue_status').on(t.statusId),
       index('idx_issue_project').on(t.projectId),
       index('idx_issue_cycle').on(t.cycleId),
