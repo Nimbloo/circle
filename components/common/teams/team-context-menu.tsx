@@ -35,7 +35,7 @@ import { toast } from 'sonner';
 export function TeamContextMenu({ team, children }: { team: Team; children: React.ReactNode }) {
    const { orgId } = useParams<{ orgId: string }>();
    const router = useRouter();
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
+   const removeTeamLocal = useWorkspaceStore((s) => s.removeTeamLocal);
    const [confirmOpen, setConfirmOpen] = useState(false);
    const [busy, setBusy] = useState(false);
 
@@ -51,7 +51,7 @@ export function TeamContextMenu({ team, children }: { team: Team; children: Reac
       setBusy(true);
       try {
          await api.teams.remove(team.id);
-         await hydrate();
+         removeTeamLocal(team.id);
          toast.success('Team deleted');
          setConfirmOpen(false);
       } catch {

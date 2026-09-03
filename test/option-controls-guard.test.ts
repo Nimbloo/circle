@@ -92,17 +92,27 @@ describe('botões de opções', () => {
    });
 
    it('não exibe no mobile o controle do painel desktop', () => {
-      const header = readFileSync(join(root, 'layout/headers/initiative/header.tsx'), 'utf8');
+      const panel = readFileSync(join(root, 'common/detail-side-panel.tsx'), 'utf8');
 
-      expect(header).toContain('className="hidden size-7 xl:inline-flex"');
+      expect(panel).toContain('className="hidden size-7 xl:inline-flex"');
+      for (const file of [
+         'layout/headers/initiative/header.tsx',
+         'layout/headers/project/header.tsx',
+         'layout/headers/issue/header-nav.tsx',
+      ]) {
+         expect(readFileSync(join(root, file), 'utf8')).toMatch(
+            /<DetailPanelToggle kind="\w+" \/>/
+         );
+      }
    });
 
    it('mantém o painel de detalhes funcional em todas as abas da initiative', () => {
       const details = readFileSync(join(root, 'common/initiatives/initiative-details.tsx'), 'utf8');
 
       expect(details).toMatch(/const content\s*=\s*tab === 'activity'/);
-      expect(details).toContain('{detailsOpen && (');
-      expect(details.match(/<aside/g)).toHaveLength(1);
+      // Um único painel, fora das abas — não pode voltar a viver dentro do Overview.
+      expect(details.match(/<DetailSidePanel\b/g)).toHaveLength(1);
+      expect(details).not.toContain('<aside');
    });
 
    it('mantém paginação acessível quando o filtro zera a página carregada de reviews', () => {

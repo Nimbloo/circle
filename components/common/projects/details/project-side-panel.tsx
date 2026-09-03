@@ -1,20 +1,11 @@
 'use client';
 
+import { DetailSidePanel } from '@/components/common/detail-side-panel';
 import { InsightsPanel } from '@/components/common/issues/insights-panel';
 import { Issue } from '@/data/issues';
 import { ProjectDetail } from '@/data/project-details';
 import { Project } from '@/data/projects';
 import { useRightPanelStore } from '@/store/right-panel-store';
-import { Button } from '@/components/ui/button';
-import {
-   Sheet,
-   SheetContent,
-   SheetDescription,
-   SheetHeader,
-   SheetTitle,
-   SheetTrigger,
-} from '@/components/ui/sheet';
-import { PanelRight } from 'lucide-react';
 import { ProjectPropertiesPanel } from './project-properties-panel';
 
 interface ProjectSidePanelProps {
@@ -30,9 +21,9 @@ interface ProjectSidePanelProps {
 }
 
 /**
- * Right panel of the project pages. Properties are shown by default;
- * the header icons switch to the insights panel or collapse it entirely
- * (right-panel-store: null = properties, 'insights', 'hidden').
+ * Right panel of the project pages. Properties are shown by default; the header
+ * switches to the insights panel (right-panel-store: null = properties, 'insights')
+ * and the open/closed state is the shared `detail-panel-store` (kind 'project').
  */
 export function ProjectSidePanel({
    project,
@@ -45,48 +36,22 @@ export function ProjectSidePanel({
    const { openPanel } = useRightPanelStore();
 
    return (
-      <>
-         <Sheet>
-            <SheetTrigger asChild>
-               <Button
-                  size="sm"
-                  variant="secondary"
-                  className="absolute bottom-4 right-4 z-20 gap-1.5 shadow-sm xl:hidden"
-               >
-                  <PanelRight className="size-4" />
-                  Properties
-               </Button>
-            </SheetTrigger>
-            <SheetContent className="w-[92vw] overflow-y-auto p-0 pt-10 sm:max-w-[400px]">
-               <SheetHeader className="sr-only">
-                  <SheetTitle>Project properties</SheetTitle>
-                  <SheetDescription>View and edit the properties of this project.</SheetDescription>
-               </SheetHeader>
-               <ProjectPropertiesPanel
-                  project={project}
-                  detail={detail}
-                  issues={issues}
-                  projectId={projectId}
-                  onChanged={onChanged}
-               />
-            </SheetContent>
-         </Sheet>
-
-         {openPanel !== 'hidden' && (
-            <aside className="hidden h-full w-[400px] shrink-0 overflow-hidden pl-1 xl:flex">
-               {openPanel === 'insights' ? (
-                  <InsightsPanel issues={insightsIssues ?? issues} />
-               ) : (
-                  <ProjectPropertiesPanel
-                     project={project}
-                     detail={detail}
-                     issues={issues}
-                     projectId={projectId}
-                     onChanged={onChanged}
-                  />
-               )}
-            </aside>
+      <DetailSidePanel
+         kind="project"
+         title="Project details"
+         description="View and edit the properties of this project."
+      >
+         {openPanel === 'insights' ? (
+            <InsightsPanel issues={insightsIssues ?? issues} />
+         ) : (
+            <ProjectPropertiesPanel
+               project={project}
+               detail={detail}
+               issues={issues}
+               projectId={projectId}
+               onChanged={onChanged}
+            />
          )}
-      </>
+      </DetailSidePanel>
    );
 }

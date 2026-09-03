@@ -1,6 +1,7 @@
 'use client';
 
 import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
+import { DetailPanelToggle } from '@/components/common/detail-side-panel';
 import { HeaderActions, HeaderGroup, LocationBar } from '@/components/layout/header-primitives';
 import { Button } from '@/components/ui/button';
 import {
@@ -212,6 +213,7 @@ export default function HeaderNav() {
                   <ChevronDown className="size-4" />
                )}
             </Button>
+            <DetailPanelToggle kind="issue" />
          </HeaderActions>
       </LocationBar>
    );

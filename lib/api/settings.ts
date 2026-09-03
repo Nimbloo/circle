@@ -3,6 +3,9 @@ import { eq } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { userSettings } from '@/db/schema';
 import { ApiError } from './errors';
+import { MAX_SETTINGS_BYTES } from '@/lib/settings-limits';
+
+export { MAX_SETTINGS_BYTES };
 
 /**
  * Settings por-usuário: um blob JSON (tema, preferências de notificação, etc.)
@@ -10,9 +13,6 @@ import { ApiError } from './errors';
  * localStorage do cliente é só cache/fallback.
  */
 export type UserSettings = Record<string, unknown>;
-
-/** Teto do blob serializado (~32KB). `user_settings.data` é `text` — sem cap, aceitaria MB. */
-export const MAX_SETTINGS_BYTES = 32 * 1024;
 
 /**
  * Schema fechado do blob de settings (espelha `SettingsBlob` de user-settings-sync.ts).
@@ -91,11 +91,70 @@ const PreferencesSchema = z
    })
    .strict();
 
+/**
+ * Layout por-usuário (o que antes vivia só no localStorage): opções de display e
+ * list/board por view, times abertos na sidebar, customização da sidebar, painéis
+ * de detalhe e largura da lista do inbox. Espelha `LayoutBlob` de
+ * user-settings-sync.ts e os stores correspondentes; enums repetidos aqui de
+ * propósito (o servidor não importa store de UI).
+ */
+const ViewDisplaySchema = z
+   .object({
+      grouping: z.enum(['status', 'assignee', 'priority', 'project', 'label', 'none']).optional(),
+      ordering: z.enum(['priority', 'created', 'title', 'manual', 'dueDate']).optional(),
+      orderCompletedByRecency: z.boolean().optional(),
+      completedIssues: z.enum(['all', 'none']).optional(),
+      showEmptyGroups: z.boolean().optional(),
+      displayProperties: z
+         .object({
+            id: z.boolean().optional(),
+            status: z.boolean().optional(),
+            priority: z.boolean().optional(),
+            assignee: z.boolean().optional(),
+            labels: z.boolean().optional(),
+            project: z.boolean().optional(),
+            estimate: z.boolean().optional(),
+            dueDate: z.boolean().optional(),
+            created: z.boolean().optional(),
+            cycle: z.boolean().optional(),
+         })
+         .strict()
+         .optional(),
+   })
+   .strict();
+
+const SidebarVisibilitySchema = z.enum(['always', 'badged', 'never']);
+
+const LayoutSchema = z
+   .object({
+      displayByView: z.record(z.string(), ViewDisplaySchema).optional(),
+      viewTypeByView: z.record(z.string(), z.enum(['list', 'grid'])).optional(),
+      sidebarTeams: z
+         .object({ openById: z.record(z.string(), z.boolean()) })
+         .strict()
+         .optional(),
+      sidebarPrefs: z
+         .object({
+            badgeStyle: z.enum(['count', 'dot']).optional(),
+            visibility: z.record(z.string(), SidebarVisibilitySchema).optional(),
+            order: z.record(z.string(), z.array(z.string())).optional(),
+         })
+         .strict()
+         .optional(),
+      detailPanels: z
+         .object({ openByKind: z.record(z.string(), z.boolean()) })
+         .strict()
+         .optional(),
+      inboxListWidth: z.number().nonnegative().optional(),
+   })
+   .strict();
+
 export const SettingsSchema = z
    .object({
       theme: ThemeSchema.optional(),
       notifications: NotificationsSchema.optional(),
       preferences: PreferencesSchema.optional(),
+      layout: LayoutSchema.optional(),
    })
    .strict();
 

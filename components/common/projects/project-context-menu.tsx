@@ -41,7 +41,7 @@ type IconCmp = ComponentType<{ className?: string; style?: CSSProperties }>;
 /**
  * Context menu de botão direito de um project (padrão Linear): Status, Priority,
  * Health, Lead, Initiative (submenus), Copy link, Delete. Cada mudança persiste
- * via `api.projects.update` + re-hidrata o workspace.
+ * via `api.projects.update` + aplica o DTO no workspace.
  */
 export function ProjectContextMenu({
    project,
@@ -51,7 +51,6 @@ export function ProjectContextMenu({
    children: React.ReactNode;
 }) {
    const { orgId } = useParams<{ orgId: string }>();
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
    const applyProject = useWorkspaceStore((s) => s.applyProject);
    const removeProjectLocal = useWorkspaceStore((s) => s.removeProjectLocal);
    const users = useWorkspaceStore((s) => s.users);
@@ -67,10 +66,8 @@ export function ProjectContextMenu({
    const patch = async (body: UpdateProjectInput, msg: string) => {
       try {
          const dto = await api.projects.update(project.id, body);
+         // `applyProject` também reconcilia o projectIds da initiative (vínculo relacional).
          applyProject(dto);
-         // Mudar o vínculo de initiative afeta o projectIds da initiative (relacional):
-         // reconcilia em background para o detalhe da initiative não ficar stale.
-         if ('initiativeId' in body) void hydrate();
          toast.success(msg);
       } catch {
          toast.error('Could not update the project');

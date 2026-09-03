@@ -12,16 +12,22 @@ import type {
 } from '../core/types'
 import { getColumn } from '../lib/helpers'
 import type { Locale } from '../lib/i18n'
-import { FilterOperator } from './filter-operator'
+import { FilterOperator, FilterOperatorDisplay } from './filter-operator'
 import { FilterSubject } from './filter-subject'
-import { FilterValue } from './filter-value'
+import { FilterValue, FilterValueDisplay } from './filter-value'
 
 interface ActiveFiltersProps<TData> {
   columns: Column<TData>[]
   filters: FiltersState
-  actions: DataTableFilterActions
+  /** Obrigatório no modo interativo; ignorado em `readOnly`. */
+  actions?: DataTableFilterActions
   strategy: FilterStrategy
   locale?: Locale
+  /**
+   * Somente leitura: mostra os chips (assunto / operador / valores) sem popovers
+   * nem botão de remover. Usado pela página de view salva, cujo filtro é fixo.
+   */
+  readOnly?: boolean
 }
 
 export function ActiveFilters<TData>({
@@ -30,6 +36,7 @@ export function ActiveFilters<TData>({
   actions,
   strategy,
   locale = 'en',
+  readOnly = false,
 }: ActiveFiltersProps<TData>) {
   return (
     <>
@@ -49,6 +56,7 @@ export function ActiveFilters<TData>({
             actions={actions}
             strategy={strategy}
             locale={locale}
+            readOnly={readOnly}
           />
         )
       })}
@@ -59,10 +67,14 @@ export function ActiveFilters<TData>({
 interface ActiveFilterProps<TData, TType extends ColumnDataType> {
   filter: FilterModel<TType>
   column: Column<TData, TType>
-  actions: DataTableFilterActions
+  actions?: DataTableFilterActions
   strategy: FilterStrategy
   locale?: Locale
+  readOnly?: boolean
 }
+
+const chipClassName =
+  'flex h-7 items-center rounded-2xl border border-border bg-background shadow-xs text-xs'
 
 // Generic render function for a filter with type-safe value
 export function ActiveFilter<TData, TType extends ColumnDataType>({
@@ -71,9 +83,30 @@ export function ActiveFilter<TData, TType extends ColumnDataType>({
   actions,
   strategy,
   locale = 'en',
+  readOnly = false,
 }: ActiveFilterProps<TData, TType>) {
+  if (readOnly || !actions) {
+    return (
+      <div className={chipClassName}>
+        <FilterSubject column={column} />
+        <Separator orientation="vertical" />
+        <span className="flex h-full items-center whitespace-nowrap px-2">
+          <FilterOperatorDisplay
+            filter={filter}
+            columnType={column.type}
+            locale={locale}
+          />
+        </span>
+        <Separator orientation="vertical" />
+        <span className="flex h-full items-center whitespace-nowrap px-2">
+          <FilterValueDisplay filter={filter} column={column} locale={locale} />
+        </span>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex h-7 items-center rounded-2xl border border-border bg-background shadow-xs text-xs">
+    <div className={chipClassName}>
       <FilterSubject column={column} />
       <Separator orientation="vertical" />
       <FilterOperator

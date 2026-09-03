@@ -11,16 +11,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import {
-   Sheet,
-   SheetContent,
-   SheetDescription,
-   SheetHeader,
-   SheetTitle,
-   SheetTrigger,
-} from '@/components/ui/sheet';
-import { PanelRight } from 'lucide-react';
+import { DetailSidePanel, DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 import { AssigneeUser } from '../assignee-user';
 import { ActivityFeed } from './activity-feed';
 import { ContentBlocks } from './content-blocks';
@@ -41,9 +32,9 @@ interface IssueDetailViewProps {
  * pela página da issue e pelo preview do inbox — no Linear, selecionar uma
  * notificação abre a issue inteira, não um resumo read-only.
  *
- * A sidebar responde à largura do CONTAINER (não do viewport): no preview do
- * inbox o pane redimensionável pode ser estreito com o viewport largo. Na rota
- * completa, o grid reproduz as colunas medidas no Linear (791 + 56 + 400px).
+ * A sidebar é o `DetailSidePanel` compartilhado (400px no desktop, Sheet no mobile,
+ * aberto/fechado pelo `detail-panel-store`), o mesmo de initiative e project; o
+ * conteúdo ocupa a largura restante, centralizado nos 791px medidos no Linear.
  */
 export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
    const { orgId } = useParams<{ orgId: string }>();
@@ -167,32 +158,12 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
    };
 
    return (
-      <div className="@container h-full w-full overflow-hidden">
-         <div className="mx-auto grid h-full w-full grid-cols-1 @3xl:grid-cols-[minmax(0,1fr)_16rem] @3xl:gap-6 @5xl:grid-cols-[minmax(0,1fr)_20rem] @7xl:max-w-[1247px] @7xl:grid-cols-[minmax(0,791px)_400px] @7xl:gap-14">
-            {/* Main column */}
-            <article className="h-full min-w-0 overflow-x-hidden overflow-y-auto px-5 py-8 sm:px-8 sm:py-10 @7xl:px-0 @7xl:pt-[59px]">
-               <div className="mb-5 flex justify-end @3xl:hidden">
-                  <Sheet>
-                     <SheetTrigger asChild>
-                        <Button size="xs" variant="outline" className="gap-1.5">
-                           <PanelRight className="size-3.5" />
-                           Properties
-                        </Button>
-                     </SheetTrigger>
-                     <SheetContent className="w-[92vw] overflow-y-auto p-4 pt-12 sm:max-w-[400px]">
-                        <SheetHeader className="sr-only">
-                           <SheetTitle>Issue properties</SheetTitle>
-                           <SheetDescription>
-                              View and edit the properties of this issue.
-                           </SheetDescription>
-                        </SheetHeader>
-                        <IssuePropertiesPanel
-                           issue={issue}
-                           detail={detail}
-                           onChanged={() => setReloadKey((k) => k + 1)}
-                        />
-                     </SheetContent>
-                  </Sheet>
+      <div className="flex h-full w-full overflow-hidden">
+         {/* Main column — conteúdo centralizado nos 791px medidos no Linear. */}
+         <article className="h-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-8 sm:px-8 sm:py-10 xl:pt-[59px]">
+            <div className="mx-auto w-full max-w-[791px]">
+               <div className="mb-5 flex justify-end xl:hidden">
+                  <DetailSidePanelTrigger kind="issue" />
                </div>
                {banner}
                {editingTitle ? (
@@ -319,17 +290,23 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
                   issueId={issue.id}
                   onCommentAdded={() => setReloadKey((k) => k + 1)}
                />
-            </article>
+            </div>
+         </article>
 
-            {/* Properties sidebar — compacta no split view e com 400px na rota completa. */}
-            <aside className="hidden h-full min-w-0 overflow-y-auto px-4 py-5 @3xl:block @5xl:px-5 @5xl:py-6 @7xl:px-0 @7xl:pt-[21px]">
+         {/* Properties sidebar — 400px, mesmo painel de initiative e project. */}
+         <DetailSidePanel
+            kind="issue"
+            title="Issue details"
+            description="View and edit the properties of this issue."
+         >
+            <div className="h-full w-full overflow-y-auto px-5 py-5 xl:pt-[21px]">
                <IssuePropertiesPanel
                   issue={issue}
                   detail={detail}
                   onChanged={() => setReloadKey((k) => k + 1)}
                />
-            </aside>
-         </div>
+            </div>
+         </DetailSidePanel>
       </div>
    );
 }

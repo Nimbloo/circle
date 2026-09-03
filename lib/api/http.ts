@@ -24,6 +24,10 @@ function titleFor(status: number): string {
          return 'Not Found';
       case 409:
          return 'Conflict';
+      case 502:
+         return 'Bad Gateway';
+      case 503:
+         return 'Service Unavailable';
       default:
          return 'Internal Server Error';
    }

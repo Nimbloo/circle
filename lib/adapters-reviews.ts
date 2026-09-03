@@ -9,7 +9,13 @@
  *
  * Os fetchers usam o cliente tipado global (`api.reviews`, em lib/client.ts).
  */
-import type { Review, ReviewCommit, ReviewFileStat, ReviewStatus } from '@/data/reviews';
+import type {
+   Review,
+   ReviewCommit,
+   ReviewFileStat,
+   ReviewGuide,
+   ReviewStatus,
+} from '@/data/reviews';
 import type { ReviewCommitDto, ReviewDetailDto, ReviewDto, ReviewFileDto } from '@/lib/api/reviews';
 import { api, ApiError } from '@/lib/client';
 
@@ -64,13 +70,14 @@ export function adaptReviewCommit(commit: ReviewCommitDto): ReviewCommit {
 }
 
 /**
- * ReviewDto (backend, PR cru) -> Review (tipo rico da UI). Arquivos e commits só vêm
- * no detalhe (`ReviewDetailDto`); na lista saem vazios. `summary`/`testPlan` seguem
+ * ReviewDto (backend, PR cru) -> Review (tipo rico da UI). Arquivos, commits e guide só
+ * vêm no detalhe (`ReviewDetailDto`); na lista saem vazios. `summary`/`testPlan` seguem
  * vazios (sem fonte de dados) e `list` é neutro ('for-you').
  */
 export function adaptReview(dto: ReviewDto | ReviewDetailDto): Review {
    const files = 'files' in dto ? dto.files.map(adaptReviewFile) : [];
    const commits = 'commits' in dto ? dto.commits.map(adaptReviewCommit) : [];
+   const guide = 'guide' in dto ? dto.guide : null;
    return {
       id: dto.id,
       title: dto.title,
@@ -90,6 +97,7 @@ export function adaptReview(dto: ReviewDto | ReviewDetailDto): Review {
       commits,
       summary: [],
       testPlan: [],
+      guide,
    };
 }
 
@@ -127,6 +135,11 @@ export async function fetchReview(id: string): Promise<Review | null> {
       if (e instanceof ApiError && e.status === 404) return null;
       throw e;
    }
+}
+
+/** POST /reviews/{id}/guide — gera (ou regenera) o guide a partir do diff e o devolve. */
+export async function generateReviewGuide(id: string): Promise<ReviewGuide> {
+   return api.reviews.generateGuide(id);
 }
 
 /** POST /reviews/sync — dispara a ingestão de PRs do GitHub (roda em background no servidor). */

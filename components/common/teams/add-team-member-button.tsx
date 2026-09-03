@@ -15,7 +15,7 @@ export function AddTeamMemberButton() {
    const { teamId } = useParams<{ orgId: string; teamId: string }>();
    const teams = useWorkspaceStore((state) => state.teams);
    const workspaceUsers = useWorkspaceStore((state) => state.users);
-   const hydrate = useWorkspaceStore((state) => state.hydrate);
+   const applyTeamMembers = useWorkspaceStore((state) => state.applyTeamMembers);
    const isAdmin = useWorkspaceStore((state) => state.me?.admin ?? false);
    const team = teams.find((candidate) => candidate.id === teamId);
 
@@ -43,8 +43,7 @@ export function AddTeamMemberButton() {
 
       setBusy(true);
       try {
-         await api.teams.addMember(team.id, email);
-         await hydrate();
+         applyTeamMembers(team.id, await api.teams.addMember(team.id, email));
          setQuery('');
          setOpen(false);
          toast.success(`${email} added to ${team.name}`);

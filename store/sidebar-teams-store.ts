@@ -5,6 +5,8 @@ interface SidebarTeamsState {
    /** Times expandidos na sidebar, por id. Ausente = ainda não decidido pelo usuário. */
    openById: Record<string, boolean>;
    setOpen: (teamId: string, open: boolean) => void;
+   /** Aplica o snapshot do servidor (user-settings-sync): substitui o mapa inteiro. */
+   hydrateOpenById: (openById: Record<string, boolean>) => void;
 }
 
 /**
@@ -21,6 +23,13 @@ export const useSidebarTeamsStore = create<SidebarTeamsState>()(
                   ? state
                   : { openById: { ...state.openById, [teamId]: open } }
             ),
+         hydrateOpenById: (openById) => {
+            const clean: Record<string, boolean> = {};
+            Object.entries(openById ?? {}).forEach(([teamId, open]) => {
+               if (typeof open === 'boolean') clean[teamId] = open;
+            });
+            set({ openById: clean });
+         },
       }),
       { name: 'sidebar-teams', partialize: ({ openById }) => ({ openById }) }
    )
