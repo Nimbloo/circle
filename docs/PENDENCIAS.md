@@ -1,6 +1,6 @@
 # Pendências do Circle
 
-Estado em **2026-09-02**, com `main` e `develop` sincronizadas na v0.24.0.
+Estado em **2026-09-02**, com `main` e `develop` sincronizadas na v0.25.0.
 
 > **As [issues](https://github.com/Nimbloo/circle/issues) são a fonte da verdade** sobre
 > escopo. Este documento registra o que elas **não** capturam: bloqueios que vivem em
@@ -183,6 +183,11 @@ quitação dos nove itens de débito (spec `2026-09-02-debito-front-design.md`, 
    e mensagem honesta sem modelo configurado.
 9. **PRs antigos** ganham arquivos/commits/checks sob demanda ao abrir o detalhe
    (`review.depth_synced_at`, uma tentativa por PR).
+
+**Promovido para produção na release
+[v0.25.0](https://github.com/Nimbloo/circle/releases/tag/v0.25.0)** (PRs #87 e #88):
+migration 0035 aplicada no boot (36/36), rollout `Synced/Healthy`, `healthz`/`readyz` em
+`200`.
 
 **Ainda em aberto:** de-para pixel do painel de initiatives com o Linear — a extensão
 Claude-in-Chrome está sem permissão para `linear.app`; liberar o domínio para medir
