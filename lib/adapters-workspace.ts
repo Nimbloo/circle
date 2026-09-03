@@ -161,6 +161,8 @@ export function adaptInitiative(i: InitiativeDto, users: Map<string, User>): Ini
       priority: toPriority(i.priority),
       owner: i.owner ? users.get(i.owner.id) : undefined,
       target: i.target ?? undefined,
+      startDate: i.startDate ?? undefined,
+      targetDate: i.targetDate ?? undefined,
       health: toHealth(i.health),
       labels: i.labels,
       projectIds: i.projectIds,

@@ -229,6 +229,84 @@ describe('initiatives', () => {
       expect(feed[0].user?.email).toBe(actor);
    });
 
+   it('cria com startDate/targetDate reais e atualiza as datas (inclusive limpando)', async () => {
+      const db = await setup();
+      const init = await createInitiative(db, {
+         slug: 'dates',
+         name: 'Dates',
+         priorityId: 'high',
+         healthId: 'on-track',
+         target: 'Q3 2026',
+         startDate: '2026-07-01',
+         targetDate: '2026-09-30',
+      });
+      expect(init.startDate).toBe('2026-07-01');
+      expect(init.targetDate).toBe('2026-09-30');
+      expect(init.target).toBe('Q3 2026');
+
+      const moved = await updateInitiative(db, init.id, {
+         target: 'Q4 2026',
+         targetDate: '2026-12-31',
+         startDate: '2026-10-01',
+      });
+      expect(moved?.startDate).toBe('2026-10-01');
+      expect(moved?.targetDate).toBe('2026-12-31');
+
+      const cleared = await updateInitiative(db, init.id, { startDate: null, targetDate: null });
+      expect(cleared?.startDate).toBeNull();
+      expect(cleared?.targetDate).toBeNull();
+      expect(cleared?.target).toBe('Q4 2026'); // rótulo não é tocado
+   });
+
+   it('deriva targetDate do rótulo quando só `target` vem (cliente antigo)', async () => {
+      const db = await setup();
+      const init = await createInitiative(db, {
+         slug: 'label-only',
+         name: 'Label only',
+         priorityId: 'high',
+         healthId: 'on-track',
+         target: 'H1 2027',
+      });
+      expect(init.targetDate).toBe('2027-06-30');
+
+      // Rótulo livre: data fica nula, rótulo segue.
+      const free = await updateInitiative(db, init.id, { target: 'Sep 30th' });
+      expect(free?.target).toBe('Sep 30th');
+      expect(free?.targetDate).toBeNull();
+
+      const monthly = await updateInitiative(db, init.id, { target: 'Sep 2027' });
+      expect(monthly?.targetDate).toBe('2027-09-30');
+
+      // `targetDate` explícito vence o rótulo.
+      const explicit = await updateInitiative(db, init.id, {
+         target: 'Q4 2027',
+         targetDate: '2027-11-15',
+      });
+      expect(explicit?.targetDate).toBe('2027-11-15');
+
+      const none = await updateInitiative(db, init.id, { target: null });
+      expect(none?.target).toBeNull();
+      expect(none?.targetDate).toBeNull();
+   });
+
+   it('rótulo e data juntos viram um único "target" no feed', async () => {
+      const db = await setup();
+      const init = await createInitiative(db, {
+         slug: 'feed',
+         name: 'Feed',
+         priorityId: 'high',
+         healthId: 'on-track',
+      });
+      await updateInitiative(
+         db,
+         init.id,
+         { target: 'Q3 2026', targetDate: '2026-09-30', startDate: '2026-07-01' },
+         'ana@nimbloo.ai'
+      );
+      const [entry] = await listInitiativeActivity(db, init.id);
+      expect(entry.text).toBe('changed target, start date');
+   });
+
    /**
     * A migration custom 0037 deriva `target_date` do rótulo `target` já gravado. O
     * `makeTestDb` roda as migrations num banco vazio, então o teste insere o rótulo

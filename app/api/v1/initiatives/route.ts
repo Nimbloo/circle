@@ -32,7 +32,9 @@ const CreateSchema = z.object({
    icon: z.string().max(64).nullish(),
    iconColor: z.string().max(32).nullish(),
    ownerId: z.string().nullish(),
-   target: z.string().nullish(),
+   target: z.string().max(64).nullish(),
+   startDate: z.string().date().nullish(),
+   targetDate: z.string().date().nullish(),
    projectIds: z.array(z.string()).optional(),
    labelIds: z.array(z.string().max(64)).max(100).optional(),
 });
