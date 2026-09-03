@@ -1,3 +1,5 @@
+import type { FiltersState } from '@/components/data-table-filter/core/types';
+import { applyIssueFilters, NO_PROJECT } from '@/components/common/issues/issue-filter-columns';
 import { Issue, issues } from './issues';
 import { Project, projects } from './projects';
 import { StatusCategory } from './status';
@@ -46,22 +48,63 @@ export function getViewById(id: string): View | undefined {
    return views.find((view) => view.id === id);
 }
 
-/** Apply an issue view's declarative filter to the issue list. */
+/** Filtro `option` só quando há valores (array vazio = sem filtro, como no servidor). */
+function optionFilter(columnId: string, values: string[] | undefined): FiltersState {
+   if (!values?.length) return [];
+   return [
+      {
+         columnId,
+         type: 'option',
+         operator: values.length > 1 ? 'is any of' : 'is',
+         values: [...values],
+      },
+   ];
+}
+
+/**
+ * Converte o filtro declarativo de uma view salva para o `FiltersState` do bazza/ui
+ * (o mesmo formato da barra de filtro das listas). É o único ponto onde os dois
+ * modelos se encontram: `filterIssuesForView` filtra com `applyIssueFilters` e a
+ * página da view renderiza os chips a partir do resultado. Semântica = `resolveView`
+ * do servidor (arrays vazios são ignorados; `hasProject` = "Project is not No project";
+ * `unassigned` = "Assignee is Unassigned").
+ */
+export function viewFilterToFilters(filter: ViewFilter): FiltersState {
+   const filters: FiltersState = [
+      ...optionFilter('status', filter.statusIds),
+      ...optionFilter('statusType', filter.statusCategories),
+   ];
+   if (filter.unassigned) {
+      filters.push({
+         columnId: 'assignee',
+         type: 'option',
+         operator: 'is',
+         values: ['unassigned'],
+      });
+   }
+   filters.push(...optionFilter('priority', filter.priorityIds));
+   if (filter.labelIds?.length) {
+      filters.push({
+         columnId: 'labels',
+         type: 'multiOption',
+         operator: filter.labelIds.length > 1 ? 'include any of' : 'include',
+         values: [...filter.labelIds],
+      });
+   }
+   if (filter.hasProject) {
+      filters.push({
+         columnId: 'project',
+         type: 'option',
+         operator: 'is not',
+         values: [NO_PROJECT],
+      });
+   }
+   return filters;
+}
+
+/** Apply an issue view's declarative filter to the issue list (same engine as the filter bar). */
 export function filterIssuesForView(view: View, source: Issue[] = issues): Issue[] {
-   const { filter } = view;
-   return source.filter((issue) => {
-      if (filter.statusCategories && !filter.statusCategories.includes(issue.status.category)) {
-         return false;
-      }
-      if (filter.statusIds && !filter.statusIds.includes(issue.status.id)) return false;
-      if (filter.labelIds && !issue.labels.some((label) => filter.labelIds?.includes(label.id))) {
-         return false;
-      }
-      if (filter.priorityIds && !filter.priorityIds.includes(issue.priority.id)) return false;
-      if (filter.hasProject && !issue.project) return false;
-      if (filter.unassigned && issue.assignee) return false;
-      return true;
-   });
+   return applyIssueFilters(source, viewFilterToFilters(view.filter));
 }
 
 /** Apply a project view's declarative filter to the project list. */
