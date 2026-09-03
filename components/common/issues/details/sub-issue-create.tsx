@@ -1,57 +1,56 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { api } from '@/lib/client';
 import { useIssuesStore } from '@/store/issues-store';
 import { toast } from 'sonner';
 
 /**
- * Criação inline de sub-issue (paridade Linear): cria uma issue nova no mesmo time
- * (e projeto) da pai, com defaults 'to-do'/'no-priority', e a vincula como filha
- * (relação `sub`). Insere no issues-store (applyRemote) p/ aparecer na lista, e
- * dispara onCreated (refetch do detalhe → atualiza subIssueIds/rollup).
+ * Criação inline de sub-issue (paridade Linear, #95): `api.issues.create({ parentId })`
+ * cria a filha JÁ vinculada, herdando time/prioridade/projeto do pai no servidor.
+ * Enter cria e mantém o input aberto e focado para a próxima; colar várias linhas
+ * cria uma sub-issue por linha; Esc fecha. Insere no issues-store (applyRemote) e
+ * dispara onCreated (refetch do detalhe → lista de filhas + rollup).
  */
 export function SubIssueCreate({
    parentId,
-   teamId,
-   projectId,
    onCreated,
 }: {
    parentId: string;
-   teamId?: string;
-   projectId?: string | null;
    onCreated: () => void;
 }) {
    const [open, setOpen] = useState(false);
    const [title, setTitle] = useState('');
    const [busy, setBusy] = useState(false);
+   const inputRef = useRef<HTMLInputElement>(null);
 
-   const submit = async () => {
-      const t = title.trim();
-      if (!t || busy) return;
-      if (!teamId) {
-         toast.error('Sem time para criar a sub-issue');
-         return;
-      }
+   const createMany = async (titles: string[]) => {
+      const clean = titles.map((t) => t.trim()).filter(Boolean);
+      if (clean.length === 0 || busy) return;
       setBusy(true);
+      let created = 0;
       try {
-         const dto = await api.issues.create({
-            teamId,
-            title: t,
-            statusId: 'to-do',
-            priorityId: 'no-priority',
-            projectId: projectId ?? null,
-         });
-         await api.issues.addRelation(parentId, dto.id, 'sub');
-         await useIssuesStore.getState().applyRemote(dto.id);
+         // Sequencial de propósito: mantém a ordem das linhas coladas (rank = append).
+         for (const t of clean) {
+            const dto = await api.issues.create({ parentId, title: t });
+            created += 1;
+            void useIssuesStore.getState().applyRemote(dto.id);
+         }
          setTitle('');
-         setOpen(false);
          onCreated();
+         if (clean.length > 1) toast.success(`${created} sub-issues created`);
       } catch {
-         toast.error('Falha ao criar sub-issue');
+         if (created > 0) onCreated();
+         toast.error(
+            created > 0
+               ? `Created ${created} of ${clean.length} sub-issues`
+               : 'Could not create the sub-issue'
+         );
       } finally {
          setBusy(false);
+         // Enter mantém o fluxo: foco de volta no input para a próxima sub-issue.
+         requestAnimationFrame(() => inputRef.current?.focus());
       }
    };
 
@@ -70,17 +69,27 @@ export function SubIssueCreate({
 
    return (
       <input
+         ref={inputRef}
          autoFocus
          value={title}
          disabled={busy}
+         aria-label="Sub-issue title"
          onChange={(e) => setTitle(e.target.value)}
+         onPaste={(e) => {
+            // 'text' é o alias de 'text/plain' nos browsers (e o único que o user-event preenche).
+            const text = e.clipboardData.getData('text/plain') || e.clipboardData.getData('text');
+            const lines = text.split(/\r?\n/).filter((l) => l.trim());
+            if (lines.length <= 1) return; // colar de uma linha segue o fluxo normal do input
+            e.preventDefault();
+            void createMany(lines);
+         }}
          onBlur={() => {
-            if (!title.trim()) setOpen(false);
+            if (!title.trim() && !busy) setOpen(false);
          }}
          onKeyDown={(e) => {
             if (e.key === 'Enter') {
                e.preventDefault();
-               void submit();
+               void createMany([title]);
             } else if (e.key === 'Escape') {
                setTitle('');
                setOpen(false);

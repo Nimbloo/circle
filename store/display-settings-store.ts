@@ -63,6 +63,8 @@ export interface ViewDisplaySettings {
    orderCompletedByRecency: boolean;
    completedIssues: CompletedIssuesFilter;
    showEmptyGroups: boolean;
+   /** Sub-issues (#95): `false` esconde as issues com pai nas listas e no board. */
+   showSubIssues: boolean;
    displayProperties: Record<DisplayPropertyKey, boolean>;
 }
 
@@ -71,9 +73,8 @@ export const DEFAULT_DISPLAY_SETTINGS: ViewDisplaySettings = {
    ordering: 'priority',
    orderCompletedByRecency: false,
    completedIssues: 'all',
-   // "Show sub-issues" foi removido: o domínio não tem sub-issues (sem parentId), o
-   // toggle não tinha consumidor. Volta junto com sub-issues (#25).
    showEmptyGroups: false,
+   showSubIssues: true,
    displayProperties: DEFAULT_DISPLAY_PROPERTIES,
 };
 
@@ -86,6 +87,7 @@ interface DisplaySettingsState {
    setOrderCompletedByRecency: (viewKey: string, value: boolean) => void;
    setCompletedIssues: (viewKey: string, value: CompletedIssuesFilter) => void;
    setShowEmptyGroups: (viewKey: string, value: boolean) => void;
+   setShowSubIssues: (viewKey: string, value: boolean) => void;
    toggleDisplayProperty: (viewKey: string, key: DisplayPropertyKey) => void;
    /** Volta SÓ a view indicada aos defaults (as outras views não mudam). */
    resetDisplaySettings: (viewKey: string) => void;
@@ -125,6 +127,10 @@ export function normalizeDisplaySettings(
          typeof p.showEmptyGroups === 'boolean'
             ? p.showEmptyGroups
             : DEFAULT_DISPLAY_SETTINGS.showEmptyGroups,
+      showSubIssues:
+         typeof p.showSubIssues === 'boolean'
+            ? p.showSubIssues
+            : DEFAULT_DISPLAY_SETTINGS.showSubIssues,
       displayProperties: properties,
    };
 }
@@ -156,6 +162,7 @@ export function isDefaultDisplaySettings(settings: ViewDisplaySettings): boolean
       settings.orderCompletedByRecency === DEFAULT_DISPLAY_SETTINGS.orderCompletedByRecency &&
       settings.completedIssues === DEFAULT_DISPLAY_SETTINGS.completedIssues &&
       settings.showEmptyGroups === DEFAULT_DISPLAY_SETTINGS.showEmptyGroups &&
+      settings.showSubIssues === DEFAULT_DISPLAY_SETTINGS.showSubIssues &&
       (Object.keys(DEFAULT_DISPLAY_PROPERTIES) as DisplayPropertyKey[]).every(
          (key) => settings.displayProperties[key] === DEFAULT_DISPLAY_PROPERTIES[key]
       )
@@ -189,6 +196,7 @@ export const useDisplaySettingsStore = create<DisplaySettingsState>()(
                patchView(viewKey, { completedIssues }),
             setShowEmptyGroups: (viewKey, showEmptyGroups) =>
                patchView(viewKey, { showEmptyGroups }),
+            setShowSubIssues: (viewKey, showSubIssues) => patchView(viewKey, { showSubIssues }),
             toggleDisplayProperty: (viewKey, key) =>
                set((state) => {
                   const current = getViewDisplaySettings(state.byView, viewKey);
@@ -242,6 +250,7 @@ type DisplaySettingsActions = {
    setOrderCompletedByRecency: (value: boolean) => void;
    setCompletedIssues: (value: CompletedIssuesFilter) => void;
    setShowEmptyGroups: (value: boolean) => void;
+   setShowSubIssues: (value: boolean) => void;
    toggleDisplayProperty: (key: DisplayPropertyKey) => void;
    resetDisplaySettings: () => void;
 };
@@ -275,6 +284,7 @@ export function useDisplaySettings(): DisplaySettings {
          setOrderCompletedByRecency: (value) => store.setOrderCompletedByRecency(viewKey, value),
          setCompletedIssues: (value) => store.setCompletedIssues(viewKey, value),
          setShowEmptyGroups: (value) => store.setShowEmptyGroups(viewKey, value),
+         setShowSubIssues: (value) => store.setShowSubIssues(viewKey, value),
          toggleDisplayProperty: (key) => store.toggleDisplayProperty(viewKey, key),
          resetDisplaySettings: () => store.resetDisplaySettings(viewKey),
       };

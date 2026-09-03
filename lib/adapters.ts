@@ -102,6 +102,8 @@ export function adaptIssue(dto: IssueDto): Issue {
       estimate: dto.estimate ?? undefined,
       subIssueCount: dto.subIssueCount,
       subIssueDoneCount: dto.subIssueDoneCount,
+      parentId: dto.parentId ?? null,
+      parentIdentifier: dto.parentIdentifier ?? null,
       snoozedUntil: dto.snoozedUntil,
       createdById: dto.createdBy?.id ?? undefined,
    };

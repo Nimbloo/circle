@@ -14,19 +14,27 @@ import {
 import { cn } from '@/lib/utils';
 import { useFavoritesStore } from '@/store/favorites-store';
 import { useIssuesStore } from '@/store/issues-store';
+import { useCurrentIssueStore } from '@/store/current-issue-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import {
+   ParentIssuePickerDialog,
+   useSetParent,
+} from '@/components/common/issues/details/parent-issue';
+import { ISSUE_CHANGED_EVENT } from '@/lib/use-live-sync';
 import {
    Bell,
    BellOff,
    ChevronDown,
    ChevronRight,
    ChevronUp,
+   CornerLeftUp,
    MoreHorizontal,
    Star,
    Copy,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { useState } from 'react';
 import { toast } from 'sonner';
 
 async function copyToClipboard(value: string, successMessage: string) {
@@ -39,16 +47,25 @@ async function copyToClipboard(value: string, successMessage: string) {
 }
 
 /**
- * Issue page header: breadcrumb (team › cycle › identifier + title) and
- * previous / next navigation across the issue list.
+ * Issue page header: breadcrumb (team › cycle › [parent ›] identifier + title) and
+ * previous / next navigation across the issue list. A issue atual e o pai vêm do
+ * `current-issue-store` (publicado pela página, mesma fonte do detalhe) — não do
+ * issues-store, que não conhece deep-links nem o pai. O store só serve à navegação
+ * anterior/próxima.
  */
 export default function HeaderNav() {
    const { orgId, issueId } = useParams<{ orgId: string; issueId: string }>();
    const issues = useIssuesStore((s) => s.issues);
    const teams = useWorkspaceStore((s) => s.teams);
+   const current = useCurrentIssueStore((s) => s.issue);
+   const detail = useCurrentIssueStore((s) => s.detail);
+   const setParent = useSetParent();
+   const [convertOpen, setConvertOpen] = useState(false);
 
    const index = issues.findIndex((candidate) => candidate.identifier === issueId);
-   const issue = index >= 0 ? issues[index] : undefined;
+   const issue =
+      current && current.identifier === issueId ? current : index >= 0 ? issues[index] : undefined;
+   const parent = detail && issue && detail.identifier === issue.identifier ? detail.parent : null;
    const subscribed = useWorkspaceStore((s) =>
       issue ? (s.me?.subscribedIssueIds.includes(issue.id) ?? false) : false
    );
@@ -90,6 +107,20 @@ export default function HeaderNav() {
                   >
                      <CyclePlayIcon className="size-3.5" />
                      {cycle.name}
+                  </Link>
+               </>
+            )}
+            {parent && (
+               <>
+                  <ChevronRight className="size-3.5 text-muted-foreground shrink-0" />
+                  <Link
+                     href={`/${orgId}/issue/${parent.identifier}`}
+                     title={parent.title}
+                     data-testid="breadcrumb-parent"
+                     className="flex shrink-0 items-center gap-1 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                     <CornerLeftUp className="size-3.5" />
+                     {parent.identifier}
                   </Link>
                </>
             )}
@@ -153,12 +184,31 @@ export default function HeaderNav() {
                            Copy title
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={() => setConvertOpen(true)}>
+                           <CornerLeftUp className="size-4" />
+                           Convert to sub-issue of…
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem onSelect={() => void toggleFavorite('issue', issue.id)}>
                            <Star className={cn('size-4', isFavorite && 'fill-current')} />
                            {isFavorite ? 'Remove from favorites' : 'Add to favorites'}
                         </DropdownMenuItem>
                      </DropdownMenuContent>
                   </DropdownMenu>
+                  <ParentIssuePickerDialog
+                     open={convertOpen}
+                     onOpenChange={setConvertOpen}
+                     issueId={issue.id}
+                     onSelect={async (newParent) => {
+                        if (await setParent(issue.id, newParent.id)) {
+                           toast.success(`Now a sub-issue of ${newParent.identifier}`);
+                           // A página escuta este evento e refaz o detail (breadcrumb + Parent).
+                           window.dispatchEvent(
+                              new CustomEvent(ISSUE_CHANGED_EVENT, { detail: { id: issue.id } })
+                           );
+                        }
+                     }}
+                  />
                </>
             )}
          </HeaderGroup>

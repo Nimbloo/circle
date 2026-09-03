@@ -33,6 +33,7 @@ const UpdateSchema = z.object({
    estimate: z.number().int().min(0).max(1000).nullish(),
    snoozedUntil: z.string().datetime().nullish(),
    milestoneId: z.string().max(36).nullish(),
+   parentId: z.string().max(36).nullish(),
 });
 
 export async function PATCH(req: Request, { params }: Params) {

@@ -106,6 +106,7 @@ const ViewDisplaySchema = z
       orderCompletedByRecency: z.boolean().optional(),
       completedIssues: z.enum(['all', 'none']).optional(),
       showEmptyGroups: z.boolean().optional(),
+      showSubIssues: z.boolean().optional(),
       displayProperties: z
          .object({
             id: z.boolean().optional(),

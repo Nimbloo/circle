@@ -1,6 +1,7 @@
 import { Issue } from './issues';
 import { User, users } from './users';
 import type { EditorDoc } from '@/lib/editor-doc';
+import type { SubIssueRef } from '@/lib/api/issue-detail';
 
 /* -------------------------------------------------------------------------- */
 /*                         Rich content block model                           */
@@ -81,6 +82,10 @@ export interface IssueDetail {
    /** Doc do editor de blocos; null = derivar de `description` (`blocksToDoc`). */
    descriptionDoc?: EditorDoc | null;
    activity: ActivityItem[];
+   /** Pai canônico (#95) — alimenta o breadcrumb e a propriedade Parent. */
+   parent?: { id: string; identifier: string; title: string } | null;
+   /** Filhas diretas resolvidas pelo servidor (a UI não cruza com o issues-store). */
+   subIssues?: SubIssueRef[];
    subIssueIds?: string[];
    relatedIds?: string[];
    blockedByIds?: string[];

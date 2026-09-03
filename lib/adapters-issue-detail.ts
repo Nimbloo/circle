@@ -88,6 +88,8 @@ export function adaptIssueDetail(dto: IssueDetailDto, activity: ActivityDto[]): 
       description: textToBlocks(dto.description),
       descriptionDoc: dto.descriptionDoc ?? null,
       activity: adaptActivity(activity),
+      parent: dto.parent ?? null,
+      subIssues: dto.subIssues ?? [],
       subIssueIds: dto.subIssueIds,
       relatedIds: dto.relatedIds,
       blockedByIds: dto.blockedByIds,
