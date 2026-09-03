@@ -1,5 +1,6 @@
 import { Issue } from './issues';
 import { User, users } from './users';
+import type { EditorDoc } from '@/lib/editor-doc';
 
 /* -------------------------------------------------------------------------- */
 /*                         Rich content block model                           */
@@ -58,6 +59,8 @@ export interface PrLink {
 export interface IssueDetail {
    identifier: string;
    description: ContentBlock[];
+   /** Doc do editor de blocos; null = derivar de `description` (`blocksToDoc`). */
+   descriptionDoc?: EditorDoc | null;
    activity: ActivityItem[];
    subIssueIds?: string[];
    relatedIds?: string[];

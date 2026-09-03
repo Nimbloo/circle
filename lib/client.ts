@@ -48,6 +48,7 @@ import type {
    CommentDto,
    ActivityItem,
    MyActivityItemDto,
+   UpdateIssueContentInput,
 } from '@/lib/api/issue-detail';
 import type { IssueMatrix, ProjectProgress, TimeMetrics } from '@/lib/api/aggregations';
 import type { MeDto } from '@/lib/api/users';
@@ -218,10 +219,8 @@ export const api = {
       removeLabel: (id: string, labelId: string) =>
          del<IssueDto>(`/issues/${id}/labels/${labelId}`),
       detail: (id: string) => get<IssueDetailDto>(`/issues/${id}/detail`),
-      updateDetail: (
-         id: string,
-         body: { description?: string | null; milestone?: string | null }
-      ) => patch<IssueDetailDto>(`/issues/${id}/detail`, body),
+      updateDetail: (id: string, body: UpdateIssueContentInput) =>
+         patch<IssueDetailDto>(`/issues/${id}/detail`, body),
       addRelation: (id: string, relatedId: string, kind: string) =>
          post<IssueDetailDto>(`/issues/${id}/relations`, { relatedId, kind }),
       removeRelation: (id: string, relatedId: string, kind: string) =>

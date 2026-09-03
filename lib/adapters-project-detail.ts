@@ -84,6 +84,7 @@ export function adaptProjectDetail(dto: ProjectDetailDto): ProjectDetail {
       projectId: dto.projectId,
       summary: dto.summary,
       description: dto.description,
+      descriptionDoc: dto.descriptionDoc ?? null,
       resources: dto.resources.map((r) => ({ id: r.id, label: r.label, url: r.url })),
       milestones: dto.milestones.map((m) => ({
          id: m.id,
