@@ -267,6 +267,13 @@
          "when": 1788402527108,
          "tag": "0037_backfill_initiative_dates",
          "breakpoints": true
+      },
+      {
+         "idx": 38,
+         "version": "7",
+         "when": 1788403291292,
+         "tag": "0038_description_doc",
+         "breakpoints": true
       }
    ]
 }
