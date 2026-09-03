@@ -465,8 +465,39 @@ export const comment = pgTable(
       /** Comentário-pai (threading, paridade Linear). NULL = comentário raiz. */
       parentId: varchar('parent_id', { length: 36 }),
       createdAt: timestamp('created_at').notNull().defaultNow(),
+      /** Última edição do corpo. NULL = nunca editado (a UI mostra "edited" quando existe). */
+      updatedAt: timestamp('updated_at'),
+      /** Thread resolvida (só na raiz). NULL = aberta. */
+      resolvedAt: timestamp('resolved_at'),
+      resolvedById: varchar('resolved_by_id', { length: 36 }).references(() => appUser.id),
    },
    (t) => [index('idx_comment_issue').on(t.issueId), index('idx_comment_parent').on(t.parentId)]
+);
+
+// Anexo de issue ou de comentário (#98). O arquivo vive no S3/CDN (`url`); a linha guarda
+// os metadados. `comment_id` NULL = anexo da issue; sem FK (como `comment.parent_id`) —
+// `deleteComment` limpa os anexos do comentário. Cascade no delete da issue.
+export const attachment = pgTable(
+   'attachment',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      issueId: varchar('issue_id', { length: 36 })
+         .notNull()
+         .references(() => issue.id, { onDelete: 'cascade' }),
+      commentId: varchar('comment_id', { length: 36 }),
+      uploadedById: varchar('uploaded_by_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      url: text('url').notNull(),
+      fileName: varchar('file_name', { length: 255 }).notNull(),
+      contentType: varchar('content_type', { length: 127 }).notNull(),
+      size: integer('size').notNull(),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [
+      index('idx_attachment_issue').on(t.issueId),
+      index('idx_attachment_comment').on(t.commentId),
+   ]
 );
 
 export const commentReaction = pgTable(

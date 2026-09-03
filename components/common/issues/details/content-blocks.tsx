@@ -8,8 +8,49 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Fragment } from 'react';
 
+/** Identifier de issue (ENG-12) solto no texto — vira link quando o time existe no store. */
+const IDENTIFIER_RE = /\b([A-Z][A-Z0-9]{1,9}-\d+)\b/g;
+
+function IssueRefInline({ identifier }: { identifier: string }) {
+   const { orgId } = useParams<{ orgId: string }>();
+   const issue = useIssuesStore((s) => s.issues.find((i) => i.identifier === identifier));
+   return (
+      <Link
+         href={`/${orgId ?? 'nimbloo'}/issue/${identifier}`}
+         title={issue?.title}
+         className="inline-flex items-center gap-1 rounded bg-accent/60 px-1 py-px align-baseline text-[0.92em] font-medium text-foreground/90 hover:bg-accent"
+      >
+         {issue && <issue.status.icon />}
+         {identifier}
+      </Link>
+   );
+}
+
+/** Texto com identifiers de times conhecidos (no store) linkados; o resto fica como está. */
+function LinkedIdentifiers({ text }: { text: string }) {
+   const teamKeys = useIssuesStore((s) => {
+      const keys = new Set<string>();
+      for (const i of s.issues) keys.add(i.identifier.split('-')[0]);
+      return [...keys].sort().join(',');
+   });
+   const known = new Set(teamKeys ? teamKeys.split(',') : []);
+   if (known.size === 0) return <>{text}</>;
+   const parts = text.split(IDENTIFIER_RE);
+   return (
+      <>
+         {parts.map((part, index) =>
+            index % 2 === 1 && known.has(part.split('-')[0]) ? (
+               <IssueRefInline key={index} identifier={part} />
+            ) : (
+               <Fragment key={index}>{part}</Fragment>
+            )
+         )}
+      </>
+   );
+}
+
 /**
- * Lightweight inline formatting: `code` spans and **bold** runs.
+ * Lightweight inline formatting: `code` spans, **bold** runs and issue identifiers.
  */
 export function InlineText({ text }: { text: string }) {
    const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
@@ -34,7 +75,7 @@ export function InlineText({ text }: { text: string }) {
                   </strong>
                );
             }
-            return <Fragment key={index}>{part}</Fragment>;
+            return <LinkedIdentifiers key={index} text={part} />;
          })}
       </>
    );

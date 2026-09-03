@@ -10,12 +10,15 @@ import { ISSUE_CHANGED_EVENT } from '@/lib/use-live-sync';
 import { useIssuesStore } from '@/store/issues-store';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ReactNode, useEffect, useMemo, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { DetailSidePanel, DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 import { BlockEditor } from '@/components/common/editor/block-editor';
 import { AssigneeUser } from '../assignee-user';
 import { ActivityFeed } from './activity-feed';
+import { AttachmentsSection } from './attachments-section';
+import { useAttachmentUploader } from './use-attachment-uploader';
+import { filesOf, isImageFile } from '@/lib/attachments-client';
 import { IssuePropertiesPanel } from './issue-properties-panel';
 import { IssueDetailSkeleton } from './issue-detail-skeleton';
 import { RelationEditor } from './relation-editor';
@@ -106,6 +109,16 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
 
    const displayTitle = inStore ? issue.title : (localTitle ?? issue.title);
 
+   // Anexos da issue: upload compartilhado pela seção Attachments e pelo colar/soltar de
+   // arquivo não-imagem na descrição (imagem continua indo pro editor).
+   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
+   const { pending: pendingAttachments, addFiles: addAttachments } = useAttachmentUploader(
+      issue.id,
+      reload
+   );
+   const nonImageFiles = (list: FileList | null | undefined) =>
+      filesOf(list).filter((f) => !isImageFile(f));
+
    if (loading || !detail) {
       // Loading → skeleton; erro real (não-loading, sem detail) → mensagem.
       if (loading) return <IssueDetailSkeleton />;
@@ -187,7 +200,25 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
                   </h1>
                )}
 
-               <div className="mt-6 min-h-8">
+               {/* Colar/soltar arquivo que NÃO é imagem na descrição vira anexo da issue; o
+                   editor só trata imagens (o evento sobe até aqui sem ser consumido). */}
+               <div
+                  className="mt-6 min-h-8"
+                  onPaste={(e) => {
+                     const files = nonImageFiles(e.clipboardData?.files);
+                     if (files.length) {
+                        e.preventDefault();
+                        void addAttachments(files);
+                     }
+                  }}
+                  onDrop={(e) => {
+                     const files = nonImageFiles(e.dataTransfer?.files);
+                     if (files.length) {
+                        e.preventDefault();
+                        void addAttachments(files);
+                     }
+                  }}
+               >
                   <BlockEditor
                      key={issue.id}
                      doc={descriptionDoc}
@@ -195,6 +226,13 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
                      onSave={saveDescription}
                   />
                </div>
+
+               <AttachmentsSection
+                  attachments={detail.attachments ?? []}
+                  pending={pendingAttachments}
+                  onAddFiles={(files) => void addAttachments(files)}
+                  onChanged={reload}
+               />
 
                {/* Sub-issues */}
                <div className="mt-8">
@@ -256,7 +294,12 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
                <ActivityFeed
                   activity={detail.activity}
                   issueId={issue.id}
-                  onCommentAdded={() => setReloadKey((k) => k + 1)}
+                  issueContext={{
+                     teamId: issue.teamId,
+                     projectId: issue.project?.id ?? null,
+                     assigneeId: issue.assignee?.id ?? null,
+                  }}
+                  onCommentAdded={reload}
                />
             </div>
          </article>
