@@ -1,8 +1,3 @@
-ALTER TABLE "issue" ADD COLUMN "parent_id" varchar(36);--> statement-breakpoint
-ALTER TABLE "team" ADD COLUMN "auto_close_parent" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE "team" ADD COLUMN "auto_close_children" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE "issue" ADD CONSTRAINT "issue_parent_id_issue_id_fk" FOREIGN KEY ("parent_id") REFERENCES "public"."issue"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "idx_issue_parent" ON "issue" USING btree ("parent_id");--> statement-breakpoint
 -- Backfill de issue.parent_id a partir da hierarquia antiga (issue_relation kind='sub':
 -- issue_id = pai, related_id = filha). Idempotente: só preenche quem ainda não tem pai.
 -- Em conflito (filha com mais de um pai), fica o pai MAIS ANTIGO (created_at, depois id).
