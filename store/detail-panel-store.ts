@@ -2,7 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 /** Páginas de detalhe que têm painel lateral de propriedades/atividade. */
-export type DetailPanelKind = 'initiative' | 'project' | 'issue';
+export const DETAIL_PANEL_KINDS = ['initiative', 'project', 'issue', 'member'] as const;
+export type DetailPanelKind = (typeof DETAIL_PANEL_KINDS)[number];
 
 interface DetailPanelState {
    /** Painel aberto por tipo de página (persistido; padrão aberto, como no Linear). */
@@ -17,13 +18,14 @@ export const DEFAULT_DETAIL_PANELS: Record<DetailPanelKind, boolean> = {
    initiative: true,
    project: true,
    issue: true,
+   member: true,
 };
 
 /**
- * Um único estado de "painel lateral aberto" para initiative, project e issue —
- * substitui o `initiative-details-store` (só initiative) e o uso de `right-panel-store`
- * `'hidden'` no project. Chaveado por tipo, não por id: como no Linear, fechar o painel
- * de um projeto fecha para todos os projetos.
+ * Um único estado de "painel lateral aberto" para initiative, project, issue e o perfil
+ * de membro — substitui o `initiative-details-store` (só initiative) e o antigo
+ * `'hidden'` do `right-panel-store` (project e perfil). Chaveado por tipo, não por id:
+ * como no Linear, fechar o painel de um projeto fecha para todos os projetos.
  */
 export const useDetailPanelStore = create<DetailPanelState>()(
    persist(

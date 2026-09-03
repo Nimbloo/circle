@@ -5,6 +5,7 @@ import type { IssueDetail } from '@/data/issue-details';
 import { adaptIssueDetail, textToBlocks } from '@/lib/adapters-issue-detail';
 import { adaptIssues } from '@/lib/adapters';
 import { api } from '@/lib/client';
+import { blocksToDoc, type EditorDoc } from '@/lib/editor-doc';
 import { ISSUE_CHANGED_EVENT } from '@/lib/use-live-sync';
 import { useIssuesStore } from '@/store/issues-store';
 import Link from 'next/link';
@@ -12,9 +13,9 @@ import { useParams } from 'next/navigation';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { DetailSidePanel, DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
+import { BlockEditor } from '@/components/common/editor/block-editor';
 import { AssigneeUser } from '../assignee-user';
 import { ActivityFeed } from './activity-feed';
-import { ContentBlocks } from './content-blocks';
 import { IssuePropertiesPanel } from './issue-properties-panel';
 import { IssueDetailSkeleton } from './issue-detail-skeleton';
 import { RelationEditor } from './relation-editor';
@@ -45,13 +46,12 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
    const [loading, setLoading] = useState(true);
    const [reloadKey, setReloadKey] = useState(0);
 
-   // Edição inline de título e descrição (padrão Linear). `rawDescription` guarda o
-   // texto cru (o `detail.description` é ContentBlock[] só-leitura, adaptado do texto).
+   // Edição inline do título (padrão Linear). A descrição é o editor de blocos, sempre
+   // editável: `descriptionDoc` é o doc do servidor ou, quando ele ainda não existe, a
+   // conversão da projeção em texto (`textToBlocks` → `blocksToDoc`).
    const [editingTitle, setEditingTitle] = useState(false);
    const [titleDraft, setTitleDraft] = useState('');
-   const [editingDesc, setEditingDesc] = useState(false);
-   const [descDraft, setDescDraft] = useState('');
-   const [rawDescription, setRawDescription] = useState('');
+   const [descriptionDoc, setDescriptionDoc] = useState<EditorDoc | null>(null);
    // Override local do título para issue FORA do store (deep-link frio): o objeto vem
    // do pai e não flui de volta — o override exibe o valor salvo até o store assumir.
    const [localTitle, setLocalTitle] = useState<string | null>(null);
@@ -65,7 +65,7 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
       setLoading(true);
       setLocalTitle(null);
       setEditingTitle(false);
-      setEditingDesc(false);
+      setDescriptionDoc(null);
    }, [detailIssueId]);
 
    useEffect(() => {
@@ -77,7 +77,9 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
          .then(([detailDto, activity]) => {
             if (active) {
                setDetail(adaptIssueDetail(detailDto, activity));
-               setRawDescription(detailDto.description ?? '');
+               setDescriptionDoc(
+                  detailDto.descriptionDoc ?? blocksToDoc(textToBlocks(detailDto.description))
+               );
             }
          })
          .catch(() => {
@@ -137,22 +139,12 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
       }
    };
 
-   const applyDescription = async () => {
-      const next = descDraft;
-      setEditingDesc(false);
-      if (next.trim() === rawDescription.trim()) return;
-      const prev = rawDescription;
-      const prevBlocks = detail.description;
-      // Otimista nos DOIS estados (texto cru + blocks renderizados) — a tela troca na
-      // hora, sem refetch; o reload silencioso abaixo só reconcilia o activity feed.
-      setRawDescription(next);
-      setDetail((d) => (d ? { ...d, description: textToBlocks(next) } : d));
+   // O editor já mostra o que o usuário digitou; só o erro precisa de feedback (sem
+   // toast de sucesso — o save é contínuo, com debounce).
+   const saveDescription = async (doc: EditorDoc) => {
       try {
-         await api.issues.updateDetail(issue.id, { description: next.trim() || null });
-         setReloadKey((k) => k + 1);
+         await api.issues.updateDetail(issue.id, { descriptionDoc: doc });
       } catch {
-         setRawDescription(prev);
-         setDetail((d) => (d ? { ...d, description: prevBlocks } : d));
          toast.error('Falha ao salvar a descrição');
       }
    };
@@ -195,37 +187,13 @@ export function IssueDetailView({ issue, banner }: IssueDetailViewProps) {
                   </h1>
                )}
 
-               <div className="mt-6">
-                  {editingDesc ? (
-                     <textarea
-                        autoFocus
-                        value={descDraft}
-                        onChange={(e) => setDescDraft(e.target.value)}
-                        onBlur={() => void applyDescription()}
-                        onKeyDown={(e) => {
-                           if (e.key === 'Escape') setEditingDesc(false);
-                        }}
-                        placeholder="Add a description…"
-                        rows={Math.max(4, descDraft.split('\n').length + 1)}
-                        className="w-full resize-none bg-transparent text-[15px] leading-6 outline-none placeholder:text-muted-foreground/70"
-                     />
-                  ) : (
-                     <div
-                        className="-mx-[14px] min-h-8 cursor-text rounded-md px-[14px] py-1 transition-colors hover:bg-accent/10"
-                        onClick={() => {
-                           setDescDraft(rawDescription);
-                           setEditingDesc(true);
-                        }}
-                     >
-                        {rawDescription.trim() ? (
-                           <ContentBlocks blocks={detail.description} />
-                        ) : (
-                           <span className="text-[15px] leading-6 text-muted-foreground/70">
-                              Add a description…
-                           </span>
-                        )}
-                     </div>
-                  )}
+               <div className="mt-6 min-h-8">
+                  <BlockEditor
+                     key={issue.id}
+                     doc={descriptionDoc}
+                     placeholder="Add a description…"
+                     onSave={saveDescription}
+                  />
                </div>
 
                {/* Sub-issues */}

@@ -59,6 +59,7 @@ describe('InlineNewInitiative', () => {
          screen.getByRole('button', { name: 'Change priority' }),
          screen.getByRole('button', { name: 'Change initiative owner' }),
          screen.getByRole('button', { name: 'Change initiative target date' }),
+         screen.getByRole('button', { name: 'Change initiative start date' }),
          screen.getByRole('button', { name: 'Change labels' }),
          screen.getByRole('button', { name: 'Cancel initiative' }),
       ];

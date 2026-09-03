@@ -30,6 +30,7 @@ import { issues } from '@/data/issues';
 import { cycles } from '@/data/cycles';
 import { initiatives } from '@/data/initiatives';
 import { views } from '@/data/views';
+import { targetDateFromLabel } from '@/lib/initiative-period';
 
 function ts(dateish: string | undefined): Date {
    const d = dateish ? new Date(dateish) : new Date('2026-01-01');
@@ -115,6 +116,7 @@ export async function seedDemo(db: Db): Promise<boolean> {
                priorityId: i.priority.id,
                ownerId: i.owner?.id ?? null,
                target: i.target ?? null,
+               targetDate: targetDateFromLabel(i.target),
                healthId: i.health.id,
                createdAt: ts(i.createdAt),
             }))

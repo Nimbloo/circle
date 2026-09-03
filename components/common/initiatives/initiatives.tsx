@@ -21,6 +21,7 @@ import {
    SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { dayLabel } from '@/lib/initiative-period';
 import { Initiative, INITIATIVE_STATUS_META, InitiativeStatus } from '@/data/initiatives';
 import { health as allHealth } from '@/data/projects';
 import { usePriorities } from '@/store/catalog-store';
@@ -45,6 +46,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
 import { useMemo, useState } from 'react';
+import { format, parseISO } from 'date-fns';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { InitiativeStatusIcon } from './initiative-status-icon';
 import { InitiativesSidePanel } from './initiatives-side-panel';
@@ -423,8 +425,16 @@ function InitiativeRow({
                </span>
             )}
             {displayProperties.target && (
-               <span className="hidden md:block w-[100px] shrink-0 text-xs text-muted-foreground">
-                  {initiative.target ?? '—'}
+               <span
+                  className="hidden md:block w-[100px] shrink-0 text-xs text-muted-foreground"
+                  title={
+                     initiative.targetDate
+                        ? `Ends ${format(parseISO(initiative.targetDate), 'MMM d, yyyy')}`
+                        : undefined
+                  }
+               >
+                  {initiative.target ??
+                     (initiative.targetDate ? dayLabel(initiative.targetDate) : '—')}
                </span>
             )}
             {displayProperties.projects && (
@@ -461,6 +471,22 @@ function InitiativeRow({
 
 /* ---------------------------------- page ---------------------------------- */
 
+/**
+ * Ordena pela data real (ISO compara lexicograficamente). Sem data, cai no rótulo
+ * (dado antigo que o backfill não reconheceu); sem nada, vai para o fim.
+ */
+function compareByTarget(a: Initiative, b: Initiative): number {
+   if (a.targetDate && b.targetDate) {
+      return a.targetDate.localeCompare(b.targetDate) || a.name.localeCompare(b.name);
+   }
+   if (a.targetDate || b.targetDate) return a.targetDate ? -1 : 1;
+   const labelA = a.target ?? '';
+   const labelB = b.target ?? '';
+   if (labelA && labelB) return labelA.localeCompare(labelB) || a.name.localeCompare(b.name);
+   if (labelA || labelB) return labelA ? -1 : 1;
+   return a.name.localeCompare(b.name);
+}
+
 export default function Initiatives() {
    const { orgId } = useParams<{ orgId: string }>();
    const [tab] = useQueryState('tab', parseAsStringLiteral(INITIATIVE_TABS).withDefault('active'));
@@ -491,8 +517,7 @@ export default function Initiatives() {
          list = list.filter((initiative) => filters.health.includes(initiative.health.id));
       }
       if (ordering === 'name') list.sort((a, b) => a.name.localeCompare(b.name));
-      else if (ordering === 'target')
-         list.sort((a, b) => (a.target ?? '').localeCompare(b.target ?? ''));
+      else if (ordering === 'target') list.sort(compareByTarget);
       return list;
    }, [tab, filters, ordering, allInitiatives]);
 

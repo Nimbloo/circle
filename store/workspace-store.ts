@@ -15,7 +15,7 @@ import {
 } from '@/lib/adapters-workspace';
 import type { WorkspaceBootstrap, TeamFull } from '@/lib/api/workspace';
 import type { MeDto } from '@/lib/api/users';
-import type { ProjectDto } from '@/lib/api/projects';
+import type { ProjectDto, UpdateProjectInput } from '@/lib/api/projects';
 import type { InitiativeDto } from '@/lib/api/initiatives';
 import type { TeamDto } from '@/lib/api/teams';
 import type { MemberDto } from '@/lib/api/members';
@@ -47,6 +47,10 @@ interface WorkspaceState {
     * `initiatives[].projectIds`, `projects[].initiative`, membership em `teams[].members`,
     * `owner` de initiatives/views), sem tocar nas demais coleções. */
    applyProject: (dto: ProjectDto) => void;
+   /** PATCH otimista de um projeto (DnD do board, reschedule da timeline): aplica `local`
+    * na hora, persiste `body` e, no erro, faz rollback + toast e re-lança. O sucesso é
+    * silencioso (o DTO do servidor entra via `applyProject`). */
+   patchProject: (id: string, local: Partial<Project>, body: UpdateProjectInput) => Promise<void>;
    applyInitiative: (dto: InitiativeDto) => void;
    removeProjectLocal: (id: string) => void;
    removeInitiativeLocal: (id: string) => void;
@@ -217,6 +221,19 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
             return linked ? { ...i, projectIds: dropId(i.projectIds, adapted.id) } : i;
          }),
       }));
+   },
+   patchProject: (id, local, body) => {
+      const prev = get().projects.find((p) => p.id === id);
+      if (!prev) return Promise.resolve();
+      set((s) => ({ projects: s.projects.map((p) => (p.id === id ? { ...p, ...local } : p)) }));
+      return api.projects
+         .update(id, body)
+         .then((dto) => get().applyProject(dto))
+         .catch((e) => {
+            set((s) => ({ projects: s.projects.map((p) => (p.id === id ? prev : p)) }));
+            toast.error('Could not update the project');
+            throw e;
+         });
    },
    applyInitiative: (dto) => {
       const usersById = new Map(get().users.map((u) => [u.id, u]));

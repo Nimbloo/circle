@@ -8,6 +8,8 @@ export interface Team {
    joined: boolean;
    color: string;
    estimateScale: string; // fibonacci|exponential|linear|tshirt
+   /** Days without a current cycle between one cycle and the next (0-14). */
+   cycleCooldownDays: number;
    members: User[];
    projects: Project[];
 }

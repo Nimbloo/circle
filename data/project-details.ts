@@ -1,5 +1,6 @@
 import { ContentBlock } from './issue-details';
 import { User, users } from './users';
+import type { EditorDoc } from '@/lib/editor-doc';
 
 /* -------------------------------------------------------------------------- */
 /*                                 Interfaces                                 */
@@ -54,6 +55,8 @@ export interface ProjectDetail {
    /** One-line summary shown under the project name. */
    summary: string;
    description: ContentBlock[];
+   /** Doc do editor de blocos; null = derivar de `description` (`blocksToDoc`). */
+   descriptionDoc?: EditorDoc | null;
    resources: ProjectResource[];
    milestones: ProjectMilestone[];
    updates: ProjectUpdate[];

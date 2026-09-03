@@ -18,6 +18,8 @@ import { dispatchNotification } from './notify';
 import { ApiError } from './errors';
 import { publish } from './events';
 import type { UserRef } from './issues';
+import { projectDescriptionDoc } from './description-doc';
+import type { EditorDoc } from '@/lib/editor-doc';
 
 function userRef(
    u:
@@ -59,7 +61,10 @@ export interface ActivityItem {
 
 export interface IssueDetailDto {
    identifier: string;
+   /** Projeção em texto (markdown) da descrição — busca, API antiga, e-mails. */
    description: string | null;
+   /** Documento do editor de blocos (JSON do ProseMirror). null = só há a projeção. */
+   descriptionDoc: EditorDoc | null;
    /** Milestone livre (legado). Novo fluxo usa milestoneId/milestoneName estruturados. */
    milestone: string | null;
    /** Milestone estruturada (FK project_milestone) + nome resolvido. */
@@ -134,6 +139,7 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
    return {
       identifier: iss.identifier,
       description: content[0]?.description ?? null,
+      descriptionDoc: (content[0]?.descriptionDoc as EditorDoc | null | undefined) ?? null,
       milestone: content[0]?.milestone ?? null,
       milestoneId: iss.milestoneId ?? null,
       milestoneName: ms[0]?.name ?? null,
@@ -146,12 +152,20 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
    };
 }
 
-/** Upsert da descrição (texto raw) da issue em `issue_content`. Antes só era gravada
- * no create — não havia caminho de edição ponta-a-ponta. Retorna o detail atualizado. */
+export interface UpdateIssueContentInput {
+   /** Texto cru (cliente antigo): grava a projeção e ZERA o doc. */
+   description?: string | null;
+   /** Doc do editor: grava o doc e DERIVA a projeção em texto. Tem precedência. */
+   descriptionDoc?: EditorDoc | null;
+   milestone?: string | null;
+}
+
+/** Upsert da descrição (doc do editor + projeção em texto) da issue em `issue_content`.
+ * Retorna o detail atualizado. */
 export async function updateIssueContent(
    db: Db,
    issueId: string,
-   patch: { description?: string | null; milestone?: string | null }
+   patch: UpdateIssueContentInput
 ): Promise<IssueDetailDto | null> {
    const exists = await db
       .select({ id: issueT.id })
@@ -161,13 +175,21 @@ export async function updateIssueContent(
    if (exists.length === 0) return null;
    // Upsert parcial: só os campos presentes no patch são alterados numa linha existente.
    const set: Partial<typeof issueContent.$inferInsert> = {};
-   if (patch.description !== undefined) set.description = patch.description;
+   if (patch.descriptionDoc !== undefined) {
+      const derived = projectDescriptionDoc(patch.descriptionDoc);
+      set.description = derived.text;
+      set.descriptionDoc = derived.doc;
+   } else if (patch.description !== undefined) {
+      set.description = patch.description;
+      set.descriptionDoc = null;
+   }
    if (patch.milestone !== undefined) set.milestone = patch.milestone;
    await db
       .insert(issueContent)
       .values({
          issueId,
-         description: patch.description ?? null,
+         description: set.description ?? null,
+         descriptionDoc: set.descriptionDoc ?? null,
          milestone: patch.milestone ?? null,
       })
       .onConflictDoUpdate({ target: issueContent.issueId, set });

@@ -1,5 +1,10 @@
 'use client';
 
+import {
+   DetailPanelContainer,
+   DetailPanelToggle,
+   DetailSidePanelTrigger,
+} from '@/components/common/detail-side-panel';
 import { IssueDetailView } from '@/components/common/issues/details/issue-details';
 import { IssueDetailSkeleton } from '@/components/common/issues/details/issue-detail-skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -47,6 +52,11 @@ function NotificationContext({ notification }: { notification: InboxItem }) {
  * Inbox preview pane — paridade Linear: selecionar uma notificação abre a ISSUE
  * COMPLETA (título/descrição editáveis, sub-issues, feed com composer e a sidebar
  * de properties), com o contexto da notificação como banner no topo.
+ *
+ * O pane é um `DetailPanelContainer`: a sidebar de properties responde à largura do
+ * PANE (redimensionável, bem mais estreito que a janela), não à do viewport — senão
+ * ela abria em 400 px sobre um pane de 700 e esmagava o conteúdo. O toggle do painel
+ * fica no cabeçalho do pane (mesmo estado persistido da página da issue).
  */
 export default function IssuePreview({
    notification,
@@ -76,7 +86,7 @@ export default function IssuePreview({
    const displayIssue = issue ?? notification;
 
    return (
-      <div className="flex flex-col h-full overflow-hidden">
+      <DetailPanelContainer className="flex h-full flex-col overflow-hidden">
          {/* Header */}
          <div className="flex h-11 shrink-0 items-center justify-between border-b border-border px-4">
             <div className="flex items-center gap-2 min-w-0">
@@ -112,6 +122,10 @@ export default function IssuePreview({
                      <ArrowUpRight className="size-3.5 ml-0.5" />
                   </Link>
                </Button>
+               <DetailPanelToggle kind="issue" />
+               {/* O trigger do corpo da issue some no viewport `xl`; quando o pane ainda é
+                   estreito (< @3xl) este cobre o vão para o Sheet continuar acessível. */}
+               <DetailSidePanelTrigger kind="issue" className="hidden xl:@max-3xl:inline-flex" />
             </div>
          </div>
 
@@ -127,6 +141,6 @@ export default function IssuePreview({
                <IssueDetailSkeleton />
             )}
          </div>
-      </div>
+      </DetailPanelContainer>
    );
 }

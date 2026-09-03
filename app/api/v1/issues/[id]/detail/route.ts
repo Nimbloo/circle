@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { EditorDoc } from '@/lib/editor-doc';
 import { db } from '@/db';
 import { ok, notFound } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
@@ -18,8 +19,14 @@ export async function GET(req: Request, { params }: Params) {
    }, req);
 }
 
+// Casca do doc do ProseMirror; a validação de schema (nós/marks) acontece ao derivar o texto.
+const DocSchema = z
+   .object({ type: z.literal('doc'), content: z.array(z.record(z.unknown())).optional() })
+   .transform((doc) => doc as EditorDoc);
+
 const PatchSchema = z.object({
    description: z.string().max(20000).nullish(),
+   descriptionDoc: DocSchema.nullish(),
    milestone: z.string().max(196).nullish(),
 });
 

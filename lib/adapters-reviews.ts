@@ -1,11 +1,12 @@
 /**
  * Adapters + fetchers da feature Reviews (code review estilo GitHub).
  *
- * O backend guarda o PR "cru" sincronizado do GitHub (título, status, branches,
- * contadores) via `ReviewDto`. A UI usa o tipo rico `Review` do mock, que tem
- * campos de DETALHE (files/commits/summary/testPlan/deployment/reviewNote) que o
- * backend AINDA não modela — esses saem VAZIOS. Nada é inventado: sem dado no
- * contrato, os componentes degradam pra estado vazio.
+ * O backend sincroniza o PR do GitHub (`ReviewDto`: título, status, branches,
+ * contadores, checks) e, no detalhe (`ReviewDetailDto`), os arquivos com patch, os
+ * commits e o guide gerado a partir do diff. A UI usa o tipo rico `Review`
+ * (`data/reviews.ts`); só `summary`, `testPlan`, `deployment` e `reviewNote` seguem
+ * sem fonte no contrato e saem vazios — nada é inventado, os componentes degradam
+ * pra estado vazio.
  *
  * Os fetchers usam o cliente tipado global (`api.reviews`, em lib/client.ts).
  */

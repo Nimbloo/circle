@@ -14,13 +14,12 @@ import { toast } from 'sonner';
 /**
  * Team Home — "Members" tab: membros do time, com adicionar e remover. Só entra no
  * picker quem JÁ é usuário do Circle (acesso concedido no Orbis + primeiro login por
- * SSO) — não há convite por e-mail aqui. Persiste via api.teams e re-hidrata o
- * workspace.
+ * SSO) — não há convite por e-mail aqui. Persiste via api.teams e aplica a lista de
+ * membros devolvida no store (`applyTeamMembers`), sem re-hidratar o workspace.
  */
 export default function TeamMembers() {
    const { teamId } = useParams<{ orgId: string; teamId: string }>();
    const teams = useWorkspaceStore((s) => s.teams);
-   const hydrate = useWorkspaceStore((s) => s.hydrate);
    const applyTeamMembers = useWorkspaceStore((s) => s.applyTeamMembers);
    const isAdmin = useWorkspaceStore((s) => s.me?.admin ?? false);
    const loaded = useWorkspaceStore((s) => s.loaded);
@@ -49,10 +48,9 @@ export default function TeamMembers() {
    const decide = async (id: string, decision: 'approved' | 'denied') => {
       setBusy(true);
       try {
-         await api.teams.decideJoinRequest(teamId, id, decision);
-         // A rota devolve as solicitações (JoinRequestDto[]), não os membros do time:
-         // aprovar muda a membership, então aqui ainda re-hidrata.
-         await Promise.all([refreshRequests(), hydrate()]);
+         const { requests, members } = await api.teams.decideJoinRequest(teamId, id, decision);
+         setRequests(requests);
+         applyTeamMembers(teamId, members);
          toast.success(decision === 'approved' ? 'Solicitação aprovada' : 'Solicitação negada');
       } catch {
          toast.error('Não deu pra decidir a solicitação');

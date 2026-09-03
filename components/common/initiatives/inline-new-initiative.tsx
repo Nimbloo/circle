@@ -24,7 +24,7 @@ import { toast } from 'sonner';
 import { InitiativeIconPicker } from './initiative-icon-picker';
 import { InitiativeLabelPicker } from './initiative-label-picker';
 import { InitiativeStatusIcon } from './initiative-status-icon';
-import { InitiativeTargetPicker } from './initiative-target-picker';
+import { InitiativeTargetPicker, type InitiativePeriodValue } from './initiative-target-picker';
 
 export function buildInitiativeSlug(value: string): string {
    const base = value
@@ -65,7 +65,8 @@ export function InlineNewInitiative({
    const [priorityId, setPriorityId] = useState('');
    const [healthId, setHealthId] = useState('');
    const [ownerId, setOwnerId] = useState<string | null>(null);
-   const [target, setTarget] = useState('');
+   const [target, setTarget] = useState<InitiativePeriodValue>({ label: null, date: null });
+   const [startDate, setStartDate] = useState<string | null>(null);
    const [labelIds, setLabelIds] = useState<string[]>([]);
    const [statusOpen, setStatusOpen] = useState(false);
    const [priorityOpen, setPriorityOpen] = useState(false);
@@ -104,7 +105,9 @@ export function InlineNewInitiative({
             icon,
             iconColor,
             ownerId,
-            target: target || null,
+            target: target.label,
+            targetDate: target.date,
+            startDate,
             labelIds,
          });
          applyInitiative(created);
@@ -374,7 +377,18 @@ export function InlineNewInitiative({
                   </PopoverContent>
                </Popover>
 
-               <InitiativeTargetPicker value={target} onChange={setTarget} compact />
+               <InitiativeTargetPicker
+                  label={target.label}
+                  date={target.date}
+                  onChange={setTarget}
+                  compact
+               />
+               <InitiativeTargetPicker
+                  kind="start"
+                  date={startDate}
+                  onChange={({ date }) => setStartDate(date)}
+                  compact
+               />
                <InitiativeLabelPicker
                   labels={labels}
                   value={labelIds}

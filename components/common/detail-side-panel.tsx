@@ -11,8 +11,54 @@ import {
 import { cn } from '@/lib/utils';
 import { useDetailPanelStore, type DetailPanelKind } from '@/store/detail-panel-store';
 import { PanelRight, PanelRightClose, PanelRightOpen } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import { create } from 'zustand';
+
+/**
+ * A que largura o painel responde: à do viewport (`xl`, páginas de detalhe) ou à do
+ * container mais próximo (`@3xl`/`@5xl`/`@7xl`, painel de issue dentro do Inbox, cujo
+ * pane é redimensionável e bem mais estreito que a janela).
+ */
+type DetailPanelLayout = 'viewport' | 'container';
+
+const DetailPanelLayoutContext = createContext<DetailPanelLayout>('viewport');
+
+/**
+ * Marca a subárvore como query container (`@container`) e faz o `DetailSidePanel`, o
+ * `DetailSidePanelTrigger` e o `DetailPanelToggle` dentro dela responderem à largura
+ * DESTE elemento, não à do viewport.
+ */
+export function DetailPanelContainer({
+   className,
+   children,
+}: {
+   className?: string;
+   children: ReactNode;
+}) {
+   return (
+      <DetailPanelLayoutContext.Provider value="container">
+         <div className={cn('@container', className)}>{children}</div>
+      </DetailPanelLayoutContext.Provider>
+   );
+}
+
+/** Classes responsivas por layout — a única diferença entre os dois modos. */
+const LAYOUT_CLASSES: Record<
+   DetailPanelLayout,
+   { aside: string; trigger: string; toggle: string }
+> = {
+   viewport: {
+      aside: 'w-[400px] xl:flex',
+      trigger: 'xl:hidden',
+      toggle: 'xl:inline-flex',
+   },
+   // Larguras dos degraus medidos no Linear: 16rem (@3xl) → 20rem (@5xl) → 400px (@7xl).
+   container: {
+      aside: '@3xl:flex @3xl:w-64 @5xl:w-80 @7xl:w-[400px]',
+      trigger: '@3xl:hidden',
+      toggle: '@3xl:inline-flex',
+   },
+};
 
 interface DetailSheetState {
    /** Tipo cujo Sheet (mobile) está aberto; um só por vez. */
@@ -34,6 +80,7 @@ const KIND_LABEL: Record<DetailPanelKind, string> = {
    initiative: 'Initiative',
    project: 'Project',
    issue: 'Issue',
+   member: 'Member',
 };
 
 interface DetailSidePanelProps {
@@ -46,10 +93,11 @@ interface DetailSidePanelProps {
 }
 
 /**
- * Painel lateral de propriedades das páginas de detalhe (initiative, project, issue),
- * com paridade Linear: 400 px à direita no desktop (`xl`), sem coluna residual quando
- * fechado; no mobile vira um Sheet aberto pelo `DetailSidePanelTrigger`. O estado
- * aberto/fechado do desktop é o `detail-panel-store` (por tipo, persistido).
+ * Painel lateral de propriedades das páginas de detalhe (initiative, project, issue,
+ * member), com paridade Linear: 400 px à direita no desktop (`xl`), sem coluna residual
+ * quando fechado; no mobile vira um Sheet aberto pelo `DetailSidePanelTrigger`. O estado
+ * aberto/fechado do desktop é o `detail-panel-store` (por tipo, persistido). Dentro de
+ * um `DetailPanelContainer` os degraus são do container, não do viewport.
  */
 export function DetailSidePanel({
    kind,
@@ -61,6 +109,7 @@ export function DetailSidePanel({
    const open = useDetailPanelStore((s) => s.openByKind[kind]);
    const sheetOpen = useDetailSheetStore((s) => s.openKind === kind);
    const setOpenKind = useDetailSheetStore((s) => s.setOpenKind);
+   const layout = useContext(DetailPanelLayoutContext);
 
    return (
       <>
@@ -78,7 +127,8 @@ export function DetailSidePanel({
             <aside
                aria-label={title}
                className={cn(
-                  'hidden h-full w-[400px] shrink-0 overflow-hidden pl-1 xl:flex',
+                  'hidden h-full shrink-0 overflow-hidden pl-1',
+                  LAYOUT_CLASSES[layout].aside,
                   className
                )}
             >
@@ -101,13 +151,14 @@ export function DetailSidePanelTrigger({
    className?: string;
 }) {
    const setOpenKind = useDetailSheetStore((s) => s.setOpenKind);
+   const layout = useContext(DetailPanelLayoutContext);
 
    return (
       <Button
          type="button"
          size="xs"
          variant="outline"
-         className={cn('gap-1.5 xl:hidden', className)}
+         className={cn('gap-1.5', LAYOUT_CLASSES[layout].trigger, className)}
          onClick={() => setOpenKind(kind)}
       >
          <PanelRight className="size-3.5" />
@@ -120,6 +171,7 @@ export function DetailSidePanelTrigger({
 export function DetailPanelToggle({ kind }: { kind: DetailPanelKind }) {
    const open = useDetailPanelStore((s) => s.openByKind[kind]);
    const toggle = useDetailPanelStore((s) => s.toggle);
+   const layout = useContext(DetailPanelLayoutContext);
    const label = KIND_LABEL[kind];
 
    return (
@@ -127,7 +179,7 @@ export function DetailPanelToggle({ kind }: { kind: DetailPanelKind }) {
          type="button"
          size="icon"
          variant="ghost"
-         className="hidden size-7 xl:inline-flex"
+         className={cn('hidden size-7', LAYOUT_CLASSES[layout].toggle)}
          onClick={() => toggle(kind)}
          aria-label={open ? `Close ${label} details` : `Open ${label} details`}
          aria-expanded={open}

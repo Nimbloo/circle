@@ -7,9 +7,9 @@ describe('detail-panel-store', () => {
       useDetailPanelStore.setState({ openByKind: { ...DEFAULT_DETAIL_PANELS } });
    });
 
-   it('começa aberto para os três tipos e alterna por tipo', () => {
+   it('começa aberto para os quatro tipos e alterna por tipo', () => {
       const s = useDetailPanelStore.getState();
-      expect(s.openByKind).toEqual({ initiative: true, project: true, issue: true });
+      expect(s.openByKind).toEqual({ initiative: true, project: true, issue: true, member: true });
       s.toggle('project');
       expect(useDetailPanelStore.getState().openByKind.project).toBe(false);
       expect(useDetailPanelStore.getState().openByKind.initiative).toBe(true);
@@ -24,6 +24,7 @@ describe('detail-panel-store', () => {
          initiative: false,
          project: true,
          issue: true,
+         member: true,
       });
    });
 
