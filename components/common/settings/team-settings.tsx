@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import {
    AlertDialog,
    AlertDialogAction,
@@ -27,6 +28,8 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import {
    Bot,
    ChevronRight,
+   CornerLeftUp,
+   CornerRightDown,
    FileText,
    Hourglass,
    Pencil,
@@ -206,6 +209,51 @@ function CooldownDaysInput({
    );
 }
 
+/**
+ * Toggle de automação de sub-issues (#95). Otimista no Switch, mas o toast de sucesso
+ * só depois que a API confirma; se falhar, volta ao valor salvo.
+ */
+function AutoCloseToggle({
+   team,
+   field,
+   label,
+   disabled,
+}: {
+   team: { id: string; autoCloseParent: boolean; autoCloseChildren: boolean };
+   field: 'autoCloseParent' | 'autoCloseChildren';
+   label: string;
+   disabled: boolean;
+}) {
+   const applyTeam = useWorkspaceStore((s) => s.applyTeam);
+   const [busy, setBusy] = useState(false);
+   const [optimistic, setOptimistic] = useState<boolean | null>(null);
+   const checked = optimistic ?? team[field];
+
+   const toggle = async (next: boolean) => {
+      if (busy) return;
+      setBusy(true);
+      setOptimistic(next);
+      try {
+         applyTeam(await api.teams.update(team.id, { [field]: next }));
+         toast.success('Automação atualizada');
+      } catch {
+         toast.error('Não foi possível atualizar a automação');
+      } finally {
+         setOptimistic(null);
+         setBusy(false);
+      }
+   };
+
+   return (
+      <Switch
+         checked={checked}
+         disabled={disabled || busy}
+         aria-label={label}
+         onCheckedChange={(v) => void toggle(v)}
+      />
+   );
+}
+
 /** Per-team settings page (general, workflow, AI and danger zone). */
 export default function TeamSettings({ teamId }: TeamSettingsProps) {
    const { orgId } = useParams<{ orgId: string }>();
@@ -346,6 +394,32 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
                      icon={<Workflow className="size-4" />}
                      title="Workflows & automations"
                      description="Manage issue automations, git workflows and other workflows"
+                  />
+                  <SettingsRow
+                     icon={<CornerLeftUp className="size-4" />}
+                     title="Auto-close parent issue"
+                     description="Completing the last open sub-issue completes the parent"
+                     trailing={
+                        <AutoCloseToggle
+                           team={team}
+                           field="autoCloseParent"
+                           label="Auto-close parent issue"
+                           disabled={!isAdmin}
+                        />
+                     }
+                  />
+                  <SettingsRow
+                     icon={<CornerRightDown className="size-4" />}
+                     title="Auto-close sub-issues"
+                     description="Completing the parent completes its remaining sub-issues"
+                     trailing={
+                        <AutoCloseToggle
+                           team={team}
+                           field="autoCloseChildren"
+                           label="Auto-close sub-issues"
+                           disabled={!isAdmin}
+                        />
+                     }
                   />
                   <SettingsRow
                      icon={<Radar className="size-4" />}
