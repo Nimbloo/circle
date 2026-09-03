@@ -48,7 +48,8 @@ export function PrioritySelector({
       if (issueId) {
          const newPriority = priorities.find((p) => p.id === priorityId);
          if (newPriority) {
-            updateIssuePriority(issueId, newPriority);
+            // O store já faz rollback + toast e re-lança; aqui não há mais o que tratar.
+            updateIssuePriority(issueId, newPriority).catch(() => undefined);
          }
       }
    };

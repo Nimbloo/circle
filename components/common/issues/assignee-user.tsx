@@ -47,11 +47,11 @@ export function AssigneeUser({ users, user, issueId, compact = false }: Assignee
       const next = isSelected(member.id)
          ? assignees.filter((a) => a.id !== member.id)
          : [...assignees, member];
-      void updateIssueAssignees(issueId, next);
+      void updateIssueAssignees(issueId, next).catch(() => undefined);
    };
    const clear = () => {
       setOpen(false);
-      void updateIssueAssignees(issueId, []);
+      void updateIssueAssignees(issueId, []).catch(() => undefined);
    };
    const me = meId ? members.find((m) => m.id === meId) : undefined;
    const single = assignees.length === 1 ? assignees[0] : null;

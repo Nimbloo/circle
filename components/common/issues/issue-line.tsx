@@ -82,10 +82,12 @@ function IssueRow({
    const changeLabels = (next: LabelInterface[]) => {
       const current = new Set(issue.labels.map((l) => l.id));
       const wanted = new Set(next.map((l) => l.id));
-      next.filter((l) => !current.has(l.id)).forEach((l) => void addIssueLabel(issue.id, l));
+      next
+         .filter((l) => !current.has(l.id))
+         .forEach((l) => void addIssueLabel(issue.id, l).catch(() => undefined));
       issue.labels
          .filter((l) => !wanted.has(l.id))
-         .forEach((l) => void removeIssueLabel(issue.id, l.id));
+         .forEach((l) => void removeIssueLabel(issue.id, l.id).catch(() => undefined));
    };
 
    return (
@@ -154,7 +156,9 @@ function IssueRow({
                      {displayProperties.project && issue.project && (
                         <ProjectSelector
                            project={issue.project}
-                           onChange={(project) => void updateIssueProject(issue.id, project)}
+                           onChange={(project) =>
+                              void updateIssueProject(issue.id, project).catch(() => undefined)
+                           }
                         >
                            <button
                               type="button"
@@ -172,7 +176,9 @@ function IssueRow({
                      <EstimateSelector
                         estimate={issue.estimate}
                         teamId={issue.teamId}
-                        onChange={(estimate) => void updateIssue(issue.id, { estimate })}
+                        onChange={(estimate) =>
+                           void updateIssue(issue.id, { estimate }).catch(() => undefined)
+                        }
                      >
                         <button
                            type="button"
@@ -200,7 +206,9 @@ function IssueRow({
                   {displayProperties.dueDate && issue.dueDate && (
                      <DueDateSelector
                         dueDate={issue.dueDate}
-                        onChange={(dueDate) => void updateIssue(issue.id, { dueDate })}
+                        onChange={(dueDate) =>
+                           void updateIssue(issue.id, { dueDate }).catch(() => undefined)
+                        }
                      >
                         <button
                            type="button"
@@ -268,7 +276,7 @@ function DraggableIssueRow({
 
             // Grupo diferente: adota o status da linha-alvo.
             if (item.status.id !== issue.status.id) {
-               void updateIssueStatus(item.id, issue.status);
+               void updateIssueStatus(item.id, issue.status).catch(() => undefined);
                return { handled: true };
             }
 

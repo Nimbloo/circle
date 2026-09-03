@@ -49,7 +49,8 @@ export function StatusSelector({
       if (issueId) {
          const newStatus = allStatus.find((s) => s.id === statusId);
          if (newStatus) {
-            updateIssueStatus(issueId, newStatus);
+            // O store já faz rollback + toast e re-lança; aqui não há mais o que tratar.
+            updateIssueStatus(issueId, newStatus).catch(() => undefined);
          }
       }
    };
