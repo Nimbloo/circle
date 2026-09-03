@@ -31,10 +31,11 @@ export async function POST(req: Request, { params }: Params) {
       const email = await requireEmail(req);
       const input = CreateSchema.parse(await req.json());
       const author = await getOrCreateUser(db, email);
-      const dto = await postInitiativeUpdate(db, id, author.id, {
+      // Devolve `{ update, initiative }` — a initiative já com o health propagado.
+      const result = await postInitiativeUpdate(db, id, author.id, {
          health: input.health as InitiativeUpdateHealth,
          blocks: input.blocks as ContentBlock[],
       });
-      return ok(dto);
+      return ok(result);
    }, req);
 }

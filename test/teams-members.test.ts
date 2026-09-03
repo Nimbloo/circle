@@ -329,8 +329,14 @@ describe('team membership: creator + request-to-join', () => {
       const newbie = await getOrCreateUser(db, 'newbie@nimbloo.ai');
       expect(await pendingRequestTeamIds(db, newbie.id)).toContain('PLAT');
 
-      // admin aprova → vira membro, fila esvazia, "solicitado" some
-      await decideJoinRequest(db, 'PLAT', pending[0].id, 'approved', admin.id);
+      // admin aprova → vira membro, fila esvazia, "solicitado" some. A decisão devolve
+      // a fila e os membros já atualizados (o cliente aplica no store sem re-hidratar).
+      const decided = await decideJoinRequest(db, 'PLAT', pending[0].id, 'approved', admin.id);
+      expect(decided.requests).toEqual([]);
+      expect(decided.members.map((m) => m.email).sort()).toEqual([
+         'founder@nimbloo.ai',
+         'newbie@nimbloo.ai',
+      ]);
       const members = await listTeamMembers(db, 'PLAT');
       expect(members.map((m) => m.email).sort()).toEqual([
          'founder@nimbloo.ai',
@@ -347,7 +353,9 @@ describe('team membership: creator + request-to-join', () => {
 
       await requestToJoin(db, 'PLAT', 'newbie@nimbloo.ai');
       const [req1] = await listJoinRequests(db, 'PLAT');
-      await decideJoinRequest(db, 'PLAT', req1.id, 'denied', admin.id);
+      const denied = await decideJoinRequest(db, 'PLAT', req1.id, 'denied', admin.id);
+      expect(denied.requests).toEqual([]);
+      expect(denied.members).toHaveLength(1); // só o criador
       expect(await listJoinRequests(db, 'PLAT')).toHaveLength(0);
       expect(await listTeamMembers(db, 'PLAT')).toHaveLength(1); // só o criador
 

@@ -266,9 +266,12 @@ export const api = {
       requestJoin: (key: string) => post<{ status: string }>(`/teams/${key}/join-requests`, {}),
       /** Solicitações pendentes do time (admin). */
       joinRequests: (key: string) => get<JoinRequestDto[]>(`/teams/${key}/join-requests`),
-      /** Admin aprova/nega uma solicitação. */
+      /** Admin aprova/nega uma solicitação; devolve a fila pendente e os membros do time. */
       decideJoinRequest: (key: string, id: string, decision: 'approved' | 'denied') =>
-         post<JoinRequestDto[]>(`/teams/${key}/join-requests/${id}`, { decision }),
+         post<{ requests: JoinRequestDto[]; members: MemberDto[] }>(
+            `/teams/${key}/join-requests/${id}`,
+            { decision }
+         ),
       issues: (key: string, opts?: IssueListOptions) =>
          get<IssueDto[]>(`/teams/${key}/issues${issueQuery(opts)}`),
       cycles: (key: string) => get<CycleDto[]>(`/teams/${key}/cycles`),
@@ -383,8 +386,12 @@ export const api = {
          patch<InitiativeDto>(`/initiatives/${id}`, body),
       remove: (id: string) => del<{ deleted: boolean }>(`/initiatives/${id}`),
       updates: (id: string) => get<InitiativeUpdateDto[]>(`/initiatives/${id}/updates`),
+      /** Posta um update; devolve o update e a initiative já com o health propagado. */
       postUpdate: (id: string, body: PostInitiativeUpdateInput) =>
-         post<InitiativeUpdateDto>(`/initiatives/${id}/updates`, body),
+         post<{ update: InitiativeUpdateDto; initiative: InitiativeDto }>(
+            `/initiatives/${id}/updates`,
+            body
+         ),
       /** Feed de alterações (campos mudados) — não confundir com `updates`. */
       activity: (id: string) => get<InitiativeActivityDto[]>(`/initiatives/${id}/activity`),
    },
