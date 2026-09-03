@@ -13,13 +13,13 @@ import type { View } from '@/data/views';
  * Os catálogos (status/priority/label) vêm dos defaults mock do catalog-store.
  */
 
-const view = (filter: View['filter']): View =>
+const view = (filter: View['filter'], type: View['type'] = 'issue'): View =>
    ({
       id: 'v1',
       name: 'Bugs em andamento',
       description: '',
       icon: '🐛',
-      type: 'issue',
+      type,
       createdAt: '2026-09-01T00:00:00Z',
       updatedAt: '2026-09-01T00:00:00Z',
       filter,
@@ -61,5 +61,36 @@ describe('ViewFilterChips', () => {
    it('não renderiza a barra quando a view não tem filtro', () => {
       render(<ViewFilterChips view={view({})} />);
       expect(screen.queryByRole('group', { name: 'View filters' })).toBeNull();
+   });
+
+   it('view de projeto usa as colunas de projeto e ignora filtros só de issue', () => {
+      render(
+         <ViewFilterChips
+            view={view(
+               {
+                  statusIds: ['in-progress'],
+                  statusCategories: ['planned', 'started'],
+                  priorityIds: ['high', 'urgent'],
+                  labelIds: ['bug'],
+                  // Não se aplicam a projeto: não viram chip.
+                  unassigned: true,
+                  hasProject: true,
+               },
+               'project'
+            )}
+         />
+      );
+
+      expect(screen.getByRole('group', { name: 'View filters' })).toBeTruthy();
+      expect(screen.getByText('Status')).toBeTruthy();
+      expect(screen.getByText('Status type')).toBeTruthy();
+      expect(screen.getByText('2 status types')).toBeTruthy();
+      expect(screen.getByText('Priority')).toBeTruthy();
+      expect(screen.getByText('2 priorities')).toBeTruthy();
+      expect(screen.getByText('Labels')).toBeTruthy();
+      expect(screen.getByText('Bug')).toBeTruthy();
+      expect(screen.queryByText('Assignee')).toBeNull();
+      expect(screen.queryByText('Project')).toBeNull();
+      expect(screen.queryAllByRole('button')).toHaveLength(0);
    });
 });

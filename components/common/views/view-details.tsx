@@ -58,7 +58,14 @@ function ProjectViewBody({ view }: { view: View }) {
       return [...byStatus.values()];
    }, [view, liveProjects]);
 
-   return <ProjectsList groups={groups} />;
+   return (
+      <div className="w-full h-full flex flex-col overflow-hidden">
+         <ViewFilterChips view={view} />
+         <div className="flex-1 min-h-0 w-full overflow-hidden">
+            <ProjectsList groups={groups} />
+         </div>
+      </div>
+   );
 }
 
 /** Saved-view detail page: filtered issues (with insights) or projects. */
