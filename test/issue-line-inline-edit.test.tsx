@@ -128,8 +128,13 @@ describe('IssueLine — edição inline pelos seletores', () => {
       await user.click(screen.getByLabelText('Assign issue'));
       await user.click(await screen.findByText('Ana'));
 
-      expect(screen.getByLabelText('Change assignee: Ana')).toBeTruthy();
-      await waitFor(() => expect(apiMocks.update).toHaveBeenCalledWith('a', { assigneeId: 'u1' }));
+      expect(screen.getByLabelText('Change assignees: Ana')).toBeTruthy();
+      await waitFor(() =>
+         expect(apiMocks.update).toHaveBeenCalledWith(
+            'a',
+            expect.objectContaining({ assigneeIds: ['u1'] })
+         )
+      );
    });
 
    it('labels: o badge abre o seletor; marcar adiciona e desmarcar remove', async () => {
