@@ -253,6 +253,13 @@
          "when": 1788394688622,
          "tag": "0035_reviews_depth_synced_guide",
          "breakpoints": true
+      },
+      {
+         "idx": 36,
+         "version": "7",
+         "when": 1788401765040,
+         "tag": "0036_cycle_cooldown_and_snapshots",
+         "breakpoints": true
       }
    ]
 }
