@@ -7,17 +7,23 @@ import ProjectsList from '@/components/common/projects/projects-list';
 import { ProjectGroup } from '@/components/common/projects/projects';
 import { filterIssuesForView, filterProjectsForView, View } from '@/data/views';
 import { ViewFilterChips } from './view-filter-chips';
-import { useStatuses } from '@/store/catalog-store';
+import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
+import { useViewStore } from '@/store/view-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useMemo } from 'react';
 
 function IssueViewBody({ view }: { view: View }) {
    const { openPanel } = useRightPanelStore();
-   const allStatus = useStatuses();
+   // Mesmas colunas/ordem e mesmo layout (list/board do "Display") das demais listas.
+   const allStatus = useDisplayOrderedStatuses();
+   const { viewType } = useViewStore();
    // Filtra contra o store vivo (hidratado da API), não o mock vazio.
    const liveIssues = useIssuesStore((s) => s.issues);
+   const loading = useIssuesStore((s) => s.loading);
+   const error = useIssuesStore((s) => s.error);
+   const hydrate = useIssuesStore((s) => s.hydrate);
    const issues = useMemo(() => filterIssuesForView(view, liveIssues), [view, liveIssues]);
 
    return (
@@ -29,7 +35,10 @@ function IssueViewBody({ view }: { view: View }) {
                   issues={issues}
                   totalIssues={issues}
                   statuses={allStatus}
-                  isViewTypeGrid={false}
+                  isViewTypeGrid={viewType === 'grid'}
+                  loading={loading}
+                  error={error}
+                  onRetry={() => hydrate()}
                />
             </div>
             {openPanel === 'insights' && (

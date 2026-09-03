@@ -5,16 +5,18 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format, parseISO } from 'date-fns';
 import { CalendarClock, X } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 
 interface DueDateSelectorProps {
    /** Data no formato YYYY-MM-DD (ou undefined). */
    dueDate: string | undefined;
    onChange: (dueDate: string | undefined) => void;
+   /** Trigger customizado (chip da linha de issue); default: botão com a data. */
+   children?: ReactNode;
 }
 
 /** Chip de due date no modal de criação (padrão Linear): calendário em popover. */
-export function DueDateSelector({ dueDate, onChange }: DueDateSelectorProps) {
+export function DueDateSelector({ dueDate, onChange, children }: DueDateSelectorProps) {
    const id = useId();
    const [open, setOpen] = useState(false);
    const label = dueDate ? format(parseISO(dueDate), 'MMM d') : 'Due date';
@@ -22,17 +24,19 @@ export function DueDateSelector({ dueDate, onChange }: DueDateSelectorProps) {
    return (
       <Popover open={open} onOpenChange={setOpen}>
          <PopoverTrigger asChild>
-            <Button
-               id={id}
-               size="xs"
-               variant="secondary"
-               role="combobox"
-               aria-expanded={open}
-               className="flex items-center justify-center gap-1"
-            >
-               <CalendarClock className="text-muted-foreground size-4" />
-               <span>{label}</span>
-            </Button>
+            {children ?? (
+               <Button
+                  id={id}
+                  size="xs"
+                  variant="secondary"
+                  role="combobox"
+                  aria-expanded={open}
+                  className="flex items-center justify-center gap-1"
+               >
+                  <CalendarClock className="text-muted-foreground size-4" />
+                  <span>{label}</span>
+               </Button>
+            )}
          </PopoverTrigger>
          <PopoverContent className="w-auto p-0" align="start">
             <Calendar

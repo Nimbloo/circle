@@ -29,6 +29,8 @@ import { IssuePicker } from './issue-picker';
 import { useParentCandidatesExclusion, useSetParent } from './parent-issue';
 import { SubIssueCreate } from './sub-issue-create';
 import { SubIssueProgress } from '../sub-issue-progress';
+import { SubIssueRow } from './sub-issue-row';
+import { adaptUser } from '@/lib/adapters';
 
 interface IssueDetailViewProps {
    issue: Issue;
@@ -280,6 +282,15 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
                      doc={descriptionDoc}
                      placeholder="Add a description…"
                      onSave={saveDescription}
+                     context={
+                        issue.teamId
+                           ? {
+                                issueId: issue.id,
+                                teamId: issue.teamId,
+                                projectId: issue.project?.id ?? null,
+                             }
+                           : undefined
+                     }
                   />
                </div>
 
@@ -301,38 +312,19 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
                         <div className="flex flex-col border-t border-border/50 mb-2">
                            {subIssues.map((subIssue) => {
                               const status = statusById.get(subIssue.statusId);
-                              const StatusIcon = status?.icon;
+                              if (!status) return null;
                               return (
-                                 <Link
+                                 <SubIssueRow
                                     key={subIssue.id}
-                                    href={`/${orgId ?? 'nimbloo'}/issue/${subIssue.identifier}`}
-                                    className="flex items-center gap-2.5 h-10 px-1 border-b border-border/50 hover:bg-sidebar/50 text-sm min-w-0"
-                                 >
-                                    {StatusIcon ? (
-                                       <StatusIcon />
-                                    ) : (
-                                       <span className="size-3.5 rounded-full border border-border shrink-0" />
-                                    )}
-                                    <span className="text-muted-foreground shrink-0 text-xs font-medium tabular-nums">
-                                       {subIssue.identifier}
-                                    </span>
-                                    <span className="truncate font-medium">{subIssue.title}</span>
-                                    <span className="ml-auto shrink-0">
-                                       {subIssue.assignee ? (
-                                          <Avatar className="size-5" title={subIssue.assignee.name}>
-                                             <AvatarImage
-                                                src={subIssue.assignee.avatarUrl ?? undefined}
-                                                alt={subIssue.assignee.name}
-                                             />
-                                             <AvatarFallback className="text-[10px]">
-                                                {subIssue.assignee.name[0]}
-                                             </AvatarFallback>
-                                          </Avatar>
-                                       ) : (
-                                          <span className="block size-5 rounded-full border border-dashed border-border" />
-                                       )}
-                                    </span>
-                                 </Link>
+                                    id={subIssue.id}
+                                    identifier={subIssue.identifier}
+                                    title={subIssue.title}
+                                    status={status}
+                                    assignee={
+                                       subIssue.assignee ? adaptUser(subIssue.assignee) : null
+                                    }
+                                    orgId={orgId ?? 'nimbloo'}
+                                 />
                               );
                            })}
                         </div>

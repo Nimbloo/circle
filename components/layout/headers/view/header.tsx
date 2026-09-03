@@ -9,6 +9,7 @@ import {
    ViewBar,
 } from '@/components/layout/header-primitives';
 import { ViewActions } from '@/components/common/views/view-actions';
+import { DisplayOptions } from '../display-options';
 import { filterIssuesForView, filterProjectsForView } from '@/data/views';
 import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
@@ -112,6 +113,7 @@ export default function Header() {
                   >
                      <BarChart3 className="size-4" />
                   </Button>
+                  <DisplayOptions />
                </HeaderActions>
             )}
          </ViewBar>

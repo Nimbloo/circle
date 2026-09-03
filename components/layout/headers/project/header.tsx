@@ -9,6 +9,7 @@ import {
    ViewBar,
 } from '@/components/layout/header-primitives';
 import { DetailPanelToggle } from '@/components/common/detail-side-panel';
+import { DisplayOptions } from '../display-options';
 import { cn } from '@/lib/utils';
 import { useDetailPanelStore } from '@/store/detail-panel-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
@@ -56,23 +57,29 @@ function PanelToggles() {
    const { openPanel, togglePanel } = useRightPanelStore();
    const panelOpen = useDetailPanelStore((s) => s.openByKind.project);
    const setPanelOpen = useDetailPanelStore((s) => s.setOpen);
+   // "Display" (list/board, agrupamento, propriedades) só na aba Issues — é a lista.
+   const pathname = usePathname();
+   const onIssuesTab = pathname.endsWith('/issues');
 
    return (
-      <div className="hidden items-center gap-1 xl:flex">
-         <Button
-            size="xs"
-            variant={openPanel === 'insights' ? 'secondary' : 'ghost'}
-            onClick={() => {
-               togglePanel('insights');
-               // Ligar o Insights com o painel fechado não mostraria nada: abre o painel.
-               if (openPanel !== 'insights' && !panelOpen) setPanelOpen('project', true);
-            }}
-            aria-label="Toggle insights panel"
-            aria-pressed={openPanel === 'insights'}
-         >
-            <BarChart3 className="size-4" />
-         </Button>
-         <DetailPanelToggle kind="project" />
+      <div className="flex items-center gap-1">
+         {onIssuesTab && <DisplayOptions />}
+         <div className="hidden items-center gap-1 xl:flex">
+            <Button
+               size="xs"
+               variant={openPanel === 'insights' ? 'secondary' : 'ghost'}
+               onClick={() => {
+                  togglePanel('insights');
+                  // Ligar o Insights com o painel fechado não mostraria nada: abre o painel.
+                  if (openPanel !== 'insights' && !panelOpen) setPanelOpen('project', true);
+               }}
+               aria-label="Toggle insights panel"
+               aria-pressed={openPanel === 'insights'}
+            >
+               <BarChart3 className="size-4" />
+            </Button>
+            <DetailPanelToggle kind="project" />
+         </div>
       </div>
    );
 }

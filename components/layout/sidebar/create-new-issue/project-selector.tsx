@@ -14,14 +14,16 @@ import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Project } from '@/data/projects';
 import { Box, CheckIcon, FolderIcon } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 
 interface ProjectSelectorProps {
    project: Project | undefined;
    onChange: (project: Project | undefined) => void;
+   /** Trigger customizado (badge da linha de issue); default: botão com ícone e nome. */
+   children?: ReactNode;
 }
 
-export function ProjectSelector({ project, onChange }: ProjectSelectorProps) {
+export function ProjectSelector({ project, onChange, children }: ProjectSelectorProps) {
    const id = useId();
    const [open, setOpen] = useState<boolean>(false);
    const [value, setValue] = useState<string | undefined>(project?.id);
@@ -53,28 +55,32 @@ export function ProjectSelector({ project, onChange }: ProjectSelectorProps) {
       <div className="*:not-first:mt-2">
          <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-               <Button
-                  id={id}
-                  className="flex items-center justify-center"
-                  size="xs"
-                  variant="secondary"
-                  role="combobox"
-                  aria-expanded={open}
-               >
-                  {value ? (
-                     (() => {
-                        const selectedProject = projects.find((p) => p.id === value);
-                        if (selectedProject) {
-                           const Icon = selectedProject.icon;
-                           return <Icon className="size-4" />;
-                        }
-                        return <Box className="size-4" />;
-                     })()
-                  ) : (
-                     <Box className="size-4" />
-                  )}
-                  <span>{value ? projects.find((p) => p.id === value)?.name : 'No project'}</span>
-               </Button>
+               {children ?? (
+                  <Button
+                     id={id}
+                     className="flex items-center justify-center"
+                     size="xs"
+                     variant="secondary"
+                     role="combobox"
+                     aria-expanded={open}
+                  >
+                     {value ? (
+                        (() => {
+                           const selectedProject = projects.find((p) => p.id === value);
+                           if (selectedProject) {
+                              const Icon = selectedProject.icon;
+                              return <Icon className="size-4" />;
+                           }
+                           return <Box className="size-4" />;
+                        })()
+                     ) : (
+                        <Box className="size-4" />
+                     )}
+                     <span>
+                        {value ? projects.find((p) => p.id === value)?.name : 'No project'}
+                     </span>
+                  </Button>
+               )}
             </PopoverTrigger>
             <PopoverContent
                className="border-input w-full min-w-[var(--radix-popper-anchor-width)] p-0"
