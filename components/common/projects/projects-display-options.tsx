@@ -114,7 +114,7 @@ export function ProjectsDisplayOptions() {
          <PopoverContent
             align="end"
             sideOffset={5}
-            className="h-[406px] w-[332px] rounded-xl border-[var(--popover-border)] bg-popover p-0 pt-2"
+            className="min-h-[406px] w-[332px] rounded-xl border-[var(--popover-border)] bg-popover p-0 pt-2"
             style={{ boxShadow: 'var(--popover-shadow)' }}
          >
             <div className="flex h-[126px] flex-col gap-3 px-4 pb-3 pt-2">
@@ -208,7 +208,7 @@ export function ProjectsDisplayOptions() {
                </OptionRow>
             </div>
 
-            <div className="relative h-[221px] border-t px-4 py-2">
+            <div className="flex min-h-[221px] flex-col border-t px-4 py-2">
                {/* Per-view options */}
                <div className="flex flex-col gap-1.5">
                   <span className="text-xs font-medium">
@@ -263,7 +263,7 @@ export function ProjectsDisplayOptions() {
                   <button
                      type="button"
                      onClick={resetDisplaySettings}
-                     className="absolute bottom-2 left-4 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                     className="mt-3 self-start pb-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
                   >
                      Reset
                   </button>
