@@ -2,7 +2,7 @@
 
 **Data:** 2026-09-02
 
-**Status:** em execução (5 grupos em paralelo, integrados na branch `danilo/debt-2-e-produto`)
+**Status:** concluído (integrado em `danilo/debt-2-e-produto`, PR para `develop` em 2026-09-02)
 
 Pedido: "vai do 1 ao 7, tem que deixar tudo impecável; cycles, editor, datas reais em
 initiatives, isso tudo tem que ser tocado". Sem decisão pendente do usuário: as decisões

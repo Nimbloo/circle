@@ -208,45 +208,45 @@ model e nos inference profiles; é só o formulário. Efeito: `POST /api/v1/agen
 responde 500 e `POST /api/v1/reviews/{id}/guide` responde 503 com mensagem honesta.
 Pré-existente à v0.25.0 (o agent já falhava); nada a mudar no código.
 
+### Produto — cycles, editor, datas de initiative, projetos (02/09/2026)
+
+Os quatro itens que dependiam de decisão foram decididos e construídos (spec
+`docs/superpowers/specs/2026-09-02-debito-2-e-produto-design.md`):
+
+- **Cycles (#24):** `team.cycle_cooldown_days` (Team settings → Cycles), rollover cria o
+  próximo cycle após o cool-down e nenhum cycle é `current` no intervalo; `cycle_snapshot`
+  diário por upsert lazy (rollover no boot e GET do detalhe), `scopeDelta` e burn-up reais
+  a partir do histórico. Sem CronJob.
+- **Editor de blocos (#16):** Tiptap v3; `description_doc` (jsonb) em `issue_content` e
+  `project_detail`; `description` continua como projeção em markdown (busca, API antiga).
+  Fora: imagens/vídeo/referências de issue e o modal de criação (segue textarea).
+- **Datas reais em initiatives:** `start_date`/`target_date` com backfill dos rótulos
+  ("Q3 2026", "H2 2026", "2026", "Sep 2026", ISO); o rótulo `target` segue como texto humano.
+- **Projetos (#19):** DnD no board por status e reschedule na timeline (arraste da barra e
+  das alças, teclado ←/→ e Shift). Board por time não existe (PATCH não aceita `teamId`;
+  seria mudança de contrato).
+
+Também quitados os sete itens miúdos restantes da auditoria: código morto de reviews,
+perfil de membro no `DetailSidePanel`, painel de issue no Inbox por container query, chips
+em views de projeto, `decideJoinRequest`/`postInitiativeUpdate` devolvendo a entidade,
+`vitest.config` com workers por CPU e timeout de 60 s, guards de `size` dinâmico e motion.
+
 ## Decisões suas (não é falta de código)
 
-### Datas reais em iniciativas
-
-`target` é `varchar` livre e aceita `"Q3 2026"`. Criar `startDate`/`targetDate` como as de
-project é trivial; **o que fazer com os valores já gravados** não é — não convertem para
-data sem perda. Manter os dois campos, migrar o que der e descartar o resto, ou deixar
-como está.
-
-### Estratégia de snapshot para cycles — [#24](https://github.com/Nimbloo/circle/issues/24)
-
-O `scopeDelta` real exige saber **quando a issue entrou no ciclo**, e isso não existia. A
-gravação desse histórico **começou** (eventos de `cycle` e `estimate` agora registram de/
-para, e o auto-add passou a emitir evento), mas o dado retroativo não existe.
-
-Para fechar, é preciso `cycle_snapshot(cycle_id, date, scope, started, completed)` com
-`UNIQUE(cycle_id, date)`. **Onde rodar o job é a decisão:** o app não tem scheduler e o
-chart não tem CronJob. Ou se adiciona um CronJob, ou se faz upsert idempotente no
-bootstrap — lazy, igual ao rollover, sem infra nova, com buracos em dias sem acesso
-(interpoláveis).
-
-### Editor de blocos — [#16](https://github.com/Nimbloo/circle/issues/16)
-
-Maior item isolado do backlog. Antes de começar: escolher a biblioteca e **o formato de
-storage** dos blocos. Hoje a descrição é texto plano e `textToBlocks` só emite `paragraph`.
-
----
+Nenhuma pendente em 02/09/2026: datas de initiatives, snapshot de cycles e editor de blocos
+foram decididos e entregues (seção acima).
 
 ## Construção de produto
 
 Roadmap, não limpeza. Priorize por valor.
 
-| Issue                                              | O que falta de verdade                                                                                                                                                                                                                                                                                                                |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [#19](https://github.com/Nimbloo/circle/issues/19) | **Só dois itens**: DnD no board de projetos e reschedule no timeline. Health do update, resources edit/remove e delete de milestone **já estão prontos** — a descrição original está obsoleta. O repo já tem `react-dnd`. Nota: o board agrupa por **time** por default, então "DnD muda status" precisa de revalidação do requisito. |
-| [#22](https://github.com/Nimbloo/circle/issues/22) | Webhook, "For you/Created" e **arquivos/commits/diff + checks reais já saíram** (tabelas `review_file`/`review_commit`, Checks API, abas Overview/Guide/Diff, webhook `check_run`). Restam: Guide narrado (sem fonte de dados hoje) e notas/comentários de review.                                                                    |
-| [#24](https://github.com/Nimbloo/circle/issues/24) | Cool-down (não existe em lugar nenhum do repo) e snapshots — ver decisão acima. Burn-up real **já saiu**.                                                                                                                                                                                                                             |
-| [#16](https://github.com/Nimbloo/circle/issues/16) | Editor de blocos — ver decisão acima.                                                                                                                                                                                                                                                                                                 |
-| [#25](https://github.com/Nimbloo/circle/issues/25) | Épico de paridade com o Linear. Serve para **fatiar**, não para executar.                                                                                                                                                                                                                                                             |
+| Issue                                              | O que falta de verdade                                                                                                                                                                                                                                             |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [#19](https://github.com/Nimbloo/circle/issues/19) | **Fechada na prática**: DnD no board (por status) e reschedule na timeline saíram em 02/09; health, resources e milestones já estavam prontos. Falta só fechar a issue no GitHub.                                                                                  |
+| [#22](https://github.com/Nimbloo/circle/issues/22) | Webhook, "For you/Created" e **arquivos/commits/diff + checks reais já saíram** (tabelas `review_file`/`review_commit`, Checks API, abas Overview/Guide/Diff, webhook `check_run`). Restam: Guide narrado (sem fonte de dados hoje) e notas/comentários de review. |
+| [#24](https://github.com/Nimbloo/circle/issues/24) | **Fechada na prática**: cool-down e snapshots (upsert lazy) saíram em 02/09; burn-up e scopeDelta agora vêm do histórico. Falta só fechar a issue no GitHub.                                                                                                       |
+| [#16](https://github.com/Nimbloo/circle/issues/16) | **Entregue o núcleo**: editor Tiptap com blocos, listas, tarefas, código e links em issue e project. Resta: imagens/vídeo, referência a issue e o modal de criação (ainda textarea).                                                                               |
+| [#25](https://github.com/Nimbloo/circle/issues/25) | Épico de paridade com o Linear. Serve para **fatiar**, não para executar.                                                                                                                                                                                          |
 
 ---
 
