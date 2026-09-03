@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, or } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    issue as issueT,
@@ -17,7 +17,14 @@ import { getOrCreateUser } from './users';
 import { dispatchNotification } from './notify';
 import { ApiError } from './errors';
 import { publish } from './events';
+import { isAdmin } from './auth';
 import type { UserRef } from './issues';
+import {
+   attachmentsByComment,
+   deleteAttachmentsOfComments,
+   listIssueAttachments,
+   type AttachmentDto,
+} from './attachments';
 import { projectDescriptionDoc } from './description-doc';
 import type { EditorDoc } from '@/lib/editor-doc';
 
@@ -44,7 +51,13 @@ export interface CommentDto {
    body: string;
    parentId: string | null;
    createdAt: string;
+   /** Última edição do corpo; null = nunca editado. */
+   updatedAt: string | null;
+   /** Thread resolvida (só na raiz); null = aberta. */
+   resolvedAt: string | null;
+   resolvedBy: UserRef | null;
    reactions: ReactionDto[];
+   attachments: AttachmentDto[];
 }
 
 export interface ActivityItem {
@@ -56,7 +69,11 @@ export interface ActivityItem {
    text?: string;
    body?: string;
    parentId?: string | null;
+   updatedAt?: string | null;
+   resolvedAt?: string | null;
+   resolvedBy?: UserRef | null;
    reactions?: ReactionDto[];
+   attachments?: AttachmentDto[];
 }
 
 export interface IssueDetailDto {
@@ -77,6 +94,33 @@ export interface IssueDetailDto {
    blockingIds: string[];
    duplicateIds: string[];
    prLinks: { id: string; title: string; status: string }[];
+   /** Anexos da issue (os de comentário vêm em cada CommentDto). */
+   attachments: AttachmentDto[];
+}
+
+type CommentRow = typeof commentT.$inferSelect;
+
+/** Monta o CommentDto a partir da linha + mapas já carregados (autor, reactions, anexos). */
+function commentDto(
+   c: CommentRow,
+   users: Map<string, typeof appUser.$inferSelect>,
+   reactions: Map<string, ReactionDto[]>,
+   attachments: Map<string, AttachmentDto[]>
+): CommentDto {
+   const toIso = (d: Date | string | null | undefined) =>
+      d == null ? null : d instanceof Date ? d.toISOString() : String(d);
+   return {
+      id: c.id,
+      author: userRef(users.get(c.authorId)),
+      body: c.body,
+      parentId: c.parentId ?? null,
+      createdAt: toIso(c.createdAt)!,
+      updatedAt: toIso(c.updatedAt),
+      resolvedAt: toIso(c.resolvedAt),
+      resolvedBy: c.resolvedById ? userRef(users.get(c.resolvedById)) : null,
+      reactions: reactions.get(c.id) ?? [],
+      attachments: attachments.get(c.id) ?? [],
+   };
 }
 
 async function loadUsers(db: Db, ids: string[]) {
@@ -119,7 +163,7 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
    const rows = await db.select().from(issueT).where(eq(issueT.id, issueId)).limit(1);
    if (rows.length === 0) return null;
    const iss = rows[0];
-   const [content, relations, blocking, prs, ms] = await Promise.all([
+   const [content, relations, blocking, prs, ms, attachments] = await Promise.all([
       db.select().from(issueContent).where(eq(issueContent.issueId, issueId)).limit(1),
       db.select().from(issueRelation).where(eq(issueRelation.issueId, issueId)),
       // Lado inverso: outras issues que declaram ESTA como blocked_by → ESTA as bloqueia.
@@ -135,6 +179,7 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
               .where(eq(projectMilestone.id, iss.milestoneId))
               .limit(1)
          : Promise.resolve([]),
+      listIssueAttachments(db, issueId),
    ]);
    return {
       identifier: iss.identifier,
@@ -149,6 +194,7 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
       blockingIds: blocking.map((b) => b.issueId),
       duplicateIds: relations.filter((r) => r.kind === 'duplicate').map((r) => r.relatedId),
       prLinks: prs.map((p) => ({ id: p.id, title: p.title, status: p.status })),
+      attachments,
    };
 }
 
@@ -325,25 +371,16 @@ export async function listComments(
          .limit(1);
       meUserId = meRows[0]?.id;
    }
-   const [users, reactions] = await Promise.all([
-      loadUsers(
-         db,
-         comments.map((c) => c.authorId)
-      ),
-      reactionsByComment(
-         db,
-         comments.map((c) => c.id),
-         meUserId
-      ),
+   const commentIds = comments.map((c) => c.id);
+   const [users, reactions, attachments] = await Promise.all([
+      loadUsers(db, [
+         ...comments.map((c) => c.authorId),
+         ...comments.map((c) => c.resolvedById).filter((id): id is string => !!id),
+      ]),
+      reactionsByComment(db, commentIds, meUserId),
+      attachmentsByComment(db, commentIds),
    ]);
-   return comments.map((c) => ({
-      id: c.id,
-      author: userRef(users.get(c.authorId)),
-      body: c.body,
-      parentId: c.parentId ?? null,
-      createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : String(c.createdAt),
-      reactions: reactions.get(c.id) ?? [],
-   }));
+   return comments.map((c) => commentDto(c, users, reactions, attachments));
 }
 
 export async function addComment(
@@ -363,7 +400,9 @@ export async function addComment(
    // Threading: valida que o pai existe E é da MESMA issue (sem cross-issue thread).
    // Só um nível de aninhamento — responder a uma resposta ancora no mesmo pai raiz.
    let rootParentId: string | null = null;
-   let parentAuthorId: string | null = null;
+   let rootAuthorId: string | null = null;
+   let rootBody: string | null = null;
+   let participantIds: string[] = [];
    if (parentId) {
       const [parent] = await db
          .select({
@@ -371,13 +410,22 @@ export async function addComment(
             issueId: commentT.issueId,
             parentId: commentT.parentId,
             authorId: commentT.authorId,
+            body: commentT.body,
          })
          .from(commentT)
          .where(eq(commentT.id, parentId))
          .limit(1);
       if (!parent || parent.issueId !== issueId) throw new ApiError(400, 'Comentário-pai inválido');
       rootParentId = parent.parentId ?? parent.id;
-      parentAuthorId = parent.authorId;
+      // Raiz + quem já respondeu na thread: todos recebem a notificação da resposta.
+      const thread = await db
+         .select({ id: commentT.id, authorId: commentT.authorId, body: commentT.body })
+         .from(commentT)
+         .where(or(eq(commentT.id, rootParentId), eq(commentT.parentId, rootParentId)));
+      const root = thread.find((c) => c.id === rootParentId);
+      rootAuthorId = root?.authorId ?? parent.authorId;
+      rootBody = root?.body ?? parent.body;
+      participantIds = [...new Set(thread.map((c) => c.authorId))];
    }
 
    const author = await getOrCreateUser(db, actorEmail);
@@ -424,23 +472,28 @@ export async function addComment(
          })
       );
    }
-   // Resposta: notifica o autor do comentário-pai (se não for o próprio autor,
-   // nem o assignee/mencionado já notificados acima).
-   if (
-      parentAuthorId &&
-      parentAuthorId !== author.id &&
-      parentAuthorId !== iss.assigneeId &&
-      !mentionedIds.has(parentAuthorId)
-   ) {
-      notifications.push(
-         dispatchNotification(db, {
-            type: 'comment',
-            issueId,
-            recipientId: parentAuthorId,
-            actorId: author.id,
-            content: `${author.name} respondeu ao seu comentário`,
-         })
-      );
+   // Resposta: notifica o autor da raiz e quem já participa da thread — uma vez cada,
+   // sem o próprio ator e sem quem já foi notificado acima (assignee/mencionado).
+   // O e-mail leva o texto da raiz como contexto.
+   if (rootParentId) {
+      const already = new Set([author.id, ...mentionedIds, iss.assigneeId ?? '']);
+      for (const recipientId of participantIds) {
+         if (already.has(recipientId)) continue;
+         already.add(recipientId);
+         notifications.push(
+            dispatchNotification(db, {
+               type: 'comment',
+               issueId,
+               recipientId,
+               actorId: author.id,
+               content:
+                  recipientId === rootAuthorId
+                     ? `${author.name} respondeu ao seu comentário`
+                     : `${author.name} respondeu em uma conversa que você participa`,
+               contextText: rootBody,
+            })
+         );
+      }
    }
    // Fire-and-forget: as notificações (Slack/SES) não bloqueiam a resposta do comentário.
    void Promise.all(notifications).catch((e) =>
@@ -454,7 +507,11 @@ export async function addComment(
       body,
       parentId: rootParentId,
       createdAt: now.toISOString(),
+      updatedAt: null,
+      resolvedAt: null,
+      resolvedBy: null,
       reactions: [],
+      attachments: [],
    };
 }
 
@@ -473,20 +530,56 @@ export async function updateComment(
    const c = rows[0];
    const actor = await getOrCreateUser(db, actorEmail);
    if (c.authorId !== actor.id) throw new ApiError(403, 'Só o autor pode editar o comentário');
-   await db.update(commentT).set({ body }).where(eq(commentT.id, commentId));
+   const updatedAt = new Date();
+   await db.update(commentT).set({ body, updatedAt }).where(eq(commentT.id, commentId));
    publish({ entity: 'comment', action: 'updated', id: commentId, actorEmail });
-   const [users, reactions] = await Promise.all([
-      loadUsers(db, [c.authorId]),
-      reactionsByComment(db, [commentId]),
+   return loadCommentDto(db, { ...c, body, updatedAt }, actor.id);
+}
+
+async function loadCommentDto(db: Db, c: CommentRow, meUserId?: string): Promise<CommentDto> {
+   const [users, reactions, attachments] = await Promise.all([
+      loadUsers(db, [c.authorId, ...(c.resolvedById ? [c.resolvedById] : [])]),
+      reactionsByComment(db, [c.id], meUserId),
+      attachmentsByComment(db, [c.id]),
    ]);
-   return {
-      id: c.id,
-      author: userRef(users.get(c.authorId)),
-      body,
-      parentId: c.parentId ?? null,
-      createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : String(c.createdAt),
-      reactions: reactions.get(c.id) ?? [],
-   };
+   return commentDto(c, users, reactions, attachments);
+}
+
+/**
+ * Resolve ou reabre uma thread (só o comentário-raiz; 400 numa resposta). Permissão:
+ * autor da raiz, responsável da issue ou admin (403). Retorna o CommentDto ou null.
+ */
+export async function resolveComment(
+   db: Db,
+   commentId: string,
+   resolved: boolean,
+   actorEmail: string
+): Promise<CommentDto | null> {
+   const rows = await db.select().from(commentT).where(eq(commentT.id, commentId)).limit(1);
+   if (rows.length === 0) return null;
+   const c = rows[0];
+   if (c.parentId) throw new ApiError(400, 'Só o comentário-raiz de uma thread pode ser resolvido');
+   const actor = await getOrCreateUser(db, actorEmail);
+   const [iss] = await db
+      .select({ assigneeId: issueT.assigneeId })
+      .from(issueT)
+      .where(eq(issueT.id, c.issueId))
+      .limit(1);
+   const allowed =
+      c.authorId === actor.id ||
+      (iss?.assigneeId != null && iss.assigneeId === actor.id) ||
+      (await isAdmin(actorEmail, db));
+   if (!allowed)
+      throw new ApiError(
+         403,
+         'Só o autor, o responsável da issue ou um admin pode resolver a thread'
+      );
+   const patch = resolved
+      ? { resolvedAt: new Date(), resolvedById: actor.id }
+      : { resolvedAt: null, resolvedById: null };
+   await db.update(commentT).set(patch).where(eq(commentT.id, commentId));
+   publish({ entity: 'comment', action: 'updated', id: commentId, actorEmail });
+   return loadCommentDto(db, { ...c, ...patch }, actor.id);
 }
 
 /**
@@ -511,6 +604,7 @@ export async function deleteComment(
       .where(eq(commentT.parentId, commentId));
    const ids = [commentId, ...replies.map((r) => r.id)];
    await db.delete(commentReaction).where(inArray(commentReaction.commentId, ids));
+   await deleteAttachmentsOfComments(db, ids);
    await db.delete(commentT).where(inArray(commentT.id, ids));
    publish({ entity: 'comment', action: 'deleted', id: commentId, actorEmail });
    return true;
@@ -543,7 +637,11 @@ export async function listActivity(
       createdAt: c.createdAt,
       body: c.body,
       parentId: c.parentId,
+      updatedAt: c.updatedAt,
+      resolvedAt: c.resolvedAt,
+      resolvedBy: c.resolvedBy,
       reactions: c.reactions,
+      attachments: c.attachments,
    }));
    return [...eventItems, ...commentItems].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
