@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { makeTestDb } from './helpers/db';
-import { reviewFile, reviewCommit } from '@/db/schema';
+import { review, reviewFile, reviewCommit } from '@/db/schema';
 import {
    syncFromGitHub,
    getReview,
@@ -101,6 +101,11 @@ function makeFetch(opts: { filesFail?: boolean; files?: unknown[]; checks?: unkn
    }) as unknown as typeof fetch;
    return { fetch: f, calls };
 }
+
+// O ambiente do dev pode ter GITHUB_TOKEN; o detalhe só deve buscar com o token explícito.
+beforeEach(() => {
+   vi.stubEnv('GITHUB_TOKEN', '');
+});
 
 describe('reviews: arquivos, commits e checks', () => {
    it('persiste arquivos, commits e checks do PR aberto no sync', async () => {
@@ -214,5 +219,71 @@ describe('reviews: arquivos, commits e checks', () => {
          .from(reviewCommit)
          .where(eq(reviewCommit.reviewId, 'x/y#7'));
       expect(commits).toHaveLength(2); // intocado
+   });
+});
+
+describe('reviews: profundidade sob demanda no detalhe (PRs antigos)', () => {
+   async function depthSyncedAt(db: Awaited<ReturnType<typeof makeTestDb>>, id: string) {
+      const [row] = await db
+         .select({ at: review.depthSyncedAt })
+         .from(review)
+         .where(eq(review.id, id));
+      return row?.at ?? null;
+   }
+
+   it('PR mergeado sem profundidade: o primeiro detalhe busca e persiste, o segundo não', async () => {
+      const db = await makeTestDb();
+      await syncFromGitHub(db, { repos: ['x/y'], token: 'fake', fetchImpl: makeFetch().fetch });
+      expect(await depthSyncedAt(db, 'x/y#5')).toBeNull();
+
+      const first = makeFetch();
+      const detail = await getReview(db, 'x/y#5', { token: 'fake', fetchImpl: first.fetch });
+      expect(first.calls.some((u) => /\/pulls\/5(?:$|\?)/.test(u))).toBe(true); // head.sha
+      expect(first.calls.some((u) => /\/pulls\/5\/files/.test(u))).toBe(true);
+      expect(detail?.files).toHaveLength(3);
+      expect(detail?.commits).toHaveLength(2);
+      expect(detail?.checksPassed).toBe(2);
+      expect(detail?.checksTotal).toBe(3);
+      expect(await depthSyncedAt(db, 'x/y#5')).not.toBeNull();
+
+      const second = makeFetch();
+      const again = await getReview(db, 'x/y#5', { token: 'fake', fetchImpl: second.fetch });
+      expect(second.calls).toEqual([]);
+      expect(again?.files).toHaveLength(3);
+   });
+
+   it('sem token não busca nada', async () => {
+      const db = await makeTestDb();
+      await syncFromGitHub(db, { repos: ['x/y'], token: 'fake', fetchImpl: makeFetch().fetch });
+      const probe = makeFetch();
+      const detail = await getReview(db, 'x/y#5', { fetchImpl: probe.fetch });
+      expect(probe.calls).toEqual([]);
+      expect(detail?.files).toEqual([]);
+      expect(await depthSyncedAt(db, 'x/y#5')).toBeNull();
+   });
+
+   it('falha na API marca a tentativa e não bate de novo na próxima abertura', async () => {
+      const db = await makeTestDb();
+      await syncFromGitHub(db, { repos: ['x/y'], token: 'fake', fetchImpl: makeFetch().fetch });
+      const calls: string[] = [];
+      const failing = (async (url: string) => {
+         calls.push(String(url));
+         return new Response('{"message":"rate limited"}', { status: 403 });
+      }) as unknown as typeof fetch;
+
+      const detail = await getReview(db, 'x/y#5', { token: 'fake', fetchImpl: failing });
+      expect(calls.length).toBeGreaterThan(0);
+      expect(detail?.files).toEqual([]);
+      expect(await depthSyncedAt(db, 'x/y#5')).not.toBeNull();
+
+      calls.length = 0;
+      await getReview(db, 'x/y#5', { token: 'fake', fetchImpl: failing });
+      expect(calls).toEqual([]);
+   });
+
+   it('sync do PR aberto já marca depthSyncedAt (não re-busca no detalhe)', async () => {
+      const db = await makeTestDb();
+      await syncFromGitHub(db, { repos: ['x/y'], token: 'fake', fetchImpl: makeFetch().fetch });
+      expect(await depthSyncedAt(db, 'x/y#7')).not.toBeNull();
    });
 });
