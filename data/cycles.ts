@@ -105,6 +105,23 @@ export function formatCycleDateRange(cycle: Cycle): string {
    return `${format(parseISO(cycle.startDate), 'MMM d')} → ${format(parseISO(cycle.endDate), 'MMM d')}`;
 }
 
+/**
+ * Cool-down (#24): entre o fim de um cycle e o início do próximo o time fica sem cycle
+ * `current`. Retorna a data (ISO) em que o próximo cycle começa — o fim do cool-down —
+ * ou null quando o time não está nesse intervalo. `cycles` já filtrados pelo time.
+ */
+export function cooldownUntil(cycles: Cycle[], today: string): string | null {
+   if (cycles.some((c) => c.status === 'current')) return null;
+   if (!cycles.some((c) => c.status === 'completed' && c.endDate < today)) return null;
+   const next = cycles
+      .filter((c) => c.status === 'upcoming' && c.startDate > today)
+      .sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
+   return next?.startDate ?? null;
+}
+
+/** Hoje em ISO (UTC) — mesma régua que o servidor usa no rollover. */
+export const todayIso = () => new Date().toISOString().slice(0, 10);
+
 export const cycleStatusLabel: Record<CycleStatus, string> = {
    planned: 'Planned',
    upcoming: 'Upcoming',

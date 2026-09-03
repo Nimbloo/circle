@@ -27,6 +27,7 @@ export interface TeamDto {
    icon: string | null;
    color: string | null;
    estimateScale: string; // fibonacci|exponential|linear|tshirt
+   cycleCooldownDays: number; // dias sem cycle current entre um cycle e o próximo (0-14)
    memberCount: number;
    projectCount: number;
    joined: boolean;
@@ -70,6 +71,7 @@ function toDto(
       icon: t.icon,
       color: t.color,
       estimateScale: t.estimateScale,
+      cycleCooldownDays: t.cycleCooldownDays,
       memberCount: counts.members.get(t.id) ?? 0,
       projectCount: counts.projects.get(t.id) ?? 0,
       joined: joined.has(t.id),
@@ -389,9 +391,10 @@ export interface UpdateTeamInput {
    icon?: string | null;
    color?: string | null;
    estimateScale?: string;
+   cycleCooldownDays?: number;
 }
 
-/** Atualização parcial (name/icon/color). Retorna o TeamDto ou null se não existir. */
+/** Atualização parcial (name/icon/color/estimateScale/cycleCooldownDays). Retorna o TeamDto ou null se não existir. */
 export async function updateTeam(
    db: Db,
    id: string,
@@ -404,6 +407,7 @@ export async function updateTeam(
    if (patch.icon !== undefined) set.icon = patch.icon;
    if (patch.color !== undefined) set.color = patch.color;
    if (patch.estimateScale !== undefined) set.estimateScale = patch.estimateScale;
+   if (patch.cycleCooldownDays !== undefined) set.cycleCooldownDays = patch.cycleCooldownDays;
    if (Object.keys(set).length) await db.update(teamT).set(set).where(eq(teamT.id, id));
    publish({ entity: 'team', action: 'updated', id });
    return getTeam(db, id);

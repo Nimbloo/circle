@@ -28,6 +28,7 @@ import {
    Bot,
    ChevronRight,
    FileText,
+   Hourglass,
    Pencil,
    Radar,
    RefreshCcw,
@@ -142,6 +143,66 @@ function EditTeamDialog({
             </DialogFooter>
          </DialogContent>
       </Dialog>
+   );
+}
+
+/**
+ * Cool-down entre cycles (dias, 0–14). Persiste no blur/Enter via PATCH /teams/[key];
+ * o toast só depois que a API confirma, e o input volta ao valor salvo se falhar.
+ */
+function CooldownDaysInput({
+   team,
+   disabled,
+}: {
+   team: { id: string; cycleCooldownDays: number };
+   disabled: boolean;
+}) {
+   const applyTeam = useWorkspaceStore((s) => s.applyTeam);
+   const [value, setValue] = useState(String(team.cycleCooldownDays));
+   const [busy, setBusy] = useState(false);
+
+   useEffect(() => setValue(String(team.cycleCooldownDays)), [team.cycleCooldownDays]);
+
+   const commit = async () => {
+      const parsed = value.trim() === '' ? NaN : Number(value);
+      if (!Number.isFinite(parsed)) {
+         setValue(String(team.cycleCooldownDays));
+         return;
+      }
+      const days = Math.max(0, Math.min(14, Math.round(parsed)));
+      setValue(String(days));
+      if (days === team.cycleCooldownDays || busy) return;
+      setBusy(true);
+      try {
+         applyTeam(await api.teams.update(team.id, { cycleCooldownDays: days }));
+         toast.success('Cool-down atualizado');
+      } catch {
+         setValue(String(team.cycleCooldownDays));
+         toast.error('Não foi possível atualizar o cool-down');
+      } finally {
+         setBusy(false);
+      }
+   };
+
+   return (
+      <div className="flex items-center gap-2">
+         <Input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={14}
+            value={value}
+            disabled={disabled || busy}
+            aria-label="Cool-down (dias)"
+            onChange={(e) => setValue(e.target.value)}
+            onBlur={() => void commit()}
+            onKeyDown={(e) => {
+               if (e.key === 'Enter') e.currentTarget.blur();
+            }}
+            className="h-[30px] w-16 bg-accent text-right"
+         />
+         <span>dias</span>
+      </div>
    );
 }
 
@@ -297,6 +358,17 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
                      title="Cycles"
                      description="Focus your team over short, time-boxed windows"
                      trailing={<span>{cycles.length > 0 ? 'Every 2 weeks' : 'Off'}</span>}
+                  />
+               </SettingsCard>
+            </SettingsSection>
+
+            <SettingsSection title="Cycles">
+               <SettingsCard>
+                  <SettingsRow
+                     icon={<Hourglass className="size-4" />}
+                     title="Cool-down"
+                     description="Dias entre o fim de um cycle e o início do próximo, sem cycle ativo (0–14)"
+                     trailing={<CooldownDaysInput team={team} disabled={!isAdmin} />}
                   />
                </SettingsCard>
             </SettingsSection>

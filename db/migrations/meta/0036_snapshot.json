@@ -1,5 +1,5 @@
 {
-   "id": "43863ff4-8f99-4ebd-9842-6a72222b1622",
+   "id": "050a38e4-90fd-4e23-a894-5e413af02ea1",
    "prevId": "66016cf7-bdc4-42e8-908c-a4272f6ac3dd",
    "version": "7",
    "dialect": "postgresql",
@@ -747,6 +747,64 @@
                "columns": ["team_id", "number"]
             }
          },
+         "policies": {},
+         "checkConstraints": {},
+         "isRLSEnabled": false
+      },
+      "public.cycle_snapshot": {
+         "name": "cycle_snapshot",
+         "schema": "",
+         "columns": {
+            "cycle_id": {
+               "name": "cycle_id",
+               "type": "varchar(36)",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "date": {
+               "name": "date",
+               "type": "date",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "scope": {
+               "name": "scope",
+               "type": "integer",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "started": {
+               "name": "started",
+               "type": "integer",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "completed": {
+               "name": "completed",
+               "type": "integer",
+               "primaryKey": false,
+               "notNull": true
+            }
+         },
+         "indexes": {},
+         "foreignKeys": {
+            "cycle_snapshot_cycle_id_cycle_id_fk": {
+               "name": "cycle_snapshot_cycle_id_cycle_id_fk",
+               "tableFrom": "cycle_snapshot",
+               "tableTo": "cycle",
+               "columnsFrom": ["cycle_id"],
+               "columnsTo": ["id"],
+               "onDelete": "cascade",
+               "onUpdate": "no action"
+            }
+         },
+         "compositePrimaryKeys": {
+            "cycle_snapshot_cycle_id_date_pk": {
+               "name": "cycle_snapshot_cycle_id_date_pk",
+               "columns": ["cycle_id", "date"]
+            }
+         },
+         "uniqueConstraints": {},
          "policies": {},
          "checkConstraints": {},
          "isRLSEnabled": false
@@ -3644,6 +3702,13 @@
                "primaryKey": false,
                "notNull": true,
                "default": "'fibonacci'"
+            },
+            "cycle_cooldown_days": {
+               "name": "cycle_cooldown_days",
+               "type": "integer",
+               "primaryKey": false,
+               "notNull": true,
+               "default": 0
             }
          },
          "indexes": {},

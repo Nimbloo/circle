@@ -1,11 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
-import { cycle as cycleT, issue as issueT, status as statusT, team as teamT } from '@/db/schema';
+import {
+   cycle as cycleT,
+   cycleSnapshot as snapshotT,
+   issue as issueT,
+   status as statusT,
+   team as teamT,
+} from '@/db/schema';
 import { ApiError } from './errors';
 import { publish } from './events';
 
 type CycleRow = typeof cycleT.$inferSelect;
+type SnapshotRow = typeof snapshotT.$inferSelect;
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 export interface BurnupPoint {
    date: string;
@@ -78,6 +86,22 @@ async function aggregatesByCycle(db: Db, cycleIds: string[]): Promise<Map<string
    return result;
 }
 
+const isoDay = (d: Date) => d.toISOString().slice(0, 10);
+
+/** `iso` + `n` dias (UTC), em `YYYY-MM-DD`. */
+function addDays(iso: string, n: number): string {
+   const d = new Date(`${iso}T00:00:00Z`);
+   d.setUTCDate(d.getUTCDate() + n);
+   return isoDay(d);
+}
+
+/** Dias inteiros entre dois ISO (`to - from`). */
+function diffDays(from: string, to: string): number {
+   return Math.round(
+      (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000
+   );
+}
+
 /** Dias (ISO `YYYY-MM-DD`) de `from` até `to`, inclusive. Cap de 120 por segurança. */
 function daysBetween(from: string, to: string): string[] {
    const out: string[] = [];
@@ -91,31 +115,40 @@ function daysBetween(from: string, to: string): string[] {
 }
 
 /**
- * Curva de burn-up DIÁRIA, reconstruída de `issue.startedAt`/`completedAt` — que o app
- * já grava. Antes eram dois pontos sintéticos (início→hoje), o que não é burn-up: é uma
- * reta ligando o começo ao estado atual.
+ * Curva de burn-up DIÁRIA. Com >= 2 snapshots (`cycle_snapshot`, gravados no rollover
+ * e no GET do detalhe) a série vem deles — scope, started e completed REAIS por dia,
+ * interpolando linearmente os dias sem snapshot (dias sem acesso) e segurando o
+ * primeiro/último valor fora do intervalo gravado. Sem histórico suficiente cai no
+ * sintético: `started`/`completed` reconstruídos de `issue.startedAt`/`completedAt` e
+ * `scope` PLANO (não há registro de quando a issue entrou no ciclo).
  *
- * LIMITAÇÃO HONESTA — a linha de `scope` é PLANA. Não existe registro de quando a issue
- * entrou neste ciclo (o auto-add em `updateIssue` e o carry-over do rollover reescrevem
- * `cycleId` sem deixar rastro), então projetamos o escopo atual para trás. Por isso
- * `scopeDelta` continua 0: variação de escopo exige histórico que ainda não é gravado.
- * As curvas de `started` e `completed` são reais.
- *
- * Enviesada por sobrevivência em ciclos passados: issue que saiu do ciclo já não aponta
- * para ele e some da série. Aceitável para leitura de tendência, não para auditoria.
+ * O sintético é enviesado por sobrevivência em ciclos passados: issue que saiu do
+ * ciclo já não aponta para ele e some da série. Aceitável para tendência.
  */
-function buildBurnup(row: CycleRow, agg: Agg): BurnupPoint[] | null {
+function buildBurnup(
+   row: CycleRow,
+   agg: Agg,
+   snapshots: SnapshotRow[],
+   today: string
+): BurnupPoint[] | null {
    if (row.status !== 'current' && row.status !== 'completed') return null;
 
-   const today = new Date().toISOString().slice(0, 10);
    // Ciclo em andamento para de desenhar em hoje: dia futuro viraria linha reta no zero.
    const last = row.status === 'current' && today < row.endDate ? today : row.endDate;
    const days = daysBetween(row.startDate, last);
    if (days.length === 0) return null;
+   const span = days.length - 1;
+   const ideal = (idx: number) => (span === 0 ? agg.scope : Math.round((agg.scope * idx) / span));
+
+   if (snapshots.length >= 2) {
+      return days.map((date, idx) => ({
+         date,
+         ...interpolate(snapshots, date),
+         ideal: ideal(idx),
+      }));
+   }
 
    const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
-   const span = days.length - 1;
-
    return days.map((date, idx) => {
       let started = 0;
       let completed = 0;
@@ -126,21 +159,45 @@ function buildBurnup(row: CycleRow, agg: Agg): BurnupPoint[] | null {
          if (c && c <= date) completed += it.points;
          else if (s && s <= date) started += it.points;
       }
-      return {
-         date,
-         scope: agg.scope,
-         started,
-         completed,
-         ideal: span === 0 ? agg.scope : Math.round((agg.scope * idx) / span),
-      };
+      return { date, scope: agg.scope, started, completed, ideal: ideal(idx) };
    });
 }
 
-function toDto(row: CycleRow, agg: Agg): CycleDto {
+type Metrics = Pick<SnapshotRow, 'scope' | 'started' | 'completed'>;
+
+/** Valor de `date` a partir dos snapshots (ordenados por data): clamp nas pontas, lerp no meio. */
+function interpolate(snapshots: SnapshotRow[], date: string): Metrics {
+   const pick = ({ scope, started, completed }: SnapshotRow): Metrics => ({
+      scope,
+      started,
+      completed,
+   });
+   if (date <= snapshots[0].date) return pick(snapshots[0]);
+   const lastSnap = snapshots[snapshots.length - 1];
+   if (date >= lastSnap.date) return pick(lastSnap);
+   let i = 0;
+   while (snapshots[i + 1].date <= date) i++;
+   const a = snapshots[i];
+   const b = snapshots[i + 1];
+   if (a.date === date) return pick(a);
+   const t = diffDays(a.date, date) / diffDays(a.date, b.date);
+   const lerp = (x: number, y: number) => Math.round(x + (y - x) * t);
+   return {
+      scope: lerp(a.scope, b.scope),
+      started: lerp(a.started, b.started),
+      completed: lerp(a.completed, b.completed),
+   };
+}
+
+function toDto(row: CycleRow, agg: Agg, snapshots: SnapshotRow[], today: string): CycleDto {
    const successRate =
       row.status === 'completed' && agg.scope > 0
          ? Math.round((agg.completed / agg.scope) * 100)
          : null;
+   // Variação de escopo (%) desde o primeiro snapshot do ciclo; 0 sem histórico.
+   const first = snapshots[0];
+   const scopeDelta =
+      first && first.scope > 0 ? Math.round(((agg.scope - first.scope) / first.scope) * 100) : 0;
    return {
       id: row.id,
       number: row.number,
@@ -153,92 +210,228 @@ function toDto(row: CycleRow, agg: Agg): CycleDto {
       scope: agg.scope,
       started: agg.started,
       completed: agg.completed,
-      scopeDelta: 0, // exige histórico (fase futura)
+      scopeDelta,
       successRate,
-      burnup: buildBurnup(row, agg),
+      burnup: buildBurnup(row, agg, snapshots, today),
    };
+}
+
+const EMPTY_AGG = (): Agg => ({ scope: 0, started: 0, completed: 0, items: [] });
+
+async function snapshotsByCycle(db: Db, cycleIds: string[]): Promise<Map<string, SnapshotRow[]>> {
+   const result = new Map<string, SnapshotRow[]>();
+   if (cycleIds.length === 0) return result;
+   const rows = await db
+      .select()
+      .from(snapshotT)
+      .where(inArray(snapshotT.cycleId, cycleIds))
+      .orderBy(asc(snapshotT.date));
+   for (const r of rows) {
+      const arr = result.get(r.cycleId) ?? [];
+      arr.push(r);
+      result.set(r.cycleId, arr);
+   }
+   return result;
+}
+
+/**
+ * Upsert idempotente do snapshot do DIA (1 linha por cycle+data; repetir no mesmo dia
+ * só atualiza os valores). Chamado para os cycles `current` no rollover e no GET do
+ * detalhe — não há job.
+ */
+async function upsertSnapshots(
+   db: Db,
+   entries: { cycleId: string; agg: Agg }[],
+   date: string
+): Promise<void> {
+   if (entries.length === 0) return;
+   await db
+      .insert(snapshotT)
+      .values(
+         entries.map(({ cycleId, agg }) => ({
+            cycleId,
+            date,
+            scope: agg.scope,
+            started: agg.started,
+            completed: agg.completed,
+         }))
+      )
+      .onConflictDoUpdate({
+         target: [snapshotT.cycleId, snapshotT.date],
+         set: {
+            scope: sql`excluded.scope`,
+            started: sql`excluded.started`,
+            completed: sql`excluded.completed`,
+         },
+      });
+}
+
+/** Snapshot do dia de todos os cycles `current` do time. */
+export async function snapshotCurrentCycles(
+   db: Db,
+   teamId: string,
+   now: Date = new Date()
+): Promise<void> {
+   const rows = await db
+      .select({ id: cycleT.id })
+      .from(cycleT)
+      .where(and(eq(cycleT.teamId, teamId), eq(cycleT.status, 'current')));
+   if (rows.length === 0) return;
+   const ids = rows.map((r) => r.id);
+   const aggs = await aggregatesByCycle(db, ids);
+   await upsertSnapshots(
+      db,
+      ids.map((cycleId) => ({ cycleId, agg: aggs.get(cycleId) ?? EMPTY_AGG() })),
+      isoDay(now)
+   );
+}
+
+/** Aggregates + snapshots em 3 queries para N cycles, e monta os DTOs. */
+async function toDtos(db: Db, rows: CycleRow[], now: Date): Promise<CycleDto[]> {
+   const ids = rows.map((r) => r.id);
+   const [aggs, snaps] = await Promise.all([aggregatesByCycle(db, ids), snapshotsByCycle(db, ids)]);
+   const today = isoDay(now);
+   return rows.map((r) => toDto(r, aggs.get(r.id) ?? EMPTY_AGG(), snaps.get(r.id) ?? [], today));
 }
 
 /**
  * Auto-rollover (#24): quando o cycle 'current' de um time vence (endDate < hoje),
  * fecha ele, carrega as issues INCOMPLETAS (não completed/canceled) pro próximo
- * 'upcoming', e promove esse próximo a 'current' se já começou. Idempotente e lazy
- * (rodado ao listar os cycles do time; o app não tem scheduler).
+ * 'upcoming' — criado aqui se não existir, começando em `fim do anterior + cool-down`
+ * do time (`team.cycle_cooldown_days`) e com a mesma duração — e promove o próximo a
+ * 'current' quando a data de início chega. Durante o cool-down NENHUM cycle é
+ * current (paridade Linear). Idempotente e lazy (rodado no boot da página e ao listar
+ * os cycles do time; o app não tem scheduler). `now` é injetável para os testes.
+ *
+ * Transacional com lock no cycle current: dois boots concorrentes no mesmo time não
+ * criam o próximo cycle em dobro (o 2º espera o lock e já vê o current fechado).
  */
-export async function rolloverCyclesForTeam(db: Db, teamId: string): Promise<void> {
-   const today = new Date().toISOString().slice(0, 10);
-   const [current] = await db
-      .select()
-      .from(cycleT)
-      .where(and(eq(cycleT.teamId, teamId), eq(cycleT.status, 'current')))
-      .limit(1);
-   if (!current || current.endDate >= today) return; // sem current ou ainda em andamento
+export async function rolloverCyclesForTeam(
+   db: Db,
+   teamId: string,
+   now: Date = new Date()
+): Promise<void> {
+   const today = isoDay(now);
+   await db.transaction(async (tx) => {
+      const [current] = await tx
+         .select()
+         .from(cycleT)
+         .where(and(eq(cycleT.teamId, teamId), eq(cycleT.status, 'current')))
+         .limit(1)
+         .for('update');
 
-   const [next] = await db
-      .select()
-      .from(cycleT)
-      .where(and(eq(cycleT.teamId, teamId), eq(cycleT.status, 'upcoming')))
-      .orderBy(asc(cycleT.number))
-      .limit(1);
+      if (current && current.endDate < today) {
+         let [next] = await tx
+            .select()
+            .from(cycleT)
+            .where(and(eq(cycleT.teamId, teamId), eq(cycleT.status, 'upcoming')))
+            .orderBy(asc(cycleT.startDate))
+            .limit(1);
+         if (!next) next = await createNextCycle(tx, teamId, current);
 
-   const statuses = await db.select().from(statusT);
-   // Paridade Linear: só issues "em aberto" (unstarted/started) rolam pro próximo ciclo.
-   // Backlog, triage, completed e canceled NÃO são carregadas (a doc do Linear exclui
-   // explicitamente backlog+triage, além de completed/canceled).
-   const noCarry = new Set(['backlog', 'triage', 'completed', 'canceled']);
-   const excludeIds = statuses.filter((s) => noCarry.has(s.category)).map((s) => s.id);
+         const statuses = await tx.select().from(statusT);
+         // Paridade Linear: só issues "em aberto" (unstarted/started) rolam pro próximo ciclo.
+         // Backlog, triage, completed e canceled NÃO são carregadas (a doc do Linear exclui
+         // explicitamente backlog+triage, além de completed/canceled).
+         const noCarry = new Set(['backlog', 'triage', 'completed', 'canceled']);
+         const excludeIds = statuses.filter((s) => noCarry.has(s.category)).map((s) => s.id);
+         await tx
+            .update(issueT)
+            .set({ cycleId: next.id, updatedAt: new Date() })
+            .where(
+               and(
+                  eq(issueT.cycleId, current.id),
+                  excludeIds.length ? notInArray(issueT.statusId, excludeIds) : sql`true`
+               )
+            );
+         await tx.update(cycleT).set({ status: 'completed' }).where(eq(cycleT.id, current.id));
+      }
 
-   if (next) {
-      // carrega as issues em aberto do current pro próximo cycle
-      await db
-         .update(issueT)
-         .set({ cycleId: next.id, updatedAt: new Date() })
-         .where(
-            and(
-               eq(issueT.cycleId, current.id),
-               excludeIds.length ? notInArray(issueT.statusId, excludeIds) : sql`true`
+      // Sem current (recém-fechado ou cool-down que acabou): promove o upcoming cuja data
+      // de início já chegou. Durante o cool-down (startDate > hoje) fica sem current.
+      if (!current || current.endDate < today) {
+         const [due] = await tx
+            .select({ id: cycleT.id })
+            .from(cycleT)
+            .where(
+               and(
+                  eq(cycleT.teamId, teamId),
+                  eq(cycleT.status, 'upcoming'),
+                  sql`${cycleT.startDate} <= ${today}`
+               )
             )
-         );
-   }
-   await db.update(cycleT).set({ status: 'completed' }).where(eq(cycleT.id, current.id));
-   if (next && next.startDate <= today) {
-      await db.update(cycleT).set({ status: 'current' }).where(eq(cycleT.id, next.id));
-   }
+            .orderBy(asc(cycleT.startDate))
+            .limit(1);
+         if (due) await tx.update(cycleT).set({ status: 'current' }).where(eq(cycleT.id, due.id));
+      }
+   });
+   await snapshotCurrentCycles(db, teamId, now);
+}
+
+/** Próximo cycle após `prev`: começa em `prev.endDate + 1 + cool-down`, mesma duração. */
+async function createNextCycle(tx: Tx, teamId: string, prev: CycleRow): Promise<CycleRow> {
+   const [team] = await tx
+      .select({ cooldown: teamT.cycleCooldownDays })
+      .from(teamT)
+      .where(eq(teamT.id, teamId))
+      .limit(1);
+   const [max] = await tx
+      .select({ m: sql<number | null>`max(${cycleT.number})` })
+      .from(cycleT)
+      .where(eq(cycleT.teamId, teamId));
+   const number = (max?.m ?? 0) + 1;
+   const startDate = addDays(prev.endDate, 1 + (team?.cooldown ?? 0));
+   const endDate = addDays(startDate, diffDays(prev.startDate, prev.endDate));
+   const [row] = await tx
+      .insert(cycleT)
+      .values({
+         id: randomUUID(),
+         number,
+         name: `Cycle ${number}`,
+         teamId,
+         status: 'upcoming',
+         startDate,
+         endDate,
+         capacity: prev.capacity,
+      })
+      .returning();
+   publish({ entity: 'cycle', action: 'created', id: row.id });
+   return row;
 }
 
 export async function listCyclesByTeam(db: Db, teamId: string): Promise<CycleDto[]> {
    const rows = await db.select().from(cycleT).where(eq(cycleT.teamId, teamId));
-   const aggs = await aggregatesByCycle(
-      db,
-      rows.map((r) => r.id)
-   );
-   return rows
-      .map((r) => toDto(r, aggs.get(r.id) ?? { scope: 0, started: 0, completed: 0, items: [] }))
-      .sort((a, b) => b.number - a.number);
+   return (await toDtos(db, rows, new Date())).sort((a, b) => b.number - a.number);
 }
 
 /**
- * Cycles de VÁRIOS times de uma vez, em 2 queries no total (1 cycles + 1 aggregate
- * pra todos os ids), em vez de N chamadas de listCyclesByTeam (cada uma re-escaneando
- * a tabela status). Usado no bootstrap do workspace — fim do N+1.
+ * Cycles de VÁRIOS times de uma vez, em poucas queries no total (1 cycles + aggregate
+ * + snapshots pra todos os ids), em vez de N chamadas de listCyclesByTeam (cada uma
+ * re-escaneando a tabela status). Usado no bootstrap do workspace — fim do N+1.
  */
 export async function listCyclesForTeams(db: Db, teamIds: string[]): Promise<CycleDto[]> {
    if (teamIds.length === 0) return [];
    const rows = await db.select().from(cycleT).where(inArray(cycleT.teamId, teamIds));
-   const aggs = await aggregatesByCycle(
-      db,
-      rows.map((r) => r.id)
-   );
-   return rows
-      .map((r) => toDto(r, aggs.get(r.id) ?? { scope: 0, started: 0, completed: 0, items: [] }))
-      .sort((a, b) => b.number - a.number);
+   return (await toDtos(db, rows, new Date())).sort((a, b) => b.number - a.number);
 }
 
-export async function getCycle(db: Db, id: string): Promise<CycleDto | null> {
+/**
+ * Detalhe do cycle. Se for `current`, grava o snapshot do dia antes de montar o DTO —
+ * é o segundo ponto de coleta (junto com o rollover), já que não há job.
+ */
+export async function getCycle(
+   db: Db,
+   id: string,
+   now: Date = new Date()
+): Promise<CycleDto | null> {
    const rows = await db.select().from(cycleT).where(eq(cycleT.id, id)).limit(1);
    if (rows.length === 0) return null;
-   const aggs = await aggregatesByCycle(db, [id]);
-   return toDto(rows[0], aggs.get(id) ?? { scope: 0, started: 0, completed: 0, items: [] });
+   if (rows[0].status === 'current') {
+      const aggs = await aggregatesByCycle(db, [id]);
+      await upsertSnapshots(db, [{ cycleId: id, agg: aggs.get(id) ?? EMPTY_AGG() }], isoDay(now));
+   }
+   const [dto] = await toDtos(db, rows, now);
+   return dto;
 }
 
 export async function getCycleByStatus(
@@ -255,9 +448,8 @@ export async function getCycleByStatus(
       .orderBy(asc(cycleT.startDate))
       .limit(1);
    if (rows.length === 0) return null;
-   const match = rows[0];
-   const aggs = await aggregatesByCycle(db, [match.id]);
-   return toDto(match, aggs.get(match.id) ?? { scope: 0, started: 0, completed: 0, items: [] });
+   const [dto] = await toDtos(db, rows, new Date());
+   return dto;
 }
 
 // ── Mutações ─────────────────────────────────────────────────────────

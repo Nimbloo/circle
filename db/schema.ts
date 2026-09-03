@@ -120,6 +120,9 @@ export const team = pgTable('team', {
    issueSeq: integer('issue_seq').notNull().default(0), // contador p/ identifier <KEY>-<n>
    // Escala de estimate do time (paridade Linear): fibonacci|exponential|linear|tshirt.
    estimateScale: varchar('estimate_scale', { length: 16 }).notNull().default('fibonacci'),
+   // Cool-down (#24): dias entre o fim de um cycle e o início do próximo, sem cycle
+   // `current` no meio (paridade Linear). 0 = sem cool-down.
+   cycleCooldownDays: integer('cycle_cooldown_days').notNull().default(0),
 });
 
 export const teamMember = pgTable(
@@ -285,6 +288,23 @@ export const cycle = pgTable(
       // computando max(number)+1 ao mesmo tempo). O 2º insert falha em vez de duplicar.
       unique('cycle_team_id_number_unique').on(t.teamId, t.number),
    ]
+);
+
+// Snapshot diário do cycle (#24): matéria-prima do burn-up real e do `scopeDelta`.
+// Sem job — o upsert do dia acontece no rollover (boot) e no GET do detalhe do cycle.
+// 1 linha por (cycle, dia); dias sem acesso são interpolados na leitura.
+export const cycleSnapshot = pgTable(
+   'cycle_snapshot',
+   {
+      cycleId: varchar('cycle_id', { length: 36 })
+         .notNull()
+         .references(() => cycle.id, { onDelete: 'cascade' }),
+      date: date('date').notNull(),
+      scope: integer('scope').notNull(),
+      started: integer('started').notNull(),
+      completed: integer('completed').notNull(),
+   },
+   (t) => [primaryKey({ columns: [t.cycleId, t.date] })]
 );
 
 export const issue = pgTable(
