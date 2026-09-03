@@ -10,6 +10,7 @@ import {
    primaryKey,
    index,
    unique,
+   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
 // ─────────────────────────────────────────────────────────────
@@ -124,6 +125,10 @@ export const team = pgTable('team', {
    // Cool-down (#24): dias entre o fim de um cycle e o início do próximo, sem cycle
    // `current` no meio (paridade Linear). 0 = sem cool-down.
    cycleCooldownDays: integer('cycle_cooldown_days').notNull().default(0),
+   // Automações de sub-issues (#95, paridade Linear): concluir todas as filhas conclui
+   // o pai; concluir o pai conclui as filhas restantes. Ambos desligados por default.
+   autoCloseParent: boolean('auto_close_parent').notNull().default(false),
+   autoCloseChildren: boolean('auto_close_children').notNull().default(false),
 });
 
 export const teamMember = pgTable(
@@ -342,11 +347,16 @@ export const issue = pgTable(
       // Card originado de um erro do Sentry: id da issue do Sentry (dedup/idempotência).
       // Nullable (issues normais = null); único → replay/retry do Sentry não duplica card.
       sentryIssueId: varchar('sentry_issue_id', { length: 128 }),
+      // Pai canônico da sub-issue (#95). NULL = issue de topo. Substitui a relação
+      // `issue_relation kind='sub'` (sem pai único nem guarda de ciclo); a guarda de
+      // ciclo/auto-pai é app-level (updateIssue). Profundidade livre.
+      parentId: varchar('parent_id', { length: 36 }).references((): AnyPgColumn => issue.id),
       createdAt: timestamp('created_at').notNull().defaultNow(),
       updatedAt: timestamp('updated_at').notNull().defaultNow(),
    },
    (t) => [
       index('idx_issue_team').on(t.teamId),
+      index('idx_issue_parent').on(t.parentId),
       index('idx_issue_status').on(t.statusId),
       index('idx_issue_project').on(t.projectId),
       index('idx_issue_cycle').on(t.cycleId),
@@ -430,6 +440,26 @@ export const issueSubscription = pgTable(
    ]
 );
 
+// Múltiplos responsáveis (#96): `issue.assignee_id` segue como o PRINCIPAL (contrato
+// atual intacto); esta tabela guarda o conjunto completo (principal incluído).
+// `created_at` dá a ordem de adição dos colaboradores.
+export const issueAssignee = pgTable(
+   'issue_assignee',
+   {
+      issueId: varchar('issue_id', { length: 36 })
+         .notNull()
+         .references(() => issue.id, { onDelete: 'cascade' }),
+      userId: varchar('user_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [
+      primaryKey({ columns: [t.issueId, t.userId] }),
+      index('idx_issue_assignee_user').on(t.userId),
+   ]
+);
+
 // Favoritos do usuário (paridade Linear): pin heterogêneo de issue/project/view
 // numa seção dedicada da sidebar. Integridade app-level (sem FK polimorfica) —
 // entidade removida é limpa no resolve/list. `position` p/ ordenação (drag futuro).
@@ -465,8 +495,39 @@ export const comment = pgTable(
       /** Comentário-pai (threading, paridade Linear). NULL = comentário raiz. */
       parentId: varchar('parent_id', { length: 36 }),
       createdAt: timestamp('created_at').notNull().defaultNow(),
+      /** Última edição do corpo. NULL = nunca editado (a UI mostra "edited" quando existe). */
+      updatedAt: timestamp('updated_at'),
+      /** Thread resolvida (só na raiz). NULL = aberta. */
+      resolvedAt: timestamp('resolved_at'),
+      resolvedById: varchar('resolved_by_id', { length: 36 }).references(() => appUser.id),
    },
    (t) => [index('idx_comment_issue').on(t.issueId), index('idx_comment_parent').on(t.parentId)]
+);
+
+// Anexo de issue ou de comentário (#98). O arquivo vive no S3/CDN (`url`); a linha guarda
+// os metadados. `comment_id` NULL = anexo da issue; sem FK (como `comment.parent_id`) —
+// `deleteComment` limpa os anexos do comentário. Cascade no delete da issue.
+export const attachment = pgTable(
+   'attachment',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      issueId: varchar('issue_id', { length: 36 })
+         .notNull()
+         .references(() => issue.id, { onDelete: 'cascade' }),
+      commentId: varchar('comment_id', { length: 36 }),
+      uploadedById: varchar('uploaded_by_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      url: text('url').notNull(),
+      fileName: varchar('file_name', { length: 255 }).notNull(),
+      contentType: varchar('content_type', { length: 127 }).notNull(),
+      size: integer('size').notNull(),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [
+      index('idx_attachment_issue').on(t.issueId),
+      index('idx_attachment_comment').on(t.commentId),
+   ]
 );
 
 export const commentReaction = pgTable(

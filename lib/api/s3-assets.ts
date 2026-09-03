@@ -19,8 +19,18 @@ export function assetsConfigured(): boolean {
    return Boolean(BUCKET && CDN_URL);
 }
 
+export interface PutAssetOptions {
+   /** `Content-Disposition` do objeto (ex.: `attachment; filename="x.pdf"` pra forçar download). */
+   contentDisposition?: string;
+}
+
 /** Sobe um asset no S3 e devolve a URL pública via CDN. Cache imutável (1 ano). */
-export async function putAsset(key: string, body: Buffer, contentType: string): Promise<string> {
+export async function putAsset(
+   key: string,
+   body: Buffer,
+   contentType: string,
+   options: PutAssetOptions = {}
+): Promise<string> {
    if (!assetsConfigured()) throw new Error('Assets bucket/CDN não configurados (env)');
    await s3().send(
       new PutObjectCommand({
@@ -29,9 +39,16 @@ export async function putAsset(key: string, body: Buffer, contentType: string): 
          Body: body,
          ContentType: contentType,
          CacheControl: 'public, max-age=31536000, immutable',
+         ...(options.contentDisposition ? { ContentDisposition: options.contentDisposition } : {}),
       })
    );
    return `${CDN_URL}/${key}`;
+}
+
+/** Chave do objeto a partir da URL pública (CDN); null se a URL não é deste CDN. */
+export function assetKeyFromUrl(url: string): string | null {
+   if (!CDN_URL || !url.startsWith(`${CDN_URL}/`)) return null;
+   return url.slice(CDN_URL.length + 1) || null;
 }
 
 export async function deleteAsset(key: string): Promise<void> {

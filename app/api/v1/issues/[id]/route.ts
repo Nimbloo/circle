@@ -27,12 +27,14 @@ const UpdateSchema = z.object({
    statusId: z.string().min(1).max(64).optional(),
    priorityId: z.string().min(1).max(64).optional(),
    assigneeId: z.string().max(36).nullish(),
+   assigneeIds: z.array(z.string().min(1).max(36)).max(50).optional(),
    projectId: z.string().max(36).nullish(),
    cycleId: z.string().max(36).nullish(),
    dueDate: z.string().date().nullish(),
    estimate: z.number().int().min(0).max(1000).nullish(),
    snoozedUntil: z.string().datetime().nullish(),
    milestoneId: z.string().max(36).nullish(),
+   parentId: z.string().max(36).nullish(),
 });
 
 export async function PATCH(req: Request, { params }: Params) {

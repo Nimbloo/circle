@@ -16,6 +16,7 @@ import { PrioritySelector } from './priority-selector';
 import { ProjectBadge } from './project-badge';
 import { StatusSelector } from './status-selector';
 import { SubIssueProgress } from './sub-issue-progress';
+import { ParentIssueChip } from './parent-issue-chip';
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { IssueContextMenu } from './issue-context-menu';
 
@@ -46,7 +47,7 @@ function IssueDragPreview({ issue }: { issue: Issue }) {
                </div>
             </div>
             <div className="absolute right-0 top-0">
-               <AssigneeUser compact user={issue.assignee} issueId={issue.id} />
+               <AssigneeUser compact users={issue.assignees} issueId={issue.id} />
             </div>
          </div>
          <div className="flex min-h-6 flex-wrap items-center gap-1">
@@ -179,6 +180,9 @@ export function IssueGrid({ issue, orderedIssues, layout = true }: IssueGridProp
                            className="min-w-0"
                         >
                            <h3 className="line-clamp-2 text-[13px] font-medium leading-4">
+                              {issue.parentIdentifier && (
+                                 <ParentIssueChip identifier={issue.parentIdentifier} />
+                              )}
                               {issue.title}
                            </h3>
                         </Link>
@@ -186,7 +190,7 @@ export function IssueGrid({ issue, orderedIssues, layout = true }: IssueGridProp
                   </div>
                   {displayProperties.assignee && (
                      <div className="absolute right-0 top-0">
-                        <AssigneeUser compact user={issue.assignee} issueId={issue.id} />
+                        <AssigneeUser compact users={issue.assignees} issueId={issue.id} />
                      </div>
                   )}
                </div>

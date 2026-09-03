@@ -8,47 +8,58 @@ import {
    CommandInput,
    CommandItem,
    CommandList,
+   CommandSeparator,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { User } from '@/data/users';
-import { CheckIcon, UserCircle } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
+import { CheckIcon, UserCircle, UserRoundCheck } from 'lucide-react';
+import { useId, useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { AssigneeAvatars } from '@/components/common/issues/assignee-avatars';
 
 interface AssigneeSelectorProps {
-   assignee: User | null;
-   onChange: (assignee: User | null) => void;
+   /** Responsáveis selecionados (principal primeiro). */
+   assignees: User[];
+   /** Recebe o conjunto inteiro a cada toggle; o 1º é o principal. */
+   onChange: (assignees: User[]) => void;
 }
 
-export function AssigneeSelector({ assignee, onChange }: AssigneeSelectorProps) {
+/**
+ * Multi-select de responsáveis (#96) do modal de criação e da sidebar de propriedades:
+ * checkbox por membro, busca, "Assign to me" alterna o próprio. Fica aberto ao marcar.
+ */
+export function AssigneeSelector({ assignees, onChange }: AssigneeSelectorProps) {
    const id = useId();
    const [open, setOpen] = useState<boolean>(false);
-   const [value, setValue] = useState<string | null>(assignee?.id || null);
 
    // Conta derivada da fatia assinada: assinar `filterByAssignee` (funcao, referencia
    // estavel) deixaria o contador do dropdown parado quando as issues mudam.
    const allIssues = useIssuesStore((s) => s.issues);
    const users = useWorkspaceStore((s) => s.users);
+   const meId = useWorkspaceStore((s) => s.me?.id);
+   const me = meId ? users.find((u) => u.id === meId) : undefined;
 
-   useEffect(() => {
-      setValue(assignee?.id || null);
-   }, [assignee]);
-
-   const handleAssigneeChange = (userId: string) => {
-      if (userId === 'unassigned') {
-         setValue(null);
-         onChange(null);
-      } else {
-         setValue(userId);
-         const newAssignee = users.find((u) => u.id === userId);
-         if (newAssignee) {
-            onChange(newAssignee);
-         }
-      }
+   const isSelected = (userId: string) => assignees.some((a) => a.id === userId);
+   const toggle = (user: User) => {
+      onChange(
+         isSelected(user.id) ? assignees.filter((a) => a.id !== user.id) : [...assignees, user]
+      );
+   };
+   const clear = () => {
+      onChange([]);
       setOpen(false);
    };
+   const countFor = (userId: string) =>
+      allIssues.filter((i) => (i.assignees ?? []).some((a) => a.id === userId)).length;
+
+   const label =
+      assignees.length === 0
+         ? 'Unassigned'
+         : assignees.length === 1
+           ? assignees[0].name
+           : `${assignees[0].name} +${assignees.length - 1}`;
 
    return (
       <div className="*:not-first:mt-2">
@@ -61,29 +72,14 @@ export function AssigneeSelector({ assignee, onChange }: AssigneeSelectorProps) 
                   variant="secondary"
                   role="combobox"
                   aria-expanded={open}
+                  aria-label={`Assignees: ${label}`}
                >
-                  {value ? (
-                     (() => {
-                        const selectedUser = users.find((user) => user.id === value);
-                        if (selectedUser) {
-                           return (
-                              <Avatar className="size-5">
-                                 <AvatarImage
-                                    src={selectedUser.avatarUrl || undefined}
-                                    alt={selectedUser.name}
-                                 />
-                                 <AvatarFallback>{selectedUser.name.charAt(0)}</AvatarFallback>
-                              </Avatar>
-                           );
-                        }
-                        return <UserCircle className="size-5" />;
-                     })()
+                  {assignees.length ? (
+                     <AssigneeAvatars users={assignees} size="sm" />
                   ) : (
                      <UserCircle className="size-5" />
                   )}
-                  <span>
-                     {value ? users.find((user) => user.id === value)?.name : 'Unassigned'}
-                  </span>
+                  <span>{label}</span>
                </Button>
             </PopoverTrigger>
             <PopoverContent
@@ -95,25 +91,44 @@ export function AssigneeSelector({ assignee, onChange }: AssigneeSelectorProps) 
                   <CommandList>
                      <CommandEmpty>No users found.</CommandEmpty>
                      <CommandGroup>
+                        {me && (
+                           <CommandItem
+                              value="assign-to-me"
+                              keywords={['me', me.name]}
+                              onSelect={() => toggle(me)}
+                              className="flex items-center justify-between"
+                           >
+                              <div className="flex items-center gap-2">
+                                 <UserRoundCheck className="size-5 text-muted-foreground" />
+                                 Assign to me
+                              </div>
+                              {isSelected(me.id) && <CheckIcon size={16} className="ml-auto" />}
+                           </CommandItem>
+                        )}
                         <CommandItem
                            value="unassigned"
-                           onSelect={() => handleAssigneeChange('unassigned')}
+                           keywords={['none', 'no assignee']}
+                           onSelect={clear}
                            className="flex items-center justify-between"
                         >
                            <div className="flex items-center gap-2">
                               <UserCircle className="size-5" />
                               Unassigned
                            </div>
-                           {value === null && <CheckIcon size={16} className="ml-auto" />}
+                           {assignees.length === 0 && <CheckIcon size={16} className="ml-auto" />}
                            <span className="text-muted-foreground text-xs">
                               {allIssues.filter((i) => i.assignee === null).length}
                            </span>
                         </CommandItem>
+                     </CommandGroup>
+                     <CommandSeparator />
+                     <CommandGroup>
                         {users.map((user) => (
                            <CommandItem
                               key={user.id}
                               value={user.id}
-                              onSelect={() => handleAssigneeChange(user.id)}
+                              keywords={[user.name, user.email]}
+                              onSelect={() => toggle(user)}
                               className="flex items-center justify-between"
                            >
                               <div className="flex items-center gap-2">
@@ -126,9 +141,9 @@ export function AssigneeSelector({ assignee, onChange }: AssigneeSelectorProps) 
                                  </Avatar>
                                  {user.name}
                               </div>
-                              {value === user.id && <CheckIcon size={16} className="ml-auto" />}
+                              {isSelected(user.id) && <CheckIcon size={16} className="ml-auto" />}
                               <span className="text-muted-foreground text-xs">
-                                 {allIssues.filter((i) => i.assignee?.id === user.id).length}
+                                 {countFor(user.id)}
                               </span>
                            </CommandItem>
                         ))}

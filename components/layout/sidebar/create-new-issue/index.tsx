@@ -64,6 +64,7 @@ export function CreateNewIssue() {
          descriptionDoc: null,
          status: defaultStatus || status.find((s) => s.id === 'to-do')!,
          assignee: null,
+         assignees: [],
          priority: priorities.find((p) => p.id === 'no-priority')!,
          labels: [],
          createdAt: new Date().toISOString(),
@@ -177,9 +178,13 @@ export function CreateNewIssue() {
                      }
                   />
                   <AssigneeSelector
-                     assignee={addIssueForm.assignee}
-                     onChange={(newAssignee) =>
-                        setAddIssueForm({ ...addIssueForm, assignee: newAssignee })
+                     assignees={addIssueForm.assignees}
+                     onChange={(assignees) =>
+                        setAddIssueForm({
+                           ...addIssueForm,
+                           assignees,
+                           assignee: assignees[0] ?? null,
+                        })
                      }
                   />
                   <ProjectSelector

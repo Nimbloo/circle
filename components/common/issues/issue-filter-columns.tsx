@@ -27,6 +27,7 @@ import {
    CircleDashed,
    CircleUserRound,
    Folder,
+   Layers,
    RefreshCcw,
    Tag,
    UserPen,
@@ -150,6 +151,47 @@ function cycleOptions(cycles: Cycle[]): ColumnOption[] {
    ];
 }
 
+/* ------------------------------ Sub-issues (#95) ---------------------------- */
+
+/**
+ * Valores do filtro "Sub-issues". Uma issue pode ser filha E ter filhas, então o
+ * accessor devolve um CONJUNTO de tags (multiOption): `all` em toda issue, mais
+ * `top-level` ou `sub-issue`, mais `with-sub-issues` quando tem filhas diretas.
+ */
+export const SUB_ISSUES_ALL = 'all';
+export const SUB_ISSUES_TOP_LEVEL = 'top-level';
+export const SUB_ISSUES_ONLY_SUB = 'sub-issue';
+export const SUB_ISSUES_WITH_SUB = 'with-sub-issues';
+
+export function subIssueTags(issue: Pick<Issue, 'parentId' | 'subIssueCount'>): string[] {
+   const tags = [SUB_ISSUES_ALL, issue.parentId ? SUB_ISSUES_ONLY_SUB : SUB_ISSUES_TOP_LEVEL];
+   if ((issue.subIssueCount ?? 0) > 0) tags.push(SUB_ISSUES_WITH_SUB);
+   return tags;
+}
+
+const subIssuesOptions: ColumnOption[] = [
+   {
+      value: SUB_ISSUES_ALL,
+      label: 'All',
+      icon: <Layers className="size-4 text-muted-foreground" />,
+   },
+   {
+      value: SUB_ISSUES_TOP_LEVEL,
+      label: 'Top-level only',
+      icon: <Layers className="size-4 text-muted-foreground" />,
+   },
+   {
+      value: SUB_ISSUES_ONLY_SUB,
+      label: 'Only sub-issues',
+      icon: <Layers className="size-4 text-muted-foreground" />,
+   },
+   {
+      value: SUB_ISSUES_WITH_SUB,
+      label: 'With sub-issues',
+      icon: <Layers className="size-4 text-muted-foreground" />,
+   },
+];
+
 /* ---------------------------- Column definitions --------------------------- */
 
 const dtf = createColumnConfigHelper<Issue>();
@@ -183,7 +225,13 @@ function buildIssueFilterColumns(
       dtf
          .option()
          .id('assignee')
-         .accessor((i: Issue) => i.assignee?.id ?? 'unassigned')
+         // TODOS os responsáveis (#96): o filtro casa qualquer um (principal ou colaborador).
+         // Segue `option` (UI e filtros salvos inalterados); `applyIssueFilters` trata o array.
+         .accessor((i: Issue) => {
+            const ids = (i.assignees ?? []).map((a) => a.id);
+            if (!ids.length && i.assignee) ids.push(i.assignee.id);
+            return ids.length ? ids : ['unassigned'];
+         })
          .displayName('Assignee')
          .icon(CircleUserRound)
          .options(assigneeOptions(users))
@@ -227,6 +275,14 @@ function buildIssueFilterColumns(
          .displayName('Created by')
          .icon(UserPen)
          .options(creatorOptions(users))
+         .build(),
+      dtf
+         .multiOption()
+         .id('subIssues')
+         .accessor((i: Issue) => subIssueTags(i))
+         .displayName('Sub-issues')
+         .icon(Layers)
+         .options(subIssuesOptions)
          .build(),
       dtf
          .date()
@@ -279,8 +335,16 @@ export function applyIssueFilters(issues: Issue[], filters: FiltersState): Issue
          if (!column) return true;
          const value = column.accessor(issue);
          switch (filter.type) {
-            case 'option':
+            case 'option': {
+               // Coluna `option` com VÁRIOS valores (assignees): "is/is any of" casa se
+               // qualquer um casa; "is not/is none of" só se nenhum casa.
+               if (Array.isArray(value)) {
+                  const negative = filter.operator === 'is not' || filter.operator === 'is none of';
+                  const hits = value.map((v) => optionFilterFn(String(v ?? ''), filter) ?? true);
+                  return negative ? hits.every(Boolean) : hits.some(Boolean);
+               }
                return optionFilterFn(String(value ?? ''), filter) ?? true;
+            }
             case 'multiOption':
                return multiOptionFilterFn((value as string[]) ?? [], filter) ?? true;
             case 'date':

@@ -18,6 +18,7 @@ import {
    issueLabel,
    issueContent,
    issueSubscription,
+   issueAssignee,
    activityEvent,
    issueRelation,
    issuePrLink,
@@ -72,6 +73,9 @@ export interface IssueDto {
    status: StatusRow;
    priority: PriorityRow;
    assignee: UserRef | null;
+   /** Conjunto completo de responsáveis (#96): o principal (`assignee`) primeiro,
+    *  depois os colaboradores por ordem de adição. Vazio = sem responsável. */
+   assignees: UserRef[];
    createdBy: UserRef | null;
    project: ProjectRef | null;
    cycleId: string; // '' = sem ciclo (paridade com o front)
@@ -79,9 +83,12 @@ export interface IssueDto {
    rank: string;
    dueDate: string | null;
    estimate: number | null;
-   /** Rollup de sub-issues (paridade Linear): total de filhas e quantas concluídas. */
+   /** Rollup de sub-issues (paridade Linear): total de filhas DIRETAS e quantas concluídas. */
    subIssueCount: number;
    subIssueDoneCount: number;
+   /** Pai canônico (#95): id + identifier (p/ o chip na linha sem depender do store). null = topo. */
+   parentId: string | null;
+   parentIdentifier: string | null;
    /** Snooze de triage: ISO enquanto adiada, null caso contrário. */
    snoozedUntil: string | null;
    createdAt: string;
@@ -131,10 +138,69 @@ async function loadCatalogs(db: Db): Promise<CatalogMaps> {
    };
 }
 
+/** Status default de issue nova (sub-issue criada sem status): 1º 'unstarted' por posição. */
+function defaultStatusId(cat: CatalogMaps): string | undefined {
+   const byCategory = (category: string) =>
+      [...cat.statuses.values()]
+         .filter((s) => s.category === category)
+         .sort((a, b) => a.position - b.position)[0]?.id;
+   return byCategory('unstarted') ?? byCategory('backlog');
+}
+
+/** Teto de profundidade ao subir a árvore de pais (dados legados podem ter ciclo). */
+const MAX_PARENT_DEPTH = 64;
+
+/** Ids dos ancestrais de `id` (pai, avô, …), de baixo pra cima. */
+async function ancestorIds(db: Db, id: string): Promise<string[]> {
+   const out: string[] = [];
+   let cur: string | null = id;
+   for (let depth = 0; cur && depth < MAX_PARENT_DEPTH; depth++) {
+      const rows: { parentId: string | null }[] = await db
+         .select({ parentId: issue.parentId })
+         .from(issue)
+         .where(eq(issue.id, cur))
+         .limit(1);
+      cur = rows[0]?.parentId ?? null;
+      if (!cur || out.includes(cur)) break;
+      out.push(cur);
+   }
+   return out;
+}
+
+/**
+ * Valida a troca de pai de `id` para `parentId` (#95): o pai existe, não é a própria
+ * issue e não é descendente dela (senão fecha ciclo). Retorna a linha do pai.
+ */
+async function resolveParent(
+   db: Db,
+   id: string,
+   parentId: string
+): Promise<typeof issue.$inferSelect> {
+   if (parentId === id) throw new ApiError(400, 'Uma issue não pode ser pai de si mesma');
+   const rows = await db.select().from(issue).where(eq(issue.id, parentId)).limit(1);
+   if (rows.length === 0) throw new ApiError(400, `Issue-pai '${parentId}' não existe`);
+   if ((await ancestorIds(db, parentId)).includes(id))
+      throw new ApiError(400, 'Uma issue não pode virar filha de uma descendente (ciclo)');
+   return rows[0];
+}
+
 /** Expande categorias (statusType) para os statusIds correspondentes. */
 function statusIdsForCategories(cats: string[], statuses: Map<string, StatusRow>): string[] {
    const set = new Set(cats);
    return [...statuses.values()].filter((s) => set.has(s.category)).map((s) => s.id);
+}
+
+/** Subquery: ids das issues em que QUALQUER um dos usuários é responsável (junção). */
+function assignedIssueIds(db: Db, userIds: string[]) {
+   return db
+      .select({ id: issueAssignee.issueId })
+      .from(issueAssignee)
+      .where(inArray(issueAssignee.userId, userIds));
+}
+
+/** Normaliza um conjunto de responsáveis: sem vazios, sem repetição, ordem preservada. */
+function normalizeAssigneeIds(ids: readonly (string | null | undefined)[]): string[] {
+   return [...new Set(ids.filter((id): id is string => Boolean(id)))];
 }
 
 function buildWhere(
@@ -165,9 +231,12 @@ function buildWhere(
    }
    if (opts.assignee?.length) {
       const wantUnassigned = opts.assignee.includes('unassigned');
-      const ids = opts.assignee.filter((a) => a !== 'unassigned');
+      // `me` é resolvido em `assigneeMe` (parseIssueListOptions) — não é um id.
+      const ids = opts.assignee.filter((a) => a !== 'unassigned' && a !== 'me');
       const parts: SQL[] = [];
-      if (ids.length) parts.push(inArray(issue.assigneeId, ids));
+      // Casa QUALQUER responsável (principal ou colaborador) via junção (#96).
+      if (ids.length) parts.push(inArray(issue.id, assignedIssueIds(db, ids)));
+      // Sem responsável = principal nulo (o principal é derivado do conjunto: vazio ⇔ null).
       if (wantUnassigned) parts.push(isNull(issue.assigneeId));
       if (parts.length) conds.push(parts.length === 1 ? parts[0] : (or(...parts) as SQL));
    }
@@ -179,7 +248,7 @@ function buildWhere(
       if (wantNone) parts.push(isNull(issue.cycleId));
       if (parts.length) conds.push(parts.length === 1 ? parts[0] : (or(...parts) as SQL));
    }
-   if (opts.assigneeMe && meId) conds.push(eq(issue.assigneeId, meId));
+   if (opts.assigneeMe && meId) conds.push(inArray(issue.id, assignedIssueIds(db, [meId])));
    if (opts.createdByMe && meId) conds.push(eq(issue.createdById, meId));
    if (opts.q) {
       const like = `%${opts.q}%`;
@@ -215,12 +284,29 @@ async function assemble(
 ): Promise<IssueDto[]> {
    if (rows.length === 0) return [];
    const issueIds = rows.map((r) => r.id);
+   // Conjunto de responsáveis (#96): carregado antes para resolver todos os usuários
+   // (principal, colaboradores, criador) num único batch. Ordem = ordem de adição.
+   const assigneeLinks = await db
+      .select({ issueId: issueAssignee.issueId, userId: issueAssignee.userId })
+      .from(issueAssignee)
+      .where(inArray(issueAssignee.issueId, issueIds))
+      .orderBy(asc(issueAssignee.createdAt));
+   const assigneeIdsByIssue = new Map<string, string[]>();
+   for (const link of assigneeLinks) {
+      const arr = assigneeIdsByIssue.get(link.issueId) ?? [];
+      arr.push(link.userId);
+      assigneeIdsByIssue.set(link.issueId, arr);
+   }
    const userIds = [
-      ...new Set(rows.flatMap((r) => [r.assigneeId, r.createdById]).filter(Boolean) as string[]),
+      ...new Set([
+         ...(rows.flatMap((r) => [r.assigneeId, r.createdById]).filter(Boolean) as string[]),
+         ...assigneeLinks.map((l) => l.userId),
+      ]),
    ];
    const projectIds = [...new Set(rows.map((r) => r.projectId).filter(Boolean) as string[])];
+   const parentIds = [...new Set(rows.map((r) => r.parentId).filter(Boolean) as string[])];
 
-   const [users, projects, labelLinks, subRels] = await Promise.all([
+   const [users, projects, labelLinks, childAgg, parents] = await Promise.all([
       userIds.length
          ? db.select().from(appUser).where(inArray(appUser.id, userIds))
          : Promise.resolve([]),
@@ -231,13 +317,23 @@ async function assemble(
               .where(inArray(projectT.id, projectIds))
          : Promise.resolve([]),
       db.select().from(issueLabel).where(inArray(issueLabel.issueId, issueIds)),
+      // Rollup de filhas DIRETAS numa query só (GROUP BY parent_id, status_id): a
+      // categoria do status resolve "done" pelo catálogo em memória.
       db
-         .select({ parentId: issueRelation.issueId, childId: issueRelation.relatedId })
-         .from(issueRelation)
-         .where(and(inArray(issueRelation.issueId, issueIds), eq(issueRelation.kind, 'sub'))),
+         .select({ parentId: issue.parentId, statusId: issue.statusId, n: sql<number>`count(*)` })
+         .from(issue)
+         .where(inArray(issue.parentId, issueIds))
+         .groupBy(issue.parentId, issue.statusId),
+      parentIds.length
+         ? db
+              .select({ id: issue.id, identifier: issue.identifier })
+              .from(issue)
+              .where(inArray(issue.id, parentIds))
+         : Promise.resolve([]),
    ]);
    const userMap = new Map(users.map((u) => [u.id, u]));
    const projectMap = new Map(projects.map((p) => [p.id, p]));
+   const parentMap = new Map(parents.map((p) => [p.id, p.identifier]));
    const labelsByIssue = new Map<string, LabelRow[]>();
    for (const link of labelLinks) {
       const lbl = cat.labels.get(link.labelId);
@@ -247,24 +343,15 @@ async function assemble(
       labelsByIssue.set(link.issueId, arr);
    }
 
-   // Rollup de sub-issues: as filhas podem não estar nesta página, então busca o
-   // status delas direto. done = status na categoria 'completed'.
-   const childIds = [...new Set(subRels.map((r) => r.childId))];
-   const childCategory = new Map<string, string>();
-   if (childIds.length) {
-      const children = await db
-         .select({ id: issue.id, statusId: issue.statusId })
-         .from(issue)
-         .where(inArray(issue.id, childIds));
-      for (const c of children)
-         childCategory.set(c.id, cat.statuses.get(c.statusId)?.category ?? '');
-   }
+   // done = filhas em status da categoria 'completed'.
    const rollup = new Map<string, { count: number; done: number }>();
-   for (const rel of subRels) {
-      const agg = rollup.get(rel.parentId) ?? { count: 0, done: 0 };
-      agg.count += 1;
-      if (childCategory.get(rel.childId) === 'completed') agg.done += 1;
-      rollup.set(rel.parentId, agg);
+   for (const row of childAgg) {
+      if (!row.parentId) continue;
+      const agg = rollup.get(row.parentId) ?? { count: 0, done: 0 };
+      const n = Number(row.n);
+      agg.count += n;
+      if (cat.statuses.get(row.statusId)?.category === 'completed') agg.done += n;
+      rollup.set(row.parentId, agg);
    }
 
    return rows.map((r) => ({
@@ -275,6 +362,10 @@ async function assemble(
       status: cat.statuses.get(r.statusId)!,
       priority: cat.priorities.get(r.priorityId)!,
       assignee: userRef(r.assigneeId ? userMap.get(r.assigneeId) : undefined),
+      // Principal primeiro, depois os colaboradores por ordem de adição.
+      assignees: normalizeAssigneeIds([r.assigneeId, ...(assigneeIdsByIssue.get(r.id) ?? [])])
+         .map((uid) => userRef(userMap.get(uid)))
+         .filter((u): u is UserRef => u !== null),
       createdBy: userRef(r.createdById ? userMap.get(r.createdById) : undefined),
       project:
          r.projectId && projectMap.get(r.projectId)
@@ -291,6 +382,8 @@ async function assemble(
       estimate: r.estimate,
       subIssueCount: rollup.get(r.id)?.count ?? 0,
       subIssueDoneCount: rollup.get(r.id)?.done ?? 0,
+      parentId: r.parentId ?? null,
+      parentIdentifier: r.parentId ? (parentMap.get(r.parentId) ?? null) : null,
       snoozedUntil:
          r.snoozedUntil instanceof Date ? r.snoozedUntil.toISOString() : (r.snoozedUntil ?? null),
       createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
@@ -379,11 +472,22 @@ export async function getIssueByIdentifier(db: Db, identifier: string): Promise<
 }
 
 export interface CreateIssueInput {
-   teamId: string;
+   /** Obrigatório sem `parentId`; com pai, herda o time dele quando omitido. */
+   teamId?: string;
    title: string;
-   statusId: string;
-   priorityId: string;
+   /** Omitido → 1º status da categoria 'unstarted' (default de issue nova). */
+   statusId?: string;
+   /** Obrigatório sem `parentId`; com pai, herda a prioridade dele quando omitido. */
+   priorityId?: string;
+   /**
+    * Cria já como sub-issue (#95), atomicamente. Herda `teamId`/`priorityId`/`projectId`
+    * do pai quando não informados; `cycleId` do pai se o cycle estiver `current`; labels
+    * NÃO herdam; assignee herda só se o criador é o assignee do pai.
+    */
+   parentId?: string | null;
    assigneeId?: string | null;
+   /** Conjunto de responsáveis (#96). Tem precedência sobre `assigneeId`; o primeiro é o principal. */
+   assigneeIds?: string[];
    projectId?: string | null;
    cycleId?: string | null;
    labelIds?: string[];
@@ -403,19 +507,50 @@ export async function createIssue(
    actorEmail: string
 ): Promise<IssueDto> {
    const actor = await getOrCreateUser(db, actorEmail);
+   const catalogs = await loadCatalogs(db);
 
-   const teamRows = await db.select().from(teamT).where(eq(teamT.id, input.teamId)).limit(1);
-   if (teamRows.length === 0) throw new ApiError(400, `Team '${input.teamId}' não existe`);
+   // Sub-issue (#95): resolve o pai e herda dele o que o cliente não informou.
+   let parent: typeof issue.$inferSelect | null = null;
+   if (input.parentId) {
+      const rows = await db.select().from(issue).where(eq(issue.id, input.parentId)).limit(1);
+      if (rows.length === 0) throw new ApiError(400, `Issue-pai '${input.parentId}' não existe`);
+      parent = rows[0];
+   }
+   const teamId = input.teamId ?? parent?.teamId;
+   if (!teamId) throw new ApiError(400, 'teamId é obrigatório');
+   const priorityId = input.priorityId ?? parent?.priorityId;
+   if (!priorityId) throw new ApiError(400, 'priorityId é obrigatório');
+   const statusId = input.statusId ?? defaultStatusId(catalogs);
+   if (!statusId) throw new ApiError(400, 'statusId é obrigatório');
+   const projectId =
+      input.projectId !== undefined ? (input.projectId ?? null) : (parent?.projectId ?? null);
+   let cycleId: string | null = input.cycleId || null;
+   if (input.cycleId === undefined && parent?.cycleId) {
+      const [cyc] = await db
+         .select({ status: cycleT.status })
+         .from(cycleT)
+         .where(eq(cycleT.id, parent.cycleId))
+         .limit(1);
+      if (cyc?.status === 'current') cycleId = parent.cycleId;
+   }
+   const assigneeId =
+      input.assigneeId !== undefined
+         ? (input.assigneeId ?? null)
+         : parent && parent.assigneeId === actor.id
+           ? actor.id
+           : null;
+
+   const teamRows = await db.select().from(teamT).where(eq(teamT.id, teamId)).limit(1);
+   if (teamRows.length === 0) throw new ApiError(400, `Team '${teamId}' não existe`);
 
    // valida FKs de catálogo antes do insert (senão a FK estoura como 500). Usa o cache
    // de catálogos (memoizado, TTL 30s) em vez de 2 SELECTs por criação de issue.
-   const catalogs = await loadCatalogs(db);
-   const statusRow = catalogs.statuses.get(input.statusId);
-   if (!statusRow) throw new ApiError(400, `Status '${input.statusId}' não existe`);
+   const statusRow = catalogs.statuses.get(statusId);
+   if (!statusRow) throw new ApiError(400, `Status '${statusId}' não existe`);
    // Marcos temporais quando a issue já nasce started/completed (cycle/lead time).
    const startCat = statusRow.category;
-   if (!catalogs.priorities.get(input.priorityId))
-      throw new ApiError(400, `Priority '${input.priorityId}' não existe`);
+   if (!catalogs.priorities.get(priorityId))
+      throw new ApiError(400, `Priority '${priorityId}' não existe`);
 
    // Descrição: o doc do editor (derivando a projeção em texto, 400 se inválido) ou o
    // texto puro do cliente antigo.
@@ -426,6 +561,9 @@ export async function createIssue(
 
    const id = randomUUID();
    const now = new Date();
+   // Responsáveis: `assigneeIds` (conjunto; o 1º é o principal) ou o `assigneeId` legado.
+   const assigneeIds = normalizeAssigneeIds(input.assigneeIds ?? (assigneeId ? [assigneeId] : []));
+   const principalId = assigneeIds[0] ?? null;
 
    // Atômico: incremento do contador + issue + content + labels + evento.
    await db.transaction(async (tx) => {
@@ -433,9 +571,9 @@ export async function createIssue(
       const seqRes = await tx
          .update(teamT)
          .set({ issueSeq: sql`${teamT.issueSeq} + 1` })
-         .where(eq(teamT.id, input.teamId))
+         .where(eq(teamT.id, teamId))
          .returning({ seq: teamT.issueSeq });
-      const identifier = `${input.teamId}-${seqRes[0].seq}`;
+      const identifier = `${teamId}-${seqRes[0].seq}`;
 
       // rank: após o maior rank existente
       const maxRankRows = await tx
@@ -448,14 +586,15 @@ export async function createIssue(
       await tx.insert(issue).values({
          id,
          identifier,
-         teamId: input.teamId,
+         teamId,
          title: input.title,
-         statusId: input.statusId,
-         priorityId: input.priorityId,
-         assigneeId: input.assigneeId ?? null,
+         statusId,
+         priorityId,
+         assigneeId: principalId,
          createdById: actor.id,
-         projectId: input.projectId ?? null,
-         cycleId: input.cycleId || null,
+         projectId,
+         cycleId,
+         parentId: parent?.id ?? null,
          rank,
          dueDate: input.dueDate ?? null,
          estimate: input.estimate ?? null,
@@ -480,18 +619,28 @@ export async function createIssue(
             .values(input.labelIds.map((labelId) => ({ issueId: id, labelId })))
             .onConflictDoNothing();
       }
-      await tx.insert(activityEvent).values({
-         id: randomUUID(),
-         issueId: id,
-         actorId: actor.id,
-         event: 'created',
-         text: 'created the issue',
-         createdAt: now,
-      });
+      const events = [{ event: 'created', text: 'created the issue' }];
+      if (parent) events.push({ event: 'parent', text: `set parent to ${parent.identifier}` });
+      await tx.insert(activityEvent).values(
+         events.map((e) => ({
+            id: randomUUID(),
+            issueId: id,
+            actorId: actor.id,
+            event: e.event,
+            text: e.text,
+            createdAt: now,
+         }))
+      );
 
-      // auto-subscribe (Linear-style): criador + assignee inicial
-      const subscribers = new Set<string>([actor.id]);
-      if (input.assigneeId) subscribers.add(input.assigneeId);
+      if (assigneeIds.length) {
+         await tx
+            .insert(issueAssignee)
+            .values(assigneeIds.map((userId) => ({ issueId: id, userId, createdAt: now })))
+            .onConflictDoNothing();
+      }
+
+      // auto-subscribe (Linear-style): criador + todos os responsáveis iniciais
+      const subscribers = new Set<string>([actor.id, ...assigneeIds]);
       await tx
          .insert(issueSubscription)
          .values([...subscribers].map((userId) => ({ issueId: id, userId })))
@@ -499,6 +648,8 @@ export async function createIssue(
    });
 
    publish({ entity: 'issue', action: 'created', id, actorEmail });
+   // O rollup do pai mudou (nova filha) → o board atualiza a linha dele.
+   if (parent) publish({ entity: 'issue', action: 'updated', id: parent.id, actorEmail });
    const created = (await getIssue(db, id))!;
    // Notificação Slack (best-effort, fire-and-forget — não acopla latência à request).
    void notifySlackEvent(db, {
@@ -514,7 +665,10 @@ export interface UpdateIssueInput {
    title?: string;
    statusId?: string;
    priorityId?: string;
+   /** Troca só o PRINCIPAL e mantém os colaboradores (`""`/null desatribui o principal). */
    assigneeId?: string | null;
+   /** Substitui o CONJUNTO de responsáveis (#96); o 1º vira o principal. `[]` limpa todos. */
+   assigneeIds?: string[];
    projectId?: string | null;
    cycleId?: string | null;
    dueDate?: string | null;
@@ -523,6 +677,8 @@ export interface UpdateIssueInput {
    snoozedUntil?: string | null;
    /** Milestone estruturada (FK project_milestone) ou null p/ remover. */
    milestoneId?: string | null;
+   /** Pai canônico (#95): id p/ mover/virar sub-issue, null p/ remover o pai. */
+   parentId?: string | null;
 }
 
 export async function updateIssue(
@@ -536,13 +692,42 @@ export async function updateIssue(
    const actor = await getOrCreateUser(db, actorEmail);
    const prev = existing[0];
 
+   // Responsáveis (#96): `assigneeIds` substitui o conjunto; `assigneeId` sozinho troca só
+   // o principal e mantém os colaboradores (`""` → sem principal, como cycleId). O
+   // principal gravado em `issue.assignee_id` é SEMPRE o 1º do conjunto resultante.
+   let nextAssigneeIds: string[] | null = null;
+   let prevAssigneeIds: string[] = [];
+   if (patch.assigneeIds !== undefined || patch.assigneeId !== undefined) {
+      const links = await db
+         .select({ userId: issueAssignee.userId })
+         .from(issueAssignee)
+         .where(eq(issueAssignee.issueId, id))
+         .orderBy(asc(issueAssignee.createdAt));
+      prevAssigneeIds = normalizeAssigneeIds([prev.assigneeId, ...links.map((l) => l.userId)]);
+      nextAssigneeIds =
+         patch.assigneeIds !== undefined
+            ? normalizeAssigneeIds(patch.assigneeIds)
+            : normalizeAssigneeIds([
+                 patch.assigneeId || null,
+                 ...prevAssigneeIds.filter((u) => u !== prev.assigneeId),
+              ]);
+   }
+   const addedAssigneeIds = nextAssigneeIds
+      ? nextAssigneeIds.filter((u) => !prevAssigneeIds.includes(u))
+      : [];
+   const removedAssigneeIds = nextAssigneeIds
+      ? prevAssigneeIds.filter((u) => !nextAssigneeIds!.includes(u))
+      : [];
+   const nextPrincipalId = nextAssigneeIds ? (nextAssigneeIds[0] ?? null) : prev.assigneeId;
+   const principalChanged = nextPrincipalId !== prev.assigneeId;
+
    const set: Record<string, unknown> = { updatedAt: new Date() };
    if (patch.title !== undefined) set.title = patch.title;
    if (patch.statusId !== undefined) set.statusId = patch.statusId;
    if (patch.priorityId !== undefined) set.priorityId = patch.priorityId;
+   if (nextAssigneeIds) set.assigneeId = nextPrincipalId;
    // `""` (limpar o campo) → null, consistente com cycleId: senão a FK vira 404
-   // "recurso não existe" em vez de desatribuir/desvincular.
-   if (patch.assigneeId !== undefined) set.assigneeId = patch.assigneeId || null;
+   // "recurso não existe" em vez de desvincular.
    if (patch.projectId !== undefined) set.projectId = patch.projectId || null;
    if (patch.cycleId !== undefined) set.cycleId = patch.cycleId || null;
    if (patch.dueDate !== undefined) set.dueDate = patch.dueDate;
@@ -570,10 +755,21 @@ export async function updateIssue(
       if (prev.milestoneId) set.milestoneId = null;
    }
 
+   // Pai (#95): "" limpa como os demais FKs; guarda de auto-pai e de ciclo em resolveParent.
+   const nextParentId = patch.parentId !== undefined ? patch.parentId || null : undefined;
+   let newParent: typeof issue.$inferSelect | null = null;
+   if (nextParentId !== undefined && nextParentId !== prev.parentId) {
+      if (nextParentId) newParent = await resolveParent(db, id, nextParentId);
+      set.parentId = nextParentId;
+   }
+
    // Transição de status: marcos temporais (cycle/lead time) + auto-add ao cycle.
    let enteredCompleted = false;
+   const prevCategory = (await loadCatalogs(db)).statuses.get(prev.statusId)?.category;
+   let nextCategory = prevCategory;
    if (patch.statusId !== undefined && patch.statusId !== prev.statusId) {
       const cat = (await loadCatalogs(db)).statuses.get(patch.statusId)?.category;
+      nextCategory = cat;
       const now = set.updatedAt as Date;
       enteredCompleted = cat === 'completed';
       // startedAt: 1ª entrada em "started" (sticky — não sobrescreve).
@@ -606,7 +802,43 @@ export async function updateIssue(
    const autoAddedCycleId =
       set.cycleId !== undefined && patch.cycleId === undefined ? (set.cycleId as string) : null;
 
-   await db.update(issue).set(set).where(eq(issue.id, id));
+   // Atômico com a junção de responsáveis: o principal em `issue` e o conjunto em
+   // `issue_assignee` nunca ficam inconsistentes entre si.
+   await db.transaction(async (tx) => {
+      await tx.update(issue).set(set).where(eq(issue.id, id));
+      if (removedAssigneeIds.length) {
+         await tx
+            .delete(issueAssignee)
+            .where(
+               and(eq(issueAssignee.issueId, id), inArray(issueAssignee.userId, removedAssigneeIds))
+            );
+      }
+      if (addedAssigneeIds.length) {
+         await tx
+            .insert(issueAssignee)
+            .values(
+               addedAssigneeIds.map((userId) => ({
+                  issueId: id,
+                  userId,
+                  createdAt: set.updatedAt as Date,
+               }))
+            )
+            .onConflictDoNothing();
+      }
+   });
+
+   // Nomes p/ o histórico "added/removed assignee X" (um SELECT só quando houve mudança).
+   const changedAssigneeIds = [...addedAssigneeIds, ...removedAssigneeIds];
+   const assigneeNames = new Map<string, string>(
+      changedAssigneeIds.length
+         ? (
+              await db
+                 .select({ id: appUser.id, name: appUser.name })
+                 .from(appUser)
+                 .where(inArray(appUser.id, changedAssigneeIds))
+           ).map((u) => [u.id, u.name])
+         : []
+   );
 
    // eventos de atividade para transições relevantes
    const events: { event: string; text: string }[] = [];
@@ -626,8 +858,14 @@ export async function updateIssue(
          event: 'cycle',
          text: `added to cycle ${autoAddedCycleId} on start`,
       });
-   if (patch.assigneeId !== undefined && (patch.assigneeId || null) !== prev.assigneeId)
+   // Entradas/saídas do conjunto têm evento por pessoa; "changed assignee" fica só para
+   // a troca de principal sem ninguém entrar/sair (ex.: promover um colaborador).
+   if (principalChanged && !addedAssigneeIds.length && !removedAssigneeIds.length)
       events.push({ event: 'assignee', text: `changed assignee` });
+   for (const uid of addedAssigneeIds)
+      events.push({ event: 'assignee', text: `added assignee ${assigneeNames.get(uid) ?? uid}` });
+   for (const uid of removedAssigneeIds)
+      events.push({ event: 'assignee', text: `removed assignee ${assigneeNames.get(uid) ?? uid}` });
    if (patch.title !== undefined && patch.title !== prev.title)
       events.push({ event: 'title', text: `renamed the issue` });
    if (patch.projectId !== undefined && (patch.projectId || null) !== prev.projectId)
@@ -639,6 +877,11 @@ export async function updateIssue(
       });
    if (patch.dueDate !== undefined && (patch.dueDate ?? null) !== prev.dueDate)
       events.push({ event: 'dueDate', text: `changed due date` });
+   if (set.parentId !== undefined)
+      events.push({
+         event: 'parent',
+         text: newParent ? `set parent to ${newParent.identifier}` : 'removed parent',
+      });
    if (events.length) {
       const now = new Date();
       await db.insert(activityEvent).values(
@@ -653,30 +896,47 @@ export async function updateIssue(
       );
    }
 
-   // auto-subscribe do novo responsável (Linear-style; inclui auto-atribuição)
-   if (patch.assigneeId !== undefined && patch.assigneeId && patch.assigneeId !== prev.assigneeId) {
-      await subscribeToIssue(db, id, patch.assigneeId);
-   }
-
-   // Notifica o novo responsável (in-app + Slack/Email best-effort)
-   if (
-      patch.assigneeId !== undefined &&
-      patch.assigneeId &&
-      patch.assigneeId !== prev.assigneeId &&
-      patch.assigneeId !== actor.id
-   ) {
+   // CADA novo responsável: auto-subscribe (Linear-style; inclui auto-atribuição) e
+   // notificação (in-app + Slack/Email best-effort) — exceto o próprio ator.
+   for (const uid of addedAssigneeIds) {
+      await subscribeToIssue(db, id, uid);
+      if (uid === actor.id) continue;
       // Fire-and-forget: notificação (Slack/SES) não bloqueia a resposta do PATCH.
       // `dispatchNotification` captura os próprios erros (loga, não lança).
       void dispatchNotification(db, {
          type: 'assignment',
          issueId: id,
-         recipientId: patch.assigneeId,
+         recipientId: uid,
          actorId: actor.id,
          content: `${actor.name} atribuiu esta issue a você`,
       });
    }
 
+   // Automações de sub-issues (#95): só quando o status trocou de CATEGORIA.
+   if (prevCategory !== nextCategory && patch.statusId !== undefined) {
+      await applyAutoClose(
+         db,
+         {
+            id,
+            teamId: prev.teamId,
+            statusId: patch.statusId,
+            parentId: set.parentId !== undefined ? (set.parentId as string | null) : prev.parentId,
+         },
+         actor.id,
+         actorEmail
+      );
+   }
+
    publish({ entity: 'issue', action: 'updated', id, actorEmail });
+   // Rollup dos pais (antigo e novo) mudou quando a issue trocou de pai ou de status.
+   const parentsToRefresh = new Set<string>();
+   if (set.parentId !== undefined) {
+      if (prev.parentId) parentsToRefresh.add(prev.parentId);
+      if (newParent) parentsToRefresh.add(newParent.id);
+   } else if (prev.parentId && patch.statusId !== undefined && patch.statusId !== prev.statusId) {
+      parentsToRefresh.add(prev.parentId);
+   }
+   for (const pid of parentsToRefresh) publish({ entity: 'issue', action: 'updated', id: pid });
    const dto = await getIssue(db, id);
    // Feed do canal Slack (best-effort, fire-and-forget). Gated pelo slack_config admin.
    if (dto) {
@@ -686,8 +946,7 @@ export async function updateIssue(
             identifier: dto.identifier,
             title: dto.title,
          });
-      const assignedNow =
-         patch.assigneeId !== undefined && patch.assigneeId && patch.assigneeId !== prev.assigneeId;
+      const assignedNow = principalChanged && nextPrincipalId !== null;
       if (assignedNow && dto.assignee)
          void notifySlackEvent(db, {
             type: 'issue.assigned',
@@ -699,12 +958,107 @@ export async function updateIssue(
    return dto;
 }
 
+/**
+ * Automações de sub-issues (#95), por time:
+ * - `auto_close_parent`: a última filha concluída/cancelada conclui o pai (sobe a árvore
+ *   enquanto a regra continuar valendo);
+ * - `auto_close_children`: pai concluído conclui as filhas ainda abertas (desce a árvore).
+ * Cada issue tocada ganha activity `status` (texto explicando a automação) e evento realtime.
+ */
+async function applyAutoClose(
+   db: Db,
+   changed: { id: string; teamId: string; statusId: string; parentId: string | null },
+   actorId: string,
+   actorEmail: string
+): Promise<void> {
+   const [flags] = await db
+      .select({ parent: teamT.autoCloseParent, children: teamT.autoCloseChildren })
+      .from(teamT)
+      .where(eq(teamT.id, changed.teamId))
+      .limit(1);
+   if (!flags || (!flags.parent && !flags.children)) return;
+   const cat = await loadCatalogs(db);
+   const categoryOf = (statusId: string) => cat.statuses.get(statusId)?.category;
+   const isDone = (statusId: string) => {
+      const c = categoryOf(statusId);
+      return c === 'completed' || c === 'canceled';
+   };
+   const completedStatusId =
+      categoryOf(changed.statusId) === 'completed'
+         ? changed.statusId
+         : [...cat.statuses.values()]
+              .filter((s) => s.category === 'completed')
+              .sort((a, b) => a.position - b.position)[0]?.id;
+   if (!completedStatusId) return;
+
+   const close = async (
+      target: { id: string; statusId: string; startedAt: Date | null },
+      text: string
+   ) => {
+      const now = new Date();
+      await db
+         .update(issue)
+         .set({
+            statusId: completedStatusId,
+            completedAt: now,
+            startedAt: target.startedAt ?? now,
+            updatedAt: now,
+         })
+         .where(eq(issue.id, target.id));
+      await db.insert(activityEvent).values({
+         id: randomUUID(),
+         issueId: target.id,
+         actorId,
+         event: 'status',
+         text,
+         createdAt: now,
+      });
+      publish({ entity: 'issue', action: 'updated', id: target.id, actorEmail });
+   };
+
+   // Sobe: a issue ficou done → se TODAS as irmãs também, conclui o pai; repete acima.
+   if (flags.parent && isDone(changed.statusId)) {
+      let parentId = changed.parentId;
+      for (let depth = 0; parentId && depth < MAX_PARENT_DEPTH; depth++) {
+         const [parent] = await db.select().from(issue).where(eq(issue.id, parentId)).limit(1);
+         if (!parent || isDone(parent.statusId)) break;
+         const siblings = await db
+            .select({ statusId: issue.statusId })
+            .from(issue)
+            .where(eq(issue.parentId, parent.id));
+         if (!siblings.every((s) => isDone(s.statusId))) break;
+         await close(parent, 'completed automatically: all sub-issues are done');
+         parentId = parent.parentId;
+      }
+   }
+
+   // Desce: a issue foi concluída → conclui as filhas (e netas) ainda abertas.
+   if (flags.children && categoryOf(changed.statusId) === 'completed') {
+      const queue = [changed.id];
+      const seen = new Set<string>();
+      while (queue.length) {
+         const pid = queue.shift()!;
+         if (seen.has(pid)) continue;
+         seen.add(pid);
+         const children = await db.select().from(issue).where(eq(issue.parentId, pid));
+         for (const child of children) {
+            if (!isDone(child.statusId))
+               await close(child, 'completed automatically: parent issue was completed');
+            queue.push(child.id);
+         }
+      }
+   }
+}
+
 export async function deleteIssue(db: Db, id: string): Promise<boolean> {
    const existing = await db.select({ id: issue.id }).from(issue).where(eq(issue.id, id)).limit(1);
    if (existing.length === 0) return false;
+   const children = await db.select({ id: issue.id }).from(issue).where(eq(issue.parentId, id));
 
    // Atômico: limpa todas as dependências (FKs) antes de remover a issue.
    await db.transaction(async (tx) => {
+      // Filhas ficam órfãs de pai (voltam ao topo) em vez de relação pendurada.
+      await tx.update(issue).set({ parentId: null }).where(eq(issue.parentId, id));
       // reações das comments desta issue → comments
       const comments = await tx
          .select({ id: comment.id })
@@ -725,11 +1079,13 @@ export async function deleteIssue(db: Db, id: string): Promise<boolean> {
       await tx.delete(notification).where(eq(notification.issueId, id));
       await tx.delete(activityEvent).where(eq(activityEvent.issueId, id));
       await tx.delete(issueLabel).where(eq(issueLabel.issueId, id));
+      await tx.delete(issueAssignee).where(eq(issueAssignee.issueId, id));
       await tx.delete(issueSubscription).where(eq(issueSubscription.issueId, id));
       await tx.delete(issueContent).where(eq(issueContent.issueId, id));
       await tx.delete(issue).where(eq(issue.id, id));
    });
    publish({ entity: 'issue', action: 'deleted', id });
+   for (const c of children) publish({ entity: 'issue', action: 'updated', id: c.id });
    return true;
 }
 

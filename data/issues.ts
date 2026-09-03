@@ -14,7 +14,10 @@ export interface Issue {
    /** Doc do editor de blocos na criação (o servidor deriva `description`). */
    descriptionDoc?: EditorDoc | null;
    status: Status;
+   /** Responsável PRINCIPAL (= `assignees[0]`); mantido para tudo que é single-assignee. */
    assignee: User | null;
+   /** Todos os responsáveis (#96): principal primeiro, depois colaboradores. */
+   assignees: User[];
    priority: Priority;
    labels: LabelInterface[];
    createdAt: string;
@@ -25,6 +28,9 @@ export interface Issue {
    /** Rollup de sub-issues (paridade Linear): total e concluídas. 0/0 = sem filhas. */
    subIssueCount?: number;
    subIssueDoneCount?: number;
+   /** Pai canônico (#95): id e identifier (chip na linha). null/undefined = issue de topo. */
+   parentId?: string | null;
+   parentIdentifier?: string | null;
    /** Snooze de triage (ISO) — enquanto futuro, some da fila de triage. */
    snoozedUntil?: string | null;
    rank: string;

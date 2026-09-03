@@ -92,6 +92,7 @@ export function adaptIssue(dto: IssueDto): Issue {
       description: '',
       status: adaptStatus(dto.status),
       assignee: dto.assignee ? adaptUser(dto.assignee) : null,
+      assignees: (dto.assignees ?? []).map(adaptUser),
       priority: adaptPriority(dto.priority),
       labels: dto.labels,
       createdAt: dto.createdAt,
@@ -102,6 +103,8 @@ export function adaptIssue(dto: IssueDto): Issue {
       estimate: dto.estimate ?? undefined,
       subIssueCount: dto.subIssueCount,
       subIssueDoneCount: dto.subIssueDoneCount,
+      parentId: dto.parentId ?? null,
+      parentIdentifier: dto.parentIdentifier ?? null,
       snoozedUntil: dto.snoozedUntil,
       createdById: dto.createdBy?.id ?? undefined,
    };

@@ -269,6 +269,53 @@ Fica de fora, consciente: item "Video" do menu "/" ainda pede a URL por `window.
 migration 0039 aplicada no boot (40/40), rollout `Synced/Healthy`, `healthz`/`readyz` em
 `200`. Issue #16 fechada; #22 comentada (resta só Bedrock e PAT, que dependem de você).
 
+### Produto — sub-issues, checklists, threads + anexos, múltiplos responsáveis, edição inline (03/09/2026)
+
+Primeira leva do épico fatiado (#95, #98, #96) mais "tasks" e a checagem da edição inline
+pedida (spec `docs/superpowers/specs/2026-09-03-sub-issues-threads-assignees-design.md`,
+quatro grupos em paralelo):
+
+- **Sub-issues (#95):** pai canônico em `issue.parent_id` (migration 0040) com backfill de
+  `issue_relation kind='sub'` (0041); create com `parentId` herda time, prioridade, projeto
+  e cycle ativo (labels não; assignee só se o criador é o assignee do pai); guarda de ciclo;
+  mover/remover pai com activity; rollup por `GROUP BY`; delete do pai desvincula as filhas.
+  Detalhe lê as filhas do servidor (fim do bug "filha fora do store some"), criar inline
+  com Enter e colar N linhas, "Add existing issue" com busca, propriedade Parent,
+  "Convert to sub-issue of…", breadcrumb `Team › PAI › FILHA`. "Show sub-issues" voltou ao
+  Display (default ligado; sincronizado), chip do pai na linha e no card, filtro
+  "Sub-issues", toggles de auto-close (pai ← filhas, filhas ← pai) em Team settings.
+- **Checklists ("tasks"):** `Mod-Shift-7` alterna task list, `Alt/Mod-Enter` marca o item,
+  colar markdown/Google Docs vira lista; item vira sub-issue por botão no hover ou
+  `Mod-Shift-O` (chip `issueRef`, check segue o status). O Linear não tem uma feature
+  "Tasks"; isso é a paridade do checklist dele.
+- **Threads e anexos (#98):** respostas colapsadas ("N replies"), reply em qualquer
+  comentário da thread, Resolve/Reopen (autor da raiz, assignee ou admin), "edited",
+  "Convert to sub-issue", notificação dos participantes com o texto da raiz no e-mail.
+  Tabela `attachment` (migration 0040) + `POST /api/v1/attachments` multipart até 25 MB com
+  allow-list (sem svg/html/js), mesmo bucket/CDN em `uploads/*`; seção Attachments no
+  detalhe, anexos em comentário, clipe / Ctrl+Shift+A / arrastar / colar. Sem bucket local a
+  rota responde 503, como o upload do editor.
+- **Múltiplos responsáveis (#96):** `issue_assignee` (0040) com backfill (0042);
+  `assignees[]` no DTO (principal = `assigneeId` continua), `assigneeIds` no create/update,
+  filtros e `assigneeMe` pela junção, notificação e subscribe por pessoa, activity por
+  entrada/saída. Multi-select com "Assign to me", pilha de avatares (até 3 + N) em linha,
+  card e propriedades; **My issues › Assigned** passou a vir do servidor e inclui
+  colaboradores; CSV com `assignees`. O Linear é single-assignee por design; aqui foi
+  decisão sua.
+- **Edição inline nas listas (sua checagem):** confirmado o relato. Causas e correções:
+  busca guardava resultados fora do store (a linha não mudava) → resolve contra o store;
+  seletores de sub-issue dentro do `<Link>` navegavam → fora do link, com status editável;
+  issue fora do store (deep-link, ⌘K) não persistia label/propriedade → o store chama a API
+  e faz upsert; projeto e views sem Display/board/painel editável → ganham os três; menu de
+  contexto mostrava 5 projetos → busca com todos; labels/projeto/estimate/cycle/due date eram
+  badges estáticos → viraram seletores; reorder por arraste agora também na lista;
+  `ProjectBadge` sem orgId fixo. Primeiros testes que montam a linha e disparam mutation.
+
+Fica de fora, consciente: o `checked` de um item convertido não é regravado no doc quando
+a sub-issue muda de status (o NodeView deriva do store); anexo de comentário sobe depois do
+POST do comentário (falha vira toast por arquivo); `deleteIssue` não apaga objetos S3 de
+anexos (cascade só no banco).
+
 ## Decisões suas (não é falta de código)
 
 Nenhuma pendente em 02/09/2026: datas de initiatives, snapshot de cycles e editor de blocos

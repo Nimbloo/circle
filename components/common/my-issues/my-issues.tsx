@@ -56,9 +56,34 @@ export default function MyIssues() {
       };
    }, [tab]);
 
+   // Aba "Assigned": o escopo vem do filtro SERVIDOR `assignee=me` (junção de responsáveis —
+   // inclui onde sou colaborador), não de um filtro do store no cliente. Re-busca quando o
+   // store muda (SSE/otimista) para acompanhar entradas e saídas; enquanto não chegou,
+   // `scopeMyIssues` aproxima pelos responsáveis já carregados.
+   const [assignedIds, setAssignedIds] = useState<ReadonlySet<string> | undefined>(undefined);
+   useEffect(() => {
+      if (tab !== 'assigned' || loading) return;
+      let alive = true;
+      api.issues
+         .list({ assignee: ['me'] })
+         .then((dtos) => alive && setAssignedIds(new Set(dtos.map((d) => d.id))))
+         .catch(() => {});
+      return () => {
+         alive = false;
+      };
+   }, [tab, issues, loading]);
+
    const scopedIssues = useMemo(
-      () => scopeMyIssues(issues, tab, meId, subscribedIds, activeIds),
-      [issues, tab, meId, subscribedIds, activeIds]
+      () =>
+         scopeMyIssues(
+            issues,
+            tab,
+            meId,
+            subscribedIds,
+            activeIds,
+            tab === 'assigned' ? assignedIds : undefined
+         ),
+      [issues, tab, meId, subscribedIds, activeIds, assignedIds]
    );
 
    const displayedIssues = useMemo(

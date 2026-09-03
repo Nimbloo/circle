@@ -207,6 +207,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
    const orderCompletedByRecency = useDisplaySetting('orderCompletedByRecency');
    const completedIssues = useDisplaySetting('completedIssues');
    const showEmptyGroups = useDisplaySetting('showEmptyGroups');
+   const showSubIssues = useDisplaySetting('showSubIssues');
    const { filters } = useFilterStore();
    const priorities = usePriorities();
    const labels = useLabels();
@@ -225,8 +226,13 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
               )
             : list;
 
-      const visibleIssues = hideDone(issues);
-      const scopeIssues = hideDone(totalIssues);
+      // "Show sub-issues" desligado (#95): issues com pai saem da lista/board. Aplica ao
+      // escopo também — é opção de display, não filtro (não conta em "hidden by filters").
+      const hideSubIssues = (list: Issue[]) =>
+         showSubIssues ? list : list.filter((issue) => !issue.parentId);
+
+      const visibleIssues = hideSubIssues(hideDone(issues));
+      const scopeIssues = hideSubIssues(hideDone(totalIssues));
 
       const buildGroups = (): { group: IssueGroupDescriptor; issues: Issue[]; total: number }[] => {
          switch (grouping) {
@@ -363,6 +369,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
       ordering,
       orderCompletedByRecency,
       completedIssues,
+      showSubIssues,
    ]);
 
    const hiddenCount = Math.max(0, totalIssues.length - issues.length);

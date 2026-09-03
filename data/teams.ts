@@ -10,6 +10,9 @@ export interface Team {
    estimateScale: string; // fibonacci|exponential|linear|tshirt
    /** Days without a current cycle between one cycle and the next (0-14). */
    cycleCooldownDays: number;
+   /** Sub-issue automations (#95): all children done closes the parent / parent done closes children. */
+   autoCloseParent: boolean;
+   autoCloseChildren: boolean;
    members: User[];
    projects: Project[];
 }
