@@ -1,6 +1,6 @@
 # Pendências do Circle
 
-Estado em **2026-09-03**, com `main` e `develop` sincronizadas na v0.27.0.
+Estado em **2026-09-03**, com `main` e `develop` sincronizadas na v0.28.0.
 
 > **As [issues](https://github.com/Nimbloo/circle/issues) são a fonte da verdade** sobre
 > escopo. Este documento registra o que elas **não** capturam: bloqueios que vivem em
@@ -315,6 +315,13 @@ Fica de fora, consciente: o `checked` de um item convertido não é regravado no
 a sub-issue muda de status (o NodeView deriva do store); anexo de comentário sobe depois do
 POST do comentário (falha vira toast por arquivo); `deleteIssue` não apaga objetos S3 de
 anexos (cascade só no banco).
+
+**Promovido para produção na release
+[v0.28.0](https://github.com/Nimbloo/circle/releases/tag/v0.28.0)** (PRs #106 e #107):
+migrations 0040–0042 aplicadas no boot (43/43), rollout `Synced/Healthy`, `healthz`/`readyz`
+em `200`, upload real de anexo verificado (CDN 200 com `Content-Disposition: attachment`).
+Issues #95, #98 e #96 fechadas. Próximas do épico: #94 (depende do Bedrock), #97, #99, #100,
+#101, #102.
 
 ## Decisões suas (não é falta de código)
 
