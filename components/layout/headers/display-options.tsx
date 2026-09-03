@@ -17,7 +17,7 @@ import {
    DISPLAY_PROPERTIES,
    GroupingKey,
    OrderingKey,
-   useDisplaySettingsStore,
+   useDisplaySettings,
 } from '@/store/display-settings-store';
 import { useViewStore } from '@/store/view-store';
 import {
@@ -65,7 +65,7 @@ export function DisplayOptions() {
       setShowEmptyGroups,
       toggleDisplayProperty,
       resetDisplaySettings,
-   } = useDisplaySettingsStore();
+   } = useDisplaySettings();
 
    const isDefault =
       grouping === 'status' &&

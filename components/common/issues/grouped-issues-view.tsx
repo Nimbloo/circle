@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { Issue, sortIssuesByPriority } from '@/data/issues';
 import { Status } from '@/data/status';
 import { usePriorities, useLabels } from '@/store/catalog-store';
-import { useDisplaySettingsStore } from '@/store/display-settings-store';
+import { useDisplaySetting } from '@/store/display-settings-store';
 import { useFilterStore } from '@/store/filter-store';
 import { useBulkSelectionStore } from '@/store/bulk-selection-store';
 import { Box, ChevronDown, Tag, User, X } from 'lucide-react';
@@ -198,8 +198,12 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
    error,
    onRetry,
 }) => {
-   const { grouping, ordering, orderCompletedByRecency, completedIssues, showEmptyGroups } =
-      useDisplaySettingsStore();
+   // Selectors individuais: re-render só quando a chave usada muda (não o store inteiro).
+   const grouping = useDisplaySetting('grouping');
+   const ordering = useDisplaySetting('ordering');
+   const orderCompletedByRecency = useDisplaySetting('orderCompletedByRecency');
+   const completedIssues = useDisplaySetting('completedIssues');
+   const showEmptyGroups = useDisplaySetting('showEmptyGroups');
    const { filters } = useFilterStore();
    const priorities = usePriorities();
    const labels = useLabels();
