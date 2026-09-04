@@ -70,9 +70,39 @@ const MAX_LIMIT = 100;
 
 // ── tsquery ─────────────────────────────────────────────────────────
 
-/** Termos aproveitáveis: letras/dígitos de qualquer alfabeto, minúsculos. */
+/**
+ * Tabela de normalização de diacríticos, IDÊNTICA à da migration `0047_search_unaccent`
+ * (que a usa em `translate()` porque `unaccent`/`pg_trgm` não existem no RDS
+ * compartilhado). As duas cópias são guardadas por `test/search-accents.test.ts`.
+ */
+export const ACCENTED = 'ÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÑÒÓÔÕÖÙÚÛÜÝàáâãäåçèéêëìíîïñòóôõöùúûüýÿ';
+export const UNACCENTED = 'AAAAAACEEEEIIIINOOOOOUUUUYaaaaaaceeeeiiiinooooouuuuyy';
+
+/**
+ * Remove diacríticos no lado da aplicação (consulta, fallback e snippet). Vai por
+ * caractere e só troca quando a base é UM caractere, então o comprimento da string é
+ * preservado — o que deixa o `plainSnippet` mapear posição normalizada → texto original.
+ */
+export function unaccent(s: string): string {
+   let out = '';
+   for (const ch of s) {
+      const base = ch.normalize('NFD').replace(/\p{Diacritic}/gu, '');
+      out += base.length === 1 ? base : ch;
+   }
+   return out;
+}
+
+/** `<coluna sem acento> ILIKE <padrão>` — o mesmo `translate` do índice. */
+function ilikeUnaccent(column: string, pattern: string): SQL {
+   return sql`translate(coalesce(${sql.raw(column)}, ''), ${ACCENTED}, ${UNACCENTED}) ILIKE ${pattern}`;
+}
+
+/** Termos aproveitáveis: letras/dígitos de qualquer alfabeto, minúsculos e sem acento. */
 function tokensOf(q: string): string[] {
-   return (q.match(/[\p{L}\p{N}]+/gu) ?? []).map((t) => t.toLowerCase()).slice(0, 12);
+   return (q.match(/[\p{L}\p{N}]+/gu) ?? [])
+      .map((t) => unaccent(t).toLowerCase())
+      .filter(Boolean)
+      .slice(0, 12);
 }
 
 /**
@@ -86,7 +116,8 @@ function tokensOf(q: string): string[] {
 function tsQuery(q: string): SQL | null {
    const tokens = tokensOf(q);
    if (tokens.length === 0) return null;
-   if (q.includes('"')) return sql`websearch_to_tsquery('simple', ${q})`;
+   // Também sem acento na frase exata: o índice guarda a forma normalizada.
+   if (q.includes('"')) return sql`websearch_to_tsquery('simple', ${unaccent(q)})`;
    const text = tokens.map((t, i) => (i === tokens.length - 1 ? `${t}:*` : t)).join(' & ');
    return sql`to_tsquery('simple', ${text})`;
 }
@@ -117,33 +148,47 @@ function safeSnippet(raw: string | null | undefined): string {
    return escapeHtml(raw).split(HL_START).join('<mark>').split(HL_END).join('</mark>');
 }
 
-/** Snippet do fallback `ilike`: janela ao redor do 1º termo casado, com `<mark>`. */
+/**
+ * Snippet do fallback `ilike`: janela ao redor do 1º termo casado, com `<mark>`.
+ *
+ * Os termos já vêm sem acento, então o casamento acontece sobre a projeção normalizada
+ * (mesmo comprimento do original) e o texto exibido continua sendo o ORIGINAL, com
+ * acento. O escape acontece por pedaço, mantendo `<mark>` como única tag.
+ */
 function plainSnippet(text: string | null | undefined, tokens: string[]): string {
    const source = (text ?? '').replace(/\s+/g, ' ').trim();
    if (!source) return '';
-   const lower = source.toLowerCase();
+   const norm = unaccent(source).toLowerCase();
+
    let at = -1;
-   let hit = '';
    for (const t of tokens) {
-      const i = lower.indexOf(t);
-      if (i >= 0 && (at < 0 || i < at)) {
-         at = i;
-         hit = t;
-      }
+      const i = norm.indexOf(t);
+      if (i >= 0 && (at < 0 || i < at)) at = i;
    }
    const start = at < 0 ? 0 : Math.max(0, at - 40);
-   const window = source.slice(start, start + 200);
-   let out = escapeHtml(window);
-   if (hit) {
-      // Escapar antes de destacar mantém `<mark>` como única tag do snippet.
-      const re = new RegExp(tokens.map(escapeRegExp).join('|'), 'gi');
-      out = out.replace(re, (m) => `<mark>${m}</mark>`);
-   }
-   return (start > 0 ? '…' : '') + out + (source.length > start + 200 ? '…' : '');
-}
+   const end = start + 200;
+   const window = source.slice(start, end);
+   const windowNorm = norm.slice(start, end);
 
-function escapeRegExp(s: string): string {
-   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+   const hits: [number, number][] = [];
+   for (const t of tokens) {
+      let i = windowNorm.indexOf(t);
+      while (i >= 0) {
+         hits.push([i, i + t.length]);
+         i = windowNorm.indexOf(t, i + t.length);
+      }
+   }
+   hits.sort((a, b) => a[0] - b[0]);
+
+   let out = '';
+   let cursor = 0;
+   for (const [from, to] of hits) {
+      if (from < cursor) continue; // sobreposição entre termos
+      out += `${escapeHtml(window.slice(cursor, from))}<mark>${escapeHtml(window.slice(from, to))}</mark>`;
+      cursor = to;
+   }
+   out += escapeHtml(window.slice(cursor));
+   return (start > 0 ? '…' : '') + out + (source.length > end ? '…' : '');
 }
 
 // ── execução ────────────────────────────────────────────────────────
@@ -187,7 +232,8 @@ async function ftsIssues(
    // regressão. Sem vetor, esses acertos entram com rank 0 e caem para o fim da lista.
    const conds: SQL[] = [
       sql`(i.search_vector @@ ${tsq} OR c.search_vector @@ ${tsq}
-           OR EXISTS (SELECT 1 FROM comment cm WHERE cm.issue_id = i.id AND cm.body ILIKE ${like}))`,
+           OR EXISTS (SELECT 1 FROM comment cm WHERE cm.issue_id = i.id
+                       AND ${ilikeUnaccent('cm.body', like)}))`,
    ];
    if (o.teamId) conds.push(sql`i.team_id = ${o.teamId}`);
    if (o.statusId) conds.push(sql`i.status_id = ${o.statusId}`);
@@ -308,14 +354,17 @@ async function ftsDocuments(
  */
 async function likeSearch(db: Db, o: SearchOptions, limit: number): Promise<SearchGroup[]> {
    const types = o.types?.length ? o.types : SEARCH_TYPES;
-   const like = `%${o.q}%`;
+   // O padrão vai SEM acento porque as colunas comparadas também são normalizadas.
+   const like = `%${unaccent(o.q)}%`;
    const tokens = tokensOf(o.q);
    const groups: SearchGroup[] = [];
 
    if (types.includes('issue')) {
       const conds: SQL[] = [
-         sql`(i.title ILIKE ${like} OR i.identifier ILIKE ${like} OR c.description ILIKE ${like}
-              OR EXISTS (SELECT 1 FROM comment cm WHERE cm.issue_id = i.id AND cm.body ILIKE ${like}))`,
+         sql`(${ilikeUnaccent('i.title', like)} OR ${ilikeUnaccent('i.identifier', like)}
+              OR ${ilikeUnaccent('c.description', like)}
+              OR EXISTS (SELECT 1 FROM comment cm WHERE cm.issue_id = i.id
+                          AND ${ilikeUnaccent('cm.body', like)}))`,
       ];
       if (o.teamId) conds.push(sql`i.team_id = ${o.teamId}`);
       if (o.statusId) conds.push(sql`i.status_id = ${o.statusId}`);
@@ -342,7 +391,9 @@ async function likeSearch(db: Db, o: SearchOptions, limit: number): Promise<Sear
    }
 
    if (types.includes('project')) {
-      const conds: SQL[] = [sql`(p.name ILIKE ${like} OR d.summary ILIKE ${like})`];
+      const conds: SQL[] = [
+         sql`(${ilikeUnaccent('p.name', like)} OR ${ilikeUnaccent('d.summary', like)})`,
+      ];
       if (o.teamId) conds.push(sql`p.team_id = ${o.teamId}`);
       const r = await rows(
          db,
@@ -370,7 +421,7 @@ async function likeSearch(db: Db, o: SearchOptions, limit: number): Promise<Sear
       const r = await rows(
          db,
          sql`SELECT n.id, n.name AS title, n.description AS snippet FROM initiative n
-             WHERE n.name ILIKE ${like} OR n.description ILIKE ${like}
+             WHERE ${ilikeUnaccent('n.name', like)} OR ${ilikeUnaccent('n.description', like)}
              ORDER BY n.created_at DESC LIMIT ${limit}`
       );
       groups.push({
@@ -389,7 +440,7 @@ async function likeSearch(db: Db, o: SearchOptions, limit: number): Promise<Sear
    }
 
    if (types.includes('document')) {
-      const conds: SQL[] = [sql`t.name ILIKE ${like}`];
+      const conds: SQL[] = [ilikeUnaccent('t.name', like)];
       if (o.teamId) conds.push(sql`f.team_id = ${o.teamId}`);
       const r = await rows(
          db,
@@ -437,7 +488,7 @@ export async function search(db: Db, opts: SearchOptions): Promise<SearchResult>
          if (types.includes('issue'))
             groups.push({
                type: 'issue',
-               items: await ftsIssues(db, opts, tsq, limit, `%${q}%`),
+               items: await ftsIssues(db, opts, tsq, limit, `%${unaccent(q)}%`),
             });
          if (types.includes('project'))
             groups.push({ type: 'project', items: await ftsProjects(db, opts, tsq, limit) });
