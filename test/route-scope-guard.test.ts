@@ -40,8 +40,6 @@ const EXEMPT: ReadonlySet<string> = new Set([
    'PATCH /notifications/[id]',
    'POST /notifications/read-all',
    'POST /uploads',
-   'POST /attachments',
-   'DELETE /attachments/[id]',
 
    // 2. Catálogo GLOBAL do workspace (não pendura em time) — gate por papel no serviço.
    'POST /labels',
@@ -73,17 +71,6 @@ const EXEMPT: ReadonlySet<string> = new Set([
    'DELETE /reviews/[id]/comments/[commentId]',
    'POST /reviews/[id]/guide',
 
-   // 5. Fora do Grupo 1 do hardening (identidade/integrações e comportamento ficaram
-   //    com os outros grupos; entram aqui para o guarda pegar o que é NOVO, não para
-   //    declarar que estão fechadas).
-   'POST /api-tokens',
-   'DELETE /api-tokens/[id]',
-   'POST /webhooks',
-   'PATCH /webhooks/[id]',
-   'DELETE /webhooks/[id]',
-   'POST /webhooks/deliveries/[deliveryId]/redeliver',
-   'PATCH /members/[id]',
-   'POST /invites',
    'DELETE /invites/[id]',
    'PATCH /integrations/slack/config',
    'POST /integrations/slack/test',

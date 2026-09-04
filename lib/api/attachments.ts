@@ -12,6 +12,7 @@ import { ApiError } from './errors';
 import { publish } from './events';
 import type { UserRef } from './issues';
 import { assetKeyFromUrl, assetsConfigured, deleteAsset, putAsset } from './s3-assets';
+import { assertCanWriteIssue } from './scope';
 import { getOrCreateUser } from './users';
 import { MAX_ATTACHMENT_BYTES, resolveAttachmentType } from '@/lib/attachment-types';
 
@@ -88,6 +89,11 @@ export async function createAttachment(
    input: CreateAttachmentInput,
    actorEmail: string
 ): Promise<AttachmentDto> {
+   // AUTORIZAÇÃO ANTES DE DISPONIBILIDADE: anexar é ESCREVER na issue, então o time
+   // importa. Vinha depois do 503 de storage — o que, além do furo (um convidado anexava
+   // em issue de time que nem enxerga), respondia 503 e confirmava a existência da issue.
+   await assertCanWriteIssue(db, actorEmail, input.issueId);
+
    if (!assetsConfigured())
       throw new ApiError(503, 'Storage de anexos não configurado (bucket/CDN)');
 
