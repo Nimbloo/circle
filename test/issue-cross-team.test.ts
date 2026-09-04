@@ -63,7 +63,7 @@ describe('integridade entre times na issue', () => {
 
    it('atribuir a usuário desativado → 400, na criação e na edição', async () => {
       const issue = await createIssue(db, { ...base, teamId: 'CORE' }, ADMIN);
-      await setMemberDeactivated(db, outroId, true, ADMIN);
+      await setMemberDeactivated(db, outroId, true);
 
       await expect(
          createIssue(db, { ...base, teamId: 'CORE', assigneeId: outroId }, ADMIN)
