@@ -4,7 +4,7 @@ import type { Db } from '@/db';
 /**
  * Busca full-text do workspace (#99).
  *
- * O índice são as colunas geradas `search_vector` (migration `0043_search_vectors`),
+ * O índice são as colunas geradas `search_vector` (migration `0044_search_vectors`),
  * com peso A no que identifica a entidade (título/nome/identifier) e B no corpo —
  * `ts_rank_cd` já ranqueia título acima de descrição sem lógica extra aqui.
  *

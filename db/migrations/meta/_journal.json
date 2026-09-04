@@ -302,6 +302,20 @@
          "when": 1788471164859,
          "tag": "0042_backfill_issue_assignee",
          "breakpoints": true
+      },
+      {
+         "idx": 43,
+         "version": "7",
+         "when": 1788489740133,
+         "tag": "0043_epico_25_leva_2",
+         "breakpoints": true
+      },
+      {
+         "idx": 44,
+         "version": "7",
+         "when": 1788489742476,
+         "tag": "0044_search_vectors",
+         "breakpoints": true
       }
    ]
 }
