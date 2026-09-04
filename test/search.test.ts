@@ -3,6 +3,7 @@ import type { Db } from '@/db';
 import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
 import {
+   comment,
    documentFolder,
    initiative,
    issue,
@@ -184,6 +185,24 @@ describe('search — filtros', () => {
 
       const res = await search(db, { q: 'login', statusId: 'done' });
       expect(itemsOf(res.groups, 'issue').map((i) => i.id)).toEqual(['i-done']);
+   });
+});
+
+describe('search — comentários (fora do índice, no ilike de sempre)', () => {
+   it('acerto só no corpo do comentário aparece, atrás dos acertos indexados', async () => {
+      await addIssue('i-titulo', 'CORE-1', 'Telemetria no título', null);
+      await addIssue('i-comentario', 'CORE-2', 'Assunto sem relação', null);
+      await db.insert(comment).values({
+         id: 'c-1',
+         issueId: 'i-comentario',
+         authorId: ownerId,
+         body: 'aqui falamos de telemetria',
+         createdAt: new Date('2026-01-01T00:00:00Z'),
+      });
+
+      const res = await search(db, { q: 'telemetria', types: ['issue'] });
+      expect(res.fallback).toBe(false);
+      expect(itemsOf(res.groups, 'issue').map((i) => i.id)).toEqual(['i-titulo', 'i-comentario']);
    });
 });
 

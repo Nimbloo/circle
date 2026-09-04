@@ -175,8 +175,20 @@ function issueUrl(identifier: string | null): string {
 
 // ── consultas full-text por tipo ────────────────────────────────────
 
-async function ftsIssues(db: Db, o: SearchOptions, tsq: SQL, limit: number): Promise<SearchItem[]> {
-   const conds: SQL[] = [sql`(i.search_vector @@ ${tsq} OR c.search_vector @@ ${tsq})`];
+async function ftsIssues(
+   db: Db,
+   o: SearchOptions,
+   tsq: SQL,
+   limit: number,
+   like: string
+): Promise<SearchItem[]> {
+   // Comentário fica FORA do índice (a spec mantém o `ilike` de hoje), mas continua
+   // casando — a tela de busca já alcançava o corpo do comentário e perder isso seria
+   // regressão. Sem vetor, esses acertos entram com rank 0 e caem para o fim da lista.
+   const conds: SQL[] = [
+      sql`(i.search_vector @@ ${tsq} OR c.search_vector @@ ${tsq}
+           OR EXISTS (SELECT 1 FROM comment cm WHERE cm.issue_id = i.id AND cm.body ILIKE ${like}))`,
+   ];
    if (o.teamId) conds.push(sql`i.team_id = ${o.teamId}`);
    if (o.statusId) conds.push(sql`i.status_id = ${o.statusId}`);
    const r = await rows(
@@ -302,7 +314,8 @@ async function likeSearch(db: Db, o: SearchOptions, limit: number): Promise<Sear
 
    if (types.includes('issue')) {
       const conds: SQL[] = [
-         sql`(i.title ILIKE ${like} OR i.identifier ILIKE ${like} OR c.description ILIKE ${like})`,
+         sql`(i.title ILIKE ${like} OR i.identifier ILIKE ${like} OR c.description ILIKE ${like}
+              OR EXISTS (SELECT 1 FROM comment cm WHERE cm.issue_id = i.id AND cm.body ILIKE ${like}))`,
       ];
       if (o.teamId) conds.push(sql`i.team_id = ${o.teamId}`);
       if (o.statusId) conds.push(sql`i.status_id = ${o.statusId}`);
@@ -422,7 +435,10 @@ export async function search(db: Db, opts: SearchOptions): Promise<SearchResult>
       try {
          const groups: SearchGroup[] = [];
          if (types.includes('issue'))
-            groups.push({ type: 'issue', items: await ftsIssues(db, opts, tsq, limit) });
+            groups.push({
+               type: 'issue',
+               items: await ftsIssues(db, opts, tsq, limit, `%${q}%`),
+            });
          if (types.includes('project'))
             groups.push({ type: 'project', items: await ftsProjects(db, opts, tsq, limit) });
          // Initiative é de workspace (não tem time) — sai de cena quando há filtro de time.
