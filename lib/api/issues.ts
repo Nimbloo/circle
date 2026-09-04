@@ -108,6 +108,8 @@ export interface IssueDto {
    snoozedUntil: string | null;
    /** SLA do time (#97): quando o `dueDate` foi calculado pelo SLA. null = data manual. */
    slaAppliedAt: string | null;
+   /** Vencimento REAL do SLA, com hora (#97 hardening). `due_date` segue sendo a data humana. */
+   slaDueAt: string | null;
    createdAt: string;
    updatedAt: string;
 }
@@ -412,6 +414,7 @@ async function assemble(
          r.snoozedUntil instanceof Date ? r.snoozedUntil.toISOString() : (r.snoozedUntil ?? null),
       slaAppliedAt:
          r.slaAppliedAt instanceof Date ? r.slaAppliedAt.toISOString() : (r.slaAppliedAt ?? null),
+      slaDueAt: r.slaDueAt instanceof Date ? r.slaDueAt.toISOString() : (r.slaDueAt ?? null),
       createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
       updatedAt: r.updatedAt instanceof Date ? r.updatedAt.toISOString() : String(r.updatedAt),
    }));

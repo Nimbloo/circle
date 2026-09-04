@@ -59,7 +59,6 @@ const HANDLER = /export\s+(?:async\s+function|const)\s+(GET|POST|PUT|PATCH|DELET
  * para ele continuar pegando o que é NOVO. É uma tolerância TEMPORÁRIA e por
  * SUBCONJUNTO: assim que os dois handlers exigirem sessão, apague estas linhas.
  */
-const KNOWN_FAIL_OPEN = ['GET /api/v1/teams', 'GET /api/v1/teams/[teamKey]'];
 
 /** `app/api/v1/foo/route.ts` -> `/api/v1/foo` */
 function pathnameOf(file: string): string {
@@ -99,7 +98,7 @@ describe('guarda de auth nas rotas de API', () => {
          }
       }
 
-      expect(unprotected.filter((h) => !KNOWN_FAIL_OPEN.includes(h))).toEqual([]);
+      expect(unprotected).toEqual([]);
    });
 
    it('a allowlist pública só contém probes e webhooks autenticados por HMAC', () => {
