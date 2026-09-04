@@ -20,6 +20,8 @@ export interface MemberDto {
    teamCount: number;
    /** Times (ids/keys) dos quais o membro participa. */
    teamIds: string[];
+   /** Desativado (#100): ISO da desativação, ou null se ativo. */
+   deactivatedAt: string | null;
 }
 
 export type MemberSort = 'name' | 'joined' | 'teams';
@@ -37,6 +39,7 @@ function toDto(u: UserRow, teamIds: string[]): MemberDto {
       joinedAt: u.joinedAt,
       teamCount: teamIds.length,
       teamIds,
+      deactivatedAt: u.deactivatedAt ? u.deactivatedAt.toISOString() : null,
    };
 }
 
@@ -58,6 +61,11 @@ export interface ListMembersOptions {
    role?: string[];
    sort?: MemberSort;
    dir?: 'asc' | 'desc';
+   /**
+    * Escopo de times (#100, Guest): só devolve quem participa de algum destes times.
+    * `undefined` = sem restrição.
+    */
+   teamIds?: string[];
 }
 
 export async function listMembers(db: Db, opts: ListMembersOptions = {}): Promise<MemberDto[]> {
@@ -67,6 +75,10 @@ export async function listMembers(db: Db, opts: ListMembersOptions = {}): Promis
    if (opts.role?.length) {
       const set = new Set(opts.role);
       dtos = dtos.filter((d) => set.has(d.role));
+   }
+   if (opts.teamIds) {
+      const scope = new Set(opts.teamIds);
+      dtos = dtos.filter((d) => d.teamIds.some((t) => scope.has(t)));
    }
 
    const dir = opts.dir === 'desc' ? -1 : 1;
@@ -111,4 +123,47 @@ export async function updateMemberRole(
    await db.update(appUser).set({ role, updatedAt: new Date() }).where(eq(appUser.id, id));
    publish({ entity: 'member', action: 'updated', id });
    return getMember(db, id);
+}
+
+/**
+ * Desativa um membro (#100): marca `deactivated_at`, remove de TODOS os times e
+ * bloqueia o login (`login-gate`). O histórico (autoria de issues, activity) fica
+ * intacto — nada é apagado. Idempotente: re-desativar mantém a data original.
+ */
+export async function setMemberDeactivated(
+   db: Db,
+   id: string,
+   deactivated: boolean
+): Promise<MemberDto | null> {
+   const rows = await db.select().from(appUser).where(eq(appUser.id, id)).limit(1);
+   if (rows.length === 0) return null;
+   const current = rows[0];
+   if (deactivated) {
+      if (!current.deactivatedAt) {
+         await db
+            .update(appUser)
+            .set({ deactivatedAt: new Date(), updatedAt: new Date() })
+            .where(eq(appUser.id, id));
+      }
+      // Sai dos times: sem isto ele seguiria contando como membro e aparecendo nas
+      // listas por time mesmo sem conseguir entrar.
+      await db.delete(teamMember).where(eq(teamMember.userId, id));
+   } else if (current.deactivatedAt) {
+      await db
+         .update(appUser)
+         .set({ deactivatedAt: null, updatedAt: new Date() })
+         .where(eq(appUser.id, id));
+   }
+   publish({ entity: 'member', action: 'updated', id });
+   return getMember(db, id);
+}
+
+/** `true` se o e-mail pertence a um usuário desativado (gate de login). */
+export async function isDeactivatedEmail(db: Db, email: string): Promise<boolean> {
+   const rows = await db
+      .select({ deactivatedAt: appUser.deactivatedAt })
+      .from(appUser)
+      .where(eq(appUser.email, email.trim().toLowerCase()))
+      .limit(1);
+   return rows.length > 0 && rows[0].deactivatedAt !== null;
 }

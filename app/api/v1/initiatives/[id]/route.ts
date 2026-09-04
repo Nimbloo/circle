@@ -2,7 +2,14 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { ok, notFound } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
-import { getInitiative, updateInitiative, deleteInitiative } from '@/lib/api/initiatives';
+import {
+   getInitiative,
+   listInitiatives,
+   updateInitiative,
+   deleteInitiative,
+} from '@/lib/api/initiatives';
+import { scopeForEmail } from '@/lib/api/scope';
+import { ApiError } from '@/lib/api/errors';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -11,8 +18,16 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
-      await requireEmail(req);
+      const email = await requireEmail(req);
       const { id } = await params;
+      // Guest (#100): a initiative só é visível se algum projeto da subárvore está
+      // num time dele — reusa exatamente a regra da listagem.
+      const { teamIds } = await scopeForEmail(db, email);
+      if (teamIds) {
+         const visible = await listInitiatives(db, { teamIds });
+         if (!visible.some((i) => i.id === id))
+            throw new ApiError(403, 'Fora do seu escopo de acesso');
+      }
       const dto = await getInitiative(db, id);
       return dto ? ok(dto) : notFound(`Initiative '${id}' não encontrada`);
    }, req);
@@ -32,6 +47,7 @@ const UpdateSchema = z.object({
    targetDate: z.string().date().nullish(),
    projectIds: z.array(z.string()).optional(),
    labelIds: z.array(z.string().max(64)).max(100).optional(),
+   parentId: z.string().max(36).nullish(),
 });
 
 export async function PATCH(req: Request, { params }: Params) {

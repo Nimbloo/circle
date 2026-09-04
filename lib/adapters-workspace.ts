@@ -82,6 +82,7 @@ export function adaptMemberToUser(m: MemberDto): User {
       joinedDate: m.joinedAt,
       teamIds: m.teamIds,
       timezone: m.timezone ?? 'UTC',
+      deactivatedAt: m.deactivatedAt ?? null,
    };
 }
 
@@ -129,6 +130,7 @@ export function adaptTeam(t: TeamFull): Team {
       cycleCooldownDays: t.cycleCooldownDays,
       autoCloseParent: t.autoCloseParent,
       autoCloseChildren: t.autoCloseChildren,
+      parentId: t.parentId ?? null,
       members: t.members.map(adaptMemberToUser),
       projects: t.projects.map(adaptProject),
    };
@@ -169,6 +171,10 @@ export function adaptInitiative(i: InitiativeDto, users: Map<string, User>): Ini
       health: toHealth(i.health),
       labels: i.labels,
       projectIds: i.projectIds,
+      parentId: i.parentId ?? null,
+      childIds: i.childIds ?? [],
+      rollupProjectCount: i.rollupProjectCount ?? i.projectIds.length,
+      rollupCompletedProjectCount: i.rollupCompletedProjectCount ?? i.completedProjectCount,
       createdAt: i.createdAt,
    };
 }

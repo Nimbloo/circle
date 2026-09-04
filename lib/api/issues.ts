@@ -47,6 +47,7 @@ import { publish } from './events';
 import { notifySlackEvent } from './integrations/slack';
 import { projectDescriptionDoc } from './description-doc';
 import type { EditorDoc } from '@/lib/editor-doc';
+import { intersectScopes, teamDescendantIds } from './hierarchy';
 
 /** Teto default de linhas nas listagens (proteção; paginação por cursor fica p/ depois). */
 const DEFAULT_LIST_LIMIT = 500;
@@ -119,6 +120,11 @@ export interface IssueFilter {
    assigneeMe?: string; // e-mail do usuário (my-issues assigned)
    createdByMe?: string;
    q?: string;
+   /**
+    * Escopo explícito de times (#100): sub-times expandidos e/ou escopo de Guest.
+    * Interage com `team` por INTERSEÇÃO; `[]` significa "nada visível".
+    */
+   teamIds?: string[];
 }
 
 export interface IssueListOptions extends IssueFilter {
@@ -217,6 +223,8 @@ function buildWhere(
 ): SQL | undefined {
    const conds: SQL[] = [];
    if (opts.team) conds.push(eq(issue.teamId, opts.team));
+   if (opts.teamIds)
+      conds.push(opts.teamIds.length ? inArray(issue.teamId, opts.teamIds) : sql`false`);
    if (opts.status?.length) conds.push(inArray(issue.statusId, opts.status));
    if (opts.statusType?.length) {
       const ids = statusIdsForCategories(opts.statusType, statuses);
@@ -448,6 +456,12 @@ export async function listIssues(
             .limit(1);
          meId = rows[0]?.id;
       }
+   }
+   // Sub-times (#100): filtrar pelo time pai inclui os filhos. A expansão é
+   // server-side e converge no mesmo `teamIds` usado pelo escopo de Guest.
+   if (opts.team) {
+      const expanded = await teamDescendantIds(db, [opts.team]);
+      opts = { ...opts, team: undefined, teamIds: intersectScopes(opts.teamIds, expanded) };
    }
    const where = buildWhere(db, opts, cat.statuses, meId);
    // Keyset por rank: só na ordem default asc(rank) (o board). Cursor = último rank

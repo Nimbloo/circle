@@ -211,7 +211,9 @@ export const api = {
    /** Convites de acesso (admin). `create` devolve o magic link uma unica vez. */
    invites: {
       list: () => get<InviteDto[]>('/invites'),
-      create: (email: string) => post<InviteDto & { url: string }>('/invites', { email }),
+      /** `role` (#100): 'Member' (default) ou 'Guest'. */
+      create: (email: string, role?: string) =>
+         post<InviteDto & { url: string }>('/invites', { email, role }),
       revoke: (id: string) => del<{ deleted: boolean }>(`/invites/${id}`),
    },
 
@@ -309,6 +311,8 @@ export const api = {
             cycleCooldownDays?: number;
             autoCloseParent?: boolean;
             autoCloseChildren?: boolean;
+            /** Sub-times (#100): `null` desvincula do pai. */
+            parentId?: string | null;
          }
       ) => patch<TeamDto>(`/teams/${key}`, body),
       remove: (key: string) => del<{ deleted: boolean }>(`/teams/${key}`),
@@ -383,6 +387,9 @@ export const api = {
       list: (q = '') => get<MemberDto[]>(`/members${q}`),
       get: (id: string) => get<MemberDto>(`/members/${id}`),
       updateRole: (id: string, role: string) => patch<MemberDto>(`/members/${id}`, { role }),
+      /** Desativa/reativa o membro (#100, admin). Remove de todos os times ao desativar. */
+      setDeactivated: (id: string, deactivated: boolean) =>
+         patch<MemberDto>(`/members/${id}`, { deactivated }),
    },
 
    projects: {

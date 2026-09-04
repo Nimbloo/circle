@@ -46,6 +46,7 @@ const team: Team = {
    cycleCooldownDays: 0,
    autoCloseParent: false,
    autoCloseChildren: false,
+   parentId: null,
    members: [],
    projects: [],
 };

@@ -121,13 +121,20 @@ async function provisionUser(db: Db, normalizedEmail: string, role: string): Pro
 /**
  * Resolve o usuário pelo e-mail da sessão; provisiona no 1º acesso (role via allowlist).
  * Idempotente por e-mail (unique).
+ *
+ * `defaultRole` (#100) vem do convite (Member|Guest) e só vale na CRIAÇÃO — quem já
+ * existe mantém a role do banco, e a allowlist de admin continua tendo precedência.
  */
-export async function getOrCreateUser(db: Db, email: string): Promise<UserRow> {
+export async function getOrCreateUser(
+   db: Db,
+   email: string,
+   defaultRole = 'Member'
+): Promise<UserRow> {
    const normalized = email.trim().toLowerCase();
    const existing = await db.select().from(appUser).where(eq(appUser.email, normalized)).limit(1);
    if (existing.length > 0) return existing[0];
 
-   const role = (await isAdmin(normalized, db)) ? 'Admin' : 'Member';
+   const role = (await isAdmin(normalized, db)) ? 'Admin' : defaultRole;
    return provisionUser(db, normalized, role);
 }
 

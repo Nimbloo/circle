@@ -4,7 +4,7 @@ import { ok } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
 import { isAdmin } from '@/lib/api/auth';
 import { ApiError } from '@/lib/api/errors';
-import { createInvite, listInvites, inviteUrl } from '@/lib/api/invites';
+import { createInvite, listInvites, inviteUrl, INVITABLE_ROLES } from '@/lib/api/invites';
 import { getOrCreateUser } from '@/lib/api/users';
 import { recordAudit } from '@/lib/api/audit';
 import { sendEmail } from '@/lib/api/integrations/mailer';
@@ -22,7 +22,11 @@ export async function GET(req: Request) {
    }, req);
 }
 
-const CreateSchema = z.object({ email: z.string().email() });
+const CreateSchema = z.object({
+   email: z.string().email(),
+   // Papel do convite (#100). Default Member; `Admin` não é convidável.
+   role: z.enum(INVITABLE_ROLES as [string, ...string[]]).optional(),
+});
 
 /**
  * POST /invites — convida um e-mail @nimbloo.ai. Devolve o `token` UMA vez, para o
@@ -33,9 +37,9 @@ export async function POST(req: Request) {
    return handle(async () => {
       const actor = await requireEmail(req);
       if (!(await isAdmin(actor, db))) throw new ApiError(403, 'Apenas admin');
-      const { email } = CreateSchema.parse(await req.json());
+      const { email, role } = CreateSchema.parse(await req.json());
 
-      const dto = await createInvite(db, email, actor);
+      const dto = await createInvite(db, email, actor, role ?? 'Member');
       const link = inviteUrl(dto.token!);
 
       const actorUser = await getOrCreateUser(db, actor);
@@ -44,7 +48,7 @@ export async function POST(req: Request) {
          action: 'invite.create',
          targetType: 'invite',
          targetId: dto.id,
-         meta: { email: dto.email },
+         meta: { email: dto.email, role: dto.role },
       });
 
       if (process.env.CIRCLE_MAIL_FROM) {

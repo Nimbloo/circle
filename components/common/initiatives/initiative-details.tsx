@@ -8,6 +8,7 @@ import { Initiative, INITIATIVE_STATUS_META, type InitiativeStatus } from '@/dat
 import { useLabels, usePriorities } from '@/store/catalog-store';
 import { Project } from '@/data/projects';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { initiativeWithDescendants } from '@/lib/initiative-tree';
 import { api } from '@/lib/client';
 import {
    Command,
@@ -23,6 +24,7 @@ import {
    Boxes,
    CalendarClock,
    ChevronDown,
+   Network,
    PenLine,
    Plus,
    UserRound,
@@ -182,6 +184,187 @@ function ProjectsSection({ initiative }: { initiative: Initiative }) {
             ))
          )}
       </section>
+   );
+}
+
+/* ----------------------------- sub-initiatives ---------------------------- */
+
+/** Progresso agregado (0-100) de uma initiative somando a subárvore. */
+function rollupPercent(initiative: Initiative): number {
+   if (initiative.rollupProjectCount === 0) return 0;
+   return Math.round(
+      (initiative.rollupCompletedProjectCount / initiative.rollupProjectCount) * 100
+   );
+}
+
+/**
+ * Lista as sub-initiatives DIRETAS com o rollup de projetos de cada uma (#100).
+ * O picker adiciona uma initiative existente como filha (PATCH `parentId` nela) —
+ * o servidor recusa ciclo com 400.
+ */
+function SubInitiativesSection({ initiative }: { initiative: Initiative }) {
+   const { orgId } = useParams<{ orgId: string }>();
+   const initiatives = useWorkspaceStore((s) => s.initiatives);
+   const applyInitiative = useWorkspaceStore((s) => s.applyInitiative);
+   const [pickerOpen, setPickerOpen] = useState(false);
+
+   const { children, available } = useMemo(() => {
+      const byId = new Map(initiatives.map((i) => [i.id, i]));
+      const forbidden = new Set(initiativeWithDescendants(initiatives, initiative.id));
+      return {
+         children: initiative.childIds
+            .map((id) => byId.get(id))
+            .filter((i): i is Initiative => Boolean(i)),
+         available: initiatives.filter((i) => !forbidden.has(i.id) && i.id !== initiative.parentId),
+      };
+   }, [initiatives, initiative.childIds, initiative.id, initiative.parentId]);
+
+   const setParent = async (childId: string, parentId: string | null) => {
+      try {
+         // A resposta é a FILHA; a mãe precisa do childIds/rollup novos.
+         applyInitiative(await api.initiatives.update(childId, { parentId }));
+         applyInitiative(await api.initiatives.get(initiative.id));
+         toast.success(parentId ? 'Sub-initiative adicionada' : 'Sub-initiative removida');
+      } catch {
+         toast.error('Não foi possível atualizar as sub-initiatives');
+      }
+   };
+
+   return (
+      <section className="mx-0.5 flex flex-col gap-2">
+         <div className="flex items-center justify-between px-2">
+            <h2 className="text-lg font-medium">Sub-initiatives</h2>
+            <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+               <PopoverTrigger asChild>
+                  <button
+                     type="button"
+                     className="text-muted-foreground hover:text-foreground transition-colors"
+                     aria-label="Add sub-initiative"
+                  >
+                     <Plus className="size-4" />
+                  </button>
+               </PopoverTrigger>
+               <PopoverContent align="end" className="w-64 p-0">
+                  <Command>
+                     <CommandInput placeholder="Add sub-initiative…" />
+                     <CommandList>
+                        <CommandEmpty>No initiatives.</CommandEmpty>
+                        <CommandGroup>
+                           {available.map((candidate) => (
+                              <CommandItem
+                                 key={candidate.id}
+                                 value={candidate.name}
+                                 onSelect={() => {
+                                    setPickerOpen(false);
+                                    void setParent(candidate.id, initiative.id);
+                                 }}
+                              >
+                                 {candidate.name}
+                              </CommandItem>
+                           ))}
+                        </CommandGroup>
+                     </CommandList>
+                  </Command>
+               </PopoverContent>
+            </Popover>
+         </div>
+
+         {children.length === 0 ? (
+            <p className="px-2 text-[13px] text-muted-foreground">No sub-initiatives</p>
+         ) : (
+            <ul className="flex flex-col">
+               {children.map((child) => (
+                  <li
+                     key={child.id}
+                     className="group flex h-10 items-center gap-2 rounded-md px-2 text-[13px] hover:bg-accent/40"
+                  >
+                     <Network className="size-3.5 shrink-0 text-muted-foreground" />
+                     <Link
+                        href={`/${orgId}/initiative/${child.id}`}
+                        className="min-w-0 flex-1 truncate"
+                     >
+                        {child.name}
+                     </Link>
+                     <span className="shrink-0 text-xs text-muted-foreground">
+                        {child.rollupCompletedProjectCount} / {child.rollupProjectCount} projects
+                     </span>
+                     <span className="w-10 shrink-0 text-right text-xs text-muted-foreground">
+                        {rollupPercent(child)}%
+                     </span>
+                     <button
+                        type="button"
+                        aria-label={`Remove ${child.name}`}
+                        className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+                        onClick={() => void setParent(child.id, null)}
+                     >
+                        <X className="size-3.5" />
+                     </button>
+                  </li>
+               ))}
+            </ul>
+         )}
+      </section>
+   );
+}
+
+/**
+ * Picker "Parent initiative" (#100). Esconde a própria initiative e sua subárvore —
+ * o servidor recusa ciclo com 400, a UI só evita oferecer a opção inválida.
+ */
+function ParentInitiativePicker({ initiative }: { initiative: Initiative }) {
+   const initiatives = useWorkspaceStore((s) => s.initiatives);
+   const applyInitiative = useWorkspaceStore((s) => s.applyInitiative);
+   const [open, setOpen] = useState(false);
+
+   const forbidden = new Set(initiativeWithDescendants(initiatives, initiative.id));
+   const options = initiatives.filter((i) => !forbidden.has(i.id));
+   const parent = initiative.parentId
+      ? initiatives.find((i) => i.id === initiative.parentId)
+      : undefined;
+
+   const setParent = async (parentId: string | null) => {
+      setOpen(false);
+      try {
+         applyInitiative(await api.initiatives.update(initiative.id, { parentId }));
+         toast.success(parentId ? 'Parent initiative definida' : 'Parent initiative removida');
+      } catch {
+         toast.error('Não foi possível atualizar a parent initiative');
+      }
+   };
+
+   return (
+      <Popover open={open} onOpenChange={setOpen}>
+         <PopoverTrigger asChild>
+            <PropertyButton>
+               <Network className="size-3.5 text-muted-foreground" />
+               <span className={parent ? undefined : 'text-muted-foreground'}>
+                  {parent?.name ?? 'No parent'}
+               </span>
+            </PropertyButton>
+         </PopoverTrigger>
+         <PopoverContent align="start" className="w-64 p-0">
+            <Command>
+               <CommandInput placeholder="Parent initiative…" />
+               <CommandList>
+                  <CommandEmpty>No initiatives.</CommandEmpty>
+                  <CommandGroup>
+                     <CommandItem value="No parent" onSelect={() => void setParent(null)}>
+                        No parent
+                     </CommandItem>
+                     {options.map((candidate) => (
+                        <CommandItem
+                           key={candidate.id}
+                           value={candidate.name}
+                           onSelect={() => void setParent(candidate.id)}
+                        >
+                           {candidate.name}
+                        </CommandItem>
+                     ))}
+                  </CommandGroup>
+               </CommandList>
+            </Command>
+         </PopoverContent>
+      </Popover>
    );
 }
 
@@ -387,11 +570,24 @@ function PropertiesPanel({ initiative }: { initiative: Initiative }) {
             />
          </PropertyRow>
 
+         <PropertyRow label="Parent">
+            <ParentInitiativePicker initiative={initiative} />
+         </PropertyRow>
+
          <PropertyRow label="Projects">
             <span className="text-muted-foreground text-xs">
                {completed} / {initiative.projectIds.length} completed
             </span>
          </PropertyRow>
+
+         {initiative.childIds.length > 0 && (
+            <PropertyRow label="Rollup">
+               <span className="text-muted-foreground text-xs">
+                  {initiative.rollupCompletedProjectCount} / {initiative.rollupProjectCount} with
+                  sub-initiatives
+               </span>
+            </PropertyRow>
+         )}
       </div>
    );
 }
@@ -525,6 +721,10 @@ function Overview({ initiative }: { initiative: Initiative }) {
 
             <div className="mt-[92px]">
                <ProjectsSection initiative={initiative} />
+            </div>
+
+            <div className="mt-10">
+               <SubInitiativesSection initiative={initiative} />
             </div>
          </div>
       </div>

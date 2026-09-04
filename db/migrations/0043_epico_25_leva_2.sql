@@ -17,8 +17,16 @@ CREATE TABLE "team_sla" (
 	CONSTRAINT "team_sla_team_id_priority_id_pk" PRIMARY KEY("team_id","priority_id")
 );
 --> statement-breakpoint
+ALTER TABLE "app_user" ADD COLUMN "deactivated_at" timestamp;--> statement-breakpoint
+ALTER TABLE "initiative" ADD COLUMN "parent_id" varchar(36);--> statement-breakpoint
+ALTER TABLE "invite" ADD COLUMN "role" varchar(16) DEFAULT 'Member' NOT NULL;--> statement-breakpoint
 ALTER TABLE "issue" ADD COLUMN "sla_applied_at" timestamp;--> statement-breakpoint
+ALTER TABLE "team" ADD COLUMN "parent_id" varchar(16);--> statement-breakpoint
 ALTER TABLE "team_automation" ADD CONSTRAINT "team_automation_team_id_team_id_fk" FOREIGN KEY ("team_id") REFERENCES "public"."team"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "team_sla" ADD CONSTRAINT "team_sla_team_id_team_id_fk" FOREIGN KEY ("team_id") REFERENCES "public"."team"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "team_sla" ADD CONSTRAINT "team_sla_priority_id_priority_id_fk" FOREIGN KEY ("priority_id") REFERENCES "public"."priority"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "idx_team_automation_team" ON "team_automation" USING btree ("team_id","trigger");
+CREATE INDEX "idx_team_automation_team" ON "team_automation" USING btree ("team_id","trigger");--> statement-breakpoint
+ALTER TABLE "initiative" ADD CONSTRAINT "initiative_parent_id_initiative_id_fk" FOREIGN KEY ("parent_id") REFERENCES "public"."initiative"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "team" ADD CONSTRAINT "team_parent_id_team_id_fk" FOREIGN KEY ("parent_id") REFERENCES "public"."team"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "idx_initiative_parent" ON "initiative" USING btree ("parent_id");--> statement-breakpoint
+CREATE INDEX "idx_team_parent" ON "team" USING btree ("parent_id");

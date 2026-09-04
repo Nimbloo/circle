@@ -5,16 +5,20 @@ import { ok } from '@/lib/api/response';
 import { handle, requireEmail, parseIssueListOptions } from '@/lib/api/http';
 import { createIssue, listIssues } from '@/lib/api/issues';
 import { emailFromRequest } from '@/lib/api/auth';
+import { scopeForEmail } from '@/lib/api/scope';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
    return handle(async () => {
-      await requireEmail(req);
+      const email = await requireEmail(req);
       const sp = new URL(req.url).searchParams;
       const meEmail = (await emailFromRequest(req)) ?? undefined;
       const { opts } = parseIssueListOptions(sp, meEmail);
+      // Escopo de Guest (#100): interseção server-side, nunca confiando na query.
+      const { teamIds } = await scopeForEmail(db, email);
+      if (teamIds) opts.teamIds = teamIds;
       return ok(await listIssues(db, opts));
    }, req);
 }

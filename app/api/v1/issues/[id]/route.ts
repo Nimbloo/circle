@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { ok, notFound } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
 import { getIssue, getIssueByIdentifier, updateIssue, deleteIssue } from '@/lib/api/issues';
+import { assertIssueInScope, scopeForEmail } from '@/lib/api/scope';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,8 +16,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
-      await requireEmail(req);
+      const email = await requireEmail(req);
       const { id } = await params;
+      // Guest fora do time (#100): 403 antes de devolver qualquer campo da issue.
+      const { teamIds } = await scopeForEmail(db, email);
+      await assertIssueInScope(db, teamIds, id);
       const dto = UUID_RE.test(id) ? await getIssue(db, id) : await getIssueByIdentifier(db, id);
       return dto ? ok(dto) : notFound(`Issue '${id}' não encontrada`);
    }, req);

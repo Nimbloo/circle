@@ -66,8 +66,11 @@ export function CommentComposer({
    const suggestions = useMemo(() => {
       if (!mention) return [];
       const q = mention.query;
+      // Membros desativados (#100) não aparecem no `@`.
       return users
-         .filter((u) => u.name.toLowerCase().includes(q) || slugOf(u).includes(q))
+         .filter(
+            (u) => !u.deactivatedAt && (u.name.toLowerCase().includes(q) || slugOf(u).includes(q))
+         )
          .slice(0, 6);
    }, [mention, users]);
 

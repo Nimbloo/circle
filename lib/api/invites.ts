@@ -9,9 +9,17 @@ import type { UserRef } from './issues';
 /** Validade do convite. Curta o bastante para um link vazado não ser permanente. */
 const TTL_DAYS = 7;
 
+/**
+ * Papéis que um convite pode conceder (#100). `Admin` fica de fora de propósito —
+ * promover a admin é um ato explícito na tela de membros, não um link por e-mail.
+ */
+export const INVITABLE_ROLES = ['Member', 'Guest'];
+
 export interface InviteDto {
    id: string;
    email: string;
+   /** Papel com que o convidado é provisionado no 1º login (#100): Member|Guest. */
+   role: string;
    /** Só volta na CRIAÇÃO — é o segredo do magic link, não se relista depois. */
    token?: string;
    invitedBy: UserRef | null;
@@ -39,6 +47,7 @@ function toDto(
    return {
       id: row.id,
       email: row.email,
+      role: row.role,
       ...(opts.withToken ? { token: row.token } : {}),
       invitedBy: inviter
          ? {
@@ -66,8 +75,12 @@ function toDto(
 export async function createInvite(
    db: Db,
    email: string,
-   invitedByEmail: string
+   invitedByEmail: string,
+   role: string = 'Member'
 ): Promise<InviteDto> {
+   if (!INVITABLE_ROLES.includes(role)) {
+      throw new ApiError(400, `Papel inválido no convite (use ${INVITABLE_ROLES.join('|')})`);
+   }
    const normalized = normalize(email);
    if (!normalized.endsWith(ALLOWED_EMAIL_DOMAIN)) {
       throw new ApiError(400, `Só é possível convidar e-mails ${ALLOWED_EMAIL_DOMAIN}`);
@@ -98,12 +111,13 @@ export async function createInvite(
          email: normalized,
          token,
          invitedById: inviter[0]?.id ?? null,
+         role,
          expiresAt,
       })
       .onConflictDoUpdate({
          target: invite.email,
          // Reconvite: token e validade novos, e o convite volta a ficar pendente.
-         set: { token, expiresAt, acceptedAt: null, invitedById: inviter[0]?.id ?? null },
+         set: { token, expiresAt, acceptedAt: null, invitedById: inviter[0]?.id ?? null, role },
       })
       .returning();
 
@@ -139,12 +153,12 @@ export async function getInviteByToken(db: Db, token: string): Promise<InviteDto
 /**
  * Gate do login: consome o convite pendente e válido do e-mail, se houver.
  *
- * Retorna `true` só quando havia convite utilizável — e o marca como aceito no mesmo
+ * Retorna o papel do convite só quando havia um utilizável (`null` caso contrário) — e o marca como aceito no mesmo
  * passo (single-use). É chamado pelo `signIn` DEPOIS de o Keycloak confirmar domínio e
  * e-mail verificado, então o convite dispensa apenas a associação ao grupo `app-circle`,
  * nunca a autenticação.
  */
-export async function consumeInvite(db: Db, email: string): Promise<boolean> {
+export async function consumeInvite(db: Db, email: string): Promise<{ role: string } | null> {
    const normalized = normalize(email);
    const accepted = await db
       .update(invite)
@@ -156,6 +170,6 @@ export async function consumeInvite(db: Db, email: string): Promise<boolean> {
             gt(invite.expiresAt, new Date())
          )
       )
-      .returning({ id: invite.id });
-   return accepted.length > 0;
+      .returning({ id: invite.id, role: invite.role });
+   return accepted.length > 0 ? { role: accepted[0].role } : null;
 }

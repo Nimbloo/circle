@@ -1,5 +1,5 @@
 {
-   "id": "91828c21-3de6-4917-af6b-72d25ca2f378",
+   "id": "bdd4c444-5850-41a2-87c8-720054f21f2d",
    "prevId": "8b59675f-0418-44a8-8485-6b6aebba8414",
    "version": "7",
    "dialect": "postgresql",
@@ -313,6 +313,12 @@
                "type": "date",
                "primaryKey": false,
                "notNull": true
+            },
+            "deactivated_at": {
+               "name": "deactivated_at",
+               "type": "timestamp",
+               "primaryKey": false,
+               "notNull": false
             },
             "created_at": {
                "name": "created_at",
@@ -1203,6 +1209,12 @@
                "primaryKey": false,
                "notNull": true
             },
+            "parent_id": {
+               "name": "parent_id",
+               "type": "varchar(36)",
+               "primaryKey": false,
+               "notNull": false
+            },
             "created_at": {
                "name": "created_at",
                "type": "timestamp",
@@ -1211,7 +1223,23 @@
                "default": "now()"
             }
          },
-         "indexes": {},
+         "indexes": {
+            "idx_initiative_parent": {
+               "name": "idx_initiative_parent",
+               "columns": [
+                  {
+                     "expression": "parent_id",
+                     "isExpression": false,
+                     "asc": true,
+                     "nulls": "last"
+                  }
+               ],
+               "isUnique": false,
+               "concurrently": false,
+               "method": "btree",
+               "with": {}
+            }
+         },
          "foreignKeys": {
             "initiative_priority_id_priority_id_fk": {
                "name": "initiative_priority_id_priority_id_fk",
@@ -1236,6 +1264,15 @@
                "tableFrom": "initiative",
                "tableTo": "health",
                "columnsFrom": ["health_id"],
+               "columnsTo": ["id"],
+               "onDelete": "no action",
+               "onUpdate": "no action"
+            },
+            "initiative_parent_id_initiative_id_fk": {
+               "name": "initiative_parent_id_initiative_id_fk",
+               "tableFrom": "initiative",
+               "tableTo": "initiative",
+               "columnsFrom": ["parent_id"],
                "columnsTo": ["id"],
                "onDelete": "no action",
                "onUpdate": "no action"
@@ -1548,6 +1585,13 @@
                "type": "varchar(36)",
                "primaryKey": false,
                "notNull": false
+            },
+            "role": {
+               "name": "role",
+               "type": "varchar(16)",
+               "primaryKey": false,
+               "notNull": true,
+               "default": "'Member'"
             },
             "created_at": {
                "name": "created_at",
@@ -4093,10 +4137,42 @@
                "primaryKey": false,
                "notNull": true,
                "default": false
+            },
+            "parent_id": {
+               "name": "parent_id",
+               "type": "varchar(16)",
+               "primaryKey": false,
+               "notNull": false
             }
          },
-         "indexes": {},
-         "foreignKeys": {},
+         "indexes": {
+            "idx_team_parent": {
+               "name": "idx_team_parent",
+               "columns": [
+                  {
+                     "expression": "parent_id",
+                     "isExpression": false,
+                     "asc": true,
+                     "nulls": "last"
+                  }
+               ],
+               "isUnique": false,
+               "concurrently": false,
+               "method": "btree",
+               "with": {}
+            }
+         },
+         "foreignKeys": {
+            "team_parent_id_team_id_fk": {
+               "name": "team_parent_id_team_id_fk",
+               "tableFrom": "team",
+               "tableTo": "team",
+               "columnsFrom": ["parent_id"],
+               "columnsTo": ["id"],
+               "onDelete": "no action",
+               "onUpdate": "no action"
+            }
+         },
          "compositePrimaryKeys": {},
          "uniqueConstraints": {},
          "policies": {},

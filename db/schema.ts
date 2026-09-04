@@ -76,6 +76,9 @@ export const appUser = pgTable('app_user', {
    presence: varchar('presence', { length: 16 }).notNull().default('offline'),
    timezone: varchar('timezone', { length: 64 }),
    joinedAt: date('joined_at').notNull(),
+   // Membro desativado (#100). NULL = ativo. Preserva o histórico (autoria, activity)
+   // mas bloqueia login e some dos seletores; reversível ("Reactivate").
+   deactivatedAt: timestamp('deactivated_at'),
    createdAt: timestamp('created_at').notNull().defaultNow(),
    updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
@@ -114,22 +117,29 @@ export const userAvatar = pgTable('user_avatar', {
    updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
-export const team = pgTable('team', {
-   id: varchar('id', { length: 16 }).primaryKey(), // key curta (CORE, DESIGN)
-   name: varchar('name', { length: 128 }).notNull(),
-   icon: varchar('icon', { length: 16 }),
-   color: varchar('color', { length: 16 }),
-   issueSeq: integer('issue_seq').notNull().default(0), // contador p/ identifier <KEY>-<n>
-   // Escala de estimate do time (paridade Linear): fibonacci|exponential|linear|tshirt.
-   estimateScale: varchar('estimate_scale', { length: 16 }).notNull().default('fibonacci'),
-   // Cool-down (#24): dias entre o fim de um cycle e o início do próximo, sem cycle
-   // `current` no meio (paridade Linear). 0 = sem cool-down.
-   cycleCooldownDays: integer('cycle_cooldown_days').notNull().default(0),
-   // Automações de sub-issues (#95, paridade Linear): concluir todas as filhas conclui
-   // o pai; concluir o pai conclui as filhas restantes. Ambos desligados por default.
-   autoCloseParent: boolean('auto_close_parent').notNull().default(false),
-   autoCloseChildren: boolean('auto_close_children').notNull().default(false),
-});
+export const team = pgTable(
+   'team',
+   {
+      id: varchar('id', { length: 16 }).primaryKey(), // key curta (CORE, DESIGN)
+      name: varchar('name', { length: 128 }).notNull(),
+      icon: varchar('icon', { length: 16 }),
+      color: varchar('color', { length: 16 }),
+      issueSeq: integer('issue_seq').notNull().default(0), // contador p/ identifier <KEY>-<n>
+      // Escala de estimate do time (paridade Linear): fibonacci|exponential|linear|tshirt.
+      estimateScale: varchar('estimate_scale', { length: 16 }).notNull().default('fibonacci'),
+      // Cool-down (#24): dias entre o fim de um cycle e o início do próximo, sem cycle
+      // `current` no meio (paridade Linear). 0 = sem cool-down.
+      cycleCooldownDays: integer('cycle_cooldown_days').notNull().default(0),
+      // Automações de sub-issues (#95, paridade Linear): concluir todas as filhas conclui
+      // o pai; concluir o pai conclui as filhas restantes. Ambos desligados por default.
+      autoCloseParent: boolean('auto_close_parent').notNull().default(false),
+      autoCloseChildren: boolean('auto_close_children').notNull().default(false),
+      // Sub-times (#100): pai canônico. NULL = time de topo. A guarda de ciclo é
+      // app-level (updateTeam), como em `issue.parent_id`.
+      parentId: varchar('parent_id', { length: 16 }).references((): AnyPgColumn => team.id),
+   },
+   (t) => [index('idx_team_parent').on(t.parentId)]
+);
 
 export const teamMember = pgTable(
    'team_member',
@@ -175,29 +185,36 @@ export const teamJoinRequest = pgTable(
 // ─────────────────────────────────────────────────────────────
 // Initiatives / Projects
 // ─────────────────────────────────────────────────────────────
-export const initiative = pgTable('initiative', {
-   id: varchar('id', { length: 36 }).primaryKey(),
-   slug: varchar('slug', { length: 96 }).notNull().unique(),
-   name: varchar('name', { length: 196 }).notNull(),
-   description: text('description'),
-   icon: varchar('icon', { length: 64 }),
-   iconColor: varchar('icon_color', { length: 32 }),
-   status: varchar('status', { length: 16 }).notNull(), // active|planned|completed
-   priorityId: varchar('priority_id', { length: 64 })
-      .notNull()
-      .references(() => priority.id),
-   ownerId: varchar('owner_id', { length: 36 }).references(() => appUser.id),
-   /** Rótulo humano do período alvo ("Q3 2026", "H2 2026", "2026", "Sep 2026"). */
-   target: varchar('target', { length: 64 }),
-   // Datas reais do período: `targetDate` é o fim do período do rótulo (derivada por
-   // `targetDateFromLabel`, backfill em 0036_backfill_initiative_dates.sql).
-   startDate: date('start_date'),
-   targetDate: date('target_date'),
-   healthId: varchar('health_id', { length: 64 })
-      .notNull()
-      .references(() => health.id),
-   createdAt: timestamp('created_at').notNull().defaultNow(),
-});
+export const initiative = pgTable(
+   'initiative',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      slug: varchar('slug', { length: 96 }).notNull().unique(),
+      name: varchar('name', { length: 196 }).notNull(),
+      description: text('description'),
+      icon: varchar('icon', { length: 64 }),
+      iconColor: varchar('icon_color', { length: 32 }),
+      status: varchar('status', { length: 16 }).notNull(), // active|planned|completed
+      priorityId: varchar('priority_id', { length: 64 })
+         .notNull()
+         .references(() => priority.id),
+      ownerId: varchar('owner_id', { length: 36 }).references(() => appUser.id),
+      /** Rótulo humano do período alvo ("Q3 2026", "H2 2026", "2026", "Sep 2026"). */
+      target: varchar('target', { length: 64 }),
+      // Datas reais do período: `targetDate` é o fim do período do rótulo (derivada por
+      // `targetDateFromLabel`, backfill em 0036_backfill_initiative_dates.sql).
+      startDate: date('start_date'),
+      targetDate: date('target_date'),
+      healthId: varchar('health_id', { length: 64 })
+         .notNull()
+         .references(() => health.id),
+      // Sub-initiatives (#100): pai canônico. NULL = initiative de topo. Guarda de
+      // ciclo app-level (updateInitiative), como em `team.parent_id`.
+      parentId: varchar('parent_id', { length: 36 }).references((): AnyPgColumn => initiative.id),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_initiative_parent').on(t.parentId)]
+);
 
 export const project = pgTable(
    'project',
@@ -683,6 +700,8 @@ export const invite = pgTable(
       email: varchar('email', { length: 255 }).notNull().unique(),
       token: varchar('token', { length: 64 }).notNull().unique(),
       invitedById: varchar('invited_by_id', { length: 36 }).references(() => appUser.id),
+      // Papel com que o convidado é provisionado no 1º login (#100): Member|Guest.
+      role: varchar('role', { length: 16 }).notNull().default('Member'),
       createdAt: timestamp('created_at').notNull().defaultNow(),
       expiresAt: timestamp('expires_at').notNull(),
       acceptedAt: timestamp('accepted_at'),

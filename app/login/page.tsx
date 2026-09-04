@@ -50,6 +50,8 @@ function LoginForm() {
       rawCallback.startsWith('/') && !rawCallback.startsWith('//') ? rawCallback : '/';
 
    const [loading, setLoading] = React.useState(false);
+   // Conta desativada (#100): o callback `signIn` redireciona pra cá com este erro.
+   const deactivated = searchParams.get('error') === 'deactivated';
 
    return (
       <div className="bg-background flex min-h-svh items-center justify-center p-4">
@@ -67,6 +69,14 @@ function LoginForm() {
                   <CardDescription className="mt-3">Entre para continuar</CardDescription>
                </CardHeader>
                <CardContent className="flex flex-col gap-4">
+                  {deactivated && (
+                     <p
+                        role="alert"
+                        className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-center text-xs text-destructive"
+                     >
+                        Sua conta foi desativada. Fale com um admin do workspace.
+                     </p>
+                  )}
                   <button
                      type="button"
                      disabled={loading}

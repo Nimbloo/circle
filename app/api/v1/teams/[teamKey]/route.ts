@@ -7,6 +7,7 @@ import { ApiError } from '@/lib/api/errors';
 import { getOrCreateUser } from '@/lib/api/users';
 import { getTeam, updateTeam, deleteTeam } from '@/lib/api/teams';
 import { recordAudit } from '@/lib/api/audit';
+import { assertTeamInScope, visibleTeamIds } from '@/lib/api/scope';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,8 +18,10 @@ export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
       const { teamKey } = await params;
       const email = await emailFromRequest(req);
-      const meId = email ? (await getOrCreateUser(db, email)).id : undefined;
-      const dto = await getTeam(db, teamKey, meId);
+      const me = email ? await getOrCreateUser(db, email) : undefined;
+      // Guest fora do time (#100): 403 — o time não faz parte do workspace dele.
+      if (me) assertTeamInScope(await visibleTeamIds(db, me), teamKey);
+      const dto = await getTeam(db, teamKey, me?.id);
       return dto ? ok(dto) : notFound(`Team '${teamKey}' não encontrado`);
    }, req);
 }
@@ -31,6 +34,7 @@ const UpdateSchema = z.object({
    cycleCooldownDays: z.number().int().min(0).max(14).optional(),
    autoCloseParent: z.boolean().optional(),
    autoCloseChildren: z.boolean().optional(),
+   parentId: z.string().max(16).nullish(),
 });
 
 export async function PATCH(req: Request, { params }: Params) {

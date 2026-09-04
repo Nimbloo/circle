@@ -8,12 +8,15 @@ import { ArrowDown, Users } from 'lucide-react';
 import { useMemo } from 'react';
 
 export default function Members() {
-   const { filters, sort } = useMembersFilterStore();
+   const { filters, sort, showDeactivated } = useMembersFilterStore();
    const allUsers = useWorkspaceStore((s) => s.users);
    const loaded = useWorkspaceStore((s) => s.loaded);
 
    const displayed = useMemo(() => {
       let list = allUsers.slice();
+
+      // Desativados (#100) ficam escondidos até o filtro "Show deactivated".
+      if (!showDeactivated) list = list.filter((u) => !u.deactivatedAt);
 
       // filter by role (called Status in UI)
       if (filters.role.length > 0) {
@@ -42,7 +45,7 @@ export default function Members() {
       };
 
       return list.sort(compare);
-   }, [allUsers, filters, sort]);
+   }, [allUsers, filters, sort, showDeactivated]);
 
    return (
       <div className="w-full">

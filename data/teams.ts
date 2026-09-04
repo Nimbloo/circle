@@ -13,6 +13,8 @@ export interface Team {
    /** Sub-issue automations (#95): all children done closes the parent / parent done closes children. */
    autoCloseParent: boolean;
    autoCloseChildren: boolean;
+   /** Sub-teams (#100): parent team id, or null when top-level. */
+   parentId: string | null;
    members: User[];
    projects: Project[];
 }
