@@ -1,6 +1,6 @@
 # Pendências do Circle
 
-Estado em **2026-09-03**, com `main` e `develop` sincronizadas na v0.29.0.
+Estado em **2026-09-03**, com `main` e `develop` sincronizadas na v0.29.1.
 
 > **As [issues](https://github.com/Nimbloo/circle/issues) são a fonte da verdade** sobre
 > escopo. Este documento registra o que elas **não** capturam: bloqueios que vivem em
@@ -261,8 +261,8 @@ Restos conscientes da leva anterior, decididos e construídos (spec
 - **Épico #25 fatiado** em nove issues por tema (#94–#102), cada uma com por quê, escopo,
   fora do escopo e aceitação; o épico segue aberto só com o checklist.
 
-Fica de fora, consciente: item "Video" do menu "/" ainda pede a URL por `window.prompt`
-(UI inline depois); comentário em linha removida (`-`) não é ancorável.
+Fica de fora, consciente: comentário em linha removida (`-`) não é ancorável. (O item "Video"
+do menu "/" pedia a URL por `window.prompt`; virou popover inline na v0.29.1.)
 
 **Promovido para produção na release
 [v0.27.0](https://github.com/Nimbloo/circle/releases/tag/v0.27.0)** (PRs #103 e #104):
@@ -311,10 +311,9 @@ quatro grupos em paralelo):
   badges estáticos → viraram seletores; reorder por arraste agora também na lista;
   `ProjectBadge` sem orgId fixo. Primeiros testes que montam a linha e disparam mutation.
 
-Fica de fora, consciente: o `checked` de um item convertido não é regravado no doc quando
-a sub-issue muda de status (o NodeView deriva do store); anexo de comentário sobe depois do
-POST do comentário (falha vira toast por arquivo); `deleteIssue` não apaga objetos S3 de
-anexos (cascade só no banco).
+Fica de fora, consciente: anexo de comentário sobe depois do POST do comentário (falha vira
+toast por arquivo). (Os outros dois desta lista — o `checked` do item convertido e o S3 órfão
+no `deleteIssue` — foram corrigidos na v0.29.1.)
 
 **Promovido para produção na release
 [v0.28.0](https://github.com/Nimbloo/circle/releases/tag/v0.28.0)** (PRs #106 e #107):
@@ -370,6 +369,61 @@ initiative e rota pública devolvendo `401` sem token. **Épico #25 fechado**, j
 #97, #99, #100, #101 e #102. Restam abertas só #22 (reviews, à espera do PAT e do Bedrock),
 #27 e #28, que vivem em outro repositório.
 
+### Auditoria da v0.29.0 e a correção de segurança (04/09/2026)
+
+Depois de fechar o épico, uma auditoria em três frentes (autorização, integridade do merge dos
+seis grupos, comportamento sob carga) **provou rodando código** 16 cenários de autorização
+exploráveis por qualquer usuário autenticado, mais dois bugs que quebravam operação normal.
+Corrigidos na
+[v0.29.1](https://github.com/Nimbloo/circle/releases/tag/v0.29.1) (PRs #112 e #113), spec em
+`docs/superpowers/specs/2026-09-04-hardening-autorizacao-design.md`.
+
+**A causa era estrutural:** o escopo vivia nos route handlers e só nas leituras — 29 de 192
+handlers verificavam, e nenhuma escrita interna. O gate passou para a **camada de serviço**, com
+validação de **origem e destino** em todo movimento (era a escalação em que um convidado puxava
+projeto alheio para o próprio time e passava a lê-lo, tornando decorativa a proteção de leitura).
+Um teste-guarda novo falha quando uma rota de escrita nasce sem verificação.
+
+Também entraram: desligamento que bloqueia sessão viva, Bearer e token de máquina num ponto só
+(e rebaixa o papel — antes desativar **ampliava** o alcance); administrador obrigatório em token
+de API e webhook; anti-SSRF com revalidação a cada disparo; duas rotas de time que respondiam sem
+sessão; os dois `23503` (apagar issue importada e apagar time com automação); anexo checando
+tamanho antes de materializar o corpo; SLA com hora real (1 h, 4 h e 12 h davam o mesmo prazo);
+busca casando com e sem acento; automações que não derrubam a requisição nem ressuscitam;
+fila de webhook destravada; gráficos sem pontos inventados; e **erros da API chegando ao
+Sentry** — antes nenhum 5xx chegava, o que tornava todo o resto invisível.
+
+**Mudança de comportamento consciente:** convidado recebe 403 onde antes recebia 200, e token e
+webhook viraram exclusivos de administrador.
+
+**Verificado em produção:** migrations 0046–0048 aplicadas no boot (49/49), rollout
+`Synced/Healthy`, `healthz`/`readyz` em `200`, webhook para `169.254.169.254` recusado com 400,
+busca respondendo pelo índice e `slaDueAt` no contrato.
+
+Fora do repositório: conferir no chart `nimbloo-k8s/circle-prd` o valor de
+`CIRCLE_KEYCLOAK_ALLOWED_CLIENTS` — o default do repo é seguro (vazio desliga o Bearer), mas o
+risco depende do valor implantado.
+
+### Resíduos do hardening, fechados (04/09/2026)
+
+Uma segunda passada depois da v0.29.1 achou débito remanescente do mesmo tipo, agora corrigido:
+
+- **Anexar arquivo não verificava escopo** — o serviço checava só a existência da issue, então
+  um convidado anexava em issue de time que não enxerga. Pior: a rota estava na lista de
+  exceções do guarda de escrita, rotulada como "dado do próprio usuário". A verificação passou
+  para o **topo** da função (autorização antes de disponibilidade: o 503 de storage vinha
+  primeiro e confirmava a existência da issue).
+- **Stream de eventos sem escopo** — o barramento é global e o evento não carrega o time. Para
+  escopo restrito o corte é a **redação**: convidado recebe `entity`/`action` (suficiente para
+  refazer as listas dele) e nunca `id` nem `actorEmail`.
+- **Agente de IA sem escopo** — as ferramentas de listar time, issue e cycle passavam filtro
+  vazio; agora herdam o escopo do usuário. As de escrita já passavam pelo gate dos serviços.
+- **Exceções vencidas do guarda** — token de API, webhook, membro e convite estavam na lista
+  como "fora do Grupo 1", mas foram fechados na mesma release. Removidas: o guarda passa sem
+  elas, o que prova que o gate existe, e volta a acusar se alguém tirar.
+- Código morto removido (`snapshotAllProjects`) e três notas de "fica de fora" que descreviam
+  itens já corrigidos.
+
 ## Decisões suas (não é falta de código)
 
 Nenhuma pendente em 02/09/2026: datas de initiatives, snapshot de cycles e editor de blocos
@@ -384,7 +438,7 @@ Roadmap, não limpeza. Priorize por valor.
 | [#19](https://github.com/Nimbloo/circle/issues/19) | **Fechada**: DnD no board por status, reschedule na timeline e agora board por time (`teamId` no PATCH) saíram em 02–03/09; health, resources e milestones já estavam prontos.                                                                                 |
 | [#22](https://github.com/Nimbloo/circle/issues/22) | Webhook, "For you/Created", arquivos/commits/diff, checks reais, **Guide narrado e comentários/veredito de review** saíram (02–03/09). Resta só o que depende de você: Bedrock (use case) e PAT com `Checks:read` para o Guide e os checks em produção.        |
 | [#24](https://github.com/Nimbloo/circle/issues/24) | **Fechada na prática**: cool-down e snapshots (upsert lazy) saíram em 02/09; burn-up e scopeDelta agora vêm do histórico. Falta só fechar a issue no GitHub.                                                                                                   |
-| [#16](https://github.com/Nimbloo/circle/issues/16) | **Completo**: blocos, listas, tarefas, código, links, imagens com upload, vídeo por URL, referência a issue com `#` e editor nos modais de criação. Resta polir o item "Video" do menu "/" (hoje `window.prompt`).                                             |
+| [#16](https://github.com/Nimbloo/circle/issues/16) | **Completo**: blocos, listas, tarefas, código, links, imagens com upload, vídeo por URL, referência a issue com `#` e editor nos modais de criação. Fechada; o item "Video" virou popover inline na v0.29.1.                                                   |
 | [#25](https://github.com/Nimbloo/circle/issues/25) | Épico de paridade com o Linear, **fatiado em 03/09** nas issues #94–#102 (triage com IA, sub-issues, múltiplos responsáveis, SLAs/automações, threads/anexos, busca, organização, import/export/API/webhooks, roadmap). Executar pelas issues, não pelo épico. |
 
 ---

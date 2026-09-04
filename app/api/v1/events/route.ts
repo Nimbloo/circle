@@ -1,6 +1,8 @@
+import { db } from '@/db';
 import { emailFromRequest } from '@/lib/api/auth';
 import { subscribe, type CircleEvent } from '@/lib/api/events';
 import { problem } from '@/lib/api/response';
+import { scopeForEmail } from '@/lib/api/scope';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,6 +20,13 @@ const HEARTBEAT_MS = 25_000;
 export async function GET(req: Request): Promise<Response> {
    const email = await emailFromRequest(req);
    if (!email) return problem(401, 'Unauthorized', 'Não autenticado');
+
+   // O barramento é global e o evento não carrega o time, então filtrar por entidade
+   // custaria uma query POR EVENTO. Para quem tem escopo restrito (#100), o corte é
+   // outro: o evento vai SEM identificadores (`id`/`actorEmail`), que é o suficiente
+   // para o cliente refazer as listas que ele pode ver, sem revelar atividade alheia.
+   const { teamIds } = await scopeForEmail(db, email);
+   const redact = teamIds !== null;
 
    const encoder = new TextEncoder();
    let unsubscribe: (() => void) | null = null;
@@ -54,7 +63,10 @@ export async function GET(req: Request): Promise<Response> {
          send(': connected\n\n');
 
          unsubscribe = subscribe((event: CircleEvent) => {
-            send(`data: ${JSON.stringify(event)}\n\n`);
+            const payload: CircleEvent = redact
+               ? { entity: event.entity, action: event.action, ts: event.ts }
+               : event;
+            send(`data: ${JSON.stringify(payload)}\n\n`);
          });
 
          heartbeat = setInterval(() => send(': ping\n\n'), HEARTBEAT_MS);
