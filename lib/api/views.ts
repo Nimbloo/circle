@@ -6,6 +6,7 @@ import { getOrCreateUser } from './users';
 import { isAdmin } from './auth';
 import { listIssues, type IssueDto } from './issues';
 import { listProjects, type ProjectDto } from './projects';
+import { searchIssueIds } from './search';
 import { ApiError } from './errors';
 import { publish } from './events';
 
@@ -16,6 +17,11 @@ export interface ViewFilter {
    priorityIds?: string[];
    hasProject?: boolean;
    unassigned?: boolean;
+   /**
+    * Saved search (#99): termo full-text. A view resolve pelo MESMO motor da busca
+    * (`lib/api/search.ts`), então o resultado salvo é idêntico ao que a tela mostrou.
+    */
+   q?: string;
 }
 
 type ViewRow = typeof savedView.$inferSelect;
@@ -65,7 +71,12 @@ function toDto(v: ViewRow): ViewDto {
  * - `viewerId` omitido → todas (uso administrativo/interno).
  * `teamId` restringe a um time específico (listagem por time).
  */
-export async function listViews(db: Db, teamId?: string, viewerId?: string): Promise<ViewDto[]> {
+export async function listViews(
+   db: Db,
+   teamId?: string,
+   viewerId?: string,
+   teamScope?: string[]
+): Promise<ViewDto[]> {
    const conds = [];
    if (teamId) conds.push(eq(savedView.teamId, teamId));
    if (viewerId) conds.push(or(isNotNull(savedView.teamId), eq(savedView.ownerId, viewerId))!);
@@ -73,7 +84,14 @@ export async function listViews(db: Db, teamId?: string, viewerId?: string): Pro
    const rows = where
       ? await db.select().from(savedView).where(where)
       : await db.select().from(savedView);
-   return rows.map(toDto).sort((a, b) => a.name.localeCompare(b.name));
+   let dtos = rows.map(toDto);
+   // Escopo de Guest (#100): views compartilhadas só dos times visíveis; as pessoais
+   // do próprio viewer continuam aparecendo (não pertencem a time nenhum).
+   if (teamScope) {
+      const scope = new Set(teamScope);
+      dtos = dtos.filter((v) => (v.teamId ? scope.has(v.teamId) : v.ownerId === viewerId));
+   }
+   return dtos.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function getView(db: Db, id: string, viewerId?: string): Promise<ViewDto | null> {
@@ -190,10 +208,13 @@ export async function deleteView(db: Db, id: string, actorEmail: string): Promis
 export async function resolveView(
    db: Db,
    id: string,
-   viewerId?: string
+   viewerId?: string,
+   teamScope?: string[]
 ): Promise<{ type: string; issues?: IssueDto[]; projects?: ProjectDto[] } | null> {
    const view = await getView(db, id, viewerId);
    if (!view) return null;
+   // Escopo de Guest (#100): view de um time fora do escopo não resolve.
+   if (teamScope && view.teamId && !teamScope.includes(view.teamId)) return null;
    const f = view.filter;
 
    if (view.type === 'issue') {
@@ -203,13 +224,27 @@ export async function resolveView(
          labels: f.labelIds,
          priority: f.priorityIds,
          assignee: f.unassigned ? ['unassigned'] : undefined,
+         teamIds: teamScope,
       });
       if (f.hasProject) issues = issues.filter((i) => i.project !== null);
+      if (f.q?.trim()) {
+         // Saved search: mesmo motor da busca. Os ids vêm ranqueados, e a ordem do
+         // ranking manda — os demais filtros da view continuam valendo por interseção.
+         const ranked = await searchIssueIds(db, {
+            q: f.q,
+            teamId: view.teamId ?? undefined,
+            limit: 100,
+         });
+         const position = new Map(ranked.map((id, i) => [id, i]));
+         issues = issues
+            .filter((i) => position.has(i.id))
+            .sort((a, b) => position.get(a.id)! - position.get(b.id)!);
+      }
       return { type: 'issue', issues };
    }
 
    // project view: aplica o que mapeia (categoria/status/priority/labels)
-   let projects = await listProjects(db, {});
+   let projects = await listProjects(db, { teamIds: teamScope });
    // statusCategories era aplicado SÓ no cliente (`data/views.ts`), então uma project
    // view filtrada por categoria devolvia conjuntos diferentes na API e na tela.
    if (f.statusCategories?.length)

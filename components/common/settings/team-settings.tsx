@@ -9,6 +9,13 @@ import {
    DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import {
+   Select,
+   SelectContent,
+   SelectItem,
+   SelectTrigger,
+   SelectValue,
+} from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -25,6 +32,8 @@ import { api } from '@/lib/client';
 import { ESTIMATE_SCALE_META, normalizeScale, type EstimateScale } from '@/data/estimate-scales';
 import { useLabels, useStatuses } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { teamWithDescendants } from '@/lib/team-tree';
+import type { Team } from '@/data/teams';
 import {
    Bot,
    ChevronRight,
@@ -32,6 +41,7 @@ import {
    CornerRightDown,
    FileText,
    Hourglass,
+   Network,
    Pencil,
    Radar,
    RefreshCcw,
@@ -254,6 +264,59 @@ function AutoCloseToggle({
    );
 }
 
+/** Valor sentinela do Select — Radix não aceita `value=""`. */
+const NO_PARENT = '__none__';
+
+/**
+ * Seletor de time pai (#100). Lista os times que NÃO estão na subárvore do time
+ * atual (o servidor recusa ciclo com 400; a UI já esconde a opção inválida).
+ * Otimista não faz sentido aqui — o toast só vem depois do PATCH.
+ */
+function ParentTeamSelect({ team, disabled }: { team: Team; disabled: boolean }) {
+   const teams = useWorkspaceStore((s) => s.teams);
+   const applyTeam = useWorkspaceStore((s) => s.applyTeam);
+   const [busy, setBusy] = useState(false);
+
+   const descendants = new Set(teamWithDescendants(teams, team.id));
+   const options = teams.filter((t) => !descendants.has(t.id));
+
+   const commit = async (next: string) => {
+      const parentId = next === NO_PARENT ? null : next;
+      if (parentId === team.parentId || busy) return;
+      setBusy(true);
+      try {
+         applyTeam(await api.teams.update(team.id, { parentId }));
+         toast.success('Time pai atualizado');
+      } catch {
+         toast.error('Não foi possível atualizar o time pai');
+      } finally {
+         setBusy(false);
+      }
+   };
+
+   return (
+      <Select
+         value={team.parentId ?? NO_PARENT}
+         disabled={disabled || busy}
+         onValueChange={(v) => void commit(v)}
+      >
+         <SelectTrigger aria-label="Parent team" className="h-[30px] w-44 bg-accent text-xs">
+            <SelectValue />
+         </SelectTrigger>
+         <SelectContent>
+            <SelectItem value={NO_PARENT} className="text-xs">
+               No parent team
+            </SelectItem>
+            {options.map((t) => (
+               <SelectItem key={t.id} value={t.id} className="text-xs">
+                  {t.name}
+               </SelectItem>
+            ))}
+         </SelectContent>
+      </Select>
+   );
+}
+
 /** Per-team settings page (general, workflow, AI and danger zone). */
 export default function TeamSettings({ teamId }: TeamSettingsProps) {
    const { orgId } = useParams<{ orgId: string }>();
@@ -345,6 +408,12 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
                      description="Name, identifier, timezone, estimates, and broader settings"
                   />
                   <SettingsRow
+                     icon={<Network className="size-4" />}
+                     title="Parent team"
+                     description="Nest this team under another one (sub-team)"
+                     trailing={<ParentTeamSelect team={team} disabled={!isAdmin} />}
+                  />
+                  <SettingsRow
                      icon={<Users className="size-4" />}
                      title="Members"
                      description="Manage team members"
@@ -393,7 +462,9 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
                   <SettingsRow
                      icon={<Workflow className="size-4" />}
                      title="Workflows & automations"
-                     description="Manage issue automations, git workflows and other workflows"
+                     description="SLAs por prioridade e regras de automação do time"
+                     chevron
+                     onClick={() => router.push(`/${orgId}/settings/teams/${team.id}/workflows`)}
                   />
                   <SettingsRow
                      icon={<CornerLeftUp className="size-4" />}

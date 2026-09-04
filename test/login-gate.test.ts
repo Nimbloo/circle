@@ -50,7 +50,7 @@ describe('gate de login (grupo OU convite)', () => {
       await createInvite(db, 'novo@nimbloo.ai', ADMIN);
 
       const first = await decideKeycloakLogin(db, profile(), 'novo@nimbloo.ai');
-      expect(first).toEqual({ allowed: true, via: 'invite' });
+      expect(first).toEqual({ allowed: true, via: 'invite', role: 'Member' });
 
       // Segundo login sem grupo nao entra mais — o convite ja foi gasto.
       const second = await decideKeycloakLogin(db, profile(), 'novo@nimbloo.ai');
@@ -65,7 +65,7 @@ describe('gate de login (grupo OU convite)', () => {
 
       // O convite continua utilizavel: quem entrou pelo grupo nao o consumiu.
       const viaInvite = await decideKeycloakLogin(db, profile(), 'novo@nimbloo.ai');
-      expect(viaInvite).toEqual({ allowed: true, via: 'invite' });
+      expect(viaInvite).toEqual({ allowed: true, via: 'invite', role: 'Member' });
    });
 
    // ---- O piso: convite NAO dispensa autenticacao ----
@@ -116,7 +116,7 @@ describe('gate de login (grupo OU convite)', () => {
 
       // Convite intacto: a barreira de identidade nao pode gastar o convite de ninguem.
       const d = await decideKeycloakLogin(db, profile(), 'novo@nimbloo.ai');
-      expect(d).toEqual({ allowed: true, via: 'invite' });
+      expect(d).toEqual({ allowed: true, via: 'invite', role: 'Member' });
    });
 
    it('convite de OUTRO e-mail nao serve', async () => {

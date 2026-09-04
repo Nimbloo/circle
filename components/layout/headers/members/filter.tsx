@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useCommandPages } from '@/components/ui/use-command-pages';
 import { useMembersFilterStore } from '@/store/members-filter-store';
 import { useState } from 'react';
-import { ArrowUpDown, CheckIcon, ChevronRight, ListFilter, Shield } from 'lucide-react';
+import { ArrowUpDown, CheckIcon, ChevronRight, ListFilter, Shield, UserMinus } from 'lucide-react';
 
 type FilterType = 'role' | 'sort';
 
@@ -30,8 +30,16 @@ export function Filter() {
    const navigation = useCommandPages<'root' | FilterType>('root', () => setOpen(false));
    const active = navigation.page === 'root' ? null : navigation.page;
 
-   const { filters, sort, toggleFilter, clearFilters, getActiveFiltersCount, setSort } =
-      useMembersFilterStore();
+   const {
+      filters,
+      sort,
+      showDeactivated,
+      setShowDeactivated,
+      toggleFilter,
+      clearFilters,
+      getActiveFiltersCount,
+      setSort,
+   } = useMembersFilterStore();
 
    return (
       <Popover
@@ -86,6 +94,16 @@ export function Filter() {
                                  )}
                                  <ChevronRight className="size-4" />
                               </div>
+                           </CommandItem>
+                           <CommandItem
+                              onSelect={() => setShowDeactivated(!showDeactivated)}
+                              className="flex items-center justify-between cursor-pointer"
+                           >
+                              <span className="flex items-center gap-2">
+                                 <UserMinus className="size-4 text-muted-foreground" />
+                                 Show deactivated
+                              </span>
+                              {showDeactivated && <CheckIcon size={16} />}
                            </CommandItem>
                            <CommandItem
                               data-command-page="sort"

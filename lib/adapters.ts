@@ -106,6 +106,7 @@ export function adaptIssue(dto: IssueDto): Issue {
       parentId: dto.parentId ?? null,
       parentIdentifier: dto.parentIdentifier ?? null,
       snoozedUntil: dto.snoozedUntil,
+      slaAppliedAt: dto.slaAppliedAt ?? null,
       createdById: dto.createdBy?.id ?? undefined,
    };
 }

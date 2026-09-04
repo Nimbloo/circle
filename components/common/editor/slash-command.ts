@@ -1,7 +1,6 @@
 import { Extension, type Editor, type Range } from '@tiptap/core';
 import { PluginKey } from '@tiptap/pm/state';
 import Suggestion, { type SuggestionOptions } from '@tiptap/suggestion';
-import { toast } from 'sonner';
 
 /**
  * Menu "/" mínimo do editor de blocos (#16): lista os blocos disponíveis e troca o
@@ -92,11 +91,12 @@ export const SLASH_ITEMS: SlashItem[] = [
       id: 'video',
       title: 'Video',
       keywords: ['video', 'youtube', 'vimeo', 'loom', 'embed', 'mp4'],
+      // Sem `window.prompt`: abre o popover inline de URL do `BlockEditor` (o handler
+      // vem pelo storage da extensão). Sem handler o item vira no-op — o schema do
+      // servidor não tem UI para pedir a URL.
       run: (editor, range) => {
-         const url = window.prompt('Video URL (YouTube, Vimeo, Loom, .mp4 or .webm)');
          editor.chain().focus().deleteRange(range).run();
-         if (!url?.trim()) return;
-         if (!editor.commands.setVideo({ src: url })) toast.error('URL de vídeo não suportada');
+         editor.storage.slashCommand?.onVideo?.();
       },
    },
 ];
@@ -111,13 +111,29 @@ export function filterSlashItems(query: string): SlashItem[] {
 
 export interface SlashCommandOptions {
    suggestion: Partial<SuggestionOptions<SlashItem, SlashItem>>;
+   /** Abre o popover de URL do vídeo (o `BlockEditor` injeta). Ausente = item inerte. */
+   onVideo?: () => void;
 }
 
-export const SlashCommand = Extension.create<SlashCommandOptions>({
+export interface SlashCommandStorage {
+   onVideo: (() => void) | null;
+}
+
+declare module '@tiptap/core' {
+   interface Storage {
+      slashCommand: SlashCommandStorage;
+   }
+}
+
+export const SlashCommand = Extension.create<SlashCommandOptions, SlashCommandStorage>({
    name: 'slashCommand',
 
    addOptions() {
       return { suggestion: {} };
+   },
+
+   addStorage() {
+      return { onVideo: this.options.onVideo ?? null };
    },
 
    addProseMirrorPlugins() {

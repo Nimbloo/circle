@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { ok, notFound } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
 import { getProjectDetail, updateProjectDetail } from '@/lib/api/project-detail';
+import { assertProjectInScope, scopeForEmail } from '@/lib/api/scope';
 import type { ContentBlock } from '@/data/issue-details';
 
 export const runtime = 'nodejs';
@@ -13,8 +14,10 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
-      await requireEmail(req);
+      const email = await requireEmail(req);
       const { id } = await params;
+      const { teamIds } = await scopeForEmail(db, email);
+      await assertProjectInScope(db, teamIds, id);
       const dto = await getProjectDetail(db, id);
       return dto ? ok(dto) : notFound(`Project '${id}' não encontrado`);
    }, req);

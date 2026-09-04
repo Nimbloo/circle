@@ -9,6 +9,8 @@ import {
    projectMilestone,
    projectResource,
    projectDetail,
+   projectDependency,
+   projectSnapshot,
    initiativeProject,
    issue as issueT,
    status as statusT,
@@ -23,6 +25,7 @@ import { ApiError } from './errors';
 import { publish } from './events';
 import { getOrCreateUser } from './users';
 import type { UserRef } from './issues';
+import { teamDescendantIds } from './hierarchy';
 
 type ProjectRow = typeof projectT.$inferSelect;
 type StatusRow = typeof statusT.$inferSelect;
@@ -174,6 +177,11 @@ export interface ListProjectsOptions {
    includeClosed?: boolean;
    sort?: ProjectSort;
    dir?: 'asc' | 'desc';
+   /**
+    * Escopo explícito de times (#100): sub-times expandidos e/ou escopo de Guest.
+    * Interage com `team` por INTERSEÇÃO; `[]` significa "nada visível".
+    */
+   teamIds?: string[];
 }
 
 const CLOSED_CATEGORIES = new Set(['completed', 'canceled']);
@@ -194,7 +202,15 @@ export async function listProjects(db: Db, opts: ListProjectsOptions = {}): Prom
       const set = new Set(opts.priority);
       dtos = dtos.filter((d) => set.has(d.priority.id));
    }
-   if (opts.team) dtos = dtos.filter((d) => d.teamId === opts.team);
+   // Sub-times (#100): a lista do time pai inclui os projetos dos filhos.
+   if (opts.team) {
+      const expanded = new Set(await teamDescendantIds(db, [opts.team]));
+      dtos = dtos.filter((d) => expanded.has(d.teamId));
+   }
+   if (opts.teamIds) {
+      const scope = new Set(opts.teamIds);
+      dtos = dtos.filter((d) => scope.has(d.teamId));
+   }
    if (opts.initiative) dtos = dtos.filter((d) => d.initiativeId === opts.initiative);
 
    const dir = opts.dir === 'desc' ? -1 : 1;
@@ -401,6 +417,10 @@ export async function deleteProject(db: Db, id: string): Promise<boolean> {
       await tx.delete(projectResource).where(eq(projectResource.projectId, id));
       await tx.delete(projectDetail).where(eq(projectDetail.projectId, id));
       await tx.delete(initiativeProject).where(eq(initiativeProject.projectId, id));
+      // Roadmap (#102): as arestas dos DOIS lados e a série de snapshots do projeto.
+      await tx.delete(projectDependency).where(eq(projectDependency.projectId, id));
+      await tx.delete(projectDependency).where(eq(projectDependency.dependsOnId, id));
+      await tx.delete(projectSnapshot).where(eq(projectSnapshot.projectId, id));
       await tx.delete(projectT).where(eq(projectT.id, id));
    });
    publish({ entity: 'project', action: 'deleted', id });

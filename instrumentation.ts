@@ -77,6 +77,12 @@ export async function register() {
       // Encerra a conexão dedicada do lock (libera o advisory lock junto, se ainda ativo).
       await lockClient.end().catch(() => {});
    }
+
+   // Webhooks de saída (#101): o sweep das entregas pendentes NÃO roda aqui. Importar
+   // `@/lib/api/webhooks` (ou `@/db`) a partir do instrumentation arrasta o cliente
+   // Postgres para o bundle **Edge** deste arquivo e o Turbopack falha em `util/types`,
+   // derrubando TODA requisição em dev. O sweep é lazy: acontece a cada `publish` e no
+   // GET de `/api/v1/webhooks` (ops abrindo a tela já reprocessa a fila).
 }
 
 /**

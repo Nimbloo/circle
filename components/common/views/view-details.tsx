@@ -12,7 +12,8 @@ import { useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useViewStore } from '@/store/view-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { api } from '@/lib/client';
 
 function IssueViewBody({ view }: { view: View }) {
    const { openPanel } = useRightPanelStore();
@@ -24,7 +25,39 @@ function IssueViewBody({ view }: { view: View }) {
    const loading = useIssuesStore((s) => s.loading);
    const error = useIssuesStore((s) => s.error);
    const hydrate = useIssuesStore((s) => s.hydrate);
-   const issues = useMemo(() => filterIssuesForView(view, liveIssues), [view, liveIssues]);
+   const filtered = useMemo(() => filterIssuesForView(view, liveIssues), [view, liveIssues]);
+
+   // Saved search (#99): quando a view guarda um termo, o RANKING vem do servidor
+   // (`/api/v1/search`, o mesmo motor da tela de busca) e a lista é a interseção com o
+   // que os demais filtros da view já deixaram passar, na ordem de relevância.
+   const q = view.filter.q?.trim() ?? '';
+   const [rankedIds, setRankedIds] = useState<string[] | null>(null);
+   useEffect(() => {
+      if (!q) {
+         setRankedIds(null);
+         return;
+      }
+      let active = true;
+      api.search
+         .query({ q, types: ['issue'], teamId: view.teamId, limit: 100 })
+         .then((res) => {
+            if (!active) return;
+            setRankedIds(res.groups.find((g) => g.type === 'issue')?.items.map((i) => i.id) ?? []);
+         })
+         .catch(() => active && setRankedIds([]));
+      return () => {
+         active = false;
+      };
+   }, [q, view.teamId]);
+
+   const issues = useMemo(() => {
+      if (!q) return filtered;
+      if (rankedIds === null) return [];
+      const position = new Map(rankedIds.map((id, i) => [id, i]));
+      return filtered
+         .filter((i) => position.has(i.id))
+         .sort((a, b) => position.get(a.id)! - position.get(b.id)!);
+   }, [q, rankedIds, filtered]);
 
    return (
       <div className="w-full h-full flex flex-col overflow-hidden">

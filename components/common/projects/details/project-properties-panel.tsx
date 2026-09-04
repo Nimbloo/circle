@@ -12,6 +12,8 @@ import { api } from '@/lib/client';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { ProjectProgressChart } from './project-progress-chart';
+import { ProjectDependenciesPicker } from './project-dependencies-picker';
+import { ProgressHistory } from '../progress-history';
 import { ArrowRight, Calendar, Check, Compass, Plus, Tag, Trash2, UserPlus, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -340,6 +342,11 @@ export function ProjectPropertiesPanel({
                      </span>
                   )}
                </PropertyRow>
+               {projectId && (
+                  <PropertyRow label="Depends on">
+                     <ProjectDependenciesPicker projectId={projectId} />
+                  </PropertyRow>
+               )}
                <PropertyRow label="Labels">
                   <div className="flex items-center gap-1.5">
                      {project.labels.length === 0 && (
@@ -505,6 +512,12 @@ export function ProjectPropertiesPanel({
                      completed={completed}
                   />
                </div>
+               {/* Histórico real por dia (#102) — o snapshot é gravado no boot/GET. */}
+               {projectId && (
+                  <div className="mb-3">
+                     <ProgressHistory projectId={projectId} />
+                  </div>
+               )}
                <Tabs defaultValue="assignees">
                   <TabsList className="h-8 bg-transparent gap-1 p-0">
                      <TabsTrigger value="assignees" className="text-xs px-2.5 rounded-full">

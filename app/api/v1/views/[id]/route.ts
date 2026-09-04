@@ -33,6 +33,7 @@ const UpdateSchema = z.object({
          priorityIds: z.array(z.string()).optional(),
          hasProject: z.boolean().optional(),
          unassigned: z.boolean().optional(),
+         q: z.string().max(200).optional(),
       })
       .optional(),
 });

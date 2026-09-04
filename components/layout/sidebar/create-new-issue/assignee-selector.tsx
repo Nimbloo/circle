@@ -13,7 +13,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { User } from '@/data/users';
+import { activeUsers, User } from '@/data/users';
 import { CheckIcon, UserCircle, UserRoundCheck } from 'lucide-react';
 import { useId, useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -37,7 +37,8 @@ export function AssigneeSelector({ assignees, onChange }: AssigneeSelectorProps)
    // Conta derivada da fatia assinada: assinar `filterByAssignee` (funcao, referencia
    // estavel) deixaria o contador do dropdown parado quando as issues mudam.
    const allIssues = useIssuesStore((s) => s.issues);
-   const users = useWorkspaceStore((s) => s.users);
+   // Membros desativados (#100) não podem receber issue nova.
+   const users = activeUsers(useWorkspaceStore((s) => s.users));
    const meId = useWorkspaceStore((s) => s.me?.id);
    const me = meId ? users.find((u) => u.id === meId) : undefined;
 

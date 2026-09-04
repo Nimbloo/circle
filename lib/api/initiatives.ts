@@ -17,6 +17,7 @@ import { targetDateFromLabel } from '@/lib/initiative-period';
 import { ApiError } from './errors';
 import { publish } from './events';
 import { getOrCreateUser } from './users';
+import { assertInitiativeParent } from './hierarchy';
 import type { UserRef } from './issues';
 
 type InitiativeRow = typeof initT.$inferSelect;
@@ -43,6 +44,16 @@ export interface InitiativeDto {
    projectIds: string[];
    projectCount: number;
    completedProjectCount: number;
+   /** Sub-initiatives (#100): initiative pai, ou null quando é de topo. */
+   parentId: string | null;
+   /** Ids das sub-initiatives DIRETAS (ordem alfabética por nome). */
+   childIds: string[];
+   /**
+    * Rollup (#100): projetos e concluídos somando esta initiative e TODA a sua
+    * subárvore. Igual a `projectCount`/`completedProjectCount` quando não há filhas.
+    */
+   rollupProjectCount: number;
+   rollupCompletedProjectCount: number;
    createdAt: string;
 }
 
@@ -104,20 +115,59 @@ async function projectsByInitiative(db: Db, initIds: string[]) {
       e.ids.push(link.projectId);
       if (isCompleted.get(link.projectId)) e.completed += 1;
    }
-   return byInit;
+   return { byInit, isCompleted };
+}
+
+/** `parentId -> filhos` sobre TODAS as initiatives (tabela pequena). */
+function childrenByParent(edges: { id: string; parentId: string | null }[]) {
+   const map = new Map<string, string[]>();
+   for (const e of edges) {
+      if (!e.parentId) continue;
+      const arr = map.get(e.parentId);
+      if (arr) arr.push(e.id);
+      else map.set(e.parentId, [e.id]);
+   }
+   return map;
+}
+
+/** Subárvore de `root` (incluindo ele), com teto contra ciclo em dado legado. */
+function subtreeIds(children: Map<string, string[]>, root: string, limit: number): string[] {
+   const seen = new Set<string>();
+   const queue = [root];
+   for (let steps = 0; queue.length > 0 && steps <= limit; steps++) {
+      const id = queue.shift()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      queue.push(...(children.get(id) ?? []));
+   }
+   return [...seen];
 }
 
 async function assemble(db: Db, rows: InitiativeRow[], maps: Maps): Promise<InitiativeDto[]> {
    if (rows.length === 0) return [];
    const ownerIds = [...new Set(rows.map((r) => r.ownerId).filter(Boolean) as string[])];
    const initiativeIds = rows.map((row) => row.id);
-   const [owners, projMap, labelLinks] = await Promise.all([
+   // Sub-initiatives (#100): o rollup precisa das linhas de vínculo de TODA a
+   // subárvore, não só das initiatives pedidas — daí carregar as arestas inteiras
+   // (tabela pequena) e expandir os ids antes de consultar os projetos.
+   const edges = await db
+      .select({ id: initT.id, parentId: initT.parentId, name: initT.name })
+      .from(initT);
+   const children = childrenByParent(edges);
+   const nameById = new Map(edges.map((e) => [e.id, e.name]));
+   const subtreeByInitiative = new Map(
+      initiativeIds.map((id) => [id, subtreeIds(children, id, edges.length + 1)])
+   );
+   const scopeIds = [...new Set([...initiativeIds, ...subtreeByInitiative.values()].flat())];
+
+   const [owners, projects, labelLinks] = await Promise.all([
       ownerIds.length
          ? db.select().from(appUser).where(inArray(appUser.id, ownerIds))
          : Promise.resolve([]),
-      projectsByInitiative(db, initiativeIds),
+      projectsByInitiative(db, scopeIds),
       db.select().from(initiativeLabel).where(inArray(initiativeLabel.initiativeId, initiativeIds)),
    ]);
+   const { byInit: projMap, isCompleted } = projects;
    const ownerMap = new Map(owners.map((u) => [u.id, u]));
    const labelIdsByInitiative = new Map<string, string[]>();
    for (const link of labelLinks) {
@@ -129,6 +179,12 @@ async function assemble(db: Db, rows: InitiativeRow[], maps: Maps): Promise<Init
    return rows.map((r) => {
       const owner = r.ownerId ? ownerMap.get(r.ownerId) : undefined;
       const p = projMap.get(r.id) ?? { ids: [], completed: 0 };
+      // Rollup: união dos projetos da subárvore (um projeto vinculado a mãe e filha
+      // conta uma vez só).
+      const rollupProjectIds = new Set<string>();
+      for (const id of subtreeByInitiative.get(r.id) ?? [r.id]) {
+         for (const pid of projMap.get(id)?.ids ?? []) rollupProjectIds.add(pid);
+      }
       return {
          id: r.id,
          slug: r.slug,
@@ -157,6 +213,13 @@ async function assemble(db: Db, rows: InitiativeRow[], maps: Maps): Promise<Init
          projectIds: p.ids,
          projectCount: p.ids.length,
          completedProjectCount: p.completed,
+         parentId: r.parentId,
+         childIds: (children.get(r.id) ?? [])
+            .slice()
+            .sort((a, b) => (nameById.get(a) ?? '').localeCompare(nameById.get(b) ?? '')),
+         rollupProjectCount: rollupProjectIds.size,
+         rollupCompletedProjectCount: [...rollupProjectIds].filter((pid) => isCompleted.get(pid))
+            .length,
          createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
       };
    });
@@ -167,6 +230,11 @@ export interface ListInitiativesOptions {
    priority?: string[];
    owner?: string[];
    health?: string[];
+   /**
+    * Escopo de times (#100, Guest): mantém só as initiatives com ao menos um projeto
+    * (próprio ou de uma sub-initiative) num time visível. `undefined` = todas.
+    */
+   teamIds?: string[];
 }
 
 export async function listInitiatives(
@@ -180,7 +248,40 @@ export async function listInitiatives(
    if (opts.priority?.length) dtos = dtos.filter((d) => opts.priority!.includes(d.priority.id));
    if (opts.health?.length) dtos = dtos.filter((d) => opts.health!.includes(d.health.id));
    if (opts.owner?.length) dtos = dtos.filter((d) => d.owner && opts.owner!.includes(d.owner.id));
+   if (opts.teamIds) dtos = await filterByTeamScope(db, dtos, opts.teamIds);
    return dtos.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Escopo de Guest (#100): a initiative fica visível se algum projeto da sua subárvore
+ * pertence a um time visível. A subárvore evita esconder uma initiative-mãe que só
+ * organiza filhas.
+ */
+async function filterByTeamScope(
+   db: Db,
+   dtos: InitiativeDto[],
+   teamIds: string[]
+): Promise<InitiativeDto[]> {
+   const scope = new Set(teamIds);
+   if (scope.size === 0) return [];
+   const byId = new Map(dtos.map((d) => [d.id, d]));
+   const projectIds = [...new Set(dtos.flatMap((d) => d.projectIds))];
+   if (projectIds.length === 0) return [];
+   const rows = await db
+      .select({ id: projectT.id, teamId: projectT.teamId })
+      .from(projectT)
+      .where(inArray(projectT.id, projectIds));
+   const teamOfProject = new Map(rows.map((r) => [r.id, r.teamId]));
+   const visible = (dto: InitiativeDto, seen: Set<string>): boolean => {
+      if (seen.has(dto.id)) return false;
+      seen.add(dto.id);
+      if (dto.projectIds.some((pid) => scope.has(teamOfProject.get(pid) ?? ''))) return true;
+      return dto.childIds.some((cid) => {
+         const child = byId.get(cid);
+         return child ? visible(child, seen) : false;
+      });
+   };
+   return dtos.filter((d) => visible(d, new Set()));
 }
 
 export async function getInitiative(db: Db, id: string): Promise<InitiativeDto | null> {
@@ -206,6 +307,8 @@ export interface CreateInitiativeInput {
    targetDate?: string | null;
    projectIds?: string[];
    labelIds?: string[];
+   /** Sub-initiatives (#100): initiative pai. */
+   parentId?: string | null;
 }
 
 export async function createInitiative(
@@ -222,6 +325,14 @@ export async function createInitiative(
    const labelIds = [...new Set(input.labelIds ?? [])];
    const unknownLabelId = labelIds.find((labelId) => !maps.labels.has(labelId));
    if (unknownLabelId) throw new ApiError(400, `label '${unknownLabelId}' inválido`);
+   if (input.parentId) {
+      const parent = await db
+         .select({ id: initT.id })
+         .from(initT)
+         .where(eq(initT.id, input.parentId))
+         .limit(1);
+      if (!parent.length) throw new ApiError(400, `initiative pai '${input.parentId}' inválida`);
+   }
    const id = randomUUID();
    await db.transaction(async (tx) => {
       await tx.insert(initT).values({
@@ -239,6 +350,7 @@ export async function createInitiative(
          targetDate:
             input.targetDate !== undefined ? input.targetDate : targetDateFromLabel(input.target),
          healthId: input.healthId,
+         parentId: input.parentId ?? null,
          createdAt: new Date(),
       });
       if (labelIds.length) {
@@ -276,6 +388,8 @@ export interface UpdateInitiativeInput {
    targetDate?: string | null;
    projectIds?: string[];
    labelIds?: string[];
+   /** Sub-initiatives (#100): `null` desvincula do pai. Ciclo → 400. */
+   parentId?: string | null;
 }
 
 /** Rótulos legíveis dos campos, para o feed de alterações (espelha o de project). */
@@ -291,6 +405,7 @@ const INITIATIVE_FIELD_LABELS: Partial<Record<keyof UpdateInitiativeInput, strin
    targetDate: 'target',
    projectIds: 'projects',
    labelIds: 'labels',
+   parentId: 'parent initiative',
 };
 
 export async function updateInitiative(
@@ -334,6 +449,11 @@ export async function updateInitiative(
    // Cliente antigo (só o rótulo): mantém a data coerente com ele.
    if (patch.target !== undefined && patch.targetDate === undefined) {
       set.targetDate = targetDateFromLabel(patch.target);
+   }
+   if (patch.parentId !== undefined) {
+      const parentId = patch.parentId?.trim() || null;
+      if (parentId) await assertInitiativeParent(db, id, parentId);
+      set.parentId = parentId;
    }
    await db.transaction(async (tx) => {
       if (Object.keys(set).length) await tx.update(initT).set(set).where(eq(initT.id, id));
@@ -432,6 +552,17 @@ export async function deleteInitiative(db: Db, id: string): Promise<boolean> {
    const existing = await db.select({ id: initT.id }).from(initT).where(eq(initT.id, id)).limit(1);
    if (existing.length === 0) return false;
    await db.transaction(async (tx) => {
+      // Sub-initiatives (#100): as filhas sobem pro avô — o FK self-referente não
+      // aceita pai inexistente.
+      const [row] = await tx
+         .select({ parentId: initT.parentId })
+         .from(initT)
+         .where(eq(initT.id, id))
+         .limit(1);
+      await tx
+         .update(initT)
+         .set({ parentId: row?.parentId ?? null })
+         .where(eq(initT.parentId, id));
       await tx.delete(initiativeProject).where(eq(initiativeProject.initiativeId, id));
       await tx.delete(initiativeLabel).where(eq(initiativeLabel.initiativeId, id));
       // project.initiativeId é RESTRICT e nullable: desvincula os projetos antes de deletar.

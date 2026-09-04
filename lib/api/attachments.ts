@@ -196,6 +196,23 @@ export async function deleteAttachmentsOfComments(db: Db, commentIds: string[]):
    void removeFromStorage(rows.map((r) => r.url));
 }
 
+/**
+ * URLs de TODOS os anexos da issue (dela e dos comentários dela) — lidas antes do
+ * cascade em `deleteIssue`, que apaga as linhas mas não os objetos no S3.
+ */
+export async function issueAttachmentUrls(db: Db, issueId: string): Promise<string[]> {
+   const rows = await db
+      .select({ url: attachmentT.url })
+      .from(attachmentT)
+      .where(eq(attachmentT.issueId, issueId));
+   return rows.map((r) => r.url);
+}
+
+/** Remove objetos do S3 em best-effort (nunca lança) — para chamadores fora deste módulo. */
+export async function removeAttachmentObjects(urls: string[]): Promise<void> {
+   await removeFromStorage(urls);
+}
+
 async function removeFromStorage(urls: string[]): Promise<void> {
    for (const url of urls) {
       const key = assetKeyFromUrl(url);

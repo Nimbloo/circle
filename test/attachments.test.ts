@@ -208,17 +208,22 @@ describe('deleteAttachment / cascades', () => {
       ).toHaveLength(0);
    });
 
-   it('excluir a issue faz cascade nos anexos', async () => {
+   it('excluir a issue faz cascade nos anexos e limpa o S3 (issue + comentários)', async () => {
       const { db, issueId } = await setup();
-      await createAttachment(db, { issueId, file: file('a.txt', 'text/plain') }, ANA);
+      const a = await createAttachment(db, { issueId, file: file('a.txt', 'text/plain') }, ANA);
       const c = await addComment(db, issueId, 'oi', ANA);
-      await createAttachment(
+      const b = await createAttachment(
          db,
          { issueId, commentId: c.id, file: file('b.txt', 'text/plain') },
          ANA
       );
+      s3.deleteAsset.mockClear();
       expect(await deleteIssue(db, issueId)).toBe(true);
       expect(await db.select().from(attachmentT)).toHaveLength(0);
+      // Best-effort e fire-and-forget: espera a microtask do `void removeAttachmentObjects`.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const keys = s3.deleteAsset.mock.calls.map((call) => call[0]).sort();
+      expect(keys).toEqual([a.url, b.url].map((u) => u.replace('https://cdn.test/', '')).sort());
    });
 });
 

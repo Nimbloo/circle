@@ -29,6 +29,8 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
+import { Input } from '@/components/ui/input';
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { IssueRefChip } from './issue-ref-chip';
 import { SlashCommand, type SlashItem } from './slash-command';
 import { TaskItemView } from './task-item-view';
@@ -308,6 +310,46 @@ export function BlockEditor({
    const slash = useSuggestionMenu<SlashItem>();
    const issueMenu = useSuggestionMenu<Issue>();
 
+   // Vídeo pelo menu "/": popover inline com input de URL (Enter insere, Esc cancela),
+   // ancorado no cursor. Substitui o `window.prompt`.
+   const [videoAt, setVideoAt] = useState<{ top: number; left: number } | null>(null);
+   const [videoUrl, setVideoUrl] = useState('');
+   const [videoError, setVideoError] = useState<string | null>(null);
+   const openVideoPrompt = useCallback(() => {
+      let point = { top: 0, left: 0 };
+      const current = editorRef.current;
+      if (current) {
+         try {
+            const coords = current.view.coordsAtPos(current.state.selection.from);
+            point = { top: coords.bottom, left: coords.left };
+         } catch {
+            // sem layout (jsdom/SSR): ancora no canto
+         }
+      }
+      setVideoUrl('');
+      setVideoError(null);
+      setVideoAt(point);
+   }, []);
+   const closeVideoPrompt = useCallback((refocus: boolean) => {
+      setVideoAt(null);
+      setVideoError(null);
+      if (refocus) editorRef.current?.commands.focus();
+   }, []);
+   // Recebe a URL do próprio input (não do estado): o Enter não depende do re-render
+   // do `onChange` já ter acontecido.
+   const insertVideo = useCallback(
+      (raw: string) => {
+         const src = raw.trim();
+         if (!src) return;
+         if (!editorRef.current?.commands.setVideo({ src })) {
+            setVideoError('URL não suportada — use YouTube, Vimeo, Loom, .mp4 ou .webm');
+            return;
+         }
+         closeVideoPrompt(true);
+      },
+      [closeVideoPrompt]
+   );
+
    const extensions = useMemo(
       () => [
          ...editorExtensions({
@@ -357,9 +399,12 @@ export function BlockEditor({
                },
             }),
          }),
-         SlashCommand.configure({ suggestion: { render: slash.render } }),
+         SlashCommand.configure({
+            suggestion: { render: slash.render },
+            onVideo: openVideoPrompt,
+         }),
       ],
-      [placeholder, slash.render, issueMenu.render, hasContext]
+      [placeholder, slash.render, issueMenu.render, hasContext, openVideoPrompt]
    );
 
    const editor = useEditor({
@@ -402,6 +447,55 @@ export function BlockEditor({
          data-variant={variant}
       >
          <EditorContent editor={editor} />
+         <Popover
+            open={videoAt !== null}
+            onOpenChange={(next) => {
+               if (!next) closeVideoPrompt(true);
+            }}
+         >
+            <PopoverAnchor asChild>
+               <span
+                  aria-hidden
+                  className="pointer-events-none fixed"
+                  style={{ top: videoAt?.top ?? 0, left: videoAt?.left ?? 0 }}
+               />
+            </PopoverAnchor>
+            <PopoverContent
+               align="start"
+               sideOffset={4}
+               className="w-80 p-2"
+               // O editor pode reivindicar o foco logo depois do menu "/" (o comando que
+               // abriu o popover chama `focus()`): fechar por "foco fora" tiraria o input
+               // do usuário. Clique fora e Esc continuam fechando.
+               onFocusOutside={(event) => event.preventDefault()}
+            >
+               <Input
+                  autoFocus
+                  aria-label="Video URL"
+                  placeholder="Cole a URL do vídeo (YouTube, Vimeo, Loom, .mp4)"
+                  value={videoUrl}
+                  onChange={(event) => {
+                     setVideoUrl(event.target.value);
+                     setVideoError(null);
+                  }}
+                  onKeyDown={(event) => {
+                     if (event.key === 'Enter') {
+                        event.preventDefault();
+                        insertVideo(event.currentTarget.value);
+                     } else if (event.key === 'Escape') {
+                        event.preventDefault();
+                        closeVideoPrompt(true);
+                     }
+                  }}
+                  className="h-8"
+               />
+               {videoError ? (
+                  <p role="alert" className="mt-1.5 px-1 text-xs text-destructive">
+                     {videoError}
+                  </p>
+               ) : null}
+            </PopoverContent>
+         </Popover>
          {slashOpen
             ? createPortal(
                  <SuggestionMenu

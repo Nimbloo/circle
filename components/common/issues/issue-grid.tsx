@@ -17,6 +17,7 @@ import { ProjectBadge } from './project-badge';
 import { StatusSelector } from './status-selector';
 import { SubIssueProgress } from './sub-issue-progress';
 import { ParentIssueChip } from './parent-issue-chip';
+import { SlaBadge } from './sla-badge';
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { IssueContextMenu } from './issue-context-menu';
 
@@ -203,6 +204,7 @@ export function IssueGrid({ issue, orderedIssues, layout = true }: IssueGridProp
                   {displayProperties.project && issue.project && (
                      <ProjectBadge project={issue.project} />
                   )}
+                  <SlaBadge issue={issue} />
                </div>
                {/* Rodapé */}
                <div className="mt-1.5 flex min-h-6 items-center justify-between gap-2">

@@ -47,6 +47,7 @@ function member(id: string, teamIds: string[] = [], extra: Partial<MemberDto> = 
       joinedAt: '2026-01-01',
       teamCount: teamIds.length,
       teamIds,
+      deactivatedAt: null,
       ...extra,
    };
 }
@@ -108,6 +109,7 @@ function team(id: string, members: User[], projects: Project[] = []): Team {
       cycleCooldownDays: 0,
       autoCloseParent: false,
       autoCloseChildren: false,
+      parentId: null,
       members,
       projects,
    };
@@ -123,6 +125,7 @@ function teamDto(id: string, extra: Partial<TeamDto> = {}): TeamDto {
       cycleCooldownDays: 0,
       autoCloseParent: false,
       autoCloseChildren: false,
+      parentId: null,
       memberCount: 1,
       projectCount: 0,
       joined: true,

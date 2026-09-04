@@ -59,6 +59,47 @@ import type { InviteDto } from '@/lib/api/invites';
 import type { FavoriteDto, FavoriteEntityType } from '@/lib/api/favorites';
 import type { SlackConfigDto } from '@/lib/api/integrations/slack';
 import type { AttachmentDto } from '@/lib/api/attachments';
+import type { TeamSlaDto } from '@/lib/api/slas';
+import type {
+   TeamAutomationDto,
+   CreateAutomationInput,
+   UpdateAutomationInput,
+} from '@/lib/api/automations';
+import type { SearchEntityType, SearchGroup, SearchItem, SearchResult } from '@/lib/api/search';
+import type { AcceptTriageInput, TriageSuggestionDto } from '@/lib/api/triage';
+import type {
+   ImportMapping,
+   ImportPreviewDto,
+   ImportResultDto,
+   ImportSource,
+} from '@/lib/api/import';
+import type { ApiScope, ApiTokenDto, CreatedApiTokenDto } from '@/lib/api/api-tokens';
+import type { WebhookDeliveryDto, WebhookDto, WebhookEvent } from '@/lib/api/webhooks';
+import type {
+   RoadmapDto,
+   RoadmapDependency,
+   RoadmapGroup,
+   RoadmapMilestone,
+} from '@/lib/api/roadmap';
+import type { ProjectSnapshotPoint } from '@/lib/api/project-snapshots';
+
+export type { SearchEntityType, SearchGroup, SearchItem, SearchResult };
+export type { RoadmapDto, RoadmapDependency, RoadmapGroup, RoadmapMilestone, ProjectSnapshotPoint };
+
+/** Parâmetros de `api.roadmap.get` (#102). */
+export interface RoadmapQueryOptions {
+   includeCompleted?: boolean;
+   sort?: 'start-date' | 'target-date' | 'title';
+}
+
+/** Parâmetros de `api.search.query` (espelha `SearchOptions` do servidor). */
+export interface SearchQueryOptions {
+   q: string;
+   types?: SearchEntityType[];
+   teamId?: string;
+   statusId?: string;
+   limit?: number;
+}
 
 /**
  * `parentId` é o contrato compartilhado da spec de sub-issues (cria a issue já vinculada
@@ -193,7 +234,9 @@ export const api = {
    /** Convites de acesso (admin). `create` devolve o magic link uma unica vez. */
    invites: {
       list: () => get<InviteDto[]>('/invites'),
-      create: (email: string) => post<InviteDto & { url: string }>('/invites', { email }),
+      /** `role` (#100): 'Member' (default) ou 'Guest'. */
+      create: (email: string, role?: string) =>
+         post<InviteDto & { url: string }>('/invites', { email, role }),
       revoke: (id: string) => del<{ deleted: boolean }>(`/invites/${id}`),
    },
 
@@ -291,6 +334,8 @@ export const api = {
             cycleCooldownDays?: number;
             autoCloseParent?: boolean;
             autoCloseChildren?: boolean;
+            /** Sub-times (#100): `null` desvincula do pai. */
+            parentId?: string | null;
          }
       ) => patch<TeamDto>(`/teams/${key}`, body),
       remove: (key: string) => del<{ deleted: boolean }>(`/teams/${key}`),
@@ -365,6 +410,9 @@ export const api = {
       list: (q = '') => get<MemberDto[]>(`/members${q}`),
       get: (id: string) => get<MemberDto>(`/members/${id}`),
       updateRole: (id: string, role: string) => patch<MemberDto>(`/members/${id}`, { role }),
+      /** Desativa/reativa o membro (#100, admin). Remove de todos os times ao desativar. */
+      setDeactivated: (id: string, deactivated: boolean) =>
+         patch<MemberDto>(`/members/${id}`, { deactivated }),
    },
 
    projects: {
@@ -504,5 +552,126 @@ export const api = {
          del<{ deleted: boolean }>(
             `/reviews/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`
          ),
+   },
+
+   /** Busca full-text agrupada por tipo (#99). */
+   search: {
+      query: (opts: SearchQueryOptions) => {
+         const sp = new URLSearchParams();
+         sp.set('q', opts.q);
+         opts.types?.forEach((t) => sp.append('types', t));
+         if (opts.teamId) sp.set('teamId', opts.teamId);
+         if (opts.statusId) sp.set('statusId', opts.statusId);
+         if (opts.limit != null) sp.set('limit', String(opts.limit));
+         return get<SearchResult>(`/search?${sp.toString()}`);
+      },
+   },
+
+   /** SLAs por prioridade do time (#97). */
+   teamSlas: {
+      list: (teamKey: string) => get<TeamSlaDto[]>(`/teams/${teamKey}/slas`),
+      /** `hours = null` remove o SLA da prioridade. Devolve a lista completa do time. */
+      set: (teamKey: string, priorityId: string, hours: number | null) =>
+         request<TeamSlaDto[]>('PUT', `/teams/${teamKey}/slas`, { priorityId, hours }),
+   },
+
+   /** Automações (Workflows & automations) do time (#97). */
+   automations: {
+      list: (teamKey: string) => get<TeamAutomationDto[]>(`/teams/${teamKey}/automations`),
+      create: (teamKey: string, input: CreateAutomationInput) =>
+         post<TeamAutomationDto>(`/teams/${teamKey}/automations`, input),
+      update: (teamKey: string, id: string, body: UpdateAutomationInput) =>
+         patch<TeamAutomationDto>(`/teams/${teamKey}/automations/${id}`, body),
+      remove: (teamKey: string, id: string) =>
+         del<{ deleted: boolean }>(`/teams/${teamKey}/automations/${id}`),
+   },
+
+   /** Triage com IA (#94): sugestão por issue e a fila do time. */
+   triage: {
+      /** Sugestão da issue (gera na hora se ainda não existir). */
+      suggestion: (issueId: string) =>
+         get<TriageSuggestionDto>(`/issues/${encodeURIComponent(issueId)}/triage-suggestion`),
+      /** Sugestões já prontas da fila do time; as que faltam são geradas em background. */
+      queue: (teamKey: string) =>
+         get<TriageSuggestionDto[]>(`/teams/${encodeURIComponent(teamKey)}/triage-suggestions`),
+      accept: (issueId: string, input: AcceptTriageInput = {}) =>
+         post<TriageSuggestionDto>(
+            `/issues/${encodeURIComponent(issueId)}/triage-suggestion/accept`,
+            input
+         ),
+      dismiss: (issueId: string) =>
+         post<TriageSuggestionDto>(
+            `/issues/${encodeURIComponent(issueId)}/triage-suggestion/dismiss`,
+            {}
+         ),
+   },
+
+   /** Import de issues por CSV — wizard de Settings → Import/Export (#101). */
+   importIssues: {
+      /** Analisa o arquivo sem escrever: colunas, mapeamento proposto, amostra e avisos. */
+      preview: (file: File, source: ImportSource, mapping?: ImportMapping) => {
+         const form = new FormData();
+         form.set('file', file);
+         form.set('source', source);
+         if (mapping) form.set('mapping', JSON.stringify(mapping));
+         return postForm<ImportPreviewDto>('/import/preview', form);
+      },
+      /** Cria (ou atualiza, em re-import) as issues com o mapeamento confirmado. */
+      commit: (input: {
+         source: ImportSource;
+         csv: string;
+         teamId: string;
+         mapping: ImportMapping;
+         createMissingLabels?: boolean;
+      }) => post<ImportResultDto>('/import/commit', input),
+   },
+
+   /** Tokens da API pública (#101). O valor em claro só vem no `create`. */
+   apiTokens: {
+      list: () => get<ApiTokenDto[]>('/api-tokens'),
+      create: (name: string, scopes: ApiScope[]) =>
+         post<CreatedApiTokenDto>('/api-tokens', { name, scopes }),
+      revoke: (id: string) => del<{ revoked: boolean }>(`/api-tokens/${encodeURIComponent(id)}`),
+   },
+
+   /** Webhooks de saída (#101). O segredo só vem no `create`. */
+   webhooks: {
+      list: () => get<WebhookDto[]>('/webhooks'),
+      create: (input: { url: string; events: WebhookEvent[]; secret?: string }) =>
+         post<WebhookDto>('/webhooks', input),
+      update: (id: string, body: { url?: string; events?: WebhookEvent[]; enabled?: boolean }) =>
+         patch<WebhookDto>(`/webhooks/${encodeURIComponent(id)}`, body),
+      remove: (id: string) => del<{ deleted: boolean }>(`/webhooks/${encodeURIComponent(id)}`),
+      deliveries: (id: string, limit = 20) =>
+         get<WebhookDeliveryDto[]>(`/webhooks/${encodeURIComponent(id)}/deliveries?limit=${limit}`),
+      redeliver: (deliveryId: string) =>
+         post<WebhookDeliveryDto>(
+            `/webhooks/deliveries/${encodeURIComponent(deliveryId)}/redeliver`
+         ),
+   },
+
+   /** Roadmap: projetos por initiative, marcos e dependências (#102). */
+   roadmap: {
+      get: (opts: RoadmapQueryOptions = {}) => {
+         const sp = new URLSearchParams();
+         if (opts.includeCompleted === false) sp.set('includeCompleted', 'false');
+         if (opts.sort) sp.set('sort', opts.sort);
+         const qs = sp.toString();
+         return get<RoadmapDto>(`/roadmap${qs ? `?${qs}` : ''}`);
+      },
+   },
+
+   /** Dependências entre projetos ("Depends on", #102). Ciclo → 400. */
+   projectDependencies: {
+      list: (projectId: string) => get<string[]>(`/projects/${projectId}/dependencies`),
+      set: (projectId: string, dependsOn: string[]) =>
+         request<string[]>('PUT', `/projects/${projectId}/dependencies`, { dependsOn }),
+   },
+
+   /** Histórico diário de progresso (#102): por projeto e agregado por initiative. */
+   projectSnapshots: {
+      list: (projectId: string) => get<ProjectSnapshotPoint[]>(`/projects/${projectId}/snapshots`),
+      forInitiative: (initiativeId: string) =>
+         get<ProjectSnapshotPoint[]>(`/initiatives/${initiativeId}/snapshots`),
    },
 };
