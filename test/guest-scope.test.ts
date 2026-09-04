@@ -29,6 +29,73 @@ import { GET as listTeamsRoute } from '@/app/api/v1/teams/route';
 import { GET as getTeamRoute } from '@/app/api/v1/teams/[teamKey]/route';
 import { GET as listTeamIssuesRoute } from '@/app/api/v1/teams/[teamKey]/issues/route';
 
+// Rotas de ESCRITA (o gate novo) + as leituras que faltavam escopo.
+import { POST as createIssueRoute } from '@/app/api/v1/issues/route';
+import {
+   PATCH as patchIssueRoute,
+   DELETE as deleteIssueRoute,
+} from '@/app/api/v1/issues/[id]/route';
+import { PATCH as patchIssueDetailRoute } from '@/app/api/v1/issues/[id]/detail/route';
+import { GET as issueActivityRoute } from '@/app/api/v1/issues/[id]/activity/route';
+import { GET as issueAttachmentsRoute } from '@/app/api/v1/issues/[id]/attachments/route';
+import { POST as addCommentRoute } from '@/app/api/v1/issues/[id]/comments/route';
+import { POST as addLabelRoute } from '@/app/api/v1/issues/[id]/labels/route';
+import { DELETE as removeLabelRoute } from '@/app/api/v1/issues/[id]/labels/[labelId]/route';
+import { PATCH as rankRoute } from '@/app/api/v1/issues/[id]/rank/route';
+import {
+   POST as addRelationRoute,
+   DELETE as removeRelationRoute,
+} from '@/app/api/v1/issues/[id]/relations/route';
+import {
+   POST as subscribeRoute,
+   DELETE as unsubscribeRoute,
+} from '@/app/api/v1/issues/[id]/subscription/route';
+import { GET as triageSuggestionRoute } from '@/app/api/v1/issues/[id]/triage-suggestion/route';
+import { POST as triageAcceptRoute } from '@/app/api/v1/issues/[id]/triage-suggestion/accept/route';
+import { POST as triageDismissRoute } from '@/app/api/v1/issues/[id]/triage-suggestion/dismiss/route';
+import { GET as exportIssuesRoute } from '@/app/api/v1/issues/export/route';
+import { GET as aggregateRoute } from '@/app/api/v1/issues/aggregate/route';
+import { POST as createProjectRoute } from '@/app/api/v1/projects/route';
+import {
+   PATCH as patchProjectRoute,
+   DELETE as deleteProjectRoute,
+} from '@/app/api/v1/projects/[id]/route';
+import { PATCH as patchProjectDetailRoute } from '@/app/api/v1/projects/[id]/detail/route';
+import { GET as projectProgressRoute } from '@/app/api/v1/projects/[id]/progress/route';
+import {
+   GET as listMilestonesRoute,
+   POST as addMilestoneRoute,
+} from '@/app/api/v1/projects/[id]/milestones/route';
+import {
+   PATCH as patchMilestoneRoute,
+   DELETE as deleteMilestoneRoute,
+} from '@/app/api/v1/projects/[id]/milestones/[mid]/route';
+import {
+   GET as listResourcesRoute,
+   POST as addResourceRoute,
+} from '@/app/api/v1/projects/[id]/resources/route';
+import {
+   PATCH as patchResourceRoute,
+   DELETE as deleteResourceRoute,
+} from '@/app/api/v1/projects/[id]/resources/[rid]/route';
+import {
+   GET as listProjectUpdatesRoute,
+   POST as postProjectUpdateRoute,
+} from '@/app/api/v1/projects/[id]/updates/route';
+import { PUT as putDependenciesRoute } from '@/app/api/v1/projects/[id]/dependencies/route';
+import { POST as createViewRoute } from '@/app/api/v1/views/route';
+import { POST as importCommitRoute } from '@/app/api/v1/import/commit/route';
+import { POST as createInitiativeRoute } from '@/app/api/v1/initiatives/route';
+import {
+   PATCH as patchInitiativeRoute,
+   DELETE as deleteInitiativeRoute,
+} from '@/app/api/v1/initiatives/[id]/route';
+import { GET as initiativeActivityRoute } from '@/app/api/v1/initiatives/[id]/activity/route';
+import { POST as postInitiativeUpdateRoute } from '@/app/api/v1/initiatives/[id]/updates/route';
+import { addMilestone, addResource } from '@/lib/api/project-detail';
+import { deleteIssue } from '@/lib/api/issues';
+import { commitImport } from '@/lib/api/import';
+
 /**
  * TESTE DE AUTORIZAÇÃO POR ROTA (#100).
  *
@@ -52,10 +119,22 @@ const ids = {
    openView: '',
    secretView: '',
    memberOnlyId: '',
+   openMilestone: '',
+   secretMilestone: '',
+   openResource: '',
+   secretResource: '',
 };
 
 function req(url: string, email: string) {
    return new Request(url, { headers: { 'x-forwarded-email': email } });
+}
+/** Request de ESCRITA (com corpo JSON quando houver). */
+function wreq(url: string, email: string, method: string, body?: unknown) {
+   return new Request(url, {
+      method,
+      headers: { 'x-forwarded-email': email, 'content-type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+   });
 }
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 const json = async (res: Response) => (await res.json()).data;
@@ -130,6 +209,15 @@ beforeEach(async () => {
          { slug: 'secret-view', name: 'Secret view', type: 'issue', filter: {}, teamId: 'SECRET' },
          ADMIN
       )
+   ).id;
+
+   ids.openMilestone = (await addMilestone(db, ids.openProject, { name: 'M open' })).id;
+   ids.secretMilestone = (await addMilestone(db, ids.secretProject, { name: 'M secret' })).id;
+   ids.openResource = (
+      await addResource(db, ids.openProject, { label: 'R open', url: 'https://open.example' })
+   ).id;
+   ids.secretResource = (
+      await addResource(db, ids.secretProject, { label: 'R secret', url: 'https://secret.example' })
    ).id;
 });
 afterEach(() => __setTestDb(null));
@@ -324,5 +412,427 @@ describe('escopo de Guest por rota de leitura (#100)', () => {
       expect(
          await json(await listIssuesRoute(req('http://x/api/v1/issues', 'solo@nimbloo.ai')))
       ).toEqual([]);
+   });
+});
+
+/**
+ * ESCOPO DE ESCRITA (hardening).
+ *
+ * A auditoria da v0.29.0 provou, rodando código, que TODA escrita respondia 200 para um
+ * guest de outro time: criar issue no time alheio (inclusive herdando o time pelo pai),
+ * editar/apagar issue e projeto, comentar, ler o feed, mexer em milestone/resource por id
+ * global, e — a escalação que anula tudo — MOVER um recurso alheio para o próprio time.
+ * Cada caso abaixo falhava (200) antes do gate na camada de serviço.
+ */
+describe('escopo de Guest nas rotas de ESCRITA', () => {
+   const status = (r: Response) => r.status;
+
+   it('POST /issues: 403 no time alheio, inclusive herdando o time pelo parentId', async () => {
+      const base = { title: 'invasão', statusId: 'to-do', priorityId: 'high' };
+      expect(
+         status(
+            await createIssueRoute(
+               wreq('http://x/api/v1/issues', GUEST, 'POST', { ...base, teamId: 'SECRET' })
+            )
+         )
+      ).toBe(403);
+
+      // Sem teamId no corpo o time vem do PAI (#95): validar só o corpo deixa o bypass.
+      expect(
+         status(
+            await createIssueRoute(
+               wreq('http://x/api/v1/issues', GUEST, 'POST', {
+                  title: 'filha invasora',
+                  parentId: ids.secretIssue,
+               })
+            )
+         )
+      ).toBe(403);
+
+      // No próprio time continua funcionando.
+      expect(
+         status(
+            await createIssueRoute(
+               wreq('http://x/api/v1/issues', GUEST, 'POST', { ...base, teamId: 'OPEN' })
+            )
+         )
+      ).toBe(200);
+   });
+
+   it('PATCH/DELETE /issues/{id}: 403 na issue de outro time', async () => {
+      const p = params({ id: ids.secretIssue });
+      const url = `http://x/api/v1/issues/${ids.secretIssue}`;
+      expect(status(await patchIssueRoute(wreq(url, GUEST, 'PATCH', { title: 'hack' }), p))).toBe(
+         403
+      );
+      expect(status(await deleteIssueRoute(wreq(url, GUEST, 'DELETE'), p))).toBe(403);
+      expect(
+         status(
+            await patchIssueDetailRoute(
+               wreq(`${url}/detail`, GUEST, 'PATCH', { description: 'hack' }),
+               p
+            )
+         )
+      ).toBe(403);
+   });
+
+   it('PATCH /issues/{id}: 403 ao mover a issue para projeto ou pai de outro time', async () => {
+      const p = params({ id: ids.openIssue });
+      const url = `http://x/api/v1/issues/${ids.openIssue}`;
+      expect(
+         status(
+            await patchIssueRoute(wreq(url, GUEST, 'PATCH', { projectId: ids.secretProject }), p)
+         )
+      ).toBe(403);
+      expect(
+         status(await patchIssueRoute(wreq(url, GUEST, 'PATCH', { parentId: ids.secretIssue }), p))
+      ).toBe(403);
+   });
+
+   it('comentário e feed de issue alheia: 403 (o feed vazava o corpo dos comentários)', async () => {
+      const p = params({ id: ids.secretIssue });
+      const url = `http://x/api/v1/issues/${ids.secretIssue}`;
+      expect(
+         status(await addCommentRoute(wreq(`${url}/comments`, GUEST, 'POST', { body: 'oi' }), p))
+      ).toBe(403);
+      expect(status(await issueActivityRoute(req(`${url}/activity`, GUEST), p))).toBe(403);
+      expect(status(await issueAttachmentsRoute(req(`${url}/attachments`, GUEST), p))).toBe(403);
+   });
+
+   it('sub-rotas de issues/{id}: labels, rank, relations, subscription e triage dão 403', async () => {
+      const p = params({ id: ids.secretIssue });
+      const url = `http://x/api/v1/issues/${ids.secretIssue}`;
+      expect(
+         status(await addLabelRoute(wreq(`${url}/labels`, GUEST, 'POST', { labelId: 'bug' }), p))
+      ).toBe(403);
+      expect(
+         status(
+            await removeLabelRoute(
+               wreq(`${url}/labels/bug`, GUEST, 'DELETE'),
+               params({ id: ids.secretIssue, labelId: 'bug' })
+            )
+         )
+      ).toBe(403);
+      expect(
+         status(await rankRoute(wreq(`${url}/rank`, GUEST, 'PATCH', { beforeId: null }), p))
+      ).toBe(403);
+      expect(status(await subscribeRoute(wreq(`${url}/subscription`, GUEST, 'POST'), p))).toBe(403);
+      expect(status(await unsubscribeRoute(wreq(`${url}/subscription`, GUEST, 'DELETE'), p))).toBe(
+         403
+      );
+      expect(status(await triageSuggestionRoute(req(`${url}/triage-suggestion`, GUEST), p))).toBe(
+         403
+      );
+      expect(
+         status(
+            await triageAcceptRoute(wreq(`${url}/triage-suggestion/accept`, GUEST, 'POST', {}), p)
+         )
+      ).toBe(403);
+      expect(
+         status(
+            await triageDismissRoute(wreq(`${url}/triage-suggestion/dismiss`, GUEST, 'POST'), p)
+         )
+      ).toBe(403);
+   });
+
+   it('relations: 403 nas DUAS pontas (origem alheia e alvo alheio)', async () => {
+      const secret = `http://x/api/v1/issues/${ids.secretIssue}/relations`;
+      expect(
+         status(
+            await addRelationRoute(
+               wreq(secret, GUEST, 'POST', { relatedId: ids.openIssue, kind: 'related' }),
+               params({ id: ids.secretIssue })
+            )
+         )
+      ).toBe(403);
+
+      // Origem no time do guest, ALVO de fora: puxaria a issue alheia para o feed dele.
+      const open = `http://x/api/v1/issues/${ids.openIssue}/relations`;
+      expect(
+         status(
+            await addRelationRoute(
+               wreq(open, GUEST, 'POST', { relatedId: ids.secretIssue, kind: 'related' }),
+               params({ id: ids.openIssue })
+            )
+         )
+      ).toBe(403);
+      expect(
+         status(
+            await removeRelationRoute(
+               wreq(`${open}?relatedId=${ids.secretIssue}&kind=related`, GUEST, 'DELETE'),
+               params({ id: ids.openIssue })
+            )
+         )
+      ).toBe(403);
+   });
+
+   it('POST/PATCH/DELETE /projects: 403 fora do escopo — e mover para o próprio time também', async () => {
+      expect(
+         status(
+            await createProjectRoute(
+               wreq('http://x/api/v1/projects', GUEST, 'POST', {
+                  name: 'P invasor',
+                  statusId: 'proj-in-progress',
+                  priorityId: 'high',
+                  healthId: 'on-track',
+                  teamId: 'SECRET',
+               })
+            )
+         )
+      ).toBe(403);
+
+      const secret = params({ id: ids.secretProject });
+      const url = `http://x/api/v1/projects/${ids.secretProject}`;
+      expect(
+         status(await patchProjectRoute(wreq(url, GUEST, 'PATCH', { name: 'x' }), secret))
+      ).toBe(403);
+      expect(status(await deleteProjectRoute(wreq(url, GUEST, 'DELETE'), secret))).toBe(403);
+      // A ESCALAÇÃO: puxar o projeto alheio para o time do guest fazia o GET passar a valer.
+      expect(
+         status(await patchProjectRoute(wreq(url, GUEST, 'PATCH', { teamId: 'OPEN' }), secret))
+      ).toBe(403);
+      // E o inverso (empurrar o próprio projeto para fora) também é movimento inválido.
+      expect(
+         status(
+            await patchProjectRoute(
+               wreq(`http://x/api/v1/projects/${ids.openProject}`, GUEST, 'PATCH', {
+                  teamId: 'SECRET',
+               }),
+               params({ id: ids.openProject })
+            )
+         )
+      ).toBe(403);
+   });
+
+   it('sub-recursos de projeto alheio (detail, milestones, resources, updates, progress): 403', async () => {
+      const p = params({ id: ids.secretProject });
+      const url = `http://x/api/v1/projects/${ids.secretProject}`;
+      expect(
+         status(
+            await patchProjectDetailRoute(
+               wreq(`${url}/detail`, GUEST, 'PATCH', { summary: 'hack' }),
+               p
+            )
+         )
+      ).toBe(403);
+      expect(status(await projectProgressRoute(req(`${url}/progress`, GUEST), p))).toBe(403);
+      expect(status(await listMilestonesRoute(req(`${url}/milestones`, GUEST), p))).toBe(403);
+      expect(
+         status(await addMilestoneRoute(wreq(`${url}/milestones`, GUEST, 'POST', { name: 'M' }), p))
+      ).toBe(403);
+      expect(status(await listResourcesRoute(req(`${url}/resources`, GUEST), p))).toBe(403);
+      expect(
+         status(
+            await addResourceRoute(
+               wreq(`${url}/resources`, GUEST, 'POST', { label: 'L', url: 'https://x' }),
+               p
+            )
+         )
+      ).toBe(403);
+      expect(status(await listProjectUpdatesRoute(req(`${url}/updates`, GUEST), p))).toBe(403);
+      expect(
+         status(
+            await postProjectUpdateRoute(
+               wreq(`${url}/updates`, GUEST, 'POST', { health: 'on-track', blocks: [] }),
+               p
+            )
+         )
+      ).toBe(403);
+   });
+
+   it('milestone/resource: o {id} do projeto na URL é respeitado (nada de editar por id global)', async () => {
+      const secretUrl = `http://x/api/v1/projects/${ids.secretProject}`;
+      expect(
+         status(
+            await patchMilestoneRoute(
+               wreq(`${secretUrl}/milestones/${ids.secretMilestone}`, GUEST, 'PATCH', {
+                  name: 'x',
+               }),
+               params({ id: ids.secretProject, mid: ids.secretMilestone })
+            )
+         )
+      ).toBe(403);
+      expect(
+         status(
+            await deleteResourceRoute(
+               wreq(`${secretUrl}/resources/${ids.secretResource}`, GUEST, 'DELETE'),
+               params({ id: ids.secretProject, rid: ids.secretResource })
+            )
+         )
+      ).toBe(403);
+
+      // Truque do id global: URL do projeto do guest, id do recurso do outro projeto.
+      const openUrl = `http://x/api/v1/projects/${ids.openProject}`;
+      expect(
+         status(
+            await patchMilestoneRoute(
+               wreq(`${openUrl}/milestones/${ids.secretMilestone}`, GUEST, 'PATCH', { name: 'x' }),
+               params({ id: ids.openProject, mid: ids.secretMilestone })
+            )
+         )
+      ).toBe(404);
+      expect(
+         status(
+            await deleteMilestoneRoute(
+               wreq(`${openUrl}/milestones/${ids.secretMilestone}`, GUEST, 'DELETE'),
+               params({ id: ids.openProject, mid: ids.secretMilestone })
+            )
+         )
+      ).toBe(404);
+      expect(
+         status(
+            await patchResourceRoute(
+               wreq(`${openUrl}/resources/${ids.secretResource}`, GUEST, 'PATCH', { label: 'x' }),
+               params({ id: ids.openProject, rid: ids.secretResource })
+            )
+         )
+      ).toBe(404);
+      expect(
+         status(
+            await deleteResourceRoute(
+               wreq(`${openUrl}/resources/${ids.secretResource}`, GUEST, 'DELETE'),
+               params({ id: ids.openProject, rid: ids.secretResource })
+            )
+         )
+      ).toBe(404);
+
+      // O próprio projeto segue editável.
+      expect(
+         status(
+            await patchMilestoneRoute(
+               wreq(`${openUrl}/milestones/${ids.openMilestone}`, GUEST, 'PATCH', { name: 'ok' }),
+               params({ id: ids.openProject, mid: ids.openMilestone })
+            )
+         )
+      ).toBe(200);
+   });
+
+   it('PUT /projects/{id}/dependencies: valida também os ALVOS, não só a ponta da URL', async () => {
+      expect(
+         status(
+            await putDependenciesRoute(
+               wreq(`http://x/api/v1/projects/${ids.openProject}/dependencies`, GUEST, 'PUT', {
+                  dependsOn: [ids.secretProject],
+               }),
+               params({ id: ids.openProject })
+            )
+         )
+      ).toBe(403);
+   });
+
+   it('POST /views: valida existência E escopo do teamId', async () => {
+      expect(
+         status(
+            await createViewRoute(
+               wreq('http://x/api/v1/views', GUEST, 'POST', {
+                  slug: 'v-secret',
+                  name: 'V',
+                  type: 'issue',
+                  filter: {},
+                  teamId: 'SECRET',
+               })
+            )
+         )
+      ).toBe(403);
+      expect(
+         status(
+            await createViewRoute(
+               wreq('http://x/api/v1/views', GUEST, 'POST', {
+                  slug: 'v-ghost',
+                  name: 'V',
+                  type: 'issue',
+                  filter: {},
+                  teamId: 'NAO-EXISTE',
+               })
+            )
+         )
+      ).toBe(404);
+   });
+
+   it('POST /import/commit: 403 quando o teamId é de outro time', async () => {
+      expect(
+         status(
+            await importCommitRoute(
+               wreq('http://x/api/v1/import/commit', GUEST, 'POST', {
+                  source: 'csv',
+                  csv: 'title\nimportada',
+                  teamId: 'SECRET',
+                  mapping: { title: 'title' },
+               })
+            )
+         )
+      ).toBe(403);
+   });
+
+   it('initiatives: 403 na de fora e ao vincular projeto de outro time', async () => {
+      const p = params({ id: ids.secretInitiative });
+      const url = `http://x/api/v1/initiatives/${ids.secretInitiative}`;
+      expect(status(await patchInitiativeRoute(wreq(url, GUEST, 'PATCH', { name: 'x' }), p))).toBe(
+         403
+      );
+      expect(status(await deleteInitiativeRoute(wreq(url, GUEST, 'DELETE'), p))).toBe(403);
+      expect(status(await initiativeActivityRoute(req(`${url}/activity`, GUEST), p))).toBe(403);
+      expect(
+         status(
+            await postInitiativeUpdateRoute(
+               wreq(`${url}/updates`, GUEST, 'POST', { health: 'on-track', blocks: [] }),
+               p
+            )
+         )
+      ).toBe(403);
+      expect(
+         status(
+            await createInitiativeRoute(
+               wreq('http://x/api/v1/initiatives', GUEST, 'POST', {
+                  slug: 'i-invasora',
+                  name: 'I',
+                  priorityId: 'high',
+                  healthId: 'on-track',
+                  projectIds: [ids.secretProject],
+               })
+            )
+         )
+      ).toBe(403);
+   });
+
+   it('GET /issues/export e /issues/aggregate não devolvem o workspace inteiro', async () => {
+      const csv = await (
+         await exportIssuesRoute(req('http://x/api/v1/issues/export', GUEST))
+      ).text();
+      expect(csv).toContain('aberta');
+      expect(csv).not.toContain('secreta');
+
+      const bundle = await (
+         await exportIssuesRoute(req('http://x/api/v1/issues/export?format=json', GUEST))
+      ).json();
+      expect(bundle.issues.map((i: { title: string }) => i.title).sort()).toEqual([
+         'aberta',
+         'sub',
+      ]);
+
+      // Agregações: com time fora do escopo, 403; sem time, o guest não recebe o total global.
+      expect(
+         status(await aggregateRoute(req('http://x/api/v1/issues/aggregate?team=SECRET', GUEST)))
+      ).toBe(403);
+      const matrix = await aggregateRoute(req('http://x/api/v1/issues/aggregate?team=OPEN', GUEST));
+      expect(status(matrix)).toBe(200);
+   });
+});
+
+describe('integridade de deleteIssue', () => {
+   it('apaga issue importada sem estourar chave estrangeira (issue_import)', async () => {
+      const res = await commitImport(
+         db,
+         {
+            source: 'csv',
+            csv: 'externalId,title\nEXT-1,Importada',
+            teamId: 'OPEN',
+            mapping: { externalId: 'externalId', title: 'title' },
+         },
+         ADMIN
+      );
+      expect(res.created).toBe(1);
+      const importedId = res.issueIds[0];
+      await expect(deleteIssue(db, importedId)).resolves.toBe(true);
    });
 });
