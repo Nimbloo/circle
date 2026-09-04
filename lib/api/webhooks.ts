@@ -5,8 +5,8 @@
  * passa, então é dele que os webhooks são alimentados: cada `publish` vira uma linha em
  * `webhook_delivery` por webhook assinante, disparada INLINE (best-effort, timeout 5 s).
  *
- * Falhou? A linha guarda `next_attempt_at` com backoff (1 m, 5 m, 30 m, 2 h, 24 h; 5
- * tentativas) e um SWEEP lazy reprocessa — no boot e a cada publish, nunca por CronJob.
+ * Falhou? A linha guarda `next_attempt_at` com backoff (1 m, 5 m, 30 m, 2 h, 24 h) e um
+ * SWEEP lazy reprocessa — no boot e a cada publish, nunca por CronJob.
  * O sweep pega um advisory lock para que múltiplos pods não entreguem em duplicidade.
  */
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
@@ -15,19 +15,11 @@ import type { Db } from '@/db';
 import { appUser, webhook as webhookT, webhookDelivery } from '@/db/schema';
 import { ApiError } from './errors';
 import type { CircleEvent } from './events';
+// O catálogo de eventos vive num módulo client-safe (a tela de Settings o lê em runtime).
+import { WEBHOOK_EVENTS, type WebhookEvent } from './webhook-events';
 
-/** Eventos assináveis. Fechado de propósito: a UI oferece exatamente estes. */
-export const WEBHOOK_EVENTS = [
-   'issue.created',
-   'issue.updated',
-   'issue.deleted',
-   'project.created',
-   'project.updated',
-   'project.deleted',
-   'comment.created',
-] as const;
-
-export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
+export { WEBHOOK_EVENTS };
+export type { WebhookEvent };
 
 export type DeliveryStatus = 'pending' | 'success' | 'failed' | 'exhausted';
 
