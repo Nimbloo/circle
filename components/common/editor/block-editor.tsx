@@ -460,7 +460,15 @@ export function BlockEditor({
                   style={{ top: videoAt?.top ?? 0, left: videoAt?.left ?? 0 }}
                />
             </PopoverAnchor>
-            <PopoverContent align="start" sideOffset={4} className="w-80 p-2">
+            <PopoverContent
+               align="start"
+               sideOffset={4}
+               className="w-80 p-2"
+               // O editor pode reivindicar o foco logo depois do menu "/" (o comando que
+               // abriu o popover chama `focus()`): fechar por "foco fora" tiraria o input
+               // do usuário. Clique fora e Esc continuam fechando.
+               onFocusOutside={(event) => event.preventDefault()}
+            >
                <Input
                   autoFocus
                   aria-label="Video URL"

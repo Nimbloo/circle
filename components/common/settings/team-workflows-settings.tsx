@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import {
    Dialog,
    DialogContent,
+   DialogDescription,
    DialogFooter,
    DialogHeader,
    DialogTitle,
@@ -38,7 +39,7 @@ import type {
 } from '@/lib/api/automations';
 import { useLabels, usePriorities, useStatuses } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { Plus, Timer, Trash2, Workflow } from 'lucide-react';
+import { Pencil, Plus, Timer, Trash2, Workflow } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
@@ -216,6 +217,9 @@ function AutomationDialog({
          <DialogContent>
             <DialogHeader>
                <DialogTitle>{initial ? 'Editar automação' : 'Nova automação'}</DialogTitle>
+               <DialogDescription>
+                  Escolha o gatilho, a ação e os parâmetros aplicados na issue.
+               </DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-3">
                <div className="flex flex-col gap-1.5">
@@ -560,19 +564,8 @@ export default function TeamWorkflowsSettings({ teamId }: { teamId: string }) {
                            icon={<Workflow className="size-4" />}
                            title={rule.name}
                            description={describe(rule)}
-                           onClick={
-                              isAdmin
-                                 ? () => {
-                                      setEditing(rule);
-                                      setDialogOpen(true);
-                                   }
-                                 : undefined
-                           }
                            trailing={
-                              <div
-                                 className="flex items-center gap-2"
-                                 onClick={(e) => e.stopPropagation()}
-                              >
+                              <div className="flex items-center gap-2">
                                  <Switch
                                     checked={rule.enabled}
                                     disabled={!isAdmin}
@@ -580,14 +573,27 @@ export default function TeamWorkflowsSettings({ teamId }: { teamId: string }) {
                                     onCheckedChange={(v) => void toggle(rule, v)}
                                  />
                                  {isAdmin && (
-                                    <button
-                                       type="button"
-                                       aria-label={`Delete ${rule.name}`}
-                                       className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-destructive"
-                                       onClick={() => setRemoving(rule)}
-                                    >
-                                       <Trash2 className="size-3.5" />
-                                    </button>
+                                    <>
+                                       <button
+                                          type="button"
+                                          aria-label={`Edit ${rule.name}`}
+                                          className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                                          onClick={() => {
+                                             setEditing(rule);
+                                             setDialogOpen(true);
+                                          }}
+                                       >
+                                          <Pencil className="size-3.5" />
+                                       </button>
+                                       <button
+                                          type="button"
+                                          aria-label={`Delete ${rule.name}`}
+                                          className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-destructive"
+                                          onClick={() => setRemoving(rule)}
+                                       >
+                                          <Trash2 className="size-3.5" />
+                                       </button>
+                                    </>
                                  )}
                               </div>
                            }
