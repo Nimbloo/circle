@@ -1036,3 +1036,89 @@ export const issueTriageSuggestion = pgTable('issue_triage_suggestion', {
    appliedAt: timestamp('applied_at'),
    dismissedAt: timestamp('dismissed_at'),
 });
+// ── Import/export, API pública e webhooks (#101) ─────────────────────────
+/**
+ * Rastro de importação: liga o id externo (Linear/Jira/CSV) à issue criada. A PK
+ * composta `(source, external_id)` é o que torna o re-import IDEMPOTENTE — a
+ * segunda passada atualiza a issue existente em vez de duplicá-la.
+ */
+export const issueImport = pgTable(
+   'issue_import',
+   {
+      source: varchar('source', { length: 32 }).notNull(), // csv|linear|jira
+      externalId: varchar('external_id', { length: 128 }).notNull(),
+      issueId: varchar('issue_id', { length: 36 })
+         .notNull()
+         .references(() => issue.id),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+      updatedAt: timestamp('updated_at').notNull().defaultNow(),
+   },
+   (t) => [
+      primaryKey({ columns: [t.source, t.externalId] }),
+      index('idx_issue_import_issue').on(t.issueId),
+   ]
+);
+
+/**
+ * Token da API pública (`/api/public/v1/*`). Guardamos só o HASH (SHA-256) — o token
+ * em claro (`circle_<random>`) é mostrado UMA vez na criação e nunca mais. `prefix`
+ * são os primeiros caracteres, exibidos na lista para o usuário reconhecer o token.
+ */
+export const apiToken = pgTable(
+   'api_token',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      name: varchar('name', { length: 128 }).notNull(),
+      tokenHash: varchar('token_hash', { length: 64 }).notNull().unique(),
+      prefix: varchar('prefix', { length: 32 }).notNull(),
+      scopes: text('scopes').array().notNull(), // read | write
+      createdBy: varchar('created_by', { length: 36 }).references(() => appUser.id),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+      lastUsedAt: timestamp('last_used_at'),
+      revokedAt: timestamp('revoked_at'),
+   },
+   (t) => [index('idx_api_token_created_by').on(t.createdBy)]
+);
+
+/** Webhook de saída: assina eventos do barramento e recebe POST assinado (HMAC-SHA256). */
+export const webhook = pgTable(
+   'webhook',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      url: varchar('url', { length: 512 }).notNull(),
+      secret: varchar('secret', { length: 128 }).notNull(),
+      events: text('events').array().notNull(), // issue.created, project.updated, ...
+      enabled: boolean('enabled').notNull().default(true),
+      createdBy: varchar('created_by', { length: 36 }).references(() => appUser.id),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_webhook_enabled').on(t.enabled)]
+);
+
+/**
+ * Uma tentativa de entrega por (webhook, evento). O disparo é inline best-effort; se
+ * falha, `next_attempt_at` agenda o retry com backoff e o sweep lazy (boot + publish)
+ * reprocessa. `status`: pending|success|failed|exhausted.
+ */
+export const webhookDelivery = pgTable(
+   'webhook_delivery',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      webhookId: varchar('webhook_id', { length: 36 })
+         .notNull()
+         .references(() => webhook.id),
+      event: varchar('event', { length: 64 }).notNull(),
+      payload: jsonb('payload').notNull(),
+      status: varchar('status', { length: 16 }).notNull().default('pending'),
+      attempts: integer('attempts').notNull().default(0),
+      nextAttemptAt: timestamp('next_attempt_at'),
+      responseCode: integer('response_code'),
+      lastError: text('last_error'),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+      updatedAt: timestamp('updated_at').notNull().defaultNow(),
+   },
+   (t) => [
+      index('idx_webhook_delivery_hook').on(t.webhookId, t.createdAt),
+      index('idx_webhook_delivery_pending').on(t.status, t.nextAttemptAt),
+   ]
+);

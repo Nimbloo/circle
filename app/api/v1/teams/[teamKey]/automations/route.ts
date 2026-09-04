@@ -16,6 +16,8 @@ export const dynamic = 'force-dynamic';
 
 type Params = { params: Promise<{ teamKey: string }> };
 
+// Não exportar: o Next valida que um `route.ts` só exporte handlers e config, e um
+// export a mais quebra o build (`OmitWithTag ... does not satisfy '{ [x: string]: never }'`).
 const ConfigSchema = z.object({
    toCategory: z.string().nullish(),
    triggerLabelId: z.string().nullish(),

@@ -1,6 +1,7 @@
 import { db } from '@/db';
 import { handle, requireEmail, multi } from '@/lib/api/http';
 import { listIssues } from '@/lib/api/issues';
+import { exportIssuesJson } from '@/lib/api/export';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,14 +13,15 @@ function csvCell(v: string | number | null | undefined): string {
 }
 
 /**
- * GET /issues/export — exporta as issues (respeitando os filtros de query) como CSV.
- * Portabilidade/backup (paridade Linear export). Retorna text/csv com attachment.
+ * GET /issues/export — exporta as issues (respeitando os filtros de query) como CSV
+ * (default) ou JSON estruturado (`?format=json`, com labels/responsáveis/pai/comentários).
+ * Portabilidade/backup (paridade Linear export). Retorna o arquivo como attachment.
  */
 export async function GET(req: Request) {
    return handle(async () => {
       await requireEmail(req);
       const sp = new URL(req.url).searchParams;
-      const issues = await listIssues(db, {
+      const filters = {
          team: sp.get('team') ?? undefined,
          status: multi(sp, 'status'),
          priority: multi(sp, 'priority'),
@@ -27,7 +29,17 @@ export async function GET(req: Request) {
          labels: multi(sp, 'labels'),
          q: sp.get('q') ?? undefined,
          limit: 5000,
-      });
+      };
+      if (sp.get('format') === 'json') {
+         const bundle = await exportIssuesJson(db, filters);
+         return new Response(JSON.stringify(bundle, null, 2), {
+            headers: {
+               'Content-Type': 'application/json; charset=utf-8',
+               'Content-Disposition': 'attachment; filename="issues.json"',
+            },
+         });
+      }
+      const issues = await listIssues(db, filters);
       const header = [
          'identifier',
          'title',

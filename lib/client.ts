@@ -67,6 +67,14 @@ import type {
 } from '@/lib/api/automations';
 import type { SearchEntityType, SearchGroup, SearchItem, SearchResult } from '@/lib/api/search';
 import type { AcceptTriageInput, TriageSuggestionDto } from '@/lib/api/triage';
+import type {
+   ImportMapping,
+   ImportPreviewDto,
+   ImportResultDto,
+   ImportSource,
+} from '@/lib/api/import';
+import type { ApiScope, ApiTokenDto, CreatedApiTokenDto } from '@/lib/api/api-tokens';
+import type { WebhookDeliveryDto, WebhookDto, WebhookEvent } from '@/lib/api/webhooks';
 
 export type { SearchEntityType, SearchGroup, SearchItem, SearchResult };
 
@@ -581,6 +589,50 @@ export const api = {
          post<TriageSuggestionDto>(
             `/issues/${encodeURIComponent(issueId)}/triage-suggestion/dismiss`,
             {}
+         ),
+   },
+
+   /** Import de issues por CSV — wizard de Settings → Import/Export (#101). */
+   importIssues: {
+      /** Analisa o arquivo sem escrever: colunas, mapeamento proposto, amostra e avisos. */
+      preview: (file: File, source: ImportSource, mapping?: ImportMapping) => {
+         const form = new FormData();
+         form.set('file', file);
+         form.set('source', source);
+         if (mapping) form.set('mapping', JSON.stringify(mapping));
+         return postForm<ImportPreviewDto>('/import/preview', form);
+      },
+      /** Cria (ou atualiza, em re-import) as issues com o mapeamento confirmado. */
+      commit: (input: {
+         source: ImportSource;
+         csv: string;
+         teamId: string;
+         mapping: ImportMapping;
+         createMissingLabels?: boolean;
+      }) => post<ImportResultDto>('/import/commit', input),
+   },
+
+   /** Tokens da API pública (#101). O valor em claro só vem no `create`. */
+   apiTokens: {
+      list: () => get<ApiTokenDto[]>('/api-tokens'),
+      create: (name: string, scopes: ApiScope[]) =>
+         post<CreatedApiTokenDto>('/api-tokens', { name, scopes }),
+      revoke: (id: string) => del<{ revoked: boolean }>(`/api-tokens/${encodeURIComponent(id)}`),
+   },
+
+   /** Webhooks de saída (#101). O segredo só vem no `create`. */
+   webhooks: {
+      list: () => get<WebhookDto[]>('/webhooks'),
+      create: (input: { url: string; events: WebhookEvent[]; secret?: string }) =>
+         post<WebhookDto>('/webhooks', input),
+      update: (id: string, body: { url?: string; events?: WebhookEvent[]; enabled?: boolean }) =>
+         patch<WebhookDto>(`/webhooks/${encodeURIComponent(id)}`, body),
+      remove: (id: string) => del<{ deleted: boolean }>(`/webhooks/${encodeURIComponent(id)}`),
+      deliveries: (id: string, limit = 20) =>
+         get<WebhookDeliveryDto[]>(`/webhooks/${encodeURIComponent(id)}/deliveries?limit=${limit}`),
+      redeliver: (deliveryId: string) =>
+         post<WebhookDeliveryDto>(
+            `/webhooks/deliveries/${encodeURIComponent(deliveryId)}/redeliver`
          ),
    },
 };

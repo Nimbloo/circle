@@ -1,5 +1,5 @@
 {
-   "id": "3dff91ca-9a7b-40e7-a619-c1305bac7d39",
+   "id": "5498fded-f753-4ea6-92da-994cbb7b9425",
    "prevId": "6e6657bd-80bf-471c-9fbd-c12a24ee31fa",
    "version": "7",
    "dialect": "postgresql",
@@ -232,6 +232,106 @@
          },
          "compositePrimaryKeys": {},
          "uniqueConstraints": {},
+         "policies": {},
+         "checkConstraints": {},
+         "isRLSEnabled": false
+      },
+      "public.api_token": {
+         "name": "api_token",
+         "schema": "",
+         "columns": {
+            "id": {
+               "name": "id",
+               "type": "varchar(36)",
+               "primaryKey": true,
+               "notNull": true
+            },
+            "name": {
+               "name": "name",
+               "type": "varchar(128)",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "token_hash": {
+               "name": "token_hash",
+               "type": "varchar(64)",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "prefix": {
+               "name": "prefix",
+               "type": "varchar(32)",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "scopes": {
+               "name": "scopes",
+               "type": "text[]",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "created_by": {
+               "name": "created_by",
+               "type": "varchar(36)",
+               "primaryKey": false,
+               "notNull": false
+            },
+            "created_at": {
+               "name": "created_at",
+               "type": "timestamp",
+               "primaryKey": false,
+               "notNull": true,
+               "default": "now()"
+            },
+            "last_used_at": {
+               "name": "last_used_at",
+               "type": "timestamp",
+               "primaryKey": false,
+               "notNull": false
+            },
+            "revoked_at": {
+               "name": "revoked_at",
+               "type": "timestamp",
+               "primaryKey": false,
+               "notNull": false
+            }
+         },
+         "indexes": {
+            "idx_api_token_created_by": {
+               "name": "idx_api_token_created_by",
+               "columns": [
+                  {
+                     "expression": "created_by",
+                     "isExpression": false,
+                     "asc": true,
+                     "nulls": "last"
+                  }
+               ],
+               "isUnique": false,
+               "concurrently": false,
+               "method": "btree",
+               "with": {}
+            }
+         },
+         "foreignKeys": {
+            "api_token_created_by_app_user_id_fk": {
+               "name": "api_token_created_by_app_user_id_fk",
+               "tableFrom": "api_token",
+               "tableTo": "app_user",
+               "columnsFrom": ["created_by"],
+               "columnsTo": ["id"],
+               "onDelete": "no action",
+               "onUpdate": "no action"
+            }
+         },
+         "compositePrimaryKeys": {},
+         "uniqueConstraints": {
+            "api_token_token_hash_unique": {
+               "name": "api_token_token_hash_unique",
+               "nullsNotDistinct": false,
+               "columns": ["token_hash"]
+            }
+         },
          "policies": {},
          "checkConstraints": {},
          "isRLSEnabled": false
@@ -2139,6 +2239,82 @@
             }
          },
          "compositePrimaryKeys": {},
+         "uniqueConstraints": {},
+         "policies": {},
+         "checkConstraints": {},
+         "isRLSEnabled": false
+      },
+      "public.issue_import": {
+         "name": "issue_import",
+         "schema": "",
+         "columns": {
+            "source": {
+               "name": "source",
+               "type": "varchar(32)",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "external_id": {
+               "name": "external_id",
+               "type": "varchar(128)",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "issue_id": {
+               "name": "issue_id",
+               "type": "varchar(36)",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "created_at": {
+               "name": "created_at",
+               "type": "timestamp",
+               "primaryKey": false,
+               "notNull": true,
+               "default": "now()"
+            },
+            "updated_at": {
+               "name": "updated_at",
+               "type": "timestamp",
+               "primaryKey": false,
+               "notNull": true,
+               "default": "now()"
+            }
+         },
+         "indexes": {
+            "idx_issue_import_issue": {
+               "name": "idx_issue_import_issue",
+               "columns": [
+                  {
+                     "expression": "issue_id",
+                     "isExpression": false,
+                     "asc": true,
+                     "nulls": "last"
+                  }
+               ],
+               "isUnique": false,
+               "concurrently": false,
+               "method": "btree",
+               "with": {}
+            }
+         },
+         "foreignKeys": {
+            "issue_import_issue_id_issue_id_fk": {
+               "name": "issue_import_issue_id_issue_id_fk",
+               "tableFrom": "issue_import",
+               "tableTo": "issue",
+               "columnsFrom": ["issue_id"],
+               "columnsTo": ["id"],
+               "onDelete": "no action",
+               "onUpdate": "no action"
+            }
+         },
+         "compositePrimaryKeys": {
+            "issue_import_source_external_id_pk": {
+               "name": "issue_import_source_external_id_pk",
+               "columns": ["source", "external_id"]
+            }
+         },
          "uniqueConstraints": {},
          "policies": {},
          "checkConstraints": {},
@@ -4738,6 +4914,225 @@
                "tableFrom": "user_settings",
                "tableTo": "app_user",
                "columnsFrom": ["user_id"],
+               "columnsTo": ["id"],
+               "onDelete": "no action",
+               "onUpdate": "no action"
+            }
+         },
+         "compositePrimaryKeys": {},
+         "uniqueConstraints": {},
+         "policies": {},
+         "checkConstraints": {},
+         "isRLSEnabled": false
+      },
+      "public.webhook": {
+         "name": "webhook",
+         "schema": "",
+         "columns": {
+            "id": {
+               "name": "id",
+               "type": "varchar(36)",
+               "primaryKey": true,
+               "notNull": true
+            },
+            "url": {
+               "name": "url",
+               "type": "varchar(512)",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "secret": {
+               "name": "secret",
+               "type": "varchar(128)",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "events": {
+               "name": "events",
+               "type": "text[]",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "enabled": {
+               "name": "enabled",
+               "type": "boolean",
+               "primaryKey": false,
+               "notNull": true,
+               "default": true
+            },
+            "created_by": {
+               "name": "created_by",
+               "type": "varchar(36)",
+               "primaryKey": false,
+               "notNull": false
+            },
+            "created_at": {
+               "name": "created_at",
+               "type": "timestamp",
+               "primaryKey": false,
+               "notNull": true,
+               "default": "now()"
+            }
+         },
+         "indexes": {
+            "idx_webhook_enabled": {
+               "name": "idx_webhook_enabled",
+               "columns": [
+                  {
+                     "expression": "enabled",
+                     "isExpression": false,
+                     "asc": true,
+                     "nulls": "last"
+                  }
+               ],
+               "isUnique": false,
+               "concurrently": false,
+               "method": "btree",
+               "with": {}
+            }
+         },
+         "foreignKeys": {
+            "webhook_created_by_app_user_id_fk": {
+               "name": "webhook_created_by_app_user_id_fk",
+               "tableFrom": "webhook",
+               "tableTo": "app_user",
+               "columnsFrom": ["created_by"],
+               "columnsTo": ["id"],
+               "onDelete": "no action",
+               "onUpdate": "no action"
+            }
+         },
+         "compositePrimaryKeys": {},
+         "uniqueConstraints": {},
+         "policies": {},
+         "checkConstraints": {},
+         "isRLSEnabled": false
+      },
+      "public.webhook_delivery": {
+         "name": "webhook_delivery",
+         "schema": "",
+         "columns": {
+            "id": {
+               "name": "id",
+               "type": "varchar(36)",
+               "primaryKey": true,
+               "notNull": true
+            },
+            "webhook_id": {
+               "name": "webhook_id",
+               "type": "varchar(36)",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "event": {
+               "name": "event",
+               "type": "varchar(64)",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "payload": {
+               "name": "payload",
+               "type": "jsonb",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "status": {
+               "name": "status",
+               "type": "varchar(16)",
+               "primaryKey": false,
+               "notNull": true,
+               "default": "'pending'"
+            },
+            "attempts": {
+               "name": "attempts",
+               "type": "integer",
+               "primaryKey": false,
+               "notNull": true,
+               "default": 0
+            },
+            "next_attempt_at": {
+               "name": "next_attempt_at",
+               "type": "timestamp",
+               "primaryKey": false,
+               "notNull": false
+            },
+            "response_code": {
+               "name": "response_code",
+               "type": "integer",
+               "primaryKey": false,
+               "notNull": false
+            },
+            "last_error": {
+               "name": "last_error",
+               "type": "text",
+               "primaryKey": false,
+               "notNull": false
+            },
+            "created_at": {
+               "name": "created_at",
+               "type": "timestamp",
+               "primaryKey": false,
+               "notNull": true,
+               "default": "now()"
+            },
+            "updated_at": {
+               "name": "updated_at",
+               "type": "timestamp",
+               "primaryKey": false,
+               "notNull": true,
+               "default": "now()"
+            }
+         },
+         "indexes": {
+            "idx_webhook_delivery_hook": {
+               "name": "idx_webhook_delivery_hook",
+               "columns": [
+                  {
+                     "expression": "webhook_id",
+                     "isExpression": false,
+                     "asc": true,
+                     "nulls": "last"
+                  },
+                  {
+                     "expression": "created_at",
+                     "isExpression": false,
+                     "asc": true,
+                     "nulls": "last"
+                  }
+               ],
+               "isUnique": false,
+               "concurrently": false,
+               "method": "btree",
+               "with": {}
+            },
+            "idx_webhook_delivery_pending": {
+               "name": "idx_webhook_delivery_pending",
+               "columns": [
+                  {
+                     "expression": "status",
+                     "isExpression": false,
+                     "asc": true,
+                     "nulls": "last"
+                  },
+                  {
+                     "expression": "next_attempt_at",
+                     "isExpression": false,
+                     "asc": true,
+                     "nulls": "last"
+                  }
+               ],
+               "isUnique": false,
+               "concurrently": false,
+               "method": "btree",
+               "with": {}
+            }
+         },
+         "foreignKeys": {
+            "webhook_delivery_webhook_id_webhook_id_fk": {
+               "name": "webhook_delivery_webhook_id_webhook_id_fk",
+               "tableFrom": "webhook_delivery",
+               "tableTo": "webhook",
+               "columnsFrom": ["webhook_id"],
                "columnsTo": ["id"],
                "onDelete": "no action",
                "onUpdate": "no action"

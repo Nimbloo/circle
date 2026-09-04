@@ -8,11 +8,13 @@ import {
    SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import {
+   ArrowLeftRight,
    Bell,
    Blocks,
    Bot,
    Code,
    FileText,
+   KeyRound,
    LucideIcon,
    Settings,
    Smile,
@@ -21,6 +23,7 @@ import {
    ScrollText,
    Target,
    UserRound,
+   Webhook,
    Zap,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -75,7 +78,12 @@ export const settingsNav: SettingsNavGroup[] = [
    },
    {
       label: 'Workspace',
-      items: [{ name: 'Audit log', url: '/settings/audit-log', icon: ScrollText }],
+      items: [
+         { name: 'Audit log', url: '/settings/audit-log', icon: ScrollText },
+         { name: 'Import / Export', url: '/settings/import-export', icon: ArrowLeftRight },
+         { name: 'API tokens', url: '/settings/api-tokens', icon: KeyRound },
+         { name: 'Webhooks', url: '/settings/webhooks', icon: Webhook },
+      ],
    },
 ];
 
