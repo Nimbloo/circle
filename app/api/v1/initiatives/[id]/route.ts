@@ -2,14 +2,8 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { ok, notFound } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
-import {
-   getInitiative,
-   listInitiatives,
-   updateInitiative,
-   deleteInitiative,
-} from '@/lib/api/initiatives';
+import { getInitiative, updateInitiative, deleteInitiative } from '@/lib/api/initiatives';
 import { assertCanWriteProject, assertInitiativeInScope, scopeForEmail } from '@/lib/api/scope';
-import { ApiError } from '@/lib/api/errors';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
