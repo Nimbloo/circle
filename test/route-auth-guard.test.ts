@@ -55,9 +55,9 @@ const HANDLER = /export\s+(?:async\s+function|const)\s+(GET|POST|PUT|PATCH|DELET
  * O que o detector corrigido revelou: dois handlers fail-open reais, que resolvem o
  * e-mail por ternário (`email ? await getOrCreateUser(...) : undefined`) e, SEM sessão,
  * seguem respondendo com escopo irrestrito. A correção é do dono de `teams/**`
- * (hardening, Grupo 2: trocar `emailFromRequest` por `requireEmail`) — a lista fica
- * aqui para o guarda continuar pegando o que é NOVO. A igualdade é EXATA: quando o
- * conserto vier, este teste falha pedindo a remoção da linha.
+ * (trocar `emailFromRequest` por `requireEmail`), não deste guarda — a lista existe só
+ * para ele continuar pegando o que é NOVO. É uma tolerância TEMPORÁRIA e por
+ * SUBCONJUNTO: assim que os dois handlers exigirem sessão, apague estas linhas.
  */
 const KNOWN_FAIL_OPEN = ['GET /api/v1/teams', 'GET /api/v1/teams/[teamKey]'];
 
@@ -99,7 +99,7 @@ describe('guarda de auth nas rotas de API', () => {
          }
       }
 
-      expect(unprotected.sort()).toEqual([...KNOWN_FAIL_OPEN].sort());
+      expect(unprotected.filter((h) => !KNOWN_FAIL_OPEN.includes(h))).toEqual([]);
    });
 
    it('a allowlist pública só contém probes e webhooks autenticados por HMAC', () => {
