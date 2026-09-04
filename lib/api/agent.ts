@@ -1,6 +1,7 @@
 import {
    BedrockRuntimeClient,
    ConverseCommand,
+   InvokeModelCommand,
    type ContentBlock,
    type Message,
    type Tool,
@@ -465,4 +466,43 @@ export async function sendAgentMessage(
       .values({ id: randomUUID(), chatId: id, role: 'assistant', content: reply });
    await db.update(agentChat).set({ updatedAt: new Date() }).where(eq(agentChat.id, id));
    return { chatId: id, title, reply };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Embeddings (busca semântica opcional — #99)
+// ─────────────────────────────────────────────────────────────
+
+/** Modelo de embedding (Titan v2). Mesma região/credenciais do agent (IRSA). */
+export const EMBED_MODEL_ID = process.env.BEDROCK_EMBED_MODEL_ID ?? 'amazon.titan-embed-text-v2:0';
+const EMBED_DIMENSIONS = 256;
+const EMBED_CONCURRENCY = 4;
+
+async function embedOne(text: string): Promise<number[]> {
+   const res = await client().send(
+      new InvokeModelCommand({
+         modelId: EMBED_MODEL_ID,
+         contentType: 'application/json',
+         accept: 'application/json',
+         body: JSON.stringify({
+            inputText: text.slice(0, 8000),
+            dimensions: EMBED_DIMENSIONS,
+            normalize: true,
+         }),
+      })
+   );
+   const parsed = JSON.parse(new TextDecoder().decode(res.body)) as { embedding?: number[] };
+   return parsed.embedding ?? [];
+}
+
+/**
+ * Embeddings de vários textos (o Titan aceita um por chamada), em lotes pequenos.
+ * Lança se o Bedrock não responder — quem chama decide o fallback.
+ */
+export async function embedTexts(texts: string[]): Promise<number[][]> {
+   const out: number[][] = [];
+   for (let i = 0; i < texts.length; i += EMBED_CONCURRENCY) {
+      const batch = texts.slice(i, i + EMBED_CONCURRENCY);
+      out.push(...(await Promise.all(batch.map(embedOne))));
+   }
+   return out;
 }
