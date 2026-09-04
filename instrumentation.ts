@@ -35,6 +35,7 @@ export async function register() {
    const migrationsFolder = path.resolve(process.cwd(), 'db/migrations');
    try {
       const { migrate } = await import('drizzle-orm/node-postgres/migrator');
+      const { drizzle } = await import('drizzle-orm/node-postgres');
       const { getDb } = await import('@/db');
       const { seedCatalogs } = await import('@/db/seed-catalogs');
       await lockClient.connect();
@@ -46,7 +47,12 @@ export async function register() {
          );
          const onDisk = Array.isArray(journal.entries) ? journal.entries.length : 0;
 
-         await migrate(getDb(), { migrationsFolder });
+         // O migrate roda na conexão DEDICADA do lock, não no pool: o pool tem
+         // `statement_timeout`/`query_timeout` de 15s (db/index.ts) e a primeira
+         // migration pesada (índice grande, backfill) seria abortada no meio,
+         // derrubando o boot em CrashLoop. Esta conexão não tem timeout e já está
+         // segurada por todo o migrate.
+         await migrate(drizzle(lockClient), { migrationsFolder });
          await seedCatalogs(getDb());
 
          const applied = (
