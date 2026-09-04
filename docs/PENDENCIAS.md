@@ -1,6 +1,6 @@
 # Pendências do Circle
 
-Estado em **2026-09-03**, com `main` e `develop` sincronizadas na v0.29.0.
+Estado em **2026-09-03**, com `main` e `develop` sincronizadas na v0.29.1.
 
 > **As [issues](https://github.com/Nimbloo/circle/issues) são a fonte da verdade** sobre
 > escopo. Este documento registra o que elas **não** capturam: bloqueios que vivem em
@@ -369,6 +369,41 @@ em `200`, busca full-text respondendo pelo índice (sem fallback), roadmap agrup
 initiative e rota pública devolvendo `401` sem token. **Épico #25 fechado**, junto com #94,
 #97, #99, #100, #101 e #102. Restam abertas só #22 (reviews, à espera do PAT e do Bedrock),
 #27 e #28, que vivem em outro repositório.
+
+### Auditoria da v0.29.0 e a correção de segurança (04/09/2026)
+
+Depois de fechar o épico, uma auditoria em três frentes (autorização, integridade do merge dos
+seis grupos, comportamento sob carga) **provou rodando código** 16 cenários de autorização
+exploráveis por qualquer usuário autenticado, mais dois bugs que quebravam operação normal.
+Corrigidos na
+[v0.29.1](https://github.com/Nimbloo/circle/releases/tag/v0.29.1) (PRs #112 e #113), spec em
+`docs/superpowers/specs/2026-09-04-hardening-autorizacao-design.md`.
+
+**A causa era estrutural:** o escopo vivia nos route handlers e só nas leituras — 29 de 192
+handlers verificavam, e nenhuma escrita interna. O gate passou para a **camada de serviço**, com
+validação de **origem e destino** em todo movimento (era a escalação em que um convidado puxava
+projeto alheio para o próprio time e passava a lê-lo, tornando decorativa a proteção de leitura).
+Um teste-guarda novo falha quando uma rota de escrita nasce sem verificação.
+
+Também entraram: desligamento que bloqueia sessão viva, Bearer e token de máquina num ponto só
+(e rebaixa o papel — antes desativar **ampliava** o alcance); administrador obrigatório em token
+de API e webhook; anti-SSRF com revalidação a cada disparo; duas rotas de time que respondiam sem
+sessão; os dois `23503` (apagar issue importada e apagar time com automação); anexo checando
+tamanho antes de materializar o corpo; SLA com hora real (1 h, 4 h e 12 h davam o mesmo prazo);
+busca casando com e sem acento; automações que não derrubam a requisição nem ressuscitam;
+fila de webhook destravada; gráficos sem pontos inventados; e **erros da API chegando ao
+Sentry** — antes nenhum 5xx chegava, o que tornava todo o resto invisível.
+
+**Mudança de comportamento consciente:** convidado recebe 403 onde antes recebia 200, e token e
+webhook viraram exclusivos de administrador.
+
+**Verificado em produção:** migrations 0046–0048 aplicadas no boot (49/49), rollout
+`Synced/Healthy`, `healthz`/`readyz` em `200`, webhook para `169.254.169.254` recusado com 400,
+busca respondendo pelo índice e `slaDueAt` no contrato.
+
+Fora do repositório: conferir no chart `nimbloo-k8s/circle-prd` o valor de
+`CIRCLE_KEYCLOAK_ALLOWED_CLIENTS` — o default do repo é seguro (vazio desliga o Bearer), mas o
+risco depende do valor implantado.
 
 ## Decisões suas (não é falta de código)
 
