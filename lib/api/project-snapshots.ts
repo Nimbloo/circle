@@ -11,12 +11,7 @@
  */
 import { asc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
-import {
-   issue as issueT,
-   projectSnapshot as snapshotT,
-   status as statusT,
-   project as projectT,
-} from '@/db/schema';
+import { issue as issueT, projectSnapshot as snapshotT, status as statusT } from '@/db/schema';
 
 export interface ProjectSnapshotPoint {
    date: string;
@@ -95,24 +90,6 @@ export async function snapshotProjects(
             completed: sql`excluded.completed`,
          },
       });
-}
-
-/** Grava o dia de TODOS os projetos dos times pedidos (`undefined` = workspace inteiro). */
-export async function snapshotAllProjects(
-   db: Db,
-   teamIds?: readonly string[],
-   now: Date = new Date()
-): Promise<void> {
-   if (teamIds && teamIds.length === 0) return;
-   const rows = await db
-      .select({ id: projectT.id })
-      .from(projectT)
-      .where(teamIds ? inArray(projectT.teamId, [...teamIds]) : undefined);
-   await snapshotProjects(
-      db,
-      rows.map((r) => r.id),
-      now
-   );
 }
 
 /** Série gravada do projeto, do dia mais antigo para o mais novo. */

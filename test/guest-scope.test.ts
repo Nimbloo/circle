@@ -499,6 +499,22 @@ describe('escopo de Guest nas rotas de ESCRITA', () => {
       expect(status(await issueAttachmentsRoute(req(`${url}/attachments`, GUEST), p))).toBe(403);
    });
 
+   it('anexar arquivo em issue alheia: 403 (a rota era exceção do guarda de escrita)', async () => {
+      // O serviço checava só a EXISTÊNCIA da issue. Anexar é escrever nela: o time importa.
+      const { createAttachment } = await import('@/lib/api/attachments');
+      await expect(
+         createAttachment(
+            db,
+            {
+               issueId: ids.secretIssue,
+               commentId: null,
+               file: { name: 'a.txt', type: 'text/plain', bytes: Buffer.from('oi') },
+            },
+            GUEST
+         )
+      ).rejects.toMatchObject({ status: 403 });
+   });
+
    it('sub-rotas de issues/{id}: labels, rank, relations, subscription e triage dão 403', async () => {
       const p = params({ id: ids.secretIssue });
       const url = `http://x/api/v1/issues/${ids.secretIssue}`;

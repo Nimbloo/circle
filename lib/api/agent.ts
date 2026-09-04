@@ -18,6 +18,7 @@ import { listTeams } from './teams';
 import { listIssues, createIssue, updateIssue, type IssueListOptions } from './issues';
 import { listCyclesByTeam } from './cycles';
 import { getCachedCatalogs } from './catalogs';
+import { scopeForEmail } from './scope';
 
 /**
  * Agent do Circle — chat com IA REAL (AWS Bedrock/Claude via IRSA) e contexto
@@ -197,8 +198,12 @@ async function runTool(
    input: ToolInput
 ): Promise<string> {
    try {
+      // O agente responde COMO o usuário: as ferramentas herdam o escopo dele (#100),
+      // senão um convidado leria o workspace inteiro pela conversa.
+      const { teamIds } = await scopeForEmail(db, email);
+      const scoped = teamIds ?? undefined;
       if (name === 'list_teams') {
-         const teams = await listTeams(db, {}, meId);
+         const teams = await listTeams(db, { teamIds: scoped }, meId);
          return JSON.stringify(
             teams.map((t) => ({
                team: t.id, // t.id É a key (ex: ENG)
@@ -219,6 +224,7 @@ async function runTool(
          if (typeof input.query === 'string') opts.q = input.query;
          if (input.assignee === 'me') opts.assigneeMe = email;
          else if (typeof input.assignee === 'string') opts.assignee = [input.assignee];
+         if (scoped) opts.teamIds = scoped;
          const issues = await listIssues(db, opts, meId);
          if (issues.length === 0) return '[]';
          return JSON.stringify(
@@ -233,7 +239,7 @@ async function runTool(
       }
       if (name === 'list_cycles') {
          const teamKey = typeof input.team === 'string' ? input.team : '';
-         const teams = await listTeams(db, {}, meId);
+         const teams = await listTeams(db, { teamIds: scoped }, meId);
          const team = teams.find((t) => t.id === teamKey);
          if (!team) return `Time "${teamKey}" não encontrado.`;
          const cycles = await listCyclesByTeam(db, team.id);
