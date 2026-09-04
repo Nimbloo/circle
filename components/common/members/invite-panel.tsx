@@ -7,6 +7,16 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { api } from '@/lib/client';
 import { ApiError } from '@/lib/api/errors';
 import type { InviteDto } from '@/lib/api/invites';
+import {
+   Select,
+   SelectContent,
+   SelectItem,
+   SelectTrigger,
+   SelectValue,
+} from '@/components/ui/select';
+
+/** Papéis convidáveis (#100) — espelha `INVITABLE_ROLES` do servidor. */
+const INVITABLE_ROLES = ['Member', 'Guest'];
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Check, Copy, Link2, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -24,6 +34,8 @@ export function InvitePanel() {
    const isAdmin = useWorkspaceStore((s) => s.me?.admin ?? false);
    const [invites, setInvites] = useState<InviteDto[] | null>(null);
    const [email, setEmail] = useState('');
+   /** Papel do convite (#100): Guest só enxerga os times de que virar membro. */
+   const [role, setRole] = useState('Member');
    const [busy, setBusy] = useState(false);
    const [open, setOpen] = useState(false);
    /** Link do convite recém-criado — o token só volta uma vez, então fica na tela. */
@@ -58,7 +70,7 @@ export function InvitePanel() {
       if (!value || busy) return;
       setBusy(true);
       try {
-         const dto = await api.invites.create(value);
+         const dto = await api.invites.create(value, role);
          setFreshLink({ email: dto.email, url: dto.url });
          setEmail('');
          setOpen(false);
@@ -129,6 +141,18 @@ export function InvitePanel() {
                      }}
                      className="h-8"
                   />
+                  <Select value={role} onValueChange={setRole}>
+                     <SelectTrigger aria-label="Invite role" className="h-8 w-[92px] text-xs">
+                        <SelectValue />
+                     </SelectTrigger>
+                     <SelectContent>
+                        {INVITABLE_ROLES.map((r) => (
+                           <SelectItem key={r} value={r} className="text-xs">
+                              {r}
+                           </SelectItem>
+                        ))}
+                     </SelectContent>
+                  </Select>
                   <Button size="xs" onClick={() => void invited()} disabled={busy}>
                      Invite
                   </Button>
@@ -168,6 +192,11 @@ export function InvitePanel() {
                            {i.email[0]?.toUpperCase()}
                         </span>
                         <span className="min-w-0 flex-1 truncate">{i.email}</span>
+                        {i.role === 'Guest' && (
+                           <span className="shrink-0 rounded border px-1 text-[10px] text-muted-foreground">
+                              Guest
+                           </span>
+                        )}
                         <span className="shrink-0 text-xs text-muted-foreground">
                            {i.invitedBy?.name ?? 'Unknown'}
                         </span>

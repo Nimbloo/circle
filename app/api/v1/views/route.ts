@@ -4,6 +4,7 @@ import { ok } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
 import { getOrCreateUser } from '@/lib/api/users';
 import { listViews, createView } from '@/lib/api/views';
+import { visibleTeamIds } from '@/lib/api/scope';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,7 +16,9 @@ export async function GET(req: Request) {
       const email = await requireEmail(req);
       const me = await getOrCreateUser(db, email);
       const sp = new URL(req.url).searchParams;
-      return ok(await listViews(db, sp.get('team') ?? undefined, me.id));
+      // Escopo de Guest (#100): views compartilhadas só dos times visíveis.
+      const teamIds = await visibleTeamIds(db, me);
+      return ok(await listViews(db, sp.get('team') ?? undefined, me.id, teamIds ?? undefined));
    }, req);
 }
 
@@ -26,6 +29,8 @@ const FilterSchema = z.object({
    priorityIds: z.array(z.string()).optional(),
    hasProject: z.boolean().optional(),
    unassigned: z.boolean().optional(),
+   // Saved search (#99): termo full-text resolvido por `lib/api/search.ts`.
+   q: z.string().max(200).optional(),
 });
 
 const CreateSchema = z.object({

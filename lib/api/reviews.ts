@@ -11,6 +11,7 @@ import {
    status as statusT,
 } from '@/db/schema';
 import { ApiError } from './errors';
+import { runAutomations } from './automations';
 import { notifySlackEvent } from './integrations/slack';
 import {
    latestVerdict,
@@ -734,21 +735,21 @@ async function linkPrsToIssues(
    for (const iss of issues) {
       const link = linkByIdentifier.get(iss.identifier);
       if (!link) continue;
-      // PR mergeado → move a issue pra Done (paridade Linear), a menos que já esteja
-      // completed/canceled (idempotente; não sobrescreve estados finais nem re-dispara).
+      // PR mergeado → dispara as automações `pr.merged` do time (#97). O antigo fluxo
+      // fixo "move a issue pra Done" virou a regra default, semeada de forma lazy
+      // (`ensureDefaultAutomations`) — visível e editável em Team settings.
+      // Idempotente: a ação não faz nada quando a issue já está no status alvo.
       if (link.status === 'merged' && doneStatus) {
          const cat = catById.get(iss.statusId);
          if (cat !== 'completed' && cat !== 'canceled') {
-            await db
-               .update(issueT)
-               .set({ statusId: doneStatus.id, updatedAt: new Date() })
-               .where(eq(issueT.id, iss.id));
+            const applied = await runAutomations(db, 'pr.merged', iss.id, { actorId: null });
             // Feed do canal Slack (best-effort). Gated pelo slack_config.onPrMerged.
-            void notifySlackEvent(db, {
-               type: 'pr.merged',
-               identifier: iss.identifier,
-               title: iss.title,
-            });
+            if (applied > 0)
+               void notifySlackEvent(db, {
+                  type: 'pr.merged',
+                  identifier: iss.identifier,
+                  title: iss.title,
+               });
          }
       }
       // id estável por (issue, repo, PR-título-normalizado) → re-sync atualiza, não duplica.

@@ -6,6 +6,7 @@ import { emailFromRequest } from '@/lib/api/auth';
 import { getOrCreateUser } from '@/lib/api/users';
 import { listTeams, createTeam, type TeamSort } from '@/lib/api/teams';
 import { recordAudit } from '@/lib/api/audit';
+import { visibleTeamIds } from '@/lib/api/scope';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,9 +15,23 @@ export async function GET(req: Request) {
    return handle(async () => {
       const sp = new URL(req.url).searchParams;
       const email = await emailFromRequest(req);
-      const meId = email ? (await getOrCreateUser(db, email)).id : undefined;
+      const me = email ? await getOrCreateUser(db, email) : undefined;
+      const meId = me?.id;
       const [sort, dir] = (sp.get('sort') ?? 'name-asc').split('-') as [TeamSort, 'asc' | 'desc'];
-      return ok(await listTeams(db, { membership: multi(sp, 'membership'), sort, dir }, meId));
+      // Escopo de Guest (#100): a lista só traz os times de que ele participa.
+      const teamIds = me ? await visibleTeamIds(db, me) : null;
+      return ok(
+         await listTeams(
+            db,
+            {
+               membership: multi(sp, 'membership'),
+               sort,
+               dir,
+               teamIds: teamIds ?? undefined,
+            },
+            meId
+         )
+      );
    }, req);
 }
 
@@ -25,6 +40,7 @@ const CreateTeamSchema = z.object({
    name: z.string().min(1),
    icon: z.string().nullish(),
    color: z.string().nullish(),
+   parentId: z.string().max(16).nullish(),
 });
 
 export async function POST(req: Request) {

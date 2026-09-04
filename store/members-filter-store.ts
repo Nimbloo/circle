@@ -1,6 +1,12 @@
 'use client';
 
-import { parseAsArrayOf, parseAsString, parseAsStringLiteral, useQueryStates } from 'nuqs';
+import {
+   parseAsArrayOf,
+   parseAsBoolean,
+   parseAsString,
+   parseAsStringLiteral,
+   useQueryStates,
+} from 'nuqs';
 
 export type MembersSort =
    | 'name-asc'
@@ -24,7 +30,10 @@ export interface MembersFilterState {
       role: ('Guest' | 'Member' | 'Admin' | 'Application')[];
    };
    sort: MembersSort;
+   /** Mostra também os membros desativados (#100). Default: escondidos. */
+   showDeactivated: boolean;
 
+   setShowDeactivated: (value: boolean) => void;
    setSort: (sort: MembersSort) => void;
    setFilter: (type: 'role', ids: string[]) => void;
    toggleFilter: (type: 'role', id: 'Guest' | 'Member' | 'Admin' | 'Application') => void;
@@ -38,6 +47,7 @@ export interface MembersFilterState {
 const parsers = {
    role: parseAsArrayOf(parseAsString).withDefault([]),
    sort: parseAsStringLiteral(SORTS).withDefault('name-asc'),
+   deactivated: parseAsBoolean.withDefault(false),
 };
 
 /** Members page filters + sorting, URL-synced via nuqs (?role=…&sort=…). */
@@ -49,7 +59,9 @@ export function useMembersFilterStore(): MembersFilterState {
    return {
       filters,
       sort: state.sort,
+      showDeactivated: state.deactivated,
 
+      setShowDeactivated: (value) => setState({ deactivated: value ? true : null }),
       setSort: (sort) => setState({ sort: sort === 'name-asc' ? null : sort }),
       setFilter: (_type, ids) => setState({ role: ids.length > 0 ? ids : null }),
       toggleFilter: (_type, id) => {
@@ -58,10 +70,10 @@ export function useMembersFilterStore(): MembersFilterState {
             : [...filters.role, id];
          setState({ role: next.length > 0 ? next : null });
       },
-      clearFilters: () => setState({ role: null }),
+      clearFilters: () => setState({ role: null, deactivated: null }),
       clearFilterType: () => setState({ role: null }),
 
-      hasActiveFilters: () => filters.role.length > 0,
-      getActiveFiltersCount: () => filters.role.length,
+      hasActiveFilters: () => filters.role.length > 0 || state.deactivated,
+      getActiveFiltersCount: () => filters.role.length + (state.deactivated ? 1 : 0),
    };
 }

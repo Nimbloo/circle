@@ -26,8 +26,17 @@ export const PUBLIC_API_EXACT: ReadonlySet<string> = new Set([
    '/api/v1/integrations/github/webhook',
 ]);
 
-/** Só o NextAuth precisa do subtree inteiro (`/api/auth/*`). */
-export const PUBLIC_API_PREFIXES: readonly string[] = ['/api/auth'];
+/**
+ * Subtrees inteiros liberados do gate de SESSÃO:
+ *  - `/api/auth/*`: o fluxo do NextAuth.
+ *  - `/api/public/*`: a API pública (#101) — a credencial é o token
+ *    (`Authorization: Bearer circle_…`), validado em `requireApiToken`. "Sem sessão"
+ *    NÃO é "sem auth": o teste-guarda exige `requireApiToken` em todo handler daqui.
+ */
+export const PUBLIC_API_PREFIXES: readonly string[] = ['/api/auth', '/api/public'];
+
+/** Prefixo da API pública autenticada por token (não é rota anônima). */
+export const TOKEN_API_PREFIX = '/api/public/';
 
 /** True se o path dispensa sessão. */
 export function isPublicApiPath(pathname: string): boolean {

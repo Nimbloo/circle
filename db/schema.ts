@@ -76,6 +76,9 @@ export const appUser = pgTable('app_user', {
    presence: varchar('presence', { length: 16 }).notNull().default('offline'),
    timezone: varchar('timezone', { length: 64 }),
    joinedAt: date('joined_at').notNull(),
+   // Membro desativado (#100). NULL = ativo. Preserva o histórico (autoria, activity)
+   // mas bloqueia login e some dos seletores; reversível ("Reactivate").
+   deactivatedAt: timestamp('deactivated_at'),
    createdAt: timestamp('created_at').notNull().defaultNow(),
    updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
@@ -114,22 +117,29 @@ export const userAvatar = pgTable('user_avatar', {
    updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
-export const team = pgTable('team', {
-   id: varchar('id', { length: 16 }).primaryKey(), // key curta (CORE, DESIGN)
-   name: varchar('name', { length: 128 }).notNull(),
-   icon: varchar('icon', { length: 16 }),
-   color: varchar('color', { length: 16 }),
-   issueSeq: integer('issue_seq').notNull().default(0), // contador p/ identifier <KEY>-<n>
-   // Escala de estimate do time (paridade Linear): fibonacci|exponential|linear|tshirt.
-   estimateScale: varchar('estimate_scale', { length: 16 }).notNull().default('fibonacci'),
-   // Cool-down (#24): dias entre o fim de um cycle e o início do próximo, sem cycle
-   // `current` no meio (paridade Linear). 0 = sem cool-down.
-   cycleCooldownDays: integer('cycle_cooldown_days').notNull().default(0),
-   // Automações de sub-issues (#95, paridade Linear): concluir todas as filhas conclui
-   // o pai; concluir o pai conclui as filhas restantes. Ambos desligados por default.
-   autoCloseParent: boolean('auto_close_parent').notNull().default(false),
-   autoCloseChildren: boolean('auto_close_children').notNull().default(false),
-});
+export const team = pgTable(
+   'team',
+   {
+      id: varchar('id', { length: 16 }).primaryKey(), // key curta (CORE, DESIGN)
+      name: varchar('name', { length: 128 }).notNull(),
+      icon: varchar('icon', { length: 16 }),
+      color: varchar('color', { length: 16 }),
+      issueSeq: integer('issue_seq').notNull().default(0), // contador p/ identifier <KEY>-<n>
+      // Escala de estimate do time (paridade Linear): fibonacci|exponential|linear|tshirt.
+      estimateScale: varchar('estimate_scale', { length: 16 }).notNull().default('fibonacci'),
+      // Cool-down (#24): dias entre o fim de um cycle e o início do próximo, sem cycle
+      // `current` no meio (paridade Linear). 0 = sem cool-down.
+      cycleCooldownDays: integer('cycle_cooldown_days').notNull().default(0),
+      // Automações de sub-issues (#95, paridade Linear): concluir todas as filhas conclui
+      // o pai; concluir o pai conclui as filhas restantes. Ambos desligados por default.
+      autoCloseParent: boolean('auto_close_parent').notNull().default(false),
+      autoCloseChildren: boolean('auto_close_children').notNull().default(false),
+      // Sub-times (#100): pai canônico. NULL = time de topo. A guarda de ciclo é
+      // app-level (updateTeam), como em `issue.parent_id`.
+      parentId: varchar('parent_id', { length: 16 }).references((): AnyPgColumn => team.id),
+   },
+   (t) => [index('idx_team_parent').on(t.parentId)]
+);
 
 export const teamMember = pgTable(
    'team_member',
@@ -175,29 +185,36 @@ export const teamJoinRequest = pgTable(
 // ─────────────────────────────────────────────────────────────
 // Initiatives / Projects
 // ─────────────────────────────────────────────────────────────
-export const initiative = pgTable('initiative', {
-   id: varchar('id', { length: 36 }).primaryKey(),
-   slug: varchar('slug', { length: 96 }).notNull().unique(),
-   name: varchar('name', { length: 196 }).notNull(),
-   description: text('description'),
-   icon: varchar('icon', { length: 64 }),
-   iconColor: varchar('icon_color', { length: 32 }),
-   status: varchar('status', { length: 16 }).notNull(), // active|planned|completed
-   priorityId: varchar('priority_id', { length: 64 })
-      .notNull()
-      .references(() => priority.id),
-   ownerId: varchar('owner_id', { length: 36 }).references(() => appUser.id),
-   /** Rótulo humano do período alvo ("Q3 2026", "H2 2026", "2026", "Sep 2026"). */
-   target: varchar('target', { length: 64 }),
-   // Datas reais do período: `targetDate` é o fim do período do rótulo (derivada por
-   // `targetDateFromLabel`, backfill em 0036_backfill_initiative_dates.sql).
-   startDate: date('start_date'),
-   targetDate: date('target_date'),
-   healthId: varchar('health_id', { length: 64 })
-      .notNull()
-      .references(() => health.id),
-   createdAt: timestamp('created_at').notNull().defaultNow(),
-});
+export const initiative = pgTable(
+   'initiative',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      slug: varchar('slug', { length: 96 }).notNull().unique(),
+      name: varchar('name', { length: 196 }).notNull(),
+      description: text('description'),
+      icon: varchar('icon', { length: 64 }),
+      iconColor: varchar('icon_color', { length: 32 }),
+      status: varchar('status', { length: 16 }).notNull(), // active|planned|completed
+      priorityId: varchar('priority_id', { length: 64 })
+         .notNull()
+         .references(() => priority.id),
+      ownerId: varchar('owner_id', { length: 36 }).references(() => appUser.id),
+      /** Rótulo humano do período alvo ("Q3 2026", "H2 2026", "2026", "Sep 2026"). */
+      target: varchar('target', { length: 64 }),
+      // Datas reais do período: `targetDate` é o fim do período do rótulo (derivada por
+      // `targetDateFromLabel`, backfill em 0036_backfill_initiative_dates.sql).
+      startDate: date('start_date'),
+      targetDate: date('target_date'),
+      healthId: varchar('health_id', { length: 64 })
+         .notNull()
+         .references(() => health.id),
+      // Sub-initiatives (#100): pai canônico. NULL = initiative de topo. Guarda de
+      // ciclo app-level (updateInitiative), como em `team.parent_id`.
+      parentId: varchar('parent_id', { length: 36 }).references((): AnyPgColumn => initiative.id),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_initiative_parent').on(t.parentId)]
+);
 
 export const project = pgTable(
    'project',
@@ -351,6 +368,9 @@ export const issue = pgTable(
       // `issue_relation kind='sub'` (sem pai único nem guarda de ciclo); a guarda de
       // ciclo/auto-pai é app-level (updateIssue). Profundidade livre.
       parentId: varchar('parent_id', { length: 36 }).references((): AnyPgColumn => issue.id),
+      // SLA do time (#97): quando o `due_date` foi calculado pelo SLA da prioridade.
+      // NULL = due date manual (ou sem SLA) — o indicador só vale para o automático.
+      slaAppliedAt: timestamp('sla_applied_at'),
       createdAt: timestamp('created_at').notNull().defaultNow(),
       updatedAt: timestamp('updated_at').notNull().defaultNow(),
    },
@@ -680,6 +700,8 @@ export const invite = pgTable(
       email: varchar('email', { length: 255 }).notNull().unique(),
       token: varchar('token', { length: 64 }).notNull().unique(),
       invitedById: varchar('invited_by_id', { length: 36 }).references(() => appUser.id),
+      // Papel com que o convidado é provisionado no 1º login (#100): Member|Guest.
+      role: varchar('role', { length: 16 }).notNull().default('Member'),
       createdAt: timestamp('created_at').notNull().defaultNow(),
       expiresAt: timestamp('expires_at').notNull(),
       acceptedAt: timestamp('accepted_at'),
@@ -942,6 +964,49 @@ export const agentMessage = pgTable(
    (t) => [index('idx_agent_message_chat').on(t.chatId, t.createdAt)]
 );
 
+// ── SLAs e automações por time (#97) ─────────────────────────────────────
+/**
+ * SLA por (time, prioridade): prazo em horas aplicado ao `due_date` de uma issue
+ * criada — ou repriorizada — sem data manual. Linha ausente = prioridade sem SLA.
+ */
+export const teamSla = pgTable(
+   'team_sla',
+   {
+      teamId: varchar('team_id', { length: 16 })
+         .notNull()
+         .references(() => team.id),
+      priorityId: varchar('priority_id', { length: 64 })
+         .notNull()
+         .references(() => priority.id),
+      hours: integer('hours').notNull(),
+   },
+   (t) => [primaryKey({ columns: [t.teamId, t.priorityId] })]
+);
+
+/**
+ * Regra de automação do time (#97): um gatilho + uma ação com parâmetros em `config`.
+ * O motor vive em `lib/api/automations.ts`; `position` ordena a execução.
+ */
+export const teamAutomation = pgTable(
+   'team_automation',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      teamId: varchar('team_id', { length: 16 })
+         .notNull()
+         .references(() => team.id),
+      name: varchar('name', { length: 128 }).notNull(),
+      // issue.created_in_triage | issue.status_changed | issue.label_added | pr.merged
+      trigger: varchar('trigger', { length: 48 }).notNull(),
+      // add_label | set_status | set_priority | set_assignee | close_sub_issues
+      action: varchar('action', { length: 48 }).notNull(),
+      config: jsonb('config'),
+      enabled: boolean('enabled').notNull().default(true),
+      position: integer('position').notNull().default(0),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_team_automation_team').on(t.teamId, t.trigger)]
+);
+
 /** Emojis customizados do workspace (imagem no S3/CDN), usados em reações. */
 export const customEmoji = pgTable('custom_emoji', {
    id: varchar('id', { length: 36 }).primaryKey(),
@@ -952,3 +1017,150 @@ export const customEmoji = pgTable('custom_emoji', {
    createdBy: varchar('created_by', { length: 36 }).references(() => appUser.id),
    createdAt: timestamp('created_at').notNull().defaultNow(),
 });
+
+// ── Triage com IA (#94) ──────────────────────────────────────────────────
+/**
+ * Sugestão de triagem de UMA issue (1:1 com a issue, por isso `issue_id` é a PK).
+ * `payload` guarda o JSON proposto (time, prioridade, labels, duplicatas, resumo);
+ * `source` distingue a sugestão do modelo (`ai`) do fallback local por similaridade
+ * de títulos (`heuristic`). `applied_at`/`dismissed_at` registram o desfecho — a
+ * sugestão apenas PROPÕE, quem aplica é o usuário no Accept.
+ */
+export const issueTriageSuggestion = pgTable('issue_triage_suggestion', {
+   issueId: varchar('issue_id', { length: 36 })
+      .primaryKey()
+      .references(() => issue.id),
+   payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+   source: varchar('source', { length: 16 }).notNull(), // ai|heuristic
+   createdAt: timestamp('created_at').notNull().defaultNow(),
+   appliedAt: timestamp('applied_at'),
+   dismissedAt: timestamp('dismissed_at'),
+});
+// ── Import/export, API pública e webhooks (#101) ─────────────────────────
+/**
+ * Rastro de importação: liga o id externo (Linear/Jira/CSV) à issue criada. A PK
+ * composta `(source, external_id)` é o que torna o re-import IDEMPOTENTE — a
+ * segunda passada atualiza a issue existente em vez de duplicá-la.
+ */
+export const issueImport = pgTable(
+   'issue_import',
+   {
+      source: varchar('source', { length: 32 }).notNull(), // csv|linear|jira
+      externalId: varchar('external_id', { length: 128 }).notNull(),
+      issueId: varchar('issue_id', { length: 36 })
+         .notNull()
+         .references(() => issue.id),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+      updatedAt: timestamp('updated_at').notNull().defaultNow(),
+   },
+   (t) => [
+      primaryKey({ columns: [t.source, t.externalId] }),
+      index('idx_issue_import_issue').on(t.issueId),
+   ]
+);
+
+// ── Roadmap: dependências entre projetos e histórico de progresso (#102) ──
+/**
+ * "Depends on": `projectId` depende de `dependsOnId`. A guarda de ciclo é app-level
+ * (`lib/api/project-dependencies.ts`), como a de `team.parent_id`/`initiative.parent_id`
+ * — o grafo é pequeno e a travessia roda em memória.
+ */
+export const projectDependency = pgTable(
+   'project_dependency',
+   {
+      projectId: varchar('project_id', { length: 36 })
+         .notNull()
+         .references(() => project.id),
+      dependsOnId: varchar('depends_on_id', { length: 36 })
+         .notNull()
+         .references(() => project.id),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [
+      primaryKey({ columns: [t.projectId, t.dependsOnId] }),
+      index('idx_project_dependency_depends_on').on(t.dependsOnId),
+   ]
+);
+
+/**
+ * Token da API pública (`/api/public/v1/*`). Guardamos só o HASH (SHA-256) — o token
+ * em claro (`circle_<random>`) é mostrado UMA vez na criação e nunca mais. `prefix`
+ * são os primeiros caracteres, exibidos na lista para o usuário reconhecer o token.
+ */
+export const apiToken = pgTable(
+   'api_token',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      name: varchar('name', { length: 128 }).notNull(),
+      tokenHash: varchar('token_hash', { length: 64 }).notNull().unique(),
+      prefix: varchar('prefix', { length: 32 }).notNull(),
+      scopes: text('scopes').array().notNull(), // read | write
+      createdBy: varchar('created_by', { length: 36 }).references(() => appUser.id),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+      lastUsedAt: timestamp('last_used_at'),
+      revokedAt: timestamp('revoked_at'),
+   },
+   (t) => [index('idx_api_token_created_by').on(t.createdBy)]
+);
+
+/** Webhook de saída: assina eventos do barramento e recebe POST assinado (HMAC-SHA256). */
+export const webhook = pgTable(
+   'webhook',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      url: varchar('url', { length: 512 }).notNull(),
+      secret: varchar('secret', { length: 128 }).notNull(),
+      events: text('events').array().notNull(), // issue.created, project.updated, ...
+      enabled: boolean('enabled').notNull().default(true),
+      createdBy: varchar('created_by', { length: 36 }).references(() => appUser.id),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_webhook_enabled').on(t.enabled)]
+);
+
+/**
+ * Uma tentativa de entrega por (webhook, evento). O disparo é inline best-effort; se
+ * falha, `next_attempt_at` agenda o retry com backoff e o sweep lazy (boot + publish)
+ * reprocessa. `status`: pending|success|failed|exhausted.
+ */
+export const webhookDelivery = pgTable(
+   'webhook_delivery',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      webhookId: varchar('webhook_id', { length: 36 })
+         .notNull()
+         .references(() => webhook.id),
+      event: varchar('event', { length: 64 }).notNull(),
+      payload: jsonb('payload').notNull(),
+      status: varchar('status', { length: 16 }).notNull().default('pending'),
+      attempts: integer('attempts').notNull().default(0),
+      nextAttemptAt: timestamp('next_attempt_at'),
+      responseCode: integer('response_code'),
+      lastError: text('last_error'),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+      updatedAt: timestamp('updated_at').notNull().defaultNow(),
+   },
+   (t) => [
+      index('idx_webhook_delivery_hook').on(t.webhookId, t.createdAt),
+      index('idx_webhook_delivery_pending').on(t.status, t.nextAttemptAt),
+   ]
+);
+
+/**
+ * Snapshot diário do projeto (#102): matéria-prima do gráfico de progresso no tempo.
+ * Sem job — o upsert do dia acontece no boot do workspace, no GET do roadmap e no GET
+ * da própria série (mesmo padrão idempotente de `cycle_snapshot`).
+ */
+export const projectSnapshot = pgTable(
+   'project_snapshot',
+   {
+      projectId: varchar('project_id', { length: 36 })
+         .notNull()
+         .references(() => project.id, { onDelete: 'cascade' }),
+      date: date('date').notNull(),
+      scope: integer('scope').notNull(),
+      started: integer('started').notNull(),
+      completed: integer('completed').notNull(),
+   },
+   (t) => [primaryKey({ columns: [t.projectId, t.date] })]
+);

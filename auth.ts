@@ -37,10 +37,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
          // através do NextAuth. Uma cópia da regra aqui divergiria em silêncio.
          const { decideKeycloakLogin } = await import('@/lib/api/login-gate');
          const decision = await decideKeycloakLogin(db, profile, email);
-         if (!decision.allowed) return false;
+         // Conta desativada (#100): redireciona pro login com a mensagem explícita —
+         // `false` daria só o "AccessDenied" genérico do NextAuth.
+         if (!decision.allowed) {
+            return decision.reason === 'deactivated' ? '/login?error=deactivated' : false;
+         }
 
          const { getOrCreateUser } = await import('@/lib/api/users');
-         const user = await getOrCreateUser(db, email);
+         // Convite com papel Guest (#100) provisiona o usuário já como convidado.
+         const user = await getOrCreateUser(
+            db,
+            email,
+            decision.via === 'invite' ? decision.role : 'Member'
+         );
 
          if (decision.via === 'invite') {
             // Entrada por convite é evento de segurança: fica no audit log.

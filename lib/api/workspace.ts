@@ -14,6 +14,8 @@ import { listInitiatives, type InitiativeDto } from './initiatives';
 import { listViews, type ViewDto } from './views';
 import { listCyclesForTeams, rolloverCyclesForTeam, type CycleDto } from './cycles';
 import { getMe, type MeDto } from './users';
+import { visibleTeamIds } from './scope';
+import { snapshotProjects } from './project-snapshots';
 
 export interface TeamFull extends TeamDto {
    members: MemberDto[];
@@ -47,6 +49,10 @@ export async function bootstrapWorkspace(
    opts: { rollover?: boolean } = {}
 ): Promise<WorkspaceBootstrap> {
    const me = await getMe(db, email);
+   // Escopo de Guest (#100): resolvido UMA vez e propagado a todas as listagens —
+   // o convidado só enxerga os times de que participa (e seus sub-times).
+   const teamScope = await visibleTeamIds(db, me);
+   const scopedTeamIds = teamScope ?? undefined;
 
    const [
       statuses,
@@ -65,12 +71,12 @@ export async function bootstrapWorkspace(
       listPriorities(db),
       listLabels(db),
       listHealthStates(db),
-      listTeams(db, {}, me.id),
-      listProjects(db, {}),
-      listMembers(db, {}),
-      listInitiatives(db, {}),
+      listTeams(db, { teamIds: scopedTeamIds }, me.id),
+      listProjects(db, { teamIds: scopedTeamIds }),
+      listMembers(db, { teamIds: scopedTeamIds }),
+      listInitiatives(db, { teamIds: scopedTeamIds }),
       // Views escopadas: compartilhadas (com time) + as pessoais do próprio usuário.
-      listViews(db, undefined, me.id),
+      listViews(db, undefined, me.id, scopedTeamIds),
    ]);
 
    // membros por time (bulk)
@@ -104,6 +110,12 @@ export async function bootstrapWorkspace(
    const teamIds = teams.map((t) => t.id);
    if (opts.rollover !== false) {
       await Promise.all(teamIds.map((id) => rolloverCyclesForTeam(db, id)));
+      // Roadmap (#102): o snapshot diário do projeto também é lazy — o boot grava o
+      // dia (upsert idempotente) para o gráfico de progresso ter história sem job.
+      await snapshotProjects(
+         db,
+         projects.map((p) => p.id)
+      );
    }
 
    // cycles de todos os times — 2 queries no total (era N+1: 1 chamada por time,

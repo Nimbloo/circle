@@ -20,6 +20,13 @@ export interface User {
    teamIds: string[];
    /** IANA timezone, used to display the member's local time. */
    timezone: string;
+   /** Deactivated members (#100): ISO timestamp, or null when active. */
+   deactivatedAt?: string | null;
+}
+
+/** Active members only (#100) — deactivated people never show up in pickers. */
+export function activeUsers(list: User[]): User[] {
+   return list.filter((u) => !u.deactivatedAt);
 }
 
 const avatarUrl = (seed: string) => `https://api.dicebear.com/9.x/glass/svg?seed=${seed}`;

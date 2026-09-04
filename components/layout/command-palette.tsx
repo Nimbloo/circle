@@ -16,7 +16,8 @@ import { useLabels, usePriorities, useStatuses } from '@/store/catalog-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useRecentsStore } from '@/store/recents-store';
-import { api } from '@/lib/client';
+import { api, type SearchEntityType, type SearchGroup } from '@/lib/client';
+import { SearchSnippet } from '@/components/common/search/search-snippet';
 import { useShallow } from 'zustand/react/shallow';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import {
@@ -113,22 +114,23 @@ export function CommandPalette() {
 
    const orgId = pathname.split('/')[1] || 'nimbloo';
 
-   // Busca server-side (best-effort, debounced): o servidor casa também a DESCRIÇÃO
-   // da issue (corpo), que a busca client-side não alcança. Guarda os ids casados;
-   // resolvidos contra o store (que tem todas as issues) para render consistente.
-   const [serverIssueIds, setServerIssueIds] = useState<Set<string>>(new Set());
+   // Busca server-side (best-effort, debounced) pelo índice full-text (#99): casa a
+   // DESCRIÇÃO da issue (corpo) — que a busca client-side não alcança — e traz também
+   // initiatives e documents, que não vivem no store. Issues e projects seguem
+   // resolvidos contra o store (render consistente); o snippet vem do servidor.
+   const [serverGroups, setServerGroups] = useState<SearchGroup[]>([]);
    useEffect(() => {
       const q = query.trim();
       if (q.length < 2) {
-         setServerIssueIds(new Set());
+         setServerGroups([]);
          return;
       }
       let active = true;
       const t = setTimeout(() => {
-         api.issues
-            .list({ q })
-            .then((dtos) => {
-               if (active) setServerIssueIds(new Set(dtos.map((d) => d.id)));
+         api.search
+            .query({ q, limit: 6 })
+            .then((res) => {
+               if (active) setServerGroups(res.groups);
             })
             .catch(() => {
                // best-effort: mantém só a busca client-side se o servidor falhar
@@ -140,31 +142,59 @@ export function CommandPalette() {
       };
    }, [query]);
 
+   const serverItems = useCallback(
+      (type: SearchEntityType) => serverGroups.find((g) => g.type === type)?.items ?? [],
+      [serverGroups]
+   );
+
    // Busca de entidades no ⌘K (padrão Linear): quando o usuário digita, além dos
    // comandos estáticos, mostra issues/projects/members que casam com o texto e
    // navega direto. Antes o ⌘K só filtrava a lista fixa de comandos.
    const searchResults = useMemo(() => {
       const q = query.trim().toLowerCase();
-      if (!q) return { issues: [], projects: [], members: [] };
+      if (!q)
+         return {
+            issues: [],
+            projects: [],
+            members: [],
+            initiatives: [],
+            documents: [],
+            snippets: new Map<string, string>(),
+         };
+      const serverIssues = serverItems('issue');
+      const serverIssueIds = new Set(serverIssues.map((i) => i.id));
       const clientIssues = issues.filter(
          (i) => i.title.toLowerCase().includes(q) || i.identifier.toLowerCase().includes(q)
       );
       // Adiciona matches por descrição (server) que o client não pegou.
-      const serverExtra = serverIssueIds.size
-         ? issues.filter(
-              (i) => serverIssueIds.has(i.id) && !clientIssues.some((c) => c.id === i.id)
-           )
-         : [];
+      const serverExtra = issues.filter(
+         (i) => serverIssueIds.has(i.id) && !clientIssues.some((c) => c.id === i.id)
+      );
+      const serverProjectIds = new Set(serverItems('project').map((p) => p.id));
+      const clientProjects = allProjects.filter((p) => p.name.toLowerCase().includes(q));
+      const projectExtra = allProjects.filter(
+         (p) => serverProjectIds.has(p.id) && !clientProjects.some((c) => c.id === p.id)
+      );
+      const snippets = new Map<string, string>(
+         serverGroups.flatMap((g) => g.items.map((i) => [i.id, i.snippet] as const))
+      );
       return {
          issues: [...clientIssues, ...serverExtra].slice(0, 6),
-         projects: allProjects.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 4),
+         projects: [...clientProjects, ...projectExtra].slice(0, 4),
          members: users
             .filter((u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q))
             .slice(0, 4),
+         initiatives: serverItems('initiative').slice(0, 4),
+         documents: serverItems('document').slice(0, 4),
+         snippets,
       };
-   }, [query, issues, allProjects, users, serverIssueIds]);
+   }, [query, issues, allProjects, users, serverGroups, serverItems]);
    const hasSearchResults =
-      searchResults.issues.length + searchResults.projects.length + searchResults.members.length >
+      searchResults.issues.length +
+         searchResults.projects.length +
+         searchResults.members.length +
+         searchResults.initiatives.length +
+         searchResults.documents.length >
       0;
 
    const contextIssue = useMemo<Issue | undefined>(() => {
@@ -539,7 +569,12 @@ export function CommandPalette() {
                                           <span className="text-muted-foreground text-xs shrink-0">
                                              {i.identifier}
                                           </span>
-                                          <span className="truncate">{i.title}</span>
+                                          <div className="min-w-0 flex-1">
+                                             <span className="block truncate">{i.title}</span>
+                                             <SearchSnippet
+                                                html={searchResults.snippets.get(i.id) ?? ''}
+                                             />
+                                          </div>
                                        </CommandItem>
                                     ))}
                                  </CommandGroup>
@@ -554,6 +589,34 @@ export function CommandPalette() {
                                        >
                                           <Box className="text-muted-foreground" />
                                           <span className="truncate">{p.name}</span>
+                                       </CommandItem>
+                                    ))}
+                                 </CommandGroup>
+                              )}
+                              {searchResults.initiatives.length > 0 && (
+                                 <CommandGroup heading="Initiatives">
+                                    {searchResults.initiatives.map((n) => (
+                                       <CommandItem
+                                          key={n.id}
+                                          value={`${query} ${n.title}`}
+                                          onSelect={() => go(n.url)}
+                                       >
+                                          <Compass className="text-muted-foreground" />
+                                          <span className="truncate">{n.title}</span>
+                                       </CommandItem>
+                                    ))}
+                                 </CommandGroup>
+                              )}
+                              {searchResults.documents.length > 0 && (
+                                 <CommandGroup heading="Documents">
+                                    {searchResults.documents.map((d) => (
+                                       <CommandItem
+                                          key={d.id}
+                                          value={`${query} ${d.title}`}
+                                          onSelect={() => go(d.url)}
+                                       >
+                                          <FileText className="text-muted-foreground" />
+                                          <span className="truncate">{d.title}</span>
                                        </CommandItem>
                                     ))}
                                  </CommandGroup>

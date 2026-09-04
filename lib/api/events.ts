@@ -185,6 +185,27 @@ export function publish(event: Omit<CircleEvent, 'ts'>): void {
          }
       })();
    }
+   dispatchWebhooks(full);
+}
+
+/**
+ * Webhooks de saída (#101): o barramento é o ponto único por onde toda mutação passa,
+ * então é daqui que as entregas são enfileiradas. Fire-and-forget com import preguiçoso
+ * (mantém `lib/api/webhooks.ts` e o `db` fora do grafo estático do Edge) e o mesmo gate
+ * do LISTEN/NOTIFY: em teste o barramento segue puramente in-memory e determinístico —
+ * os testes de webhook chamam `dispatchEvent`/`sweepWebhookDeliveries` diretamente.
+ */
+function dispatchWebhooks(event: CircleEvent): void {
+   if (!notifyEnabled()) return;
+   void (async () => {
+      try {
+         const { db } = await import('@/db');
+         const { onCircleEvent } = await import('./webhooks');
+         await onCircleEvent(db, event);
+      } catch {
+         // Webhook é best-effort: nunca derruba a mutação que originou o evento.
+      }
+   })();
 }
 
 /** Nº de subscribers ativos (diagnóstico/teste). */

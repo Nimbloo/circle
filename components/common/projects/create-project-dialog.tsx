@@ -24,6 +24,7 @@ import {
    useHealthStates,
 } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { activeUsers } from '@/data/users';
 import {
    CalendarClock,
    CalendarRange,
@@ -73,7 +74,8 @@ function Chip({ active, children }: { active?: boolean; children: React.ReactNod
 export function CreateProjectButton() {
    const applyProject = useWorkspaceStore((s) => s.applyProject);
    const teams = useWorkspaceStore((s) => s.teams);
-   const users = useWorkspaceStore((s) => s.users);
+   // Membros desativados (#100) não aparecem no seletor de lead.
+   const users = activeUsers(useWorkspaceStore((s) => s.users));
    const initiatives = useWorkspaceStore((s) => s.initiatives);
    const statuses = useProjectStatuses();
    const priorities = usePriorities();
