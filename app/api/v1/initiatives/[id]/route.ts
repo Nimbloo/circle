@@ -8,7 +8,7 @@ import {
    updateInitiative,
    deleteInitiative,
 } from '@/lib/api/initiatives';
-import { scopeForEmail } from '@/lib/api/scope';
+import { assertCanWriteProject, assertInitiativeInScope, scopeForEmail } from '@/lib/api/scope';
 import { ApiError } from '@/lib/api/errors';
 
 export const runtime = 'nodejs';
@@ -23,11 +23,7 @@ export async function GET(req: Request, { params }: Params) {
       // Guest (#100): a initiative só é visível se algum projeto da subárvore está
       // num time dele — reusa exatamente a regra da listagem.
       const { teamIds } = await scopeForEmail(db, email);
-      if (teamIds) {
-         const visible = await listInitiatives(db, { teamIds });
-         if (!visible.some((i) => i.id === id))
-            throw new ApiError(403, 'Fora do seu escopo de acesso');
-      }
+      await assertInitiativeInScope(db, teamIds, id);
       const dto = await getInitiative(db, id);
       return dto ? ok(dto) : notFound(`Initiative '${id}' não encontrada`);
    }, req);
@@ -56,6 +52,11 @@ export async function PATCH(req: Request, { params }: Params) {
       // O e-mail vai adiante: é o ator do feed de alterações (igual à rota de project).
       const actor = await requireEmail(req);
       const patch = UpdateSchema.parse(await req.json());
+      // Origem (a initiative atual) e destino (os projetos que passa a agregar).
+      const scope = await scopeForEmail(db, actor);
+      await assertInitiativeInScope(db, scope.teamIds, id);
+      for (const projectId of patch.projectIds ?? [])
+         await assertCanWriteProject(db, scope, projectId);
       const dto = await updateInitiative(db, id, patch, actor);
       return dto ? ok(dto) : notFound(`Initiative '${id}' não encontrada`);
    }, req);
@@ -64,7 +65,9 @@ export async function PATCH(req: Request, { params }: Params) {
 export async function DELETE(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      await requireEmail(req);
+      const email = await requireEmail(req);
+      const { teamIds } = await scopeForEmail(db, email);
+      await assertInitiativeInScope(db, teamIds, id);
       const removed = await deleteInitiative(db, id);
       return removed ? ok({ deleted: true }) : notFound(`Initiative '${id}' não encontrada`);
    }, req);
