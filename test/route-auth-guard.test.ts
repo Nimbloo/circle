@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { isPublicApiPath } from '@/lib/api/public-routes';
+import { isPublicApiPath, TOKEN_API_PREFIX } from '@/lib/api/public-routes';
 
 /**
  * GUARDA DE AUTENTICAÇÃO (defesa em profundidade).
@@ -16,7 +16,7 @@ import { isPublicApiPath } from '@/lib/api/public-routes';
  * barrar, então a rota continuaria respondendo a um request não autenticado.
  */
 
-const HARD_AUTH = /\brequireEmail\b|\bgetOrCreateUser\b|\brequireUser\b/;
+const HARD_AUTH = /\brequireEmail\b|\bgetOrCreateUser\b|\brequireUser\b|\brequireApiToken\b/;
 /**
  * Forma alternativa legítima: o handler resolve o e-mail e **retorna 401** ele
  * mesmo. É o caso do stream SSE (`/events`), que não passa pelo `handle()` — como
@@ -43,7 +43,10 @@ describe('guarda de auth nas rotas de API', () => {
       const unprotected: string[] = [];
 
       for (const file of routeFiles()) {
-         if (isPublicApiPath(pathnameOf(file))) continue;
+         const pathname = pathnameOf(file);
+         // `/api/public/*` dispensa SESSÃO mas não dispensa auth: a credencial é o
+         // token (`requireApiToken`), então segue sendo checado abaixo.
+         if (isPublicApiPath(pathname) && !pathname.startsWith(TOKEN_API_PREFIX)) continue;
          const src = readFileSync(file, 'utf8');
 
          const marks: { method: string; start: number }[] = [];
@@ -63,7 +66,11 @@ describe('guarda de auth nas rotas de API', () => {
    it('a allowlist pública só contém probes e webhooks autenticados por HMAC', () => {
       // Trava o tamanho da lista: adicionar rota pública passa a ser uma decisão
       // consciente, com este teste falhando até alguém atualizar a expectativa.
-      const files = routeFiles().filter((f) => isPublicApiPath(pathnameOf(f)));
+      const files = routeFiles()
+         .filter((f) => isPublicApiPath(pathnameOf(f)))
+         // A API pública (#101) é autenticada por token — coberta pelo teste acima,
+         // que exige `requireApiToken` nela. Não entra na conta de rota anônima.
+         .filter((f) => !pathnameOf(f).startsWith(TOKEN_API_PREFIX));
       expect(files.sort()).toEqual([
          'app/api/auth/[...nextauth]/route.ts',
          'app/api/auth/signup/route.ts',
