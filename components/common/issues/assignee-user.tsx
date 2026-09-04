@@ -10,7 +10,7 @@ import {
    CommandSeparator,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { statusUserColors, User } from '@/data/users';
+import { activeUsers, statusUserColors, User } from '@/data/users';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { CheckIcon, UserIcon, UserRoundCheck } from 'lucide-react';
@@ -38,7 +38,8 @@ export function AssigneeUser({ users, user, issueId, compact = false }: Assignee
    const [open, setOpen] = useState(false);
    // Deriva do prop (store) — persiste via updateIssueAssignees e reverte junto no rollback.
    const assignees = users ?? (user ? [user] : []);
-   const members = useWorkspaceStore((s) => s.users);
+   // Membros desativados (#100) somem do seletor — o histórico continua intacto.
+   const members = activeUsers(useWorkspaceStore((s) => s.users));
    const meId = useWorkspaceStore((s) => s.me?.id);
    const updateIssueAssignees = useIssuesStore((s) => s.updateIssueAssignees);
 

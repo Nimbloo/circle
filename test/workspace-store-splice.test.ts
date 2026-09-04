@@ -47,6 +47,7 @@ function member(id: string, teamIds: string[] = [], extra: Partial<MemberDto> = 
       joinedAt: '2026-01-01',
       teamCount: teamIds.length,
       teamIds,
+      deactivatedAt: null,
       ...extra,
    };
 }

@@ -82,6 +82,7 @@ export function adaptMemberToUser(m: MemberDto): User {
       joinedDate: m.joinedAt,
       teamIds: m.teamIds,
       timezone: m.timezone ?? 'UTC',
+      deactivatedAt: m.deactivatedAt ?? null,
    };
 }
 

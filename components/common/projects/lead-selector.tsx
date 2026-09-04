@@ -10,7 +10,7 @@ import {
    CommandList,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { User } from '@/data/users';
+import { User, activeUsers } from '@/data/users';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { CheckIcon } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -23,7 +23,8 @@ interface LeadSelectorProps {
 
 export function LeadSelector({ lead, onLeadChange }: LeadSelectorProps) {
    const id = useId();
-   const users = useWorkspaceStore((s) => s.users);
+   // Membros desativados (#100) não podem virar lead.
+   const users = activeUsers(useWorkspaceStore((s) => s.users));
    const [open, setOpen] = useState<boolean>(false);
    // Deriva do prop — reverte junto com o rollback e reflete mudança externa.
    const value = lead?.id ?? '';
