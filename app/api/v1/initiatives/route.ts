@@ -3,16 +3,19 @@ import { db } from '@/db';
 import { ok } from '@/lib/api/response';
 import { handle, requireEmail, multi } from '@/lib/api/http';
 import { listInitiatives, createInitiative } from '@/lib/api/initiatives';
+import { scopeForEmail } from '@/lib/api/scope';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
    return handle(async () => {
-      await requireEmail(req);
+      const email = await requireEmail(req);
       const sp = new URL(req.url).searchParams;
+      const { teamIds } = await scopeForEmail(db, email);
       return ok(
          await listInitiatives(db, {
+            teamIds: teamIds ?? undefined,
             status: multi(sp, 'status'),
             priority: multi(sp, 'priority'),
             owner: multi(sp, 'owner'),

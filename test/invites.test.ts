@@ -66,13 +66,14 @@ describe('convites', () => {
       const db = await setup();
       await createInvite(db, 'dev@nimbloo.ai', ADMIN);
 
-      expect(await consumeInvite(db, 'Dev@Nimbloo.ai')).toBe(true); // normaliza
-      expect(await consumeInvite(db, 'dev@nimbloo.ai')).toBe(false); // ja aceito
+      // Devolve o papel do convite (#100), não mais um booleano.
+      expect(await consumeInvite(db, 'Dev@Nimbloo.ai')).toEqual({ role: 'Member' }); // normaliza
+      expect(await consumeInvite(db, 'dev@nimbloo.ai')).toBeNull(); // ja aceito
    });
 
    it('nao libera e-mail sem convite, nem convite vencido', async () => {
       const db = await setup();
-      expect(await consumeInvite(db, 'estranho@nimbloo.ai')).toBe(false);
+      expect(await consumeInvite(db, 'estranho@nimbloo.ai')).toBeNull();
 
       const dto = await createInvite(db, 'atrasado@nimbloo.ai', ADMIN);
       await db
@@ -80,7 +81,7 @@ describe('convites', () => {
          .set({ expiresAt: new Date(Date.now() - 1000) })
          .where(eq(invite.id, dto.id));
 
-      expect(await consumeInvite(db, 'atrasado@nimbloo.ai')).toBe(false);
+      expect(await consumeInvite(db, 'atrasado@nimbloo.ai')).toBeNull();
       expect(await getInviteByToken(db, dto.token!)).toBeNull();
       expect((await listInvites(db))[0].expired).toBe(true);
    });
@@ -97,7 +98,7 @@ describe('convites', () => {
 
       expect(await revokeInvite(db, dto.id)).toBe(true);
       expect(await listInvites(db)).toHaveLength(0);
-      expect(await consumeInvite(db, 'dev@nimbloo.ai')).toBe(false);
+      expect(await consumeInvite(db, 'dev@nimbloo.ai')).toBeNull();
       expect(await revokeInvite(db, dto.id)).toBe(false); // idempotente
    });
 });

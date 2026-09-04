@@ -193,7 +193,9 @@ export const api = {
    /** Convites de acesso (admin). `create` devolve o magic link uma unica vez. */
    invites: {
       list: () => get<InviteDto[]>('/invites'),
-      create: (email: string) => post<InviteDto & { url: string }>('/invites', { email }),
+      /** `role` (#100): 'Member' (default) ou 'Guest'. */
+      create: (email: string, role?: string) =>
+         post<InviteDto & { url: string }>('/invites', { email, role }),
       revoke: (id: string) => del<{ deleted: boolean }>(`/invites/${id}`),
    },
 

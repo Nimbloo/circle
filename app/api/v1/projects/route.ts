@@ -3,20 +3,23 @@ import { db } from '@/db';
 import { ok } from '@/lib/api/response';
 import { handle, requireEmail, multi } from '@/lib/api/http';
 import { listProjects, createProject, type ProjectSort } from '@/lib/api/projects';
+import { scopeForEmail } from '@/lib/api/scope';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
    return handle(async () => {
-      await requireEmail(req);
+      const email = await requireEmail(req);
       const sp = new URL(req.url).searchParams;
       const [sort, dir] = (sp.get('sort') ?? 'title-asc').split('-') as [
          ProjectSort,
          'asc' | 'desc',
       ];
+      const { teamIds } = await scopeForEmail(db, email);
       return ok(
          await listProjects(db, {
+            teamIds: teamIds ?? undefined,
             tab: (sp.get('tab') as 'all' | 'active') ?? undefined,
             health: multi(sp, 'health'),
             priority: multi(sp, 'priority'),

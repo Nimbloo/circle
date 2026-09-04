@@ -697,6 +697,8 @@ export const invite = pgTable(
       email: varchar('email', { length: 255 }).notNull().unique(),
       token: varchar('token', { length: 64 }).notNull().unique(),
       invitedById: varchar('invited_by_id', { length: 36 }).references(() => appUser.id),
+      // Papel com que o convidado é provisionado no 1º login (#100): Member|Guest.
+      role: varchar('role', { length: 16 }).notNull().default('Member'),
       createdAt: timestamp('created_at').notNull().defaultNow(),
       expiresAt: timestamp('expires_at').notNull(),
       acceptedAt: timestamp('accepted_at'),

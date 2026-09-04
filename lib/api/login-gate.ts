@@ -13,7 +13,7 @@ export type LoginDecision =
    /** Caminho normal: grupo concedido via Orbis. */
    | { allowed: true; via: 'group' }
    /** Exceção: convite pendente e válido, consumido agora (single-use). */
-   | { allowed: true; via: 'invite' };
+   | { allowed: true; via: 'invite'; role: string };
 
 /**
  * Decide se um login Keycloak entra, e por qual caminho.
@@ -39,6 +39,8 @@ export async function decideKeycloakLogin(
    if (!hasNimblooIdentity(profile)) return { allowed: false, reason: 'identity' };
    if (await isDeactivatedEmail(db, email)) return { allowed: false, reason: 'deactivated' };
    if (hasCircleGroup(profile)) return { allowed: true, via: 'group' };
-   if (await consumeInvite(db, email)) return { allowed: true, via: 'invite' };
+   const invited = await consumeInvite(db, email);
+   // O papel do convite (Member|Guest, #100) provisiona o usuário no 1º login.
+   if (invited) return { allowed: true, via: 'invite', role: invited.role };
    return { allowed: false, reason: 'unauthorized' };
 }

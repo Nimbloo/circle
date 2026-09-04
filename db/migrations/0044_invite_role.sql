@@ -1,0 +1,1 @@
+ALTER TABLE "invite" ADD COLUMN "role" varchar(16) DEFAULT 'Member' NOT NULL;

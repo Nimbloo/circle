@@ -230,6 +230,11 @@ export interface ListInitiativesOptions {
    priority?: string[];
    owner?: string[];
    health?: string[];
+   /**
+    * Escopo de times (#100, Guest): mantém só as initiatives com ao menos um projeto
+    * (próprio ou de uma sub-initiative) num time visível. `undefined` = todas.
+    */
+   teamIds?: string[];
 }
 
 export async function listInitiatives(
@@ -243,7 +248,40 @@ export async function listInitiatives(
    if (opts.priority?.length) dtos = dtos.filter((d) => opts.priority!.includes(d.priority.id));
    if (opts.health?.length) dtos = dtos.filter((d) => opts.health!.includes(d.health.id));
    if (opts.owner?.length) dtos = dtos.filter((d) => d.owner && opts.owner!.includes(d.owner.id));
+   if (opts.teamIds) dtos = await filterByTeamScope(db, dtos, opts.teamIds);
    return dtos.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Escopo de Guest (#100): a initiative fica visível se algum projeto da sua subárvore
+ * pertence a um time visível. A subárvore evita esconder uma initiative-mãe que só
+ * organiza filhas.
+ */
+async function filterByTeamScope(
+   db: Db,
+   dtos: InitiativeDto[],
+   teamIds: string[]
+): Promise<InitiativeDto[]> {
+   const scope = new Set(teamIds);
+   if (scope.size === 0) return [];
+   const byId = new Map(dtos.map((d) => [d.id, d]));
+   const projectIds = [...new Set(dtos.flatMap((d) => d.projectIds))];
+   if (projectIds.length === 0) return [];
+   const rows = await db
+      .select({ id: projectT.id, teamId: projectT.teamId })
+      .from(projectT)
+      .where(inArray(projectT.id, projectIds));
+   const teamOfProject = new Map(rows.map((r) => [r.id, r.teamId]));
+   const visible = (dto: InitiativeDto, seen: Set<string>): boolean => {
+      if (seen.has(dto.id)) return false;
+      seen.add(dto.id);
+      if (dto.projectIds.some((pid) => scope.has(teamOfProject.get(pid) ?? ''))) return true;
+      return dto.childIds.some((cid) => {
+         const child = byId.get(cid);
+         return child ? visible(child, seen) : false;
+      });
+   };
+   return dtos.filter((d) => visible(d, new Set()));
 }
 
 export async function getInitiative(db: Db, id: string): Promise<InitiativeDto | null> {

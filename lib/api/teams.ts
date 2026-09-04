@@ -92,6 +92,8 @@ export interface ListTeamsOptions {
    membership?: string[]; // 'Joined' | 'Not-Joined'
    sort?: TeamSort;
    dir?: 'asc' | 'desc';
+   /** Escopo de times (#100, Guest): só devolve estes ids. `undefined` = todos. */
+   teamIds?: string[];
 }
 
 export async function listTeams(
@@ -108,6 +110,10 @@ export async function listTeams(
    const requestedSet = new Set(requested);
    let dtos = teams.map((t) => toDto(t, counts, joined, requestedSet));
 
+   if (opts.teamIds) {
+      const scope = new Set(opts.teamIds);
+      dtos = dtos.filter((d) => scope.has(d.id));
+   }
    if (opts.membership?.length) {
       const wantJoined = opts.membership.includes('Joined');
       const wantNot = opts.membership.includes('Not-Joined');

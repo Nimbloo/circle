@@ -309,6 +309,13 @@
          "when": 1788487610495,
          "tag": "0043_org_parents_deactivated",
          "breakpoints": true
+      },
+      {
+         "idx": 44,
+         "version": "7",
+         "when": 1788489268320,
+         "tag": "0044_invite_role",
+         "breakpoints": true
       }
    ]
 }
