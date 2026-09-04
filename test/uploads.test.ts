@@ -60,6 +60,20 @@ describe('POST /uploads (imagens do editor) #16', () => {
       expect(res.status).toBe(400);
    });
 
+   it('recusa o data-URL gigante sem alocar o Buffer', async () => {
+      // 3/4 do comprimento da string base64 já diz que estoura: recusar aqui evita
+      // decodificar (e duplicar na memória) só para depois responder 413.
+      const alloc = vi.spyOn(Buffer, 'from');
+      try {
+         const big = 'A'.repeat(Math.ceil(((MAX_UPLOAD_BYTES + 1) * 4) / 3));
+         const res = await POST(post({ dataUrl: big, contentType: 'image/png' }));
+         expect(res.status).toBe(413);
+         expect(alloc).not.toHaveBeenCalled();
+      } finally {
+         alloc.mockRestore();
+      }
+   });
+
    it('acima de 5 MB → 413', async () => {
       const big = Buffer.alloc(MAX_UPLOAD_BYTES + 1, 1).toString('base64');
       const res = await POST(post({ dataUrl: big, contentType: 'image/png' }));
