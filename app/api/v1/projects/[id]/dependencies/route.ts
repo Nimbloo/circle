@@ -3,7 +3,7 @@ import { db } from '@/db';
 import { ok } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
 import { listDependencies, setDependencies } from '@/lib/api/project-dependencies';
-import { assertProjectInScope, scopeForEmail } from '@/lib/api/scope';
+import { assertCanWriteProject, assertProjectInScope, scopeForEmail } from '@/lib/api/scope';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -29,9 +29,12 @@ export async function PUT(req: Request, { params }: Params) {
    return handle(async () => {
       const email = await requireEmail(req);
       const { id } = await params;
-      const { teamIds } = await scopeForEmail(db, email);
-      await assertProjectInScope(db, teamIds, id);
+      // Escopo resolvido UMA vez e reusado nos alvos (a lista chega a 50 projetos).
+      const scope = await scopeForEmail(db, email);
+      await assertProjectInScope(db, scope.teamIds, id);
       const { dependsOn } = PutSchema.parse(await req.json());
+      // As duas pontas: validar só o `{id}` da URL deixava depender de projeto alheio.
+      for (const target of dependsOn) await assertCanWriteProject(db, scope, target);
       return ok(await setDependencies(db, id, dependsOn));
    }, req);
 }

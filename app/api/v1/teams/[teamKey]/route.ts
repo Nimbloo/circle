@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { ok, notFound } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
-import { emailFromRequest, isAdmin } from '@/lib/api/auth';
+import { isAdmin } from '@/lib/api/auth';
 import { ApiError } from '@/lib/api/errors';
 import { getOrCreateUser } from '@/lib/api/users';
 import { getTeam, updateTeam, deleteTeam } from '@/lib/api/teams';
@@ -17,11 +17,13 @@ type Params = { params: Promise<{ teamKey: string }> };
 export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
       const { teamKey } = await params;
-      const email = await emailFromRequest(req);
-      const me = email ? await getOrCreateUser(db, email) : undefined;
+      // Fail-OPEN antes: sem sessão, `me` era undefined e o assert de escopo era PULADO —
+      // um anônimo lia qualquer time. Agora exige identidade.
+      const email = await requireEmail(req);
+      const me = await getOrCreateUser(db, email);
       // Guest fora do time (#100): 403 — o time não faz parte do workspace dele.
-      if (me) assertTeamInScope(await visibleTeamIds(db, me), teamKey);
-      const dto = await getTeam(db, teamKey, me?.id);
+      assertTeamInScope(await visibleTeamIds(db, me), teamKey);
+      const dto = await getTeam(db, teamKey, me.id);
       return dto ? ok(dto) : notFound(`Team '${teamKey}' não encontrado`);
    }, req);
 }

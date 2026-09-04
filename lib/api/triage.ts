@@ -16,6 +16,7 @@ import { getCachedCatalogs } from './catalogs';
 import { ApiError } from './errors';
 import { publish } from './events';
 import { getOrCreateUser } from './users';
+import { assertCanWriteIssue, assertCanWriteTeam } from './scope';
 
 /**
  * Triage com IA (#94).
@@ -299,10 +300,28 @@ async function loadCandidates(db: Db, teamId: string, selfId: string): Promise<C
  * Bedrock, JSON inválido ou credencial ausente caem no heurístico com `source`
  * honesto. Publica `issue updated` para o card aparecer sem refresh.
  */
+const inFlight = new Map<string, Promise<TriageSuggestionDto | null>>();
+
 export async function generateTriageSuggestion(
    db: Db,
    issueId: string,
    opts: GenerateTriageOptions = {}
+): Promise<TriageSuggestionDto | null> {
+   // Dedupe em voo: o painel, a fila e o `scheduleTriageSuggestion` da mutação podem
+   // pedir a sugestão da MESMA issue ao mesmo tempo. Sem isto são duas chamadas ao
+   // Bedrock e dois upserts (cada um publicando evento, que realimenta o ciclo). O mapa
+   // é por processo — a corrida entre pods segue coberta pelo upsert.
+   const flight = inFlight.get(issueId);
+   if (flight) return flight;
+   const run = generateOnce(db, issueId, opts).finally(() => inFlight.delete(issueId));
+   inFlight.set(issueId, run);
+   return run;
+}
+
+async function generateOnce(
+   db: Db,
+   issueId: string,
+   opts: GenerateTriageOptions
 ): Promise<TriageSuggestionDto | null> {
    const [target] = await db.select().from(issueT).where(eq(issueT.id, issueId)).limit(1);
    if (!target) return null;
@@ -358,12 +377,27 @@ export async function generateTriageSuggestion(
    // A coluna é jsonb genérico (`Record<string, unknown>`); a forma tipada é o
    // `TriageSuggestionPayload`, reconstruído na leitura por `readPayload`.
    const stored = { ...payload } as unknown as Record<string, unknown>;
+   // Uma geração EM VOO não pode ressuscitar um card que o usuário resolveu no meio do
+   // caminho: o upsert só sobrescreve enquanto a sugestão continua pendente, e nunca
+   // limpa `appliedAt`/`dismissedAt`. Regeneração explícita (`force`) é decisão do
+   // usuário e reabre o card.
+   const set: Record<string, unknown> = { payload: stored, source, createdAt: now };
+   if (opts.force) {
+      set.appliedAt = null;
+      set.dismissedAt = null;
+   }
    await db
       .insert(issueTriageSuggestion)
       .values({ issueId, payload: stored, source, createdAt: now })
       .onConflictDoUpdate({
          target: issueTriageSuggestion.issueId,
-         set: { payload: stored, source, createdAt: now, appliedAt: null, dismissedAt: null },
+         set,
+         where: opts.force
+            ? undefined
+            : and(
+                 isNull(issueTriageSuggestion.appliedAt),
+                 isNull(issueTriageSuggestion.dismissedAt)
+              ),
       });
    publish({ entity: 'issue', action: 'updated', id: issueId });
    return getTriageSuggestion(db, issueId);
@@ -506,6 +540,10 @@ export async function acceptTriageSuggestion(
    actorEmail: string,
    input: AcceptTriageInput = {}
 ): Promise<TriageSuggestionDto> {
+   // Escopo ANTES de qualquer lookup: a issue de ORIGEM e o time de DESTINO (o accept
+   // move a issue de time). Checar depois devolveria 404 da sugestão no lugar do 403.
+   const scope = await assertCanWriteIssue(db, actorEmail, issueId);
+   if (input.teamId) await assertCanWriteTeam(db, scope, input.teamId);
    const suggestion = await getTriageSuggestion(db, issueId);
    if (!suggestion) throw new ApiError(404, 'Sugestão de triagem não encontrada');
    if (suggestion.appliedAt) throw new ApiError(409, 'Sugestão já aplicada');
@@ -597,8 +635,10 @@ export async function acceptTriageSuggestion(
 /** Descarta a sugestão (some do card; a issue segue na fila para triagem manual). */
 export async function dismissTriageSuggestion(
    db: Db,
-   issueId: string
+   issueId: string,
+   actorEmail?: string
 ): Promise<TriageSuggestionDto> {
+   if (actorEmail) await assertCanWriteIssue(db, actorEmail, issueId);
    const [updated] = await db
       .update(issueTriageSuggestion)
       .set({ dismissedAt: new Date() })

@@ -1,14 +1,24 @@
 import { z } from 'zod';
+import { db } from '@/db';
 import { emailFromRequest } from './auth';
+import { assertActiveEmail } from './users';
 import { problem } from './response';
 import { ApiError } from './errors';
+import { captureServerError } from './observe-error';
 import { observeHttp } from '@/lib/metrics';
 import type { IssueListOptions } from './issues';
 
-/** E-mail do usuário autenticado (sessão NextAuth; header em teste) ou 401. */
+/**
+ * E-mail do usuário autenticado (sessão NextAuth; header em teste) ou 401.
+ *
+ * Também recusa com 403 quem está desativado (#100): é o chokepoint de TODA rota,
+ * inclusive das que nunca resolvem o `app_user`. `getOrCreateUser` repete a checagem —
+ * defesa em profundidade, porque nem todo serviço passa por aqui.
+ */
 export async function requireEmail(req?: Request): Promise<string> {
    const email = await emailFromRequest(req);
    if (!email) throw new ApiError(401, 'Não autenticado');
+   await assertActiveEmail(db, email);
    return email;
 }
 
@@ -97,6 +107,9 @@ export async function handle(fn: () => Promise<Response>, req?: Request): Promis
             res = dbMapped;
          } else {
             console.error(`[circle-api]${reqTag(req)} erro não tratado:`, e);
+            // O ProblemDetail abaixo faz o erro "sumir" antes do onRequestError do Next
+            // — sem esta linha nenhum 5xx da API chega ao Sentry (auditoria v0.29.0).
+            captureServerError(e, req);
             res = problem(500, 'Internal Server Error');
          }
       }

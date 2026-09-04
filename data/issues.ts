@@ -35,6 +35,8 @@ export interface Issue {
    snoozedUntil?: string | null;
    /** SLA do time (#97): quando o `dueDate` foi calculado pelo SLA. null = data manual. */
    slaAppliedAt?: string | null;
+   /** Vencimento real do SLA (ISO, com hora). Ausente = linha antiga → fim do dia. */
+   slaDueAt?: string | null;
    rank: string;
    dueDate?: string;
    /** Pontos de estimativa (undefined = sem estimativa). */

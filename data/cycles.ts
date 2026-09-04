@@ -2,12 +2,12 @@ import { format, parseISO } from 'date-fns';
 
 export type CycleStatus = 'planned' | 'upcoming' | 'current' | 'completed';
 
-/** One data point of a cycle burn-up chart. */
+/** One data point of a cycle burn-up chart. `null` = no measurement that day (gap). */
 export interface CycleBurnupPoint {
    date: string; // ISO date (yyyy-MM-dd)
-   scope: number;
-   started: number;
-   completed: number;
+   scope: number | null;
+   started: number | null;
+   completed: number | null;
    ideal: number;
 }
 

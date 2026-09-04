@@ -6,6 +6,7 @@ import { getOrCreateUser } from '@/lib/api/users';
 import { listUpdates, postProjectUpdate } from '@/lib/api/project-detail';
 import type { ProjectUpdateHealth } from '@/lib/api/project-detail';
 import type { ContentBlock } from '@/data/issue-details';
+import { assertProjectInScope, scopeForEmail } from '@/lib/api/scope';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,8 +15,10 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
-      await requireEmail(req);
+      const email = await requireEmail(req);
       const { id } = await params;
+      const { teamIds } = await scopeForEmail(db, email);
+      await assertProjectInScope(db, teamIds, id);
       return ok(await listUpdates(db, id));
    }, req);
 }
@@ -31,10 +34,16 @@ export async function POST(req: Request, { params }: Params) {
       const email = await requireEmail(req);
       const input = CreateSchema.parse(await req.json());
       const author = await getOrCreateUser(db, email);
-      const dto = await postProjectUpdate(db, id, author.id, {
-         health: input.health as ProjectUpdateHealth,
-         blocks: input.blocks as ContentBlock[],
-      });
+      const dto = await postProjectUpdate(
+         db,
+         id,
+         author.id,
+         {
+            health: input.health as ProjectUpdateHealth,
+            blocks: input.blocks as ContentBlock[],
+         },
+         email
+      );
       return ok(dto);
    }, req);
 }

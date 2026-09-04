@@ -1,5 +1,7 @@
 import { db } from '@/db';
 import { handle, requireEmail } from '@/lib/api/http';
+import { isAdmin } from '@/lib/api/auth';
+import { ApiError } from '@/lib/api/errors';
 import { ok, notFound } from '@/lib/api/response';
 import { revokeApiToken } from '@/lib/api/api-tokens';
 import { recordAudit } from '@/lib/api/audit';
@@ -12,6 +14,9 @@ export const dynamic = 'force-dynamic';
 export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
    return handle(async () => {
       const email = await requireEmail(req);
+      // Revogar credencial alheia é ação de admin — antes qualquer um derrubava a chave
+      // de integração de outra pessoa.
+      if (!(await isAdmin(email, db))) throw new ApiError(403, 'Apenas admin');
       const { id } = await ctx.params;
       const revoked = await revokeApiToken(db, id);
       if (!revoked) return notFound('Token não encontrado');

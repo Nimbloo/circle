@@ -9,6 +9,7 @@ import { listProjects, type ProjectDto } from './projects';
 import { searchIssueIds } from './search';
 import { ApiError } from './errors';
 import { publish } from './events';
+import { assertCanWriteTeam } from './scope';
 
 export interface ViewFilter {
    statusCategories?: string[];
@@ -104,6 +105,16 @@ export async function getView(db: Db, id: string, viewerId?: string): Promise<Vi
    return toDto(v);
 }
 
+/**
+ * Time de compartilhamento da view: precisa EXISTIR (404) e estar no escopo do ator
+ * (403). Antes nada era validado na criação — dava para publicar uma view num time
+ * alheio, e um id inexistente deixava a view órfã (invisível para todo mundo).
+ */
+async function assertTeamExists(db: Db, teamId: string): Promise<void> {
+   const t = await db.select({ id: teamT.id }).from(teamT).where(eq(teamT.id, teamId)).limit(1);
+   if (!t.length) throw new ApiError(404, `Team '${teamId}' não existe`);
+}
+
 export interface CreateViewInput {
    slug: string;
    name: string;
@@ -121,6 +132,10 @@ export async function createView(
 ): Promise<ViewDto> {
    if (!input.name?.trim() || !input.slug?.trim())
       throw new ApiError(400, 'slug e name são obrigatórios');
+   if (input.teamId) {
+      await assertTeamExists(db, input.teamId);
+      await assertCanWriteTeam(db, ownerEmail, input.teamId);
+   }
    const owner = await getOrCreateUser(db, ownerEmail);
    const id = randomUUID();
    const now = new Date();
@@ -183,12 +198,8 @@ export async function updateView(
       // Valida o time: sem isto, um id errado deixaria a view órfã — invisível para
       // o dono (deixou de ser pessoal) e para todo mundo (o time não existe).
       if (patch.teamId) {
-         const t = await db
-            .select({ id: teamT.id })
-            .from(teamT)
-            .where(eq(teamT.id, patch.teamId))
-            .limit(1);
-         if (!t.length) throw new ApiError(404, `Team '${patch.teamId}' não existe`);
+         await assertTeamExists(db, patch.teamId);
+         await assertCanWriteTeam(db, actorEmail, patch.teamId);
       }
       set.teamId = patch.teamId;
    }

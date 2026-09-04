@@ -26,6 +26,7 @@ import { publish } from './events';
 import { getOrCreateUser } from './users';
 import type { UserRef } from './issues';
 import { teamDescendantIds } from './hierarchy';
+import { assertCanWriteProject, assertCanWriteTeam, assertTeamInScope } from './scope';
 
 type ProjectRow = typeof projectT.$inferSelect;
 type StatusRow = typeof statusT.$inferSelect;
@@ -248,8 +249,13 @@ export interface CreateProjectInput {
    labelIds?: string[];
 }
 
-export async function createProject(db: Db, input: CreateProjectInput): Promise<ProjectDto> {
+export async function createProject(
+   db: Db,
+   input: CreateProjectInput,
+   actorEmail?: string
+): Promise<ProjectDto> {
    if (!input.name?.trim()) throw new ApiError(400, 'name é obrigatório');
+   if (actorEmail) await assertCanWriteTeam(db, actorEmail, input.teamId);
    const maps = await loadMaps(db);
    if (!maps.statuses.has(input.statusId))
       throw new ApiError(400, `status '${input.statusId}' inválido`);
@@ -336,6 +342,10 @@ export async function updateProject(
       .where(eq(projectT.id, id))
       .limit(1);
    if (existing.length === 0) return null;
+   // Escopo: valida a ORIGEM antes de tudo — sem isto, um guest de outro time movia o
+   // projeto para o time dele (`teamId` no patch) e o GET, que checa escopo, passava a
+   // devolver 200. Origem E destino.
+   const scope = actorEmail ? await assertCanWriteProject(db, actorEmail, id) : null;
    if (patch.teamId !== undefined) {
       const found = await db
          .select({ id: teamT.id })
@@ -343,6 +353,7 @@ export async function updateProject(
          .where(eq(teamT.id, patch.teamId))
          .limit(1);
       if (found.length === 0) throw new ApiError(400, `team '${patch.teamId}' inválido`);
+      if (scope) assertTeamInScope(scope.teamIds, patch.teamId);
    }
 
    // Resolvido ANTES da transação: o ator exige consulta própria, e consultar `db` de
@@ -400,13 +411,14 @@ export async function updateProject(
    return getProject(db, id);
 }
 
-export async function deleteProject(db: Db, id: string): Promise<boolean> {
+export async function deleteProject(db: Db, id: string, actorEmail?: string): Promise<boolean> {
    const existing = await db
       .select({ id: projectT.id })
       .from(projectT)
       .where(eq(projectT.id, id))
       .limit(1);
    if (existing.length === 0) return false;
+   if (actorEmail) await assertCanWriteProject(db, actorEmail, id);
    await db.transaction(async (tx) => {
       // issue.projectId é RESTRICT e nullable: desvincula em vez de deletar as issues.
       await tx.update(issueT).set({ projectId: null }).where(eq(issueT.projectId, id));

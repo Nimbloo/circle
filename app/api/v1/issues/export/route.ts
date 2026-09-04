@@ -2,6 +2,7 @@ import { db } from '@/db';
 import { handle, requireEmail, multi } from '@/lib/api/http';
 import { listIssues } from '@/lib/api/issues';
 import { exportIssuesJson } from '@/lib/api/export';
+import { scopeForEmail } from '@/lib/api/scope';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,9 +20,12 @@ function csvCell(v: string | number | null | undefined): string {
  */
 export async function GET(req: Request) {
    return handle(async () => {
-      await requireEmail(req);
+      const email = await requireEmail(req);
       const sp = new URL(req.url).searchParams;
+      // Sem isto o export devolvia o WORKSPACE INTEIRO (o filtro vinha só da query).
+      const { teamIds } = await scopeForEmail(db, email);
       const filters = {
+         teamIds: teamIds ?? undefined,
          team: sp.get('team') ?? undefined,
          status: multi(sp, 'status'),
          priority: multi(sp, 'priority'),

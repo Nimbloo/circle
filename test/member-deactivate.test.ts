@@ -83,11 +83,11 @@ describe('desativar membro (#100)', () => {
       });
    });
 
-   it('listMembers segue devolvendo o desativado (a UI é que filtra)', async () => {
+   it('listMembers esconde o desativado por padrão e só o traz sob pedido', async () => {
       await setMemberDeactivated(db, liaId, true);
-      const all = await listMembers(db);
-      const lia = all.find((m) => m.id === liaId)!;
-      expect(lia.deactivatedAt).toBeTruthy();
+      expect((await listMembers(db)).find((m) => m.id === liaId)).toBeUndefined();
+      const withOff = await listMembers(db, { includeDeactivated: true });
+      expect(withOff.find((m) => m.id === liaId)!.deactivatedAt).toBeTruthy();
    });
 
    it('rota PATCH: admin desativa e reativa, gerando audit', async () => {
