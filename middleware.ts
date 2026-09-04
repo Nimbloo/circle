@@ -34,6 +34,10 @@ function unauthorized(): Response {
 export default auth(async (req) => {
    const { pathname } = req.nextUrl;
 
+   // SEAM DE DEV LOCAL (NÃO COMMITAR): libera o gate em `next dev` quando
+   // CIRCLE_DEV_AUTH_EMAIL está setado — renderiza a UI sem Keycloak. Morto em prod.
+   if (process.env.NODE_ENV === 'development' && process.env.CIRCLE_DEV_AUTH_EMAIL) return;
+
    if (pathname.startsWith('/api')) {
       if (isPublicApiPath(pathname)) return;
       if (req.auth) return; // sessão de humano (cookie NextAuth)

@@ -36,6 +36,12 @@ export async function emailFromRequest(req?: Request): Promise<string | null> {
    if (process.env.NODE_ENV === 'test' && !process.env.NEXT_RUNTIME) {
       return emailFromTestHeader(req);
    }
+   // SEAM DE DEV LOCAL (NÃO COMMITAR): só em `next dev` (NODE_ENV==='development')
+   // e quando CIRCLE_DEV_AUTH_EMAIL está setado — para renderizar a UI sem Keycloak.
+   // Morto em produção (NODE_ENV==='production').
+   if (process.env.NODE_ENV === 'development' && process.env.CIRCLE_DEV_AUTH_EMAIL) {
+      return process.env.CIRCLE_DEV_AUTH_EMAIL.trim().toLowerCase();
+   }
    // Auth de MÁQUINA: Bearer JWT emitido pelo Keycloak (service accounts). Valida
    // contra o JWKS do realm — coerente com o SSO único, sem cofre de tokens no app.
    const bearer = bearerToken(req);

@@ -4,7 +4,13 @@ import { handle, requireEmail } from '@/lib/api/http';
 import { ok } from '@/lib/api/response';
 import { getOrCreateUser } from '@/lib/api/users';
 import { recordAudit } from '@/lib/api/audit';
-import { createWebhook, listWebhooks, WEBHOOK_EVENTS, type WebhookEvent } from '@/lib/api/webhooks';
+import {
+   createWebhook,
+   listWebhooks,
+   sweepWebhookDeliveries,
+   WEBHOOK_EVENTS,
+   type WebhookEvent,
+} from '@/lib/api/webhooks';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,6 +25,10 @@ const createSchema = z.object({
 export async function GET(req: Request) {
    return handle(async () => {
       await requireEmail(req);
+      // Sweep lazy das entregas pendentes (o boot NÃO faz isto: importar webhooks a
+      // partir do instrumentation arrasta o cliente Postgres para o bundle Edge).
+      // Best-effort: a lista responde mesmo se o reprocessamento falhar.
+      void sweepWebhookDeliveries(db).catch(() => undefined);
       return ok(await listWebhooks(db));
    }, req);
 }

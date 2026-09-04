@@ -78,19 +78,11 @@ export async function register() {
       await lockClient.end().catch(() => {});
    }
 
-   // Webhooks de saída (#101): retenta no boot as entregas que ficaram pendentes do
-   // processo anterior. Lazy, sem CronJob; o próprio sweep pega um advisory lock, então
-   // subir várias réplicas não duplica entrega. Best-effort — não derruba o pod.
-   void (async () => {
-      try {
-         const { getDb } = await import('@/db');
-         const { sweepWebhookDeliveries } = await import('@/lib/api/webhooks');
-         const tried = await sweepWebhookDeliveries(getDb());
-         if (tried > 0) console.log(`[circle] webhooks: ${tried} entrega(s) retentada(s) no boot`);
-      } catch (e) {
-         console.warn('[circle] sweep de webhooks no boot falhou:', (e as Error).message);
-      }
-   })();
+   // Webhooks de saída (#101): o sweep das entregas pendentes NÃO roda aqui. Importar
+   // `@/lib/api/webhooks` (ou `@/db`) a partir do instrumentation arrasta o cliente
+   // Postgres para o bundle **Edge** deste arquivo e o Turbopack falha em `util/types`,
+   // derrubando TODA requisição em dev. O sweep é lazy: acontece a cada `publish` e no
+   // GET de `/api/v1/webhooks` (ops abrindo a tela já reprocessa a fila).
 }
 
 /**
