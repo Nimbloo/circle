@@ -3,7 +3,7 @@ import { db } from '@/db';
 import { ok } from '@/lib/api/response';
 import { handle, requireEmail, multi } from '@/lib/api/http';
 import { listInitiatives, createInitiative } from '@/lib/api/initiatives';
-import { scopeForEmail } from '@/lib/api/scope';
+import { assertCanWriteProject, scopeForEmail } from '@/lib/api/scope';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -45,8 +45,13 @@ const CreateSchema = z.object({
 
 export async function POST(req: Request) {
    return handle(async () => {
-      await requireEmail(req);
+      const email = await requireEmail(req);
       const input = CreateSchema.parse(await req.json());
+      // A initiative não tem time próprio: quem define o alcance são os PROJETOS
+      // vinculados. Escopo resolvido uma vez e reusado na lista.
+      const scope = await scopeForEmail(db, email);
+      for (const projectId of input.projectIds ?? [])
+         await assertCanWriteProject(db, scope, projectId);
       return ok(await createInitiative(db, input));
    }, req);
 }

@@ -73,7 +73,10 @@ export async function bootstrapWorkspace(
       listHealthStates(db),
       listTeams(db, { teamIds: scopedTeamIds }, me.id),
       listProjects(db, { teamIds: scopedTeamIds }),
-      listMembers(db, { teamIds: scopedTeamIds }),
+      // Hidratação do workspace: pede os desativados EXPLICITAMENTE (default do
+      // serviço agora é escondê-los). A UI precisa deles para renderizar autoria e
+      // atribuição histórica, e para o filtro "Show deactivated" da tela de membros.
+      listMembers(db, { teamIds: scopedTeamIds, includeDeactivated: true }),
       listInitiatives(db, { teamIds: scopedTeamIds }),
       // Views escopadas: compartilhadas (com time) + as pessoais do próprio usuário.
       listViews(db, undefined, me.id, scopedTeamIds),

@@ -362,6 +362,14 @@ Dois bugs de integração corrigidos aqui: um `export` extra num route handler q
 produção, e o sweep de webhooks no boot arrastava o cliente Postgres para o bundle Edge e
 derrubava toda requisição em dev (agora é lazy, no publish e na listagem de webhooks).
 
+**Promovido para produção na release
+[v0.29.0](https://github.com/Nimbloo/circle/releases/tag/v0.29.0)** (PRs #109 e #110):
+migrations 0043–0045 aplicadas no boot (46/46), rollout `Synced/Healthy`, `healthz`/`readyz`
+em `200`, busca full-text respondendo pelo índice (sem fallback), roadmap agrupado por
+initiative e rota pública devolvendo `401` sem token. **Épico #25 fechado**, junto com #94,
+#97, #99, #100, #101 e #102. Restam abertas só #22 (reviews, à espera do PAT e do Bedrock),
+#27 e #28, que vivem em outro repositório.
+
 ## Decisões suas (não é falta de código)
 
 Nenhuma pendente em 02/09/2026: datas de initiatives, snapshot de cycles e editor de blocos

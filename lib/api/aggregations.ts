@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, isNotNull } from 'drizzle-orm';
+import { and, count, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    issue as issueT,
@@ -19,14 +19,28 @@ export interface IssueMatrix {
    total: number;
 }
 
-export async function issueMatrix(db: Db, opts: { team?: string } = {}): Promise<IssueMatrix> {
+/**
+ * Filtro de time das agregações. `teamIds` é o escopo do ator (#100): `undefined` = sem
+ * restrição (Member/Admin); lista vazia = convidado sem time, que não agrega nada. Sem isto,
+ * o total global vazaria a contagem de times fora do escopo.
+ */
+function teamFilter(opts: { team?: string; teamIds?: string[] }) {
+   if (opts.team) return eq(issueT.teamId, opts.team);
+   if (opts.teamIds) return opts.teamIds.length ? inArray(issueT.teamId, opts.teamIds) : sql`false`;
+   return undefined;
+}
+
+export async function issueMatrix(
+   db: Db,
+   opts: { team?: string; teamIds?: string[] } = {}
+): Promise<IssueMatrix> {
    const [statuses, priorities, grouped] = await Promise.all([
       db.select().from(statusT),
       db.select().from(priorityT),
       db
          .select({ statusId: issueT.statusId, priorityId: issueT.priorityId, n: count() })
          .from(issueT)
-         .where(opts.team ? eq(issueT.teamId, opts.team) : undefined)
+         .where(teamFilter(opts))
          .groupBy(issueT.statusId, issueT.priorityId),
    ]);
    const cells: Record<string, Record<string, number>> = {};
@@ -80,7 +94,7 @@ function stats(values: number[]): { avg: number; median: number; p90: number } {
 
 export async function timeMetrics(
    db: Db,
-   opts: { team?: string; weeks?: number; now?: Date } = {}
+   opts: { team?: string; weeks?: number; now?: Date; teamIds?: string[] } = {}
 ): Promise<TimeMetrics> {
    const weeks = opts.weeks ?? 8;
    const now = opts.now ?? new Date();
@@ -91,9 +105,7 @@ export async function timeMetrics(
          completedAt: issueT.completedAt,
       })
       .from(issueT)
-      .where(
-         and(isNotNull(issueT.completedAt), opts.team ? eq(issueT.teamId, opts.team) : undefined)
-      );
+      .where(and(isNotNull(issueT.completedAt), teamFilter(opts)));
 
    const lead: number[] = [];
    const cycle: number[] = [];

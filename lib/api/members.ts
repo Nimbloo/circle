@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { appUser, teamMember } from '@/db/schema';
 import { MEMBER_ROLES, type MemberRole } from '@/data/users';
@@ -66,12 +66,20 @@ export interface ListMembersOptions {
     * `undefined` = sem restrição.
     */
    teamIds?: string[];
+   /**
+    * Inclui os desativados (#100). Default `false`: quem foi desligado sai da lista
+    * no SERVIDOR, não só no filtro do componente. Quem realmente precisa deles (a
+    * hidratação do workspace, para renderizar autoria/assignee histórico, e a tela de
+    * membros com "Show deactivated") pede explicitamente.
+    */
+   includeDeactivated?: boolean;
 }
 
 export async function listMembers(db: Db, opts: ListMembersOptions = {}): Promise<MemberDto[]> {
    const [users, memberships] = await Promise.all([db.select().from(appUser), teamMemberships(db)]);
    let dtos = users.map((u) => toDto(u, memberships.get(u.id) ?? []));
 
+   if (!opts.includeDeactivated) dtos = dtos.filter((d) => d.deactivatedAt === null);
    if (opts.role?.length) {
       const set = new Set(opts.role);
       dtos = dtos.filter((d) => set.has(d.role));
@@ -106,6 +114,51 @@ export async function getMember(db: Db, id: string): Promise<MemberDto | null> {
 // o re-export mantém o contrato deste módulo para as rotas da API.
 export { MEMBER_ROLES, type MemberRole };
 
+/**
+ * 409 se tirar o papel `Admin` deste usuário deixaria o workspace sem NENHUM
+ * administrador ativo. Sem isto, o último admin se rebaixa (ou é rebaixado) e ninguém
+ * mais consegue gerir papéis, times, tokens ou webhooks — só um `UPDATE` manual no
+ * banco reabriria. Só conta admin ativo: desativado não administra nada.
+ */
+async function assertNotLastAdmin(db: Db, id: string): Promise<void> {
+   const [target] = await db
+      .select({ role: appUser.role })
+      .from(appUser)
+      .where(eq(appUser.id, id))
+      .limit(1);
+   if (!target || target.role !== 'Admin') return;
+   const others = await db
+      .select({ id: appUser.id })
+      .from(appUser)
+      .where(and(eq(appUser.role, 'Admin'), ne(appUser.id, id), isNull(appUser.deactivatedAt))!)
+      .limit(1);
+   if (others.length === 0)
+      throw new ApiError(409, 'O workspace precisa de pelo menos um administrador ativo');
+}
+
+/**
+ * 400 quando algum dos ids indicados é de usuário desativado (#100). Usado por quem
+ * aceita `assigneeId`/`assigneeIds`/`leadId`: desligar alguém não pode conviver com
+ * continuar atribuindo trabalho a ele. Ids inexistentes seguem para o 404/FK do serviço.
+ */
+export async function assertAssignableUsers(
+   db: Db,
+   ids: (string | null | undefined)[]
+): Promise<void> {
+   const wanted = [...new Set(ids.filter((v): v is string => Boolean(v)))];
+   if (wanted.length === 0) return;
+   const rows = await db
+      .select({ id: appUser.id, name: appUser.name, deactivatedAt: appUser.deactivatedAt })
+      .from(appUser)
+      .where(inArray(appUser.id, wanted));
+   const off = rows.filter((r) => r.deactivatedAt !== null);
+   if (off.length > 0)
+      throw new ApiError(
+         400,
+         `Usuário desativado não pode receber atribuição: ${off.map((o) => o.name).join(', ')}`
+      );
+}
+
 /** Atualiza a role do membro (valida o enum). Retorna o MemberDto ou null se não existir. */
 export async function updateMemberRole(
    db: Db,
@@ -120,15 +173,28 @@ export async function updateMemberRole(
       .where(eq(appUser.id, id))
       .limit(1);
    if (existing.length === 0) return null;
+   if (role !== 'Admin') await assertNotLastAdmin(db, id);
    await db.update(appUser).set({ role, updatedAt: new Date() }).where(eq(appUser.id, id));
    publish({ entity: 'member', action: 'updated', id });
    return getMember(db, id);
 }
 
 /**
- * Desativa um membro (#100): marca `deactivated_at`, remove de TODOS os times e
- * bloqueia o login (`login-gate`). O histórico (autoria de issues, activity) fica
- * intacto — nada é apagado. Idempotente: re-desativar mantém a data original.
+ * Papel de quem é desativado. `Guest` sem time nenhum = escopo VAZIO (`visibleTeamIds`
+ * devolve `[]`), enquanto `Member` é escopo IRRESTRITO — por isso desativar chegava a
+ * AMPLIAR o alcance: saía dos times e continuava enxergando tudo. O 403 do ator já
+ * fecha o buraco; o rebaixamento é a segunda barreira, para não depender de um ponto só.
+ *
+ * Reativar NÃO restaura o papel anterior (não guardamos histórico de papel): o admin
+ * volta a conceder Member/Admin explicitamente, que é o comportamento seguro.
+ */
+const DEACTIVATED_ROLE = 'Guest';
+
+/**
+ * Desativa um membro (#100): marca `deactivated_at`, rebaixa o papel, remove de TODOS
+ * os times e bloqueia o login (`login-gate`) e toda chamada de API (`requireEmail` /
+ * `getOrCreateUser`). O histórico (autoria de issues, activity) fica intacto — nada é
+ * apagado. Idempotente: re-desativar mantém a data original.
  */
 export async function setMemberDeactivated(
    db: Db,
@@ -140,9 +206,10 @@ export async function setMemberDeactivated(
    const current = rows[0];
    if (deactivated) {
       if (!current.deactivatedAt) {
+         await assertNotLastAdmin(db, id);
          await db
             .update(appUser)
-            .set({ deactivatedAt: new Date(), updatedAt: new Date() })
+            .set({ deactivatedAt: new Date(), role: DEACTIVATED_ROLE, updatedAt: new Date() })
             .where(eq(appUser.id, id));
       }
       // Sai dos times: sem isto ele seguiria contando como membro e aparecendo nas

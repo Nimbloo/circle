@@ -4,6 +4,7 @@ import { ok, notFound } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
 import { isAdmin } from '@/lib/api/auth';
 import { ApiError } from '@/lib/api/errors';
+import { assertAssignableUsers } from '@/lib/api/members';
 import {
    AUTOMATION_ACTIONS,
    AUTOMATION_TRIGGERS,
@@ -39,7 +40,9 @@ export async function PATCH(req: Request, { params }: Params) {
       const { id } = await params;
       const email = await requireEmail(req);
       if (!(await isAdmin(email, db))) throw new ApiError(403, 'Apenas admin');
-      const dto = await updateAutomation(db, id, PatchSchema.parse(await req.json()));
+      const patch = PatchSchema.parse(await req.json());
+      await assertAssignableUsers(db, [patch.config?.assigneeId]);
+      const dto = await updateAutomation(db, id, patch);
       return dto ? ok(dto) : notFound(`Automação '${id}' não encontrada`);
    }, req);
 }

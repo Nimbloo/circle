@@ -17,19 +17,20 @@ const PatchSchema = z.object({
 
 export async function PATCH(req: Request, { params }: Params) {
    return handle(async () => {
-      const { mid } = await params;
-      await requireEmail(req);
+      const { id, mid } = await params;
+      const actorEmail = await requireEmail(req);
       const patch = PatchSchema.parse(await req.json());
-      const dto = await updateMilestone(db, mid, patch);
+      // `id` do projeto na URL é vinculante: milestone de OUTRO projeto vira 404.
+      const dto = await updateMilestone(db, mid, patch, { projectId: id, actorEmail });
       return dto ? ok(dto) : notFound(`Milestone '${mid}' não encontrado`);
    }, req);
 }
 
 export async function DELETE(req: Request, { params }: Params) {
    return handle(async () => {
-      const { mid } = await params;
-      await requireEmail(req);
-      const removed = await deleteMilestone(db, mid);
+      const { id, mid } = await params;
+      const actorEmail = await requireEmail(req);
+      const removed = await deleteMilestone(db, mid, { projectId: id, actorEmail });
       return removed ? ok({ deleted: true }) : notFound(`Milestone '${mid}' não encontrado`);
    }, req);
 }

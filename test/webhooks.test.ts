@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Db } from '@/db';
@@ -58,6 +58,9 @@ let receiver: Awaited<ReturnType<typeof startReceiver>>;
 let ownerId: string;
 
 beforeEach(async () => {
+   // O receptor de teste roda em 127.0.0.1, que a allow-list anti-SSRF bloqueia.
+   // O escape hatch só existe fora de produção (ver `privateTargetsAllowed`).
+   vi.stubEnv('CIRCLE_WEBHOOK_ALLOW_PRIVATE', 'true');
    db = await makeTestDb();
    await seedTeam(db, 'CORE', 'Core');
    ownerId = await seedUser(db, {
@@ -69,6 +72,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
    await receiver.close();
+   vi.unstubAllEnvs();
 });
 
 describe('webhooks de saída (#101)', () => {

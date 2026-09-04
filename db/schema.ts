@@ -137,6 +137,10 @@ export const team = pgTable(
       // Sub-times (#100): pai canônico. NULL = time de topo. A guarda de ciclo é
       // app-level (updateTeam), como em `issue.parent_id`.
       parentId: varchar('parent_id', { length: 16 }).references((): AnyPgColumn => team.id),
+      // Automações (#97): marca de que as regras padrão já foram semeadas para o time.
+      // Sem ela, `ensureDefaultAutomations` só olhava "o time tem alguma regra?" e
+      // apagar TODAS ressuscitava a regra padrão na leitura seguinte.
+      automationsSeededAt: timestamp('automations_seeded_at'),
    },
    (t) => [index('idx_team_parent').on(t.parentId)]
 );
@@ -371,6 +375,12 @@ export const issue = pgTable(
       // SLA do time (#97): quando o `due_date` foi calculado pelo SLA da prioridade.
       // NULL = due date manual (ou sem SLA) — o indicador só vale para o automático.
       slaAppliedAt: timestamp('sla_applied_at'),
+      // Vencimento REAL do SLA, com hora. O `due_date` é `date` e trunca: SLAs de 1h,
+      // 4h e 12h aplicados de manhã caíam todos no mesmo fim de dia, e às 22h um SLA
+      // de 4h virava 26h. Esta coluna é a fonte da verdade do indicador; o `due_date`
+      // continua sendo a data humana mostrada na UI. Mantido em dia por trigger
+      // (migration 0046) para valer em QUALQUER caminho de escrita.
+      slaDueAt: timestamp('sla_due_at'),
       createdAt: timestamp('created_at').notNull().defaultNow(),
       updatedAt: timestamp('updated_at').notNull().defaultNow(),
    },

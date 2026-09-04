@@ -32,7 +32,13 @@ function decodeBase64(dataUrl: string, contentType: string): Buffer {
    if (m && m[1].toLowerCase() !== contentType) {
       throw new ApiError(400, 'contentType não corresponde ao data-URL');
    }
-   return Buffer.from(m ? m[2] : dataUrl.trim(), 'base64');
+   const payload = m ? m[2] : dataUrl.trim();
+   // Rejeita ANTES de alocar o Buffer: base64 tem ~3/4 de bytes úteis, então o
+   // comprimento da string já diz se o binário estoura o limite. Sem isto, decodificar
+   // um data-URL gigante duplica o consumo de memória só para depois recusar.
+   if (Math.floor((payload.length * 3) / 4) > MAX_UPLOAD_BYTES)
+      throw new ApiError(413, 'Imagem excede o tamanho máximo (5 MB)');
+   return Buffer.from(payload, 'base64');
 }
 
 export async function uploadImage(input: UploadInput): Promise<UploadDto> {

@@ -2,7 +2,7 @@ import { and, asc, eq } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { teamSla, team as teamT, priority as priorityT } from '@/db/schema';
 import { ApiError } from './errors';
-import { slaDueDate } from '@/lib/sla';
+import { slaDueAt, slaDueDate } from '@/lib/sla';
 
 /**
  * SLAs por time (#97): uma linha por (time, prioridade) com o prazo em horas. Quando uma
@@ -74,7 +74,10 @@ export async function slaHours(db: Db, teamId: string, priorityId: string): Prom
 }
 
 export interface AppliedSla {
+   /** Data humana (`YYYY-MM-DD`) mostrada na UI — derivada do `dueAt`. */
    dueDate: string;
+   /** Vencimento REAL, com hora: é o que o indicador de SLA usa. */
+   dueAt: Date;
    slaAppliedAt: Date;
    hours: number;
 }
@@ -82,6 +85,11 @@ export interface AppliedSla {
 /**
  * Calcula o SLA de (time, prioridade) a partir de `now`. null = prioridade sem SLA.
  * Quem grava (create/update de issue) é `lib/api/issues.ts` — aqui só o cálculo.
+ *
+ * O `dueAt` é a janela contratada exata (`now + hours`); o `dueDate` é a projeção em
+ * data para a UI. A coluna `issue.sla_due_at` é mantida coerente pela trigger da
+ * migration `0046_sla_due_at`, que vale para qualquer caminho de escrita — inclusive
+ * a regra de nunca AFROUXAR um SLA por troca de prioridade.
  */
 export async function applySla(
    db: Db,
@@ -91,5 +99,10 @@ export async function applySla(
 ): Promise<AppliedSla | null> {
    const hours = await slaHours(db, teamId, priorityId);
    if (hours === null) return null;
-   return { dueDate: slaDueDate(now, hours), slaAppliedAt: now, hours };
+   return {
+      dueDate: slaDueDate(now, hours),
+      dueAt: slaDueAt(now, hours),
+      slaAppliedAt: now,
+      hours,
+   };
 }

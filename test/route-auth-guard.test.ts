@@ -18,6 +18,25 @@ import { isPublicApiPath, TOKEN_API_PREFIX } from '@/lib/api/public-routes';
 
 const HARD_AUTH = /\brequireEmail\b|\bgetOrCreateUser\b|\brequireUser\b|\brequireApiToken\b/;
 /**
+ * Ponto cego 1: gate em posição de TERNÁRIO (`cond ? await requireEmail(req) : null`)
+ * não barra ninguém — o handler segue respondendo quando a condição é falsa. Um
+ * `requireEmail` que só aparece assim (ou dentro de comentário, que já sai no
+ * `stripComments`) não conta como autenticação.
+ */
+const TERNARY_AUTH =
+   /[?:]\s*(?:\(?\s*await\s+)?(?:requireEmail|getOrCreateUser|requireUser|requireApiToken)\s*\(/;
+/** Comentário não é código: menção a `requireEmail` em comentário não autentica. */
+function stripComments(src: string): string {
+   return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+}
+/** Todas as ocorrências do gate são condicionais? Então não há gate de verdade. */
+function onlyConditionalAuth(body: string): boolean {
+   const hits = body.match(
+      /(?:[?:]\s*(?:\(?\s*await\s+)?)?(?:requireEmail|getOrCreateUser|requireUser|requireApiToken)\s*\(/g
+   );
+   return Boolean(hits?.length) && hits!.every((h) => TERNARY_AUTH.test(h));
+}
+/**
  * Forma alternativa legítima: o handler resolve o e-mail e **retorna 401** ele
  * mesmo. É o caso do stream SSE (`/events`), que não passa pelo `handle()` — como
  * `requireEmail` lança `ApiError`, sem o wrapper a exceção viraria 500 em vez de
@@ -25,7 +44,21 @@ const HARD_AUTH = /\brequireEmail\b|\bgetOrCreateUser\b|\brequireUser\b|\brequir
  * `emailFromRequest` decorativo.
  */
 const EXPLICIT_401 = (body: string) => /\bemailFromRequest\b/.test(body) && /\b401\b/.test(body);
-const HANDLER = /export\s+async\s+function\s+(GET|POST|PUT|PATCH|DELETE)\s*\(/g;
+/**
+ * Ponto cego 2: a forma `export const GET = handler` não casava com o regex antigo
+ * (`export async function GET(`) — o arquivo inteiro passava batido, sem UM handler
+ * inspecionado. Ambas as formas contam agora.
+ */
+const HANDLER = /export\s+(?:async\s+function|const)\s+(GET|POST|PUT|PATCH|DELETE)\b/g;
+
+/**
+ * O que o detector corrigido revelou: dois handlers fail-open reais, que resolvem o
+ * e-mail por ternário (`email ? await getOrCreateUser(...) : undefined`) e, SEM sessão,
+ * seguem respondendo com escopo irrestrito. A correção é do dono de `teams/**`
+ * (trocar `emailFromRequest` por `requireEmail`), não deste guarda — a lista existe só
+ * para ele continuar pegando o que é NOVO. É uma tolerância TEMPORÁRIA e por
+ * SUBCONJUNTO: assim que os dois handlers exigirem sessão, apague estas linhas.
+ */
 
 /** `app/api/v1/foo/route.ts` -> `/api/v1/foo` */
 function pathnameOf(file: string): string {
@@ -47,16 +80,21 @@ describe('guarda de auth nas rotas de API', () => {
          // `/api/public/*` dispensa SESSÃO mas não dispensa auth: a credencial é o
          // token (`requireApiToken`), então segue sendo checado abaixo.
          if (isPublicApiPath(pathname) && !pathname.startsWith(TOKEN_API_PREFIX)) continue;
-         const src = readFileSync(file, 'utf8');
+         const src = stripComments(readFileSync(file, 'utf8'));
 
-         const marks: { method: string; start: number }[] = [];
-         for (const m of src.matchAll(HANDLER)) marks.push({ method: m[1], start: m.index! });
+         const marks: { method: string; start: number; alias: boolean }[] = [];
+         for (const m of src.matchAll(HANDLER))
+            marks.push({ method: m[1], start: m.index!, alias: m[0].includes('const') });
 
          for (let i = 0; i < marks.length; i++) {
-            const body = src.slice(marks[i].start, marks[i + 1]?.start ?? src.length);
-            if (!HARD_AUTH.test(body) && !EXPLICIT_401(body)) {
-               unprotected.push(`${marks[i].method} ${pathnameOf(file)}`);
-            }
+            // `export const GET = h`: o corpo do handler é a função `h`, que está em
+            // outro ponto do arquivo — o recorte entre marcas não a alcança.
+            const body = marks[i].alias
+               ? src
+               : src.slice(marks[i].start, marks[i + 1]?.start ?? src.length);
+            const authed =
+               (HARD_AUTH.test(body) && !onlyConditionalAuth(body)) || EXPLICIT_401(body);
+            if (!authed) unprotected.push(`${marks[i].method} ${pathnameOf(file)}`);
          }
       }
 

@@ -14,6 +14,7 @@ import {
 } from '@/db/schema';
 import { ApiError } from './errors';
 import { publish } from './events';
+import { assertCanWriteProject } from './scope';
 import type { UserRef } from './issues';
 import type { ContentBlock } from '@/data/issue-details';
 import type { EditorDoc } from '@/lib/editor-doc';
@@ -98,6 +99,29 @@ function parseBlocks(raw: string | null): ContentBlock[] {
    } catch {
       return [];
    }
+}
+
+/**
+ * Contexto de escrita dos sub-recursos: quem é o ator (gate de escopo) e a qual projeto
+ * a URL diz que o recurso pertence. Milestone/resource eram editados por id GLOBAL —
+ * o `{id}` do projeto na rota era ignorado, então valia editar o de qualquer projeto.
+ */
+export interface ProjectChildContext {
+   projectId?: string;
+   actorEmail?: string;
+}
+
+/** 403 fora do escopo do ator; 404 quando o recurso não é do projeto da URL. */
+async function assertChildOfProject(
+   db: Db,
+   ctx: ProjectChildContext | undefined,
+   ownerProjectId: string,
+   kind: string,
+   childId: string
+): Promise<void> {
+   if (ctx?.projectId && ctx.projectId !== ownerProjectId)
+      throw new ApiError(404, `${kind} '${childId}' não encontrado`);
+   if (ctx?.actorEmail) await assertCanWriteProject(db, ctx.actorEmail, ownerProjectId);
 }
 
 /** Confirma que o projeto existe; lança 404 caso contrário. */
@@ -252,9 +276,11 @@ export interface UpdateDetailInput {
 export async function updateProjectDetail(
    db: Db,
    projectId: string,
-   patch: UpdateDetailInput
+   patch: UpdateDetailInput,
+   actorEmail?: string
 ): Promise<ProjectDetailDto | null> {
    await assertProject(db, projectId);
+   if (actorEmail) await assertCanWriteProject(db, actorEmail, projectId);
 
    const set: Partial<typeof projectDetail.$inferInsert> = {};
    if (patch.summary !== undefined) set.summary = patch.summary;
@@ -290,9 +316,11 @@ export interface AddMilestoneInput {
 export async function addMilestone(
    db: Db,
    projectId: string,
-   input: AddMilestoneInput
+   input: AddMilestoneInput,
+   actorEmail?: string
 ): Promise<ProjectMilestoneDto> {
    await assertProject(db, projectId);
+   if (actorEmail) await assertCanWriteProject(db, actorEmail, projectId);
    if (!input.name?.trim()) throw new ApiError(400, 'name é obrigatório');
    const id = randomUUID();
    await db.insert(projectMilestone).values({
@@ -321,7 +349,8 @@ export interface UpdateMilestoneInput {
 export async function updateMilestone(
    db: Db,
    milestoneId: string,
-   patch: UpdateMilestoneInput
+   patch: UpdateMilestoneInput,
+   ctx?: ProjectChildContext
 ): Promise<ProjectMilestoneDto | null> {
    const rows = await db
       .select()
@@ -329,6 +358,7 @@ export async function updateMilestone(
       .where(eq(projectMilestone.id, milestoneId))
       .limit(1);
    if (rows.length === 0) return null;
+   await assertChildOfProject(db, ctx, rows[0].projectId, 'Milestone', milestoneId);
    const set: Partial<typeof projectMilestone.$inferInsert> = {};
    if (patch.name !== undefined) {
       if (!patch.name.trim()) throw new ApiError(400, 'name não pode ser vazio');
@@ -371,13 +401,18 @@ async function milestoneProgress(
    };
 }
 
-export async function deleteMilestone(db: Db, milestoneId: string): Promise<boolean> {
+export async function deleteMilestone(
+   db: Db,
+   milestoneId: string,
+   ctx?: ProjectChildContext
+): Promise<boolean> {
    const rows = await db
       .select({ projectId: projectMilestone.projectId })
       .from(projectMilestone)
       .where(eq(projectMilestone.id, milestoneId))
       .limit(1);
    if (rows.length === 0) return false;
+   await assertChildOfProject(db, ctx, rows[0].projectId, 'Milestone', milestoneId);
    // Atômico: desvincula as issues E remove a milestone juntos (milestone_id não tem FK
    // cascade). Sem transação, um delete que falha após o update deixaria issues sem
    // vínculo mas a milestone viva.
@@ -397,9 +432,11 @@ export interface AddResourceInput {
 export async function addResource(
    db: Db,
    projectId: string,
-   input: AddResourceInput
+   input: AddResourceInput,
+   actorEmail?: string
 ): Promise<ProjectResourceDto> {
    await assertProject(db, projectId);
+   if (actorEmail) await assertCanWriteProject(db, actorEmail, projectId);
    if (!input.label?.trim()) throw new ApiError(400, 'label é obrigatório');
    if (!input.url?.trim()) throw new ApiError(400, 'url é obrigatório');
    const id = randomUUID();
@@ -414,7 +451,8 @@ export async function addResource(
 export async function updateResource(
    db: Db,
    resourceId: string,
-   input: { label: string }
+   input: { label: string },
+   ctx?: ProjectChildContext
 ): Promise<boolean> {
    if (!input.label?.trim()) throw new ApiError(400, 'label é obrigatório');
    const rows = await db
@@ -423,6 +461,7 @@ export async function updateResource(
       .where(eq(projectResource.id, resourceId))
       .limit(1);
    if (rows.length === 0) return false;
+   await assertChildOfProject(db, ctx, rows[0].projectId, 'Resource', resourceId);
    await db
       .update(projectResource)
       .set({ label: input.label.trim() })
@@ -431,13 +470,18 @@ export async function updateResource(
    return true;
 }
 
-export async function deleteResource(db: Db, resourceId: string): Promise<boolean> {
+export async function deleteResource(
+   db: Db,
+   resourceId: string,
+   ctx?: ProjectChildContext
+): Promise<boolean> {
    const rows = await db
       .select({ projectId: projectResource.projectId })
       .from(projectResource)
       .where(eq(projectResource.id, resourceId))
       .limit(1);
    if (rows.length === 0) return false;
+   await assertChildOfProject(db, ctx, rows[0].projectId, 'Resource', resourceId);
    await db.delete(projectResource).where(eq(projectResource.id, resourceId));
    publish({ entity: 'project', action: 'updated', id: rows[0].projectId });
    return true;
@@ -453,9 +497,11 @@ export async function postProjectUpdate(
    db: Db,
    projectId: string,
    authorId: string,
-   input: PostUpdateInput
+   input: PostUpdateInput,
+   actorEmail?: string
 ): Promise<ProjectUpdateDto> {
    await assertProject(db, projectId);
+   if (actorEmail) await assertCanWriteProject(db, actorEmail, projectId);
    if (!UPDATE_HEALTHS.includes(input.health)) throw new ApiError(400, 'health inválido');
    const id = randomUUID();
    const now = new Date();

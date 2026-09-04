@@ -100,7 +100,7 @@ describe('scopeDelta e burn-up a partir dos snapshots (#24)', () => {
       expect(dto.scopeDelta).toBe(50);
    });
 
-   it('burn-up vem dos snapshots, interpolando os dias sem registro', async () => {
+   it('burn-up vem dos snapshots; dia sem registro fica em branco (não interpola)', async () => {
       const db = await setup('completed', '2026-01-05');
       await addIssue(db, 1, 'done', 14); // agg.scope = 14 → linha ideal termina em 14
       await db.insert(cycleSnapshot).values([
@@ -117,14 +117,14 @@ describe('scopeDelta e burn-up a partir dos snapshots (#24)', () => {
          '2026-01-04',
          '2026-01-05',
       ]);
-      expect(b.map((p) => p.scope)).toEqual([10, 11, 12, 13, 14]);
-      expect(b.map((p) => p.completed)).toEqual([0, 2, 4, 6, 8]);
-      expect(b.map((p) => p.started)).toEqual([2, 3, 4, 5, 6]);
+      expect(b.map((p) => p.scope)).toEqual([10, null, null, null, 14]);
+      expect(b.map((p) => p.completed)).toEqual([0, null, null, null, 8]);
+      expect(b.map((p) => p.started)).toEqual([2, null, null, null, 6]);
       expect(b[0].ideal).toBe(0);
       expect(b[4].ideal).toBe(14);
    });
 
-   it('segura o primeiro/último valor fora do intervalo gravado', async () => {
+   it('não estende o valor medido para fora do intervalo gravado', async () => {
       const db = await setup('completed', '2026-01-05');
       await db.insert(cycleSnapshot).values([
          { cycleId: 'c1', date: '2026-01-02', scope: 10, started: 0, completed: 0 },
@@ -132,7 +132,7 @@ describe('scopeDelta e burn-up a partir dos snapshots (#24)', () => {
       ]);
 
       const b = (await getCycle(db, 'c1', at('2026-01-20')))!.burnup!;
-      expect(b.map((p) => p.completed)).toEqual([0, 0, 5, 10, 10]);
+      expect(b.map((p) => p.completed)).toEqual([null, 0, null, 10, null]);
    });
 
    it('sem snapshots suficientes cai no sintético (scope plano, marcos das issues)', async () => {

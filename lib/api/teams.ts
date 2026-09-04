@@ -11,6 +11,8 @@ import {
    cycle as cycleT,
    savedView as savedViewT,
    documentFolder as documentFolderT,
+   teamSla,
+   teamAutomation,
 } from '@/db/schema';
 import { getOrCreateUser } from './users';
 import { assertTeamParent, teamChildIds } from './hierarchy';
@@ -466,7 +468,8 @@ export async function updateTeam(
 /**
  * Apaga um time. Escolha segura: recusa com 409 se o time tiver issues, projects,
  * cycles, saved views ou document folders (todos com FK RESTRICT — evita 500/órfãos).
- * Se estiver vazio, remove os team_member e o team. Retorna false se o time não existir.
+ * Se estiver vazio, remove a CONFIGURAÇÃO do time (membros, join requests, SLA e
+ * automações) e o team. Retorna false se o time não existir.
  */
 export async function deleteTeam(db: Db, id: string): Promise<boolean> {
    const existing = await db.select({ id: teamT.id }).from(teamT).where(eq(teamT.id, id)).limit(1);
@@ -510,6 +513,11 @@ export async function deleteTeam(db: Db, id: string): Promise<boolean> {
    // Solicitações de entrada (histórico) NÃO bloqueiam a deleção — limpa antes do time,
    // senão o FK (team_join_request.team_id, sem onDelete) estoura 23503 → 404 enganoso.
    await db.delete(teamJoinRequest).where(eq(teamJoinRequest.teamId, id));
+   // SLA e automações são CONFIGURAÇÃO do time, não conteúdo: somem com ele. Sem isto o
+   // FK estourava 23503 → 404 enganoso, e como `ensureDefaultAutomations` semeia a regra
+   // padrão na primeira leitura, quase todo time ficava indelével.
+   await db.delete(teamSla).where(eq(teamSla.teamId, id));
+   await db.delete(teamAutomation).where(eq(teamAutomation.teamId, id));
    await db.delete(teamMember).where(eq(teamMember.teamId, id));
    await db.delete(teamT).where(eq(teamT.id, id));
    publish({ entity: 'team', action: 'deleted', id });
