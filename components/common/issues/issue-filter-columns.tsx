@@ -319,6 +319,7 @@ function buildIssueFilterColumns(
          .accessor((i: Issue) =>
             slaState({
                dueDate: i.dueDate ?? null,
+               slaDueAt: i.slaDueAt ?? null,
                slaAppliedAt: i.slaAppliedAt ?? null,
                statusCategory: i.status.category,
             })

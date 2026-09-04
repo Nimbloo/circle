@@ -49,6 +49,7 @@ describe('team_sla — configuração por prioridade', () => {
       await setTeamSla(db, 'CORE', 'urgent', 48);
       expect(await applySla(db, 'CORE', 'urgent', now)).toEqual({
          dueDate: '2026-03-12',
+         dueAt: new Date('2026-03-12T08:00:00.000Z'),
          slaAppliedAt: now,
          hours: 48,
       });

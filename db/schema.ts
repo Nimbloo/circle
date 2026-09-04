@@ -371,6 +371,12 @@ export const issue = pgTable(
       // SLA do time (#97): quando o `due_date` foi calculado pelo SLA da prioridade.
       // NULL = due date manual (ou sem SLA) — o indicador só vale para o automático.
       slaAppliedAt: timestamp('sla_applied_at'),
+      // Vencimento REAL do SLA, com hora. O `due_date` é `date` e trunca: SLAs de 1h,
+      // 4h e 12h aplicados de manhã caíam todos no mesmo fim de dia, e às 22h um SLA
+      // de 4h virava 26h. Esta coluna é a fonte da verdade do indicador; o `due_date`
+      // continua sendo a data humana mostrada na UI. Mantido em dia por trigger
+      // (migration 0046) para valer em QUALQUER caminho de escrita.
+      slaDueAt: timestamp('sla_due_at'),
       createdAt: timestamp('created_at').notNull().defaultNow(),
       updatedAt: timestamp('updated_at').notNull().defaultNow(),
    },
