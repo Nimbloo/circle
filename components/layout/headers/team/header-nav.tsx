@@ -14,6 +14,7 @@ import {
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { teamBreadcrumb } from '@/lib/team-tree';
 import { Link2, MoreHorizontal, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -37,12 +38,27 @@ export default function HeaderNav() {
    // teams vazio (store não hidratou / 0 times) → team undefined; guarda contra crash.
    if (!team) return <LocationBar />;
 
+   // Sub-times (#100): breadcrumb "Pai › Sub" com os ancestrais clicáveis.
+   const path = teamBreadcrumb(teams, team.id);
+   const ancestors = path.slice(0, -1);
+
    return (
       <LocationBar>
          <HeaderGroup className="pl-2.5">
             <div className="inline-flex size-4 bg-muted/50 items-center justify-center rounded shrink-0 text-[10px]">
                {team.icon}
             </div>
+            {ancestors.map((ancestor) => (
+               <span key={ancestor.id} className="flex items-center gap-1.5">
+                  <Link
+                     href={`/${orgId}/team/${ancestor.id}/overview`}
+                     className="text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                     {ancestor.name}
+                  </Link>
+                  <span className="text-muted-foreground">›</span>
+               </span>
+            ))}
             <HeaderTitle>{team.name}</HeaderTitle>
          </HeaderGroup>
          <HeaderActions className="pr-0.5">

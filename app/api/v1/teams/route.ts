@@ -25,6 +25,7 @@ const CreateTeamSchema = z.object({
    name: z.string().min(1),
    icon: z.string().nullish(),
    color: z.string().nullish(),
+   parentId: z.string().max(16).nullish(),
 });
 
 export async function POST(req: Request) {

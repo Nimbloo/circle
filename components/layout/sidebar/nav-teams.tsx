@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/sidebar';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { isTeamOpen, useSidebarTeamsStore } from '@/store/sidebar-teams-store';
+import { buildTeamTree, type TeamNode } from '@/lib/team-tree';
 import { toast } from 'sonner';
 import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
 
@@ -60,121 +61,171 @@ function TeamSub({ href, children }: { href: string; children: ReactNode }) {
    );
 }
 
+/**
+ * Item de time na sidebar. Sub-times (#100) são renderizados DENTRO do
+ * CollapsibleContent do pai, depois dos links, recursivamente — mesmo padrão de
+ * collapsible persistido por time.
+ */
+function TeamItem({
+   node,
+   index,
+   orgId,
+   openById,
+   setTeamOpen,
+}: {
+   node: TeamNode;
+   index: number;
+   orgId: string;
+   openById: Record<string, boolean>;
+   setTeamOpen: (teamId: string, open: boolean) => void;
+}) {
+   const item = node.team;
+   return (
+      <Collapsible
+         asChild
+         open={isTeamOpen(openById, item.id, index)}
+         onOpenChange={(open) => setTeamOpen(item.id, open)}
+         className="group/collapsible"
+      >
+         <SidebarMenuItem>
+            <CollapsibleTrigger asChild>
+               <SidebarMenuButton tooltip={item.name}>
+                  {/* Avatar de time colorido pela cor do time (paridade Linear),
+                               com o ícone/emoji ou a inicial do nome. */}
+                  <div
+                     className="inline-flex size-4 shrink-0 items-center justify-center rounded text-[10px] font-medium text-white"
+                     style={{ backgroundColor: item.color }}
+                  >
+                     {item.icon || item.name.charAt(0).toUpperCase()}
+                  </div>
+                  <span>{item.name}</span>
+                  <span className="w-3 shrink-0">
+                     <ChevronRight className="w-full transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                  </span>
+               </SidebarMenuButton>
+            </CollapsibleTrigger>
+            <DropdownMenu>
+               <DropdownMenuTrigger asChild>
+                  <SidebarMenuAction showOnHover aria-label={`${item.name} actions`}>
+                     <MoreHorizontal />
+                  </SidebarMenuAction>
+               </DropdownMenuTrigger>
+               <DropdownMenuContent className="w-48 rounded-lg" side="right" align="start">
+                  <DropdownMenuItem asChild>
+                     <Link href={`/${orgId}/settings/teams/${item.id}`}>
+                        <Settings className="size-4" />
+                        <span>Team settings</span>
+                     </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                     onSelect={() => {
+                        void copyTeamUrl(orgId, item.id);
+                     }}
+                  >
+                     <LinkIcon className="size-4" />
+                     <span>Copy link</span>
+                  </DropdownMenuItem>
+               </DropdownMenuContent>
+            </DropdownMenu>
+            {/* Altura + opacidade animadas (200 ms) na abertura e no fechamento —
+                         regra global de [data-slot=collapsible-content] em globals.css. */}
+            <CollapsibleContent>
+               <SidebarMenuSub>
+                  <SidebarMenuSubItem>
+                     <TeamSub href={`/${orgId}/team/${item.id}/overview`}>
+                        <Home size={14} />
+                        <span>Home</span>
+                     </TeamSub>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                     <TeamSub href={`/${orgId}/team/${item.id}/all`}>
+                        <CopyMinus size={14} />
+                        <span>Issues</span>
+                     </TeamSub>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                     <TeamSub href={`/${orgId}/team/${item.id}/triage`}>
+                        <Inbox size={14} />
+                        <span>Triage</span>
+                     </TeamSub>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                     <TeamSub href={`/${orgId}/team/${item.id}/cycles`}>
+                        <CyclePlayIcon className="size-3.5" />
+                        <span>Cycles</span>
+                     </TeamSub>
+                     <SidebarMenuSub className="mr-0 pr-0">
+                        <SidebarMenuSubItem>
+                           <TeamSub href={`/${orgId}/team/${item.id}/cycle/active`}>
+                              <span>Current</span>
+                           </TeamSub>
+                        </SidebarMenuSubItem>
+                        <SidebarMenuSubItem>
+                           <TeamSub href={`/${orgId}/team/${item.id}/cycle/upcoming`}>
+                              <span>Upcoming</span>
+                           </TeamSub>
+                        </SidebarMenuSubItem>
+                     </SidebarMenuSub>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                     <TeamSub href={`/${orgId}/team/${item.id}/projects`}>
+                        <Box size={14} />
+                        <span>Projects</span>
+                     </TeamSub>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                     <TeamSub href={`/${orgId}/team/${item.id}/views`}>
+                        <Layers size={14} />
+                        <span>Views</span>
+                     </TeamSub>
+                  </SidebarMenuSubItem>
+               </SidebarMenuSub>
+               {/* Sub-times (#100): mesma estrutura, um nível abaixo. */}
+               {node.children.length > 0 && (
+                  <SidebarMenu className="ml-3.5 border-l border-sidebar-border pl-1">
+                     {node.children.map((child, childIndex) => (
+                        <TeamItem
+                           key={child.team.id}
+                           node={child}
+                           index={childIndex}
+                           orgId={orgId}
+                           openById={openById}
+                           setTeamOpen={setTeamOpen}
+                        />
+                     ))}
+                  </SidebarMenu>
+               )}
+            </CollapsibleContent>
+         </SidebarMenuItem>
+      </Collapsible>
+   );
+}
+
 export function NavTeams() {
    const { orgId } = useParams<{ orgId: string }>();
    const teams = useWorkspaceStore((s) => s.teams);
    // Expandido/recolhido por time é persistido (Linear lembra entre sessões).
    const openById = useSidebarTeamsStore((s) => s.openById);
    const setTeamOpen = useSidebarTeamsStore((s) => s.setOpen);
-   const joinedTeams = teams.filter((t) => t.joined);
+   // Só os times do usuário na árvore, mas a hierarquia usa todos (um sub-time cujo
+   // pai ele não participa pendura no avô presente, não vira raiz solta).
+   const tree = buildTeamTree(
+      teams.filter((t) => t.joined),
+      teams
+   );
    return (
       <SidebarGroup>
          <SidebarGroupLabel>Your teams</SidebarGroupLabel>
          <SidebarMenu>
-            {joinedTeams.map((item, index) => (
-               <Collapsible
-                  key={item.id}
-                  asChild
-                  open={isTeamOpen(openById, item.id, index)}
-                  onOpenChange={(open) => setTeamOpen(item.id, open)}
-                  className="group/collapsible"
-               >
-                  <SidebarMenuItem>
-                     <CollapsibleTrigger asChild>
-                        <SidebarMenuButton tooltip={item.name}>
-                           {/* Avatar de time colorido pela cor do time (paridade Linear),
-                               com o ícone/emoji ou a inicial do nome. */}
-                           <div
-                              className="inline-flex size-4 shrink-0 items-center justify-center rounded text-[10px] font-medium text-white"
-                              style={{ backgroundColor: item.color }}
-                           >
-                              {item.icon || item.name.charAt(0).toUpperCase()}
-                           </div>
-                           <span>{item.name}</span>
-                           <span className="w-3 shrink-0">
-                              <ChevronRight className="w-full transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                           </span>
-                        </SidebarMenuButton>
-                     </CollapsibleTrigger>
-                     <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                           <SidebarMenuAction showOnHover aria-label={`${item.name} actions`}>
-                              <MoreHorizontal />
-                           </SidebarMenuAction>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent className="w-48 rounded-lg" side="right" align="start">
-                           <DropdownMenuItem asChild>
-                              <Link href={`/${orgId}/settings/teams/${item.id}`}>
-                                 <Settings className="size-4" />
-                                 <span>Team settings</span>
-                              </Link>
-                           </DropdownMenuItem>
-                           <DropdownMenuItem
-                              onSelect={() => {
-                                 void copyTeamUrl(orgId, item.id);
-                              }}
-                           >
-                              <LinkIcon className="size-4" />
-                              <span>Copy link</span>
-                           </DropdownMenuItem>
-                        </DropdownMenuContent>
-                     </DropdownMenu>
-                     {/* Altura + opacidade animadas (200 ms) na abertura e no fechamento —
-                         regra global de [data-slot=collapsible-content] em globals.css. */}
-                     <CollapsibleContent>
-                        <SidebarMenuSub>
-                           <SidebarMenuSubItem>
-                              <TeamSub href={`/${orgId}/team/${item.id}/overview`}>
-                                 <Home size={14} />
-                                 <span>Home</span>
-                              </TeamSub>
-                           </SidebarMenuSubItem>
-                           <SidebarMenuSubItem>
-                              <TeamSub href={`/${orgId}/team/${item.id}/all`}>
-                                 <CopyMinus size={14} />
-                                 <span>Issues</span>
-                              </TeamSub>
-                           </SidebarMenuSubItem>
-                           <SidebarMenuSubItem>
-                              <TeamSub href={`/${orgId}/team/${item.id}/triage`}>
-                                 <Inbox size={14} />
-                                 <span>Triage</span>
-                              </TeamSub>
-                           </SidebarMenuSubItem>
-                           <SidebarMenuSubItem>
-                              <TeamSub href={`/${orgId}/team/${item.id}/cycles`}>
-                                 <CyclePlayIcon className="size-3.5" />
-                                 <span>Cycles</span>
-                              </TeamSub>
-                              <SidebarMenuSub className="mr-0 pr-0">
-                                 <SidebarMenuSubItem>
-                                    <TeamSub href={`/${orgId}/team/${item.id}/cycle/active`}>
-                                       <span>Current</span>
-                                    </TeamSub>
-                                 </SidebarMenuSubItem>
-                                 <SidebarMenuSubItem>
-                                    <TeamSub href={`/${orgId}/team/${item.id}/cycle/upcoming`}>
-                                       <span>Upcoming</span>
-                                    </TeamSub>
-                                 </SidebarMenuSubItem>
-                              </SidebarMenuSub>
-                           </SidebarMenuSubItem>
-                           <SidebarMenuSubItem>
-                              <TeamSub href={`/${orgId}/team/${item.id}/projects`}>
-                                 <Box size={14} />
-                                 <span>Projects</span>
-                              </TeamSub>
-                           </SidebarMenuSubItem>
-                           <SidebarMenuSubItem>
-                              <TeamSub href={`/${orgId}/team/${item.id}/views`}>
-                                 <Layers size={14} />
-                                 <span>Views</span>
-                              </TeamSub>
-                           </SidebarMenuSubItem>
-                        </SidebarMenuSub>
-                     </CollapsibleContent>
-                  </SidebarMenuItem>
-               </Collapsible>
+            {tree.map((node, index) => (
+               <TeamItem
+                  key={node.team.id}
+                  node={node}
+                  index={index}
+                  orgId={orgId}
+                  openById={openById}
+                  setTeamOpen={setTeamOpen}
+               />
             ))}
          </SidebarMenu>
       </SidebarGroup>

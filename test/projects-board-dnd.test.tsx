@@ -123,6 +123,7 @@ function makeTeam(id: string, name: string, projects: Project[] = []): Team {
       cycleCooldownDays: 0,
       autoCloseParent: false,
       autoCloseChildren: false,
+      parentId: null,
       members: [],
       projects,
    };

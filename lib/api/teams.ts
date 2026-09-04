@@ -13,6 +13,7 @@ import {
    documentFolder as documentFolderT,
 } from '@/db/schema';
 import { getOrCreateUser } from './users';
+import { assertTeamParent, teamChildIds } from './hierarchy';
 import { sendEmail } from './integrations/mailer';
 import { ctaEmailHtml } from './integrations/email-templates';
 import { escapeHtml } from './notify';
@@ -31,6 +32,8 @@ export interface TeamDto {
    /** Automações de sub-issues (#95): concluir todas as filhas conclui o pai / pai conclui filhas. */
    autoCloseParent: boolean;
    autoCloseChildren: boolean;
+   /** Sub-times (#100): time pai, ou null quando é de topo. */
+   parentId: string | null;
    memberCount: number;
    projectCount: number;
    joined: boolean;
@@ -77,6 +80,7 @@ function toDto(
       cycleCooldownDays: t.cycleCooldownDays,
       autoCloseParent: t.autoCloseParent,
       autoCloseChildren: t.autoCloseChildren,
+      parentId: t.parentId,
       memberCount: counts.members.get(t.id) ?? 0,
       projectCount: counts.projects.get(t.id) ?? 0,
       joined: joined.has(t.id),
@@ -155,6 +159,8 @@ export interface CreateTeamInput {
    name: string;
    icon?: string | null;
    color?: string | null;
+   /** Time pai (#100). O time nasce como sub-time dele. */
+   parentId?: string | null;
 }
 
 /**
@@ -175,12 +181,22 @@ export async function createTeam(
       );
    const existing = await db.select({ id: teamT.id }).from(teamT).where(eq(teamT.id, id)).limit(1);
    if (existing.length) throw new ApiError(409, `Team '${id}' já existe`);
+   const parentId = input.parentId?.trim() || null;
+   if (parentId) {
+      const parent = await db
+         .select({ id: teamT.id })
+         .from(teamT)
+         .where(eq(teamT.id, parentId))
+         .limit(1);
+      if (!parent.length) throw new ApiError(400, `Time pai '${parentId}' não existe`);
+   }
    await db.insert(teamT).values({
       id,
       name: input.name.trim(),
       icon: input.icon?.trim() || '📋',
       color: input.color?.trim() || '#6e7bdb',
       issueSeq: 0,
+      parentId,
    });
    let creatorId: string | undefined;
    if (creatorEmail) {
@@ -411,6 +427,8 @@ export interface UpdateTeamInput {
    cycleCooldownDays?: number;
    autoCloseParent?: boolean;
    autoCloseChildren?: boolean;
+   /** Sub-times (#100): `null` desvincula do pai. Ciclo → 400. */
+   parentId?: string | null;
 }
 
 /** Atualização parcial (name/icon/color/estimateScale/cycleCooldownDays/autoClose*). Retorna o TeamDto ou null se não existir. */
@@ -429,6 +447,11 @@ export async function updateTeam(
    if (patch.cycleCooldownDays !== undefined) set.cycleCooldownDays = patch.cycleCooldownDays;
    if (patch.autoCloseParent !== undefined) set.autoCloseParent = patch.autoCloseParent;
    if (patch.autoCloseChildren !== undefined) set.autoCloseChildren = patch.autoCloseChildren;
+   if (patch.parentId !== undefined) {
+      const parentId = patch.parentId?.trim() || null;
+      if (parentId) await assertTeamParent(db, id, parentId);
+      set.parentId = parentId;
+   }
    if (Object.keys(set).length) await db.update(teamT).set(set).where(eq(teamT.id, id));
    publish({ entity: 'team', action: 'updated', id });
    return getTeam(db, id);
@@ -461,6 +484,22 @@ export async function deleteTeam(db: Db, id: string): Promise<boolean> {
          409,
          `Team '${id}' tem issues/projects/cycles/views/folders — esvazie antes de apagar`
       );
+
+   // Sub-times (#100): reancora os filhos no avô antes de apagar. Sem isto o FK
+   // self-referente (team.parent_id) estoura 23503, e deixar `parent_id` apontando
+   // pra um time inexistente não é opção.
+   const children = await teamChildIds(db, id);
+   if (children.length) {
+      const [row] = await db
+         .select({ parentId: teamT.parentId })
+         .from(teamT)
+         .where(eq(teamT.id, id))
+         .limit(1);
+      await db
+         .update(teamT)
+         .set({ parentId: row?.parentId ?? null })
+         .where(eq(teamT.parentId, id));
+   }
 
    // Solicitações de entrada (histórico) NÃO bloqueiam a deleção — limpa antes do time,
    // senão o FK (team_join_request.team_id, sem onDelete) estoura 23503 → 404 enganoso.

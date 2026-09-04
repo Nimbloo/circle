@@ -291,6 +291,8 @@ export const api = {
             cycleCooldownDays?: number;
             autoCloseParent?: boolean;
             autoCloseChildren?: boolean;
+            /** Sub-times (#100): `null` desvincula do pai. */
+            parentId?: string | null;
          }
       ) => patch<TeamDto>(`/teams/${key}`, body),
       remove: (key: string) => del<{ deleted: boolean }>(`/teams/${key}`),

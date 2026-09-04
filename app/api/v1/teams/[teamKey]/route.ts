@@ -31,6 +31,7 @@ const UpdateSchema = z.object({
    cycleCooldownDays: z.number().int().min(0).max(14).optional(),
    autoCloseParent: z.boolean().optional(),
    autoCloseChildren: z.boolean().optional(),
+   parentId: z.string().max(16).nullish(),
 });
 
 export async function PATCH(req: Request, { params }: Params) {
