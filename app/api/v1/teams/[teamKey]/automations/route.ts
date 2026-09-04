@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
 
 type Params = { params: Promise<{ teamKey: string }> };
 
-export const ConfigSchema = z.object({
+const ConfigSchema = z.object({
    toCategory: z.string().nullish(),
    triggerLabelId: z.string().nullish(),
    labelId: z.string().nullish(),
