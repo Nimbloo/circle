@@ -1,6 +1,6 @@
 # Pendências do Circle
 
-Estado em **2026-09-03**, com `main` e `develop` sincronizadas na v0.28.0.
+Estado em **2026-09-03**, com `main` e `develop` sincronizadas na v0.29.0.
 
 > **As [issues](https://github.com/Nimbloo/circle/issues) são a fonte da verdade** sobre
 > escopo. Este documento registra o que elas **não** capturam: bloqueios que vivem em
@@ -322,6 +322,45 @@ migrations 0040–0042 aplicadas no boot (43/43), rollout `Synced/Healthy`, `hea
 em `200`, upload real de anexo verificado (CDN 200 com `Content-Disposition: attachment`).
 Issues #95, #98 e #96 fechadas. Próximas do épico: #94 (depende do Bedrock), #97, #99, #100,
 #101, #102.
+
+### Épico #25 fechado — SLAs/automações, busca, organização, API pública, roadmap, triage (04/09/2026)
+
+Leva 2, com as seis issues restantes do épico e os restos conscientes da v0.28.0 (spec
+`docs/superpowers/specs/2026-09-04-epico-25-leva-2-design.md`, seis grupos em paralelo):
+
+- **SLAs e automações (#97):** `team_sla` por prioridade preenche `dueDate` na criação e na
+  repriorização (data manual sempre vence), com indicadores "at risk"/"breached" na linha e no
+  card e filtro próprio; `team_automation` com gatilhos (criada em triage, status mudou, label
+  adicionada, PR mergeado) e ações (label, status, prioridade, responsável, fechar sub-issues),
+  anti-loop com profundidade 3, audit e activity. Tela em Team settings → Workflows.
+  O fluxo fixo "PR merged → Done" virou regra default semeada lazy.
+- **Busca (#99):** colunas `search_vector` geradas (peso A no título) com índice GIN em issues,
+  projetos, initiatives e documentos; `GET /api/v1/search` com ranking, snippet destacado por
+  sentinela (a tag nunca vem do conteúdo) e fallback `ilike` em três casos; palette e busca
+  dedicada agrupadas por tipo com chips e "Save search" virando View. Semântica por embeddings
+  fica atrás de `CIRCLE_SEARCH_SEMANTIC=1` e nunca quebra o resultado léxico.
+- **Organização (#100):** `team.parent_id` e `initiative.parent_id` com guarda de ciclo, sidebar
+  aninhada, breadcrumb e listas do pai incluindo os filhos; rollup de sub-initiatives por
+  subárvore; desativar membro (`deactivated_at`) mantém histórico, remove dos times, bloqueia o
+  login com mensagem própria e some dos seletores; papel `Guest` com escopo aplicado no servidor
+  em toda leitura, com um teste de autorização por rota.
+- **Import/export, API pública e webhooks (#101):** import CSV com preview, mapeamento e commit
+  idempotente (`issue_import`), export JSON; `api_token` com hash, prefixo e escopos, rotas
+  `/api/public/v1/*` respeitando o escopo de Guest e `openapi.json`; `webhook` com assinatura
+  HMAC, entrega inline e retry com backoff, mais Redeliver. Telas em Settings.
+- **Roadmap (#102):** tela agrupada por initiative respeitando a hierarquia, com marcos, zoom e
+  Display; `project_dependency` com guarda de ciclo, seta e alerta de atraso; `project_snapshot`
+  diário por upsert lazy alimentando gráfico SVG no projeto e agregado na initiative.
+- **Triage com IA (#94):** `issue_triage_suggestion` gerada ao entrar na fila e lazy no GET, com
+  ancoragem de todo id no catálogo real. Sem Bedrock, cai no heurístico por similaridade de
+  título e mostra só duplicatas, com mensagem honesta. Accept aplica campos, move de time e
+  relaciona as duplicatas.
+- **Restos da v0.28.0:** `checked` do item convertido volta a ser regravado no doc,
+  `deleteIssue` limpa os objetos S3 dos anexos, e o item "Video" do editor virou popover inline.
+
+Dois bugs de integração corrigidos aqui: um `export` extra num route handler quebrava o build de
+produção, e o sweep de webhooks no boot arrastava o cliente Postgres para o bundle Edge e
+derrubava toda requisição em dev (agora é lazy, no publish e na listagem de webhooks).
 
 ## Decisões suas (não é falta de código)
 
