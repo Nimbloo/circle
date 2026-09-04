@@ -316,6 +316,13 @@
          "when": 1788490097952,
          "tag": "0044_search_vectors",
          "breakpoints": true
+      },
+      {
+         "idx": 45,
+         "version": "7",
+         "when": 1788490482412,
+         "tag": "0045_import_api_tokens_webhooks",
+         "breakpoints": true
       }
    ]
 }
