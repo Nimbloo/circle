@@ -61,8 +61,40 @@ export interface SearchOptions {
    teamId?: string;
    /** Só se aplica a issues (o status de projeto é outro catálogo). */
    statusId?: string;
+   /**
+    * Escopo de times do ator (#100). `undefined` = sem restrição (Member/Admin); lista
+    * vazia = convidado sem time, que não pode ver nada. Sem isto a busca devolvia o
+    * workspace inteiro — e com `teamId` o vazamento era dirigido ao time proibido.
+    */
+   teamIds?: string[];
    /** Itens por grupo. */
    limit?: number;
+}
+
+/**
+ * Initiative não pendura em time: para escopo restrito, ela só aparece se agrega algum
+ * projeto de time visível — mesma regra da listagem de initiatives (#100).
+ */
+function initiativeScopeCond(o: SearchOptions): SQL | null {
+   if (!o.teamIds) return null;
+   if (o.teamIds.length === 0) return sql`false`;
+   return sql`EXISTS (SELECT 1 FROM project pr
+                       WHERE pr.initiative_id = n.id AND pr.team_id IN (${sql.join(
+                          o.teamIds.map((t) => sql`${t}`),
+                          sql`, `
+                       )}))`;
+}
+
+/** Recorte de escopo para uma coluna de time (`i.team_id`, `p.team_id`, `f.team_id`). */
+function scopeCond(o: SearchOptions, column: string): SQL | null {
+   if (!o.teamIds) return null;
+   if (o.teamIds.length === 0) return sql`false`;
+   // `= ANY($1)` exigiria o tipo do array explícito no driver; a lista literal é
+   // portátil entre pg e PGlite e o conjunto é pequeno (times do usuário).
+   return sql`${sql.raw(column)} IN (${sql.join(
+      o.teamIds.map((t) => sql`${t}`),
+      sql`, `
+   )})`;
 }
 
 const DEFAULT_LIMIT = 20;
@@ -236,6 +268,10 @@ async function ftsIssues(
                        AND ${ilikeUnaccent('cm.body', like)}))`,
    ];
    if (o.teamId) conds.push(sql`i.team_id = ${o.teamId}`);
+   {
+      const sc = scopeCond(o, 'i.team_id');
+      if (sc) conds.push(sc);
+   }
    if (o.statusId) conds.push(sql`i.status_id = ${o.statusId}`);
    const r = await rows(
       db,
@@ -268,6 +304,10 @@ async function ftsProjects(
 ): Promise<SearchItem[]> {
    const conds: SQL[] = [sql`(p.search_vector @@ ${tsq} OR d.search_vector @@ ${tsq})`];
    if (o.teamId) conds.push(sql`p.team_id = ${o.teamId}`);
+   {
+      const sc = scopeCond(o, 'p.team_id');
+      if (sc) conds.push(sc);
+   }
    const r = await rows(
       db,
       sql`SELECT p.id, p.name AS title, p.team_id, p.status_id,
@@ -291,7 +331,13 @@ async function ftsProjects(
    }));
 }
 
-async function ftsInitiatives(db: Db, tsq: SQL, limit: number): Promise<SearchItem[]> {
+async function ftsInitiatives(
+   db: Db,
+   tsq: SQL,
+   limit: number,
+   o: SearchOptions
+): Promise<SearchItem[]> {
+   const scope = initiativeScopeCond(o);
    const r = await rows(
       db,
       sql`SELECT n.id, n.name AS title,
@@ -300,6 +346,7 @@ async function ftsInitiatives(db: Db, tsq: SQL, limit: number): Promise<SearchIt
                          ${tsq}, ${HEADLINE_OPTS}) AS snippet
           FROM initiative n
           WHERE n.search_vector @@ ${tsq}
+          ${scope ? sql`AND ${scope}` : sql``}
           ORDER BY rank DESC, n.created_at DESC
           LIMIT ${limit}`
    );
@@ -323,6 +370,10 @@ async function ftsDocuments(
 ): Promise<SearchItem[]> {
    const conds: SQL[] = [sql`t.search_vector @@ ${tsq}`];
    if (o.teamId) conds.push(sql`f.team_id = ${o.teamId}`);
+   {
+      const sc = scopeCond(o, 'f.team_id');
+      if (sc) conds.push(sc);
+   }
    const r = await rows(
       db,
       sql`SELECT t.id, t.name AS title, f.team_id,
@@ -367,6 +418,10 @@ async function likeSearch(db: Db, o: SearchOptions, limit: number): Promise<Sear
                           AND ${ilikeUnaccent('cm.body', like)}))`,
       ];
       if (o.teamId) conds.push(sql`i.team_id = ${o.teamId}`);
+      {
+         const sc = scopeCond(o, 'i.team_id');
+         if (sc) conds.push(sc);
+      }
       if (o.statusId) conds.push(sql`i.status_id = ${o.statusId}`);
       const r = await rows(
          db,
@@ -395,6 +450,10 @@ async function likeSearch(db: Db, o: SearchOptions, limit: number): Promise<Sear
          sql`(${ilikeUnaccent('p.name', like)} OR ${ilikeUnaccent('d.summary', like)})`,
       ];
       if (o.teamId) conds.push(sql`p.team_id = ${o.teamId}`);
+      {
+         const sc = scopeCond(o, 'p.team_id');
+         if (sc) conds.push(sc);
+      }
       const r = await rows(
          db,
          sql`SELECT p.id, p.name AS title, p.team_id, p.status_id, d.summary AS snippet
@@ -421,7 +480,8 @@ async function likeSearch(db: Db, o: SearchOptions, limit: number): Promise<Sear
       const r = await rows(
          db,
          sql`SELECT n.id, n.name AS title, n.description AS snippet FROM initiative n
-             WHERE ${ilikeUnaccent('n.name', like)} OR ${ilikeUnaccent('n.description', like)}
+             WHERE (${ilikeUnaccent('n.name', like)} OR ${ilikeUnaccent('n.description', like)})
+             ${initiativeScopeCond(o) ? sql`AND ${initiativeScopeCond(o)!}` : sql``}
              ORDER BY n.created_at DESC LIMIT ${limit}`
       );
       groups.push({
@@ -442,6 +502,10 @@ async function likeSearch(db: Db, o: SearchOptions, limit: number): Promise<Sear
    if (types.includes('document')) {
       const conds: SQL[] = [ilikeUnaccent('t.name', like)];
       if (o.teamId) conds.push(sql`f.team_id = ${o.teamId}`);
+      {
+         const sc = scopeCond(o, 'f.team_id');
+         if (sc) conds.push(sc);
+      }
       const r = await rows(
          db,
          sql`SELECT t.id, t.name AS title, f.team_id FROM team_document t
@@ -494,7 +558,7 @@ export async function search(db: Db, opts: SearchOptions): Promise<SearchResult>
             groups.push({ type: 'project', items: await ftsProjects(db, opts, tsq, limit) });
          // Initiative é de workspace (não tem time) — sai de cena quando há filtro de time.
          if (types.includes('initiative') && !opts.teamId)
-            groups.push({ type: 'initiative', items: await ftsInitiatives(db, tsq, limit) });
+            groups.push({ type: 'initiative', items: await ftsInitiatives(db, tsq, limit, opts) });
          if (types.includes('document'))
             groups.push({ type: 'document', items: await ftsDocuments(db, opts, tsq, limit) });
          const nonEmpty = groups.filter((g) => g.items.length > 0);

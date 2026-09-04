@@ -1,6 +1,7 @@
 import { db } from '@/db';
 import { ok } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
+import { scopeForEmail } from '@/lib/api/scope';
 import { search, SEARCH_TYPES, type SearchEntityType } from '@/lib/api/search';
 import { rerankSemantic } from '@/lib/api/search-semantic';
 
@@ -13,7 +14,11 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(req: Request) {
    return handle(async () => {
-      await requireEmail(req);
+      const email = await requireEmail(req);
+      // Escopo do ator (#100): sem isto a busca devolvia o workspace inteiro — e com
+      // `?teamId=` o vazamento ficava dirigido ao time proibido. Era o achado principal
+      // da auditoria e passou batido nas três levas anteriores.
+      const { teamIds } = await scopeForEmail(db, email);
       const sp = new URL(req.url).searchParams;
       const raw = [...sp.getAll('types'), ...(sp.get('types')?.split(',') ?? [])];
       const types = [
@@ -27,6 +32,7 @@ export async function GET(req: Request) {
       ];
       const limit = Number(sp.get('limit'));
       const result = await search(db, {
+         teamIds: teamIds ?? undefined,
          q: sp.get('q') ?? '',
          types: types.length ? types : undefined,
          teamId: sp.get('teamId') ?? undefined,
