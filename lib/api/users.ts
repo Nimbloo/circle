@@ -7,6 +7,35 @@ import { ApiError } from './errors';
 
 export type UserRow = typeof appUser.$inferSelect;
 
+/** Mensagem única do 403 de conta desativada — a UI reconhece por ela. */
+export const DEACTIVATED_MESSAGE = 'Conta desativada';
+
+/**
+ * 403 quando a conta do ATOR está desativada (#100).
+ *
+ * O `login-gate` só barra no `signIn`: uma sessão JWT já emitida (30 dias), um Bearer
+ * do Keycloak ou um token de máquina continuavam entrando depois da desativação. Este
+ * é o ponto único por onde toda resolução de ator passa, então desativar passa a
+ * desligar de verdade — sessão viva inclusive.
+ */
+export function assertActiveUser(user: Pick<UserRow, 'deactivatedAt'>): void {
+   if (user.deactivatedAt) throw new ApiError(403, DEACTIVATED_MESSAGE);
+}
+
+/**
+ * Idem, a partir do e-mail — para os handlers que só chamam `requireEmail` e nunca
+ * resolvem o `app_user`. E-mail desconhecido não é desativado (segue para o fluxo
+ * normal de provisionamento).
+ */
+export async function assertActiveEmail(db: Db, email: string): Promise<void> {
+   const rows = await db
+      .select({ deactivatedAt: appUser.deactivatedAt })
+      .from(appUser)
+      .where(eq(appUser.email, email.trim().toLowerCase()))
+      .limit(1);
+   if (rows.length > 0) assertActiveUser(rows[0]);
+}
+
 export interface MeDto {
    id: string;
    slug: string;
@@ -132,7 +161,10 @@ export async function getOrCreateUser(
 ): Promise<UserRow> {
    const normalized = email.trim().toLowerCase();
    const existing = await db.select().from(appUser).where(eq(appUser.email, normalized)).limit(1);
-   if (existing.length > 0) return existing[0];
+   if (existing.length > 0) {
+      assertActiveUser(existing[0]);
+      return existing[0];
+   }
 
    const role = (await isAdmin(normalized, db)) ? 'Admin' : defaultRole;
    return provisionUser(db, normalized, role);

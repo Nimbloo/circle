@@ -4,6 +4,7 @@ import { ok } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
 import { isAdmin } from '@/lib/api/auth';
 import { ApiError } from '@/lib/api/errors';
+import { assertAssignableUsers } from '@/lib/api/members';
 import {
    AUTOMATION_ACTIONS,
    AUTOMATION_TRIGGERS,
@@ -49,6 +50,9 @@ export async function POST(req: Request, { params }: Params) {
       const email = await requireEmail(req);
       if (!(await isAdmin(email, db))) throw new ApiError(403, 'Apenas admin');
       const input = CreateSchema.parse(await req.json());
+      // Desativado (#100) não recebe atribuição — nem via regra de automação, que
+      // continuaria despejando issues numa conta desligada.
+      await assertAssignableUsers(db, [input.config?.assigneeId]);
       return ok(await createAutomation(db, teamKey, input));
    }, req);
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mocka o storage S3/CDN — testamos a rota sem rede.
 vi.mock('@/lib/api/s3-assets', () => ({
@@ -9,6 +9,17 @@ vi.mock('@/lib/api/s3-assets', () => ({
 
 import { POST } from '@/app/api/v1/uploads/route';
 import { MAX_UPLOAD_BYTES } from '@/lib/api/uploads';
+import { makeTestDb } from './helpers/db';
+import { __setTestDb } from '@/db';
+
+// `requireEmail` consulta o banco (gate de conta desativada, #100): a rota precisa
+// de um db, mesmo esta suíte não gravando nada.
+beforeEach(async () => {
+   __setTestDb(await makeTestDb(false));
+});
+afterEach(() => {
+   __setTestDb(null);
+});
 
 const PNG =
    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';

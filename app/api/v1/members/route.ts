@@ -19,6 +19,9 @@ export async function GET(req: Request) {
             sort,
             dir,
             teamIds: teamIds ?? undefined,
+            // Desativado (#100) sai da lista no SERVIDOR; quem quer ver o desligado
+            // (tela de membros, filtro "Show deactivated") pede explicitamente.
+            includeDeactivated: sp.get('includeDeactivated') === 'true',
          })
       );
    }, req);

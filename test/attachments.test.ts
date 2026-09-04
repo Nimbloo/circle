@@ -254,9 +254,17 @@ describe('POST /attachments (multipart)', () => {
    });
 
    it('sem autenticação → 401; sem file → 400', async () => {
-      const form = new FormData();
-      form.set('issueId', 'x');
-      expect((await postAttachment(post(form, null))).status).toBe(401);
-      expect((await postAttachment(post(form))).status).toBe(400);
+      // `requireEmail` consulta o banco (gate de conta desativada), então a rota
+      // precisa do db de teste injetado mesmo nos casos que nem chegam ao serviço.
+      const { db } = await setup();
+      __setTestDb(db);
+      try {
+         const form = new FormData();
+         form.set('issueId', 'x');
+         expect((await postAttachment(post(form, null))).status).toBe(401);
+         expect((await postAttachment(post(form))).status).toBe(400);
+      } finally {
+         __setTestDb(null);
+      }
    });
 });
