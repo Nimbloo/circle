@@ -24,6 +24,11 @@ import { GET as listInitiativesRoute } from '@/app/api/v1/initiatives/route';
 import { GET as getInitiativeRoute } from '@/app/api/v1/initiatives/[id]/route';
 import { GET as listViewsRoute } from '@/app/api/v1/views/route';
 import { GET as viewResultsRoute } from '@/app/api/v1/views/[id]/results/route';
+import { GET as getViewRoute } from '@/app/api/v1/views/[id]/route';
+import { GET as teamDocumentsRoute } from '@/app/api/v1/teams/[teamKey]/documents/route';
+import { GET as teamMembersRoute } from '@/app/api/v1/teams/[teamKey]/members/route';
+import { GET as teamCyclesRoute } from '@/app/api/v1/teams/[teamKey]/cycles/route';
+import { GET as favoritesRoute } from '@/app/api/v1/favorites/route';
 import { GET as listMembersRoute } from '@/app/api/v1/members/route';
 import { GET as listTeamsRoute } from '@/app/api/v1/teams/route';
 import { GET as getTeamRoute } from '@/app/api/v1/teams/[teamKey]/route';
@@ -497,6 +502,40 @@ describe('escopo de Guest nas rotas de ESCRITA', () => {
       ).toBe(403);
       expect(status(await issueActivityRoute(req(`${url}/activity`, GUEST), p))).toBe(403);
       expect(status(await issueAttachmentsRoute(req(`${url}/attachments`, GUEST), p))).toBe(403);
+   });
+
+   it('leituras por time (documentos, membros, cycles) e por id (view): 403', async () => {
+      // Ficaram sem gate nas duas levas: a ESCRITA de documento exigia ser membro, a
+      // leitura não; membros permitia enumerar quem trabalha onde; e o GET de cycles
+      // ainda DISPARA o rollover (fecha cycles e migra issues) do time alheio.
+      const tp = { params: Promise.resolve({ teamKey: 'SECRET' }) };
+      expect(
+         status(await teamDocumentsRoute(req('http://x/api/v1/teams/SECRET/documents', GUEST), tp))
+      ).toBe(403);
+      expect(
+         status(await teamMembersRoute(req('http://x/api/v1/teams/SECRET/members', GUEST), tp))
+      ).toBe(403);
+      expect(
+         status(await teamCyclesRoute(req('http://x/api/v1/teams/SECRET/cycles', GUEST), tp))
+      ).toBe(403);
+      expect(
+         status(
+            await getViewRoute(
+               req(`http://x/api/v1/views/${ids.secretView}`, GUEST),
+               params({ id: ids.secretView })
+            )
+         )
+      ).toBe(403);
+   });
+
+   it('favoritos não resolvem entidade fora do escopo', async () => {
+      const { addFavorite, listFavorites } = await import('@/lib/api/favorites');
+      await addFavorite(db, GUEST, 'issue', ids.secretIssue);
+      await addFavorite(db, GUEST, 'issue', ids.openIssue);
+      const favs = await listFavorites(db, GUEST);
+      // A linha do favorito continua no banco; o que some é o título da issue alheia.
+      expect(favs.map((f) => f.entityId)).toEqual([ids.openIssue]);
+      expect(status(await favoritesRoute(req('http://x/api/v1/favorites', GUEST)))).toBe(200);
    });
 
    it('anexar arquivo em issue alheia: 403 (a rota era exceção do guarda de escrita)', async () => {

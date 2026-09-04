@@ -404,6 +404,25 @@ Fora do repositório: conferir no chart `nimbloo-k8s/circle-prd` o valor de
 `CIRCLE_KEYCLOAK_ALLOWED_CLIENTS` — o default do repo é seguro (vazio desliga o Bearer), mas o
 risco depende do valor implantado.
 
+### Escopo nas LEITURAS e integridade entre times (04/09/2026)
+
+Terceira passada: o hardening e os resíduos cobriram escrita e alguns detalhes, mas sete
+**leituras** continuavam só exigindo sessão. Fechadas:
+
+- **Documentos, membros e cycles por time.** O documento tinha gate na escrita
+  (`assertTeamMember`) e nenhum na leitura; membros permitia enumerar quem trabalha onde. O
+  pior era o GET de cycles: ele **dispara o rollover**, então um convidado fechava cycles e
+  migrava issues de um time que nem enxerga. O escopo agora vem ANTES do rollover.
+- **View e cycle por id direto.** A listagem filtrava, o acesso por id não.
+- **Favoritos.** A linha é do usuário, mas o resolve devolvia título e identifier da
+  entidade; entidade fora do escopo agora some da lista, como já acontecia com apagada.
+- **Integridade cruzada:** cycle de outro time era aceito na issue (sujava burn-up e fila do
+  time dono) e usuário desativado ainda podia receber atribuição pela API — o motor de
+  automação validava, criar/editar issue não.
+
+Seis testes novos, todos falhando antes. O guarda de escrita não pega leitura: por isso estes
+casos entraram explícitos em `test/guest-scope.test.ts`.
+
 ### Resíduos do hardening, fechados (04/09/2026)
 
 Uma segunda passada depois da v0.29.1 achou débito remanescente do mesmo tipo, agora corrigido:

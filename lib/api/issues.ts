@@ -43,6 +43,7 @@ import { runAutomations } from './automations';
 import { getOrCreateUser } from './users';
 import { rankAfter, firstRank, rankBetween } from './rank';
 import { ApiError } from './errors';
+import { assertAssignableUsers } from './members';
 import { dispatchNotification } from './notify';
 import { getCachedCatalogs } from './catalogs';
 import { publish } from './events';
@@ -535,6 +536,22 @@ export interface CreateIssueInput {
    sentryIssueId?: string | null;
 }
 
+/**
+ * Integridade cruzada (#100): o cycle escolhido tem de ser do MESMO time da issue. Sem
+ * isto dava para pendurar issue num ciclo de outro time — não vaza leitura, mas suja o
+ * burn-up e a fila do time dono do ciclo.
+ */
+async function assertCycleOfTeam(db: Db, cycleId: string, teamId: string): Promise<void> {
+   const [row] = await db
+      .select({ teamId: cycleT.teamId })
+      .from(cycleT)
+      .where(eq(cycleT.id, cycleId))
+      .limit(1);
+   if (!row) throw new ApiError(404, `Cycle '${cycleId}' não existe`);
+   if (row.teamId !== teamId)
+      throw new ApiError(400, `Cycle '${cycleId}' é de outro time (${row.teamId})`);
+}
+
 /** Gera identifier (<TEAM_KEY>-<seq> atômico) e rank (append), cria a issue + labels + evento. */
 export async function createIssue(
    db: Db,
@@ -560,6 +577,7 @@ export async function createIssue(
    const projectId =
       input.projectId !== undefined ? (input.projectId ?? null) : (parent?.projectId ?? null);
    let cycleId: string | null = input.cycleId || null;
+   if (cycleId) await assertCycleOfTeam(db, cycleId, teamId);
    if (input.cycleId === undefined && parent?.cycleId) {
       const [cyc] = await db
          .select({ status: cycleT.status })
@@ -610,6 +628,9 @@ export async function createIssue(
    const dueDate = input.dueDate ?? sla?.dueDate ?? null;
    // Responsáveis: `assigneeIds` (conjunto; o 1º é o principal) ou o `assigneeId` legado.
    const assigneeIds = normalizeAssigneeIds(input.assigneeIds ?? (assigneeId ? [assigneeId] : []));
+   // Desligar alguém não pode conviver com continuar atribuindo trabalho a ele (#100):
+   // ficou entre os grupos do hardening — o motor de automação validava, a criação não.
+   await assertAssignableUsers(db, assigneeIds);
    const principalId = assigneeIds[0] ?? null;
 
    // Atômico: incremento do contador + issue + content + labels + evento.
@@ -793,11 +814,17 @@ export async function updateIssue(
    if (patch.title !== undefined) set.title = patch.title;
    if (patch.statusId !== undefined) set.statusId = patch.statusId;
    if (patch.priorityId !== undefined) set.priorityId = patch.priorityId;
-   if (nextAssigneeIds) set.assigneeId = nextPrincipalId;
+   if (nextAssigneeIds) {
+      await assertAssignableUsers(db, nextAssigneeIds);
+      set.assigneeId = nextPrincipalId;
+   }
    // `""` (limpar o campo) → null, consistente com cycleId: senão a FK vira 404
    // "recurso não existe" em vez de desvincular.
    if (patch.projectId !== undefined) set.projectId = patch.projectId || null;
-   if (patch.cycleId !== undefined) set.cycleId = patch.cycleId || null;
+   if (patch.cycleId !== undefined) {
+      if (patch.cycleId) await assertCycleOfTeam(db, patch.cycleId, prev.teamId);
+      set.cycleId = patch.cycleId || null;
+   }
    // Due date manual desliga o SLA da issue (o indicador só vale para o prazo automático).
    if (patch.dueDate !== undefined) {
       set.dueDate = patch.dueDate;
