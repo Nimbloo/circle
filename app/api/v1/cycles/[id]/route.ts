@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { ok, notFound } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
+import { assertTeamInScope, scopeForEmail } from '@/lib/api/scope';
 import { isAdmin } from '@/lib/api/auth';
 import { ApiError } from '@/lib/api/errors';
 import { getCycle, updateCycle, deleteCycle } from '@/lib/api/cycles';
@@ -13,9 +14,11 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
-      await requireEmail(req);
+      const email = await requireEmail(req);
       const { id } = await params;
       const dto = await getCycle(db, id);
+      // Cycle pendura em time: por id direto, um convidado lia o ciclo de qualquer um (#100).
+      if (dto) assertTeamInScope((await scopeForEmail(db, email)).teamIds, dto.teamId);
       return dto ? ok(dto) : notFound(`Cycle '${id}' não encontrado`);
    }, req);
 }

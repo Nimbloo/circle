@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { ok } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
+import { assertTeamInScope, scopeForEmail } from '@/lib/api/scope';
 import { listTeamDocuments, createDocument, createFolder } from '@/lib/api/documents';
 
 export const runtime = 'nodejs';
@@ -11,8 +12,11 @@ type Params = { params: Promise<{ teamKey: string }> };
 
 export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
-      await requireEmail(req);
+      const email = await requireEmail(req);
       const { teamKey } = await params;
+      // Convidado (#100) só lê documento de time do escopo dele. A ESCRITA já exigia ser
+      // membro (`assertTeamMember`); a leitura ficou sem gate no hardening.
+      assertTeamInScope((await scopeForEmail(db, email)).teamIds, teamKey);
       return ok(await listTeamDocuments(db, teamKey));
    }, req);
 }

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { ok } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
+import { assertTeamInScope, scopeForEmail } from '@/lib/api/scope';
 import { isAdmin } from '@/lib/api/auth';
 import { ApiError } from '@/lib/api/errors';
 import { listCyclesByTeam, createCycle, rolloverCyclesForTeam } from '@/lib/api/cycles';
@@ -13,8 +14,11 @@ type Params = { params: Promise<{ teamKey: string }> };
 
 export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
-      await requireEmail(req);
+      const email = await requireEmail(req);
       const { teamKey } = await params;
+      // Escopo ANTES do rollover: este GET escreve (fecha cycles e migra issues), então
+      // sem o gate um convidado disparava a rotina num time que nem enxerga (#100).
+      assertTeamInScope((await scopeForEmail(db, email)).teamIds, teamKey);
       // Auto-rollover lazy (#24): fecha cycles vencidos e carrega incompletas antes de listar.
       await rolloverCyclesForTeam(db, teamKey);
       return ok(await listCyclesByTeam(db, teamKey));
