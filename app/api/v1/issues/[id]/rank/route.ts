@@ -17,9 +17,9 @@ const RankSchema = z.object({
 export async function PATCH(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      await requireEmail(req);
+      const email = await requireEmail(req);
       const { beforeId, afterId } = RankSchema.parse(await req.json());
-      const dto = await reorderIssue(db, id, beforeId, afterId);
+      const dto = await reorderIssue(db, id, beforeId, afterId, email);
       return dto ? ok(dto) : notFound(`Issue '${id}' não encontrada`);
    }, req);
 }

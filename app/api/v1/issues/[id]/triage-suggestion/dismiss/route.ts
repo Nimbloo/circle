@@ -12,7 +12,7 @@ type Params = { params: Promise<{ id: string }> };
 export async function POST(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      await requireEmail(req);
-      return ok(await dismissTriageSuggestion(db, id));
+      const email = await requireEmail(req);
+      return ok(await dismissTriageSuggestion(db, id, email));
    }, req);
 }
