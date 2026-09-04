@@ -36,8 +36,10 @@ import {
    SmilePlus,
    Tag,
    Trash2,
+   Timer,
    Unlock,
    UserRound,
+   Workflow,
 } from 'lucide-react';
 import { ReactNode, useState } from 'react';
 import { useCustomEmojis, customEmojiUrl } from '@/hooks/use-custom-emojis';
@@ -62,6 +64,8 @@ const EVENT_ICONS: Record<string, ReactNode> = {
    dueDate: <CalendarClock className="size-3.5" />,
    milestone: <SignpostBig className="size-3.5" />,
    pr: <GitPullRequestArrow className="size-3.5" />,
+   sla: <Timer className="size-3.5" />,
+   automation: <Workflow className="size-3.5" />,
 };
 
 type CommentItem = Extract<ActivityItem, { kind: 'comment' }>;

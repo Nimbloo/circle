@@ -351,6 +351,9 @@ export const issue = pgTable(
       // `issue_relation kind='sub'` (sem pai único nem guarda de ciclo); a guarda de
       // ciclo/auto-pai é app-level (updateIssue). Profundidade livre.
       parentId: varchar('parent_id', { length: 36 }).references((): AnyPgColumn => issue.id),
+      // SLA do time (#97): quando o `due_date` foi calculado pelo SLA da prioridade.
+      // NULL = due date manual (ou sem SLA) — o indicador só vale para o automático.
+      slaAppliedAt: timestamp('sla_applied_at'),
       createdAt: timestamp('created_at').notNull().defaultNow(),
       updatedAt: timestamp('updated_at').notNull().defaultNow(),
    },
@@ -940,6 +943,49 @@ export const agentMessage = pgTable(
       createdAt: timestamp('created_at').notNull().defaultNow(),
    },
    (t) => [index('idx_agent_message_chat').on(t.chatId, t.createdAt)]
+);
+
+// ── SLAs e automações por time (#97) ─────────────────────────────────────
+/**
+ * SLA por (time, prioridade): prazo em horas aplicado ao `due_date` de uma issue
+ * criada — ou repriorizada — sem data manual. Linha ausente = prioridade sem SLA.
+ */
+export const teamSla = pgTable(
+   'team_sla',
+   {
+      teamId: varchar('team_id', { length: 16 })
+         .notNull()
+         .references(() => team.id),
+      priorityId: varchar('priority_id', { length: 64 })
+         .notNull()
+         .references(() => priority.id),
+      hours: integer('hours').notNull(),
+   },
+   (t) => [primaryKey({ columns: [t.teamId, t.priorityId] })]
+);
+
+/**
+ * Regra de automação do time (#97): um gatilho + uma ação com parâmetros em `config`.
+ * O motor vive em `lib/api/automations.ts`; `position` ordena a execução.
+ */
+export const teamAutomation = pgTable(
+   'team_automation',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      teamId: varchar('team_id', { length: 16 })
+         .notNull()
+         .references(() => team.id),
+      name: varchar('name', { length: 128 }).notNull(),
+      // issue.created_in_triage | issue.status_changed | issue.label_added | pr.merged
+      trigger: varchar('trigger', { length: 48 }).notNull(),
+      // add_label | set_status | set_priority | set_assignee | close_sub_issues
+      action: varchar('action', { length: 48 }).notNull(),
+      config: jsonb('config'),
+      enabled: boolean('enabled').notNull().default(true),
+      position: integer('position').notNull().default(0),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [index('idx_team_automation_team').on(t.teamId, t.trigger)]
 );
 
 /** Emojis customizados do workspace (imagem no S3/CDN), usados em reações. */

@@ -36,6 +36,8 @@ import {
    attachment as attachmentT,
 } from '@/db/schema';
 import { issueAttachmentUrls, removeAttachmentObjects } from './attachments';
+import { applySla } from './slas';
+import { runAutomations } from './automations';
 import { getOrCreateUser } from './users';
 import { rankAfter, firstRank, rankBetween } from './rank';
 import { ApiError } from './errors';
@@ -93,6 +95,8 @@ export interface IssueDto {
    parentIdentifier: string | null;
    /** Snooze de triage: ISO enquanto adiada, null caso contrário. */
    snoozedUntil: string | null;
+   /** SLA do time (#97): quando o `dueDate` foi calculado pelo SLA. null = data manual. */
+   slaAppliedAt: string | null;
    createdAt: string;
    updatedAt: string;
 }
@@ -388,6 +392,8 @@ async function assemble(
       parentIdentifier: r.parentId ? (parentMap.get(r.parentId) ?? null) : null,
       snoozedUntil:
          r.snoozedUntil instanceof Date ? r.snoozedUntil.toISOString() : (r.snoozedUntil ?? null),
+      slaAppliedAt:
+         r.slaAppliedAt instanceof Date ? r.slaAppliedAt.toISOString() : (r.slaAppliedAt ?? null),
       createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
       updatedAt: r.updatedAt instanceof Date ? r.updatedAt.toISOString() : String(r.updatedAt),
    }));
@@ -563,6 +569,10 @@ export async function createIssue(
 
    const id = randomUUID();
    const now = new Date();
+   // SLA do time (#97): sem data manual, o prazo da prioridade vira `dueDate` e marca
+   // `slaAppliedAt` (o que habilita os indicadores "at risk"/"breached").
+   const sla = input.dueDate ? null : await applySla(db, teamId, priorityId, now);
+   const dueDate = input.dueDate ?? sla?.dueDate ?? null;
    // Responsáveis: `assigneeIds` (conjunto; o 1º é o principal) ou o `assigneeId` legado.
    const assigneeIds = normalizeAssigneeIds(input.assigneeIds ?? (assigneeId ? [assigneeId] : []));
    const principalId = assigneeIds[0] ?? null;
@@ -598,7 +608,8 @@ export async function createIssue(
          cycleId,
          parentId: parent?.id ?? null,
          rank,
-         dueDate: input.dueDate ?? null,
+         dueDate,
+         slaAppliedAt: sla?.slaAppliedAt ?? null,
          estimate: input.estimate ?? null,
          sentryIssueId: input.sentryIssueId ?? null,
          startedAt: startCat === 'started' || startCat === 'completed' ? now : null,
@@ -623,6 +634,8 @@ export async function createIssue(
       }
       const events = [{ event: 'created', text: 'created the issue' }];
       if (parent) events.push({ event: 'parent', text: `set parent to ${parent.identifier}` });
+      if (sla)
+         events.push({ event: 'sla', text: `applied SLA (${sla.hours}h): due ${sla.dueDate}` });
       await tx.insert(activityEvent).values(
          events.map((e) => ({
             id: randomUUID(),
@@ -648,6 +661,13 @@ export async function createIssue(
          .values([...subscribers].map((userId) => ({ issueId: id, userId })))
          .onConflictDoNothing();
    });
+
+   // Automações do time (#97): issue que nasce em Triage.
+   if (startCat === 'triage')
+      await runAutomations(db, 'issue.created_in_triage', id, {
+         actorId: actor.id,
+         actorEmail,
+      });
 
    publish({ entity: 'issue', action: 'created', id, actorEmail });
    // O rollup do pai mudou (nova filha) → o board atualiza a linha dele.
@@ -732,7 +752,11 @@ export async function updateIssue(
    // "recurso não existe" em vez de desvincular.
    if (patch.projectId !== undefined) set.projectId = patch.projectId || null;
    if (patch.cycleId !== undefined) set.cycleId = patch.cycleId || null;
-   if (patch.dueDate !== undefined) set.dueDate = patch.dueDate;
+   // Due date manual desliga o SLA da issue (o indicador só vale para o prazo automático).
+   if (patch.dueDate !== undefined) {
+      set.dueDate = patch.dueDate;
+      set.slaAppliedAt = null;
+   }
    if (patch.estimate !== undefined) set.estimate = patch.estimate;
    if (patch.snoozedUntil !== undefined)
       set.snoozedUntil = patch.snoozedUntil ? new Date(patch.snoozedUntil) : null;
@@ -763,6 +787,24 @@ export async function updateIssue(
    if (nextParentId !== undefined && nextParentId !== prev.parentId) {
       if (nextParentId) newParent = await resolveParent(db, id, nextParentId);
       set.parentId = nextParentId;
+   }
+
+   // SLA (#97): trocar a prioridade recalcula o prazo — mas só quando a issue NÃO tem
+   // due date manual (sem data, ou com data que veio do próprio SLA) e o patch não está
+   // definindo uma data explicitamente.
+   let appliedSla: { hours: number; dueDate: string } | null = null;
+   if (
+      patch.priorityId !== undefined &&
+      patch.priorityId !== prev.priorityId &&
+      patch.dueDate === undefined &&
+      (prev.dueDate === null || prev.slaAppliedAt !== null)
+   ) {
+      const sla = await applySla(db, prev.teamId, patch.priorityId, set.updatedAt as Date);
+      if (sla) {
+         set.dueDate = sla.dueDate;
+         set.slaAppliedAt = sla.slaAppliedAt;
+         appliedSla = { hours: sla.hours, dueDate: sla.dueDate };
+      }
    }
 
    // Transição de status: marcos temporais (cycle/lead time) + auto-add ao cycle.
@@ -879,6 +921,11 @@ export async function updateIssue(
       });
    if (patch.dueDate !== undefined && (patch.dueDate ?? null) !== prev.dueDate)
       events.push({ event: 'dueDate', text: `changed due date` });
+   if (appliedSla)
+      events.push({
+         event: 'sla',
+         text: `applied SLA (${appliedSla.hours}h): due ${appliedSla.dueDate}`,
+      });
    if (set.parentId !== undefined)
       events.push({
          event: 'parent',
@@ -928,6 +975,14 @@ export async function updateIssue(
          actorEmail
       );
    }
+
+   // Automações do time (#97): status trocado (a categoria de destino filtra as regras).
+   if (patch.statusId !== undefined && patch.statusId !== prev.statusId)
+      await runAutomations(db, 'issue.status_changed', id, {
+         actorId: actor.id,
+         actorEmail,
+         toCategory: nextCategory,
+      });
 
    publish({ entity: 'issue', action: 'updated', id, actorEmail });
    // Rollup dos pais (antigo e novo) mudou quando a issue trocou de pai ou de status.
@@ -1190,6 +1245,8 @@ export async function addLabel(
          text: `added label ${labelRows[0].name}`,
          createdAt: new Date(),
       });
+      // Automações do time (#97): label adicionada.
+      await runAutomations(db, 'issue.label_added', id, { actorId: actor.id, actorEmail, labelId });
    }
    publish({ entity: 'issue', action: 'updated', id });
    return getIssue(db, id);

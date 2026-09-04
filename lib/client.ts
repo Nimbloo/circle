@@ -59,6 +59,12 @@ import type { InviteDto } from '@/lib/api/invites';
 import type { FavoriteDto, FavoriteEntityType } from '@/lib/api/favorites';
 import type { SlackConfigDto } from '@/lib/api/integrations/slack';
 import type { AttachmentDto } from '@/lib/api/attachments';
+import type { TeamSlaDto } from '@/lib/api/slas';
+import type {
+   TeamAutomationDto,
+   CreateAutomationInput,
+   UpdateAutomationInput,
+} from '@/lib/api/automations';
 
 /**
  * `parentId` é o contrato compartilhado da spec de sub-issues (cria a issue já vinculada
@@ -504,5 +510,24 @@ export const api = {
          del<{ deleted: boolean }>(
             `/reviews/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`
          ),
+   },
+
+   /** SLAs por prioridade do time (#97). */
+   teamSlas: {
+      list: (teamKey: string) => get<TeamSlaDto[]>(`/teams/${teamKey}/slas`),
+      /** `hours = null` remove o SLA da prioridade. Devolve a lista completa do time. */
+      set: (teamKey: string, priorityId: string, hours: number | null) =>
+         request<TeamSlaDto[]>('PUT', `/teams/${teamKey}/slas`, { priorityId, hours }),
+   },
+
+   /** Automações (Workflows & automations) do time (#97). */
+   automations: {
+      list: (teamKey: string) => get<TeamAutomationDto[]>(`/teams/${teamKey}/automations`),
+      create: (teamKey: string, input: CreateAutomationInput) =>
+         post<TeamAutomationDto>(`/teams/${teamKey}/automations`, input),
+      update: (teamKey: string, id: string, body: UpdateAutomationInput) =>
+         patch<TeamAutomationDto>(`/teams/${teamKey}/automations/${id}`, body),
+      remove: (teamKey: string, id: string) =>
+         del<{ deleted: boolean }>(`/teams/${teamKey}/automations/${id}`),
    },
 };

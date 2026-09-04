@@ -33,6 +33,8 @@ export interface Issue {
    parentIdentifier?: string | null;
    /** Snooze de triage (ISO) — enquanto futuro, some da fila de triage. */
    snoozedUntil?: string | null;
+   /** SLA do time (#97): quando o `dueDate` foi calculado pelo SLA. null = data manual. */
+   slaAppliedAt?: string | null;
    rank: string;
    dueDate?: string;
    /** Pontos de estimativa (undefined = sem estimativa). */

@@ -18,6 +18,7 @@ import { PrioritySelector } from './priority-selector';
 import { StatusSelector } from './status-selector';
 import { SubIssueProgress } from './sub-issue-progress';
 import { ParentIssueChip } from './parent-issue-chip';
+import { SlaBadge } from './sla-badge';
 import { IssueDragType } from './issue-grid';
 import { LabelSelector } from '@/components/layout/sidebar/create-new-issue/label-selector';
 import { ProjectSelector } from '@/components/layout/sidebar/create-new-issue/project-selector';
@@ -171,6 +172,7 @@ function IssueRow({
                         </ProjectSelector>
                      )}
                   </div>
+                  <SlaBadge issue={issue} />
                   <SubIssueProgress count={issue.subIssueCount} done={issue.subIssueDoneCount} />
                   {displayProperties.estimate && issue.estimate !== undefined && (
                      <EstimateSelector

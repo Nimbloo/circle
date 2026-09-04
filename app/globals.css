@@ -26,6 +26,8 @@
    --review-merged: #8250df;
    --review-closed: #d1242f;
    --cycle-started: #ca8a04;
+   /* SLA em risco (#97): âmbar de alerta — o vencido usa --destructive. */
+   --warning: #b45309;
    --media-overlay-background: #090a0b;
    --media-overlay-foreground: #ffffff;
    /* Acento índigo do Linear (#5e6ad2) — botão primário, seleção, foco. */
@@ -84,6 +86,7 @@
    --review-merged: #a371f7;
    --review-closed: #f85149;
    --cycle-started: #facc15;
+   --warning: #f5a524;
    --media-overlay-background: #090a0b;
    --media-overlay-foreground: #ffffff;
    --primary: #5e6ad2;
@@ -136,6 +139,7 @@
    --color-accent-foreground: var(--accent-foreground);
    --color-destructive: var(--destructive);
    --color-destructive-foreground: var(--destructive-foreground);
+   --color-warning: var(--warning);
    --color-media-overlay-background: var(--media-overlay-background);
    --color-media-overlay-foreground: var(--media-overlay-foreground);
    --color-border: var(--border);

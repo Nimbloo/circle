@@ -19,7 +19,9 @@ import type { Project } from '@/data/projects';
 import type { User } from '@/data/users';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useCatalogStore } from '@/store/catalog-store';
+import { slaState } from '@/lib/sla';
 import {
+   AlertTriangle,
    BarChart3,
    CalendarClock,
    CalendarPlus,
@@ -30,6 +32,8 @@ import {
    Layers,
    RefreshCcw,
    Tag,
+   Timer,
+   TimerOff,
    UserPen,
 } from 'lucide-react';
 
@@ -150,6 +154,31 @@ function cycleOptions(cycles: Cycle[]): ColumnOption[] {
       })),
    ];
 }
+
+/* --------------------------------- SLA (#97) -------------------------------- */
+
+const slaOptions: ColumnOption[] = [
+   {
+      value: 'at-risk',
+      label: 'At risk',
+      icon: <AlertTriangle className="size-4 text-muted-foreground" />,
+   },
+   {
+      value: 'breached',
+      label: 'Breached',
+      icon: <TimerOff className="size-4 text-muted-foreground" />,
+   },
+   {
+      value: 'ok',
+      label: 'On track',
+      icon: <Timer className="size-4 text-muted-foreground" />,
+   },
+   {
+      value: 'none',
+      label: 'No SLA',
+      icon: <Timer className="size-4 text-muted-foreground" />,
+   },
+];
 
 /* ------------------------------ Sub-issues (#95) ---------------------------- */
 
@@ -283,6 +312,20 @@ function buildIssueFilterColumns(
          .displayName('Sub-issues')
          .icon(Layers)
          .options(subIssuesOptions)
+         .build(),
+      dtf
+         .option()
+         .id('sla')
+         .accessor((i: Issue) =>
+            slaState({
+               dueDate: i.dueDate ?? null,
+               slaAppliedAt: i.slaAppliedAt ?? null,
+               statusCategory: i.status.category,
+            })
+         )
+         .displayName('SLA')
+         .icon(Timer)
+         .options(slaOptions)
          .build(),
       dtf
          .date()
