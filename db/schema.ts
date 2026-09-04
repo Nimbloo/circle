@@ -137,6 +137,10 @@ export const team = pgTable(
       // Sub-times (#100): pai canônico. NULL = time de topo. A guarda de ciclo é
       // app-level (updateTeam), como em `issue.parent_id`.
       parentId: varchar('parent_id', { length: 16 }).references((): AnyPgColumn => team.id),
+      // Automações (#97): marca de que as regras padrão já foram semeadas para o time.
+      // Sem ela, `ensureDefaultAutomations` só olhava "o time tem alguma regra?" e
+      // apagar TODAS ressuscitava a regra padrão na leitura seguinte.
+      automationsSeededAt: timestamp('automations_seeded_at'),
    },
    (t) => [index('idx_team_parent').on(t.parentId)]
 );

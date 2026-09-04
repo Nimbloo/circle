@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    activityEvent,
@@ -15,6 +15,7 @@ import { recordAudit } from './audit';
 import { getCachedCatalogs } from './catalogs';
 import { ApiError } from './errors';
 import { publish } from './events';
+import { applySla } from './slas';
 
 /**
  * Automações por time (#97). Uma regra = um gatilho + uma ação com parâmetros
@@ -95,38 +96,38 @@ function toDto(row: Row): TeamAutomationDto {
 /**
  * Regra default do PR mergeado: antes da #97 isso era um fluxo FIXO no sync de reviews;
  * agora é uma regra visível e editável. Semeada de forma lazy (sem CronJob nem backfill)
- * na primeira leitura/execução do time. Excluir TODAS as regras do time faz o default
- * voltar — para desligá-lo, use o toggle.
+ * na primeira leitura/execução do time.
+ *
+ * A semeadura acontece UMA VEZ por time, marcada em `team.automations_seeded_at`. Antes
+ * a decisão era "o time tem alguma regra?", então apagar todas ressuscitava a regra
+ * padrão na leitura seguinte — apagar não apagava. O `UPDATE … WHERE seeded IS NULL`
+ * é a trava: só quem conseguir marcar o time (uma transação, uma linha) semeia.
  */
 export async function ensureDefaultAutomations(db: Db, teamId: string): Promise<void> {
-   const existing = await db
-      .select({ id: teamAutomation.id })
-      .from(teamAutomation)
-      .where(eq(teamAutomation.teamId, teamId))
-      .limit(1);
-   if (existing.length > 0) return;
-   const [team] = await db
-      .select({ id: teamT.id })
-      .from(teamT)
-      .where(eq(teamT.id, teamId))
-      .limit(1);
-   if (!team) return;
+   const claimed = await db
+      .update(teamT)
+      .set({ automationsSeededAt: new Date() })
+      .where(and(eq(teamT.id, teamId), isNull(teamT.automationsSeededAt)))
+      .returning({ id: teamT.id });
+   if (claimed.length === 0) return; // time inexistente ou já semeado
+
    const done = await defaultCompletedStatusId(db);
-   if (!done) return;
-   await db
-      .insert(teamAutomation)
-      .values({
-         id: randomUUID(),
-         teamId,
-         name: 'PR merged → Done',
-         trigger: 'pr.merged',
-         action: 'set_status',
-         config: { statusId: done },
-         enabled: true,
-         position: 0,
-         createdAt: new Date(),
-      })
-      .onConflictDoNothing();
+   if (!done) {
+      // Catálogo ainda não semeado: devolve a marca para tentar de novo depois.
+      await db.update(teamT).set({ automationsSeededAt: null }).where(eq(teamT.id, teamId));
+      return;
+   }
+   await db.insert(teamAutomation).values({
+      id: randomUUID(),
+      teamId,
+      name: 'PR merged → Done',
+      trigger: 'pr.merged',
+      action: 'set_status',
+      config: { statusId: done },
+      enabled: true,
+      position: 0,
+      createdAt: new Date(),
+   });
 }
 
 export async function listTeamAutomations(db: Db, teamId: string): Promise<TeamAutomationDto[]> {
@@ -256,6 +257,8 @@ interface TargetIssue {
    priorityId: string;
    assigneeId: string | null;
    startedAt: Date | null;
+   dueDate: string | null;
+   slaAppliedAt: Date | null;
 }
 
 async function loadIssue(db: Db, id: string): Promise<TargetIssue | null> {
@@ -267,6 +270,8 @@ async function loadIssue(db: Db, id: string): Promise<TargetIssue | null> {
          priorityId: issueT.priorityId,
          assigneeId: issueT.assigneeId,
          startedAt: issueT.startedAt,
+         dueDate: issueT.dueDate,
+         slaAppliedAt: issueT.slaAppliedAt,
       })
       .from(issueT)
       .where(eq(issueT.id, id))
@@ -323,9 +328,28 @@ function matchesTrigger(rule: TeamAutomationDto, ctx: AutomationRunContext): boo
 
 /**
  * Roda as automações do time para um gatilho. Devolve quantas regras foram aplicadas.
- * Best-effort: um erro em uma regra é logado e não derruba a operação que a disparou.
+ *
+ * Best-effort de VERDADE: o motor inteiro é envolvido, não só o laço. Os chamadores
+ * (`createIssue`, `updateIssue`, `addLabel`, webhook do GitHub) fazem `await` sem
+ * try/catch, então qualquer falha ANTES do laço — carregar a issue, semear as regras
+ * padrão, o SELECT das regras — derrubava o POST/PATCH inteiro. Automação é efeito
+ * colateral: nunca pode custar a mutação que a disparou.
  */
 export async function runAutomations(
+   db: Db,
+   trigger: AutomationTrigger,
+   issueId: string,
+   ctx: AutomationRunContext
+): Promise<number> {
+   try {
+      return await runAutomationsUnsafe(db, trigger, issueId, ctx);
+   } catch (e) {
+      console.warn(`[circle] motor de automações falhou (${issueId}):`, (e as Error).message);
+      return 0;
+   }
+}
+
+async function runAutomationsUnsafe(
    db: Db,
    trigger: AutomationTrigger,
    issueId: string,
@@ -437,7 +461,20 @@ async function applyAction(
          const { priorities } = await getCachedCatalogs(db);
          const next = priorities.find((p) => p.id === priorityId);
          if (!next) return false;
-         await db.update(issueT).set({ priorityId, updatedAt: now }).where(eq(issueT.id, issueId));
+         const set: Record<string, unknown> = { priorityId, updatedAt: now };
+         // SLA (#97): a automação escreve direto na tabela, então precisa recalcular o
+         // prazo como a UI faz — senão a issue fica com a prioridade nova e o prazo da
+         // antiga. Só quando o due date é automático (ou não existe), igual ao
+         // `updateIssue`. A trigger de `sla_due_at` garante que o prazo não afrouxa.
+         if (target.dueDate === null || target.slaAppliedAt !== null) {
+            const sla = await applySla(db, target.teamId, priorityId, now);
+            if (sla) {
+               set.dueDate = sla.dueDate;
+               set.slaAppliedAt = sla.slaAppliedAt;
+               set.slaDueAt = sla.dueAt;
+            }
+         }
+         await db.update(issueT).set(set).where(eq(issueT.id, issueId));
          await logRun(db, rule, issueId, ctx, `set priority to ${next.name}`);
          publish({ entity: 'issue', action: 'updated', id: issueId, actorEmail: ctx.actorEmail });
          return true;
