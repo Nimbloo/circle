@@ -340,7 +340,10 @@ export async function generateTriageSuggestion(
          catalog,
          candidates
       );
-      payload = parseTriageResponse(await (opts.invoke ?? invokeText)(prompt), catalog, candidates);
+      const text = await (opts.invoke ?? invokeText)(prompt);
+      if (typeof text !== 'string' || text.trim() === '')
+         throw new SyntaxError('resposta vazia do modelo');
+      payload = parseTriageResponse(text, catalog, candidates);
    } catch (e) {
       // Bedrock bloqueado/fora do ar OU resposta inutilizável → duplicatas locais.
       console.warn(`[circle] triage sem IA (${issueId}):`, (e as Error).message);
