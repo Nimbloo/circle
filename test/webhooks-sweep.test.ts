@@ -1,16 +1,28 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
-import { webhookDelivery } from '@/db/schema';
-import {
-   createWebhook,
-   onCircleEvent,
-   sweepWebhookDeliveries,
-   updateWebhook,
-} from '@/lib/api/webhooks';
+import { webhook as webhookT, webhookDelivery } from '@/db/schema';
+import { onCircleEvent, sweepWebhookDeliveries, updateWebhook } from '@/lib/api/webhooks';
+
+/**
+ * Insere o webhook DIRETO na tabela: `createWebhook` resolve o host pela allow-list
+ * anti-SSRF, e um teste de sweep não deve depender de DNS (nem de rede) para existir.
+ */
+async function seedWebhook(url: string): Promise<{ id: string }> {
+   const id = randomUUID();
+   await db.insert(webhookT).values({
+      id,
+      url,
+      secret: 'segredo-de-teste',
+      events: ['issue.updated'],
+      enabled: true,
+      createdBy: ownerId,
+   });
+   return { id };
+}
 
 /**
  * Starvation do sweep (auditoria v0.29.0): 60 entregas falhadas de um webhook
@@ -23,6 +35,9 @@ let db: Db;
 let ownerId: string;
 
 beforeEach(async () => {
+   // Os destinos de teste não resolvem em DNS; a allow-list anti-SSRF (que roda também
+   // a cada disparo, contra rebind) barraria antes do `fetch` injetado.
+   vi.stubEnv('CIRCLE_WEBHOOK_ALLOW_PRIVATE', 'true');
    db = await makeTestDb();
    await seedTeam(db, 'CORE', 'Core');
    ownerId = await seedUser(db, { name: 'Owner', email: 'owner@circle.dev', teamIds: ['CORE'] });
@@ -45,16 +60,8 @@ async function queueFailed(webhookId: string, createdAt: Date) {
 
 describe('sweep de webhooks', () => {
    it('entrega de webhook desabilitado não ocupa o lote', async () => {
-      const morto = await createWebhook(
-         db,
-         { url: 'https://exemplo.invalid/morto', events: ['issue.updated'] },
-         ownerId
-      );
-      const vivo = await createWebhook(
-         db,
-         { url: 'https://exemplo.invalid/vivo', events: ['issue.updated'] },
-         ownerId
-      );
+      const morto = await seedWebhook('https://exemplo.invalid/morto');
+      const vivo = await seedWebhook('https://exemplo.invalid/vivo');
       await updateWebhook(db, morto.id, { enabled: false });
 
       // 60 entregas ANTIGAS do webhook desligado + 1 recente do ligado.
@@ -84,11 +91,7 @@ describe('sweep de webhooks', () => {
    });
 
    it('religar o webhook devolve as entregas presas ao lote', async () => {
-      const hook = await createWebhook(
-         db,
-         { url: 'https://exemplo.invalid/hook', events: ['issue.updated'] },
-         ownerId
-      );
+      const hook = await seedWebhook('https://exemplo.invalid/hook');
       await updateWebhook(db, hook.id, { enabled: false });
       await queueFailed(hook.id, new Date(Date.UTC(2026, 0, 1)));
 
