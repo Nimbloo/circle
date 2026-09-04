@@ -48,8 +48,8 @@ export async function PATCH(req: Request, { params }: Params) {
 export async function DELETE(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      await requireEmail(req);
-      const removed = await deleteProject(db, id);
+      const email = await requireEmail(req);
+      const removed = await deleteProject(db, id, email);
       return removed ? ok({ deleted: true }) : notFound(`Project '${id}' não encontrado`);
    }, req);
 }

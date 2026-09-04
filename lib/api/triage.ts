@@ -16,6 +16,7 @@ import { getCachedCatalogs } from './catalogs';
 import { ApiError } from './errors';
 import { publish } from './events';
 import { getOrCreateUser } from './users';
+import { assertCanWriteIssue, assertCanWriteTeam } from './scope';
 
 /**
  * Triage com IA (#94).
@@ -539,6 +540,10 @@ export async function acceptTriageSuggestion(
    actorEmail: string,
    input: AcceptTriageInput = {}
 ): Promise<TriageSuggestionDto> {
+   // Escopo ANTES de qualquer lookup: a issue de ORIGEM e o time de DESTINO (o accept
+   // move a issue de time). Checar depois devolveria 404 da sugestão no lugar do 403.
+   const scope = await assertCanWriteIssue(db, actorEmail, issueId);
+   if (input.teamId) await assertCanWriteTeam(db, scope, input.teamId);
    const suggestion = await getTriageSuggestion(db, issueId);
    if (!suggestion) throw new ApiError(404, 'Sugestão de triagem não encontrada');
    if (suggestion.appliedAt) throw new ApiError(409, 'Sugestão já aplicada');
@@ -630,8 +635,10 @@ export async function acceptTriageSuggestion(
 /** Descarta a sugestão (some do card; a issue segue na fila para triagem manual). */
 export async function dismissTriageSuggestion(
    db: Db,
-   issueId: string
+   issueId: string,
+   actorEmail?: string
 ): Promise<TriageSuggestionDto> {
+   if (actorEmail) await assertCanWriteIssue(db, actorEmail, issueId);
    const [updated] = await db
       .update(issueTriageSuggestion)
       .set({ dismissedAt: new Date() })

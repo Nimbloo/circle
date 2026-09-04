@@ -25,6 +25,7 @@ import {
    listIssueAttachments,
    type AttachmentDto,
 } from './attachments';
+import { assertCanWriteIssue } from './scope';
 import { projectDescriptionDoc } from './description-doc';
 import type { EditorDoc } from '@/lib/editor-doc';
 
@@ -256,7 +257,8 @@ export interface UpdateIssueContentInput {
 export async function updateIssueContent(
    db: Db,
    issueId: string,
-   patch: UpdateIssueContentInput
+   patch: UpdateIssueContentInput,
+   actorEmail?: string
 ): Promise<IssueDetailDto | null> {
    const exists = await db
       .select({ id: issueT.id })
@@ -264,6 +266,7 @@ export async function updateIssueContent(
       .where(eq(issueT.id, issueId))
       .limit(1);
    if (exists.length === 0) return null;
+   if (actorEmail) await assertCanWriteIssue(db, actorEmail, issueId);
    // Upsert parcial: só os campos presentes no patch são alterados numa linha existente.
    const set: Partial<typeof issueContent.$inferInsert> = {};
    if (patch.descriptionDoc !== undefined) {
@@ -346,6 +349,11 @@ export async function addRelation(
 ): Promise<IssueDetailDto | null> {
    if (issueId === relatedId)
       throw new ApiError(400, 'Uma issue não pode se relacionar consigo mesma');
+   // As DUAS pontas: relacionar puxa a issue alheia para o detalhe de quem relaciona.
+   if (actorEmail) {
+      const scope = await assertCanWriteIssue(db, actorEmail, issueId);
+      await assertCanWriteIssue(db, scope, relatedId);
+   }
    // Compat do cliente antigo: `sub` agora é o pai canônico (issue.parent_id, #95).
    if (kind === 'sub') {
       if (!actorEmail) throw new ApiError(400, 'Ator obrigatório para vincular sub-issue');
@@ -393,6 +401,10 @@ export async function removeRelation(
    kind: RelationKind,
    actorEmail?: string
 ): Promise<IssueDetailDto | null> {
+   if (actorEmail) {
+      const scope = await assertCanWriteIssue(db, actorEmail, issueId);
+      await assertCanWriteIssue(db, scope, relatedId);
+   }
    // Compat: remover `sub` = tirar o pai da filha (só se o pai for ESTA issue).
    if (kind === 'sub') {
       if (!actorEmail) throw new ApiError(400, 'Ator obrigatório para desvincular sub-issue');
@@ -466,6 +478,7 @@ export async function addComment(
       .where(eq(issueT.id, issueId))
       .limit(1);
    if (!iss) throw new ApiError(404, `Issue '${issueId}' não encontrada`);
+   await assertCanWriteIssue(db, actorEmail, issueId);
 
    // Threading: valida que o pai existe E é da MESMA issue (sem cross-issue thread).
    // Só um nível de aninhamento — responder a uma resposta ancora no mesmo pai raiz.

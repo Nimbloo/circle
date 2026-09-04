@@ -35,6 +35,7 @@ import {
    projectMilestone as projectMilestoneT,
    attachment as attachmentT,
    issueTriageSuggestion as issueTriageSuggestionT,
+   issueImport as issueImportT,
 } from '@/db/schema';
 import { issueAttachmentUrls, removeAttachmentObjects } from './attachments';
 import { applySla } from './slas';
@@ -49,6 +50,14 @@ import { notifySlackEvent } from './integrations/slack';
 import { projectDescriptionDoc } from './description-doc';
 import type { EditorDoc } from '@/lib/editor-doc';
 import { intersectScopes, teamDescendantIds } from './hierarchy';
+import {
+   assertCanWriteIssue,
+   assertCanWriteProject,
+   assertCanWriteTeam,
+   assertTeamInScope,
+   visibleTeamIds,
+   type ActorScope,
+} from './scope';
 
 /** Teto default de linhas nas listagens (proteção; paginação por cursor fica p/ depois). */
 const DEFAULT_LIST_LIMIT = 500;
@@ -566,6 +575,14 @@ export async function createIssue(
    const teamRows = await db.select().from(teamT).where(eq(teamT.id, teamId)).limit(1);
    if (teamRows.length === 0) throw new ApiError(400, `Team '${teamId}' não existe`);
 
+   // Escopo de escrita: valida o time EFETIVO (o herdado do pai também) e os alvos do
+   // vínculo — sem isto, omitir `teamId` e apontar um `parentId` alheio criava a issue
+   // no time do pai. O escopo é resolvido UMA vez e reusado nos três asserts.
+   const scope: ActorScope = { user: actor, teamIds: await visibleTeamIds(db, actor) };
+   await assertCanWriteTeam(db, scope, teamId);
+   if (parent) assertTeamInScope(scope.teamIds, parent.teamId);
+   if (projectId) await assertCanWriteProject(db, scope, projectId);
+
    // valida FKs de catálogo antes do insert (senão a FK estoura como 500). Usa o cache
    // de catálogos (memoizado, TTL 30s) em vez de 2 SELECTs por criação de issue.
    const statusRow = catalogs.statuses.get(statusId);
@@ -732,6 +749,13 @@ export async function updateIssue(
    if (existing.length === 0) return null;
    const actor = await getOrCreateUser(db, actorEmail);
    const prev = existing[0];
+
+   // Escopo de escrita: a issue de ORIGEM e os alvos do movimento (projeto e pai) têm
+   // que estar no escopo — mover para dentro/fora do próprio time é a escalação clássica.
+   const scope: ActorScope = { user: actor, teamIds: await visibleTeamIds(db, actor) };
+   assertTeamInScope(scope.teamIds, prev.teamId);
+   if (patch.projectId) await assertCanWriteProject(db, scope, patch.projectId);
+   if (patch.parentId) await assertCanWriteIssue(db, scope, patch.parentId);
 
    // Responsáveis (#96): `assigneeIds` substitui o conjunto; `assigneeId` sozinho troca só
    // o principal e mantém os colaboradores (`""` → sem principal, como cycleId). O
@@ -1131,9 +1155,10 @@ async function applyAutoClose(
    }
 }
 
-export async function deleteIssue(db: Db, id: string): Promise<boolean> {
+export async function deleteIssue(db: Db, id: string, actorEmail?: string): Promise<boolean> {
    const existing = await db.select({ id: issue.id }).from(issue).where(eq(issue.id, id)).limit(1);
    if (existing.length === 0) return false;
+   if (actorEmail) await assertCanWriteIssue(db, actorEmail, id);
    const children = await db.select({ id: issue.id }).from(issue).where(eq(issue.parentId, id));
    // Os anexos (da issue e dos comentários dela) somem por cascade, mas os OBJETOS no
    // S3 ficariam órfãos — guarda as URLs antes e limpa depois do commit (best-effort).
@@ -1167,6 +1192,9 @@ export async function deleteIssue(db: Db, id: string): Promise<boolean> {
       await tx.delete(issueSubscription).where(eq(issueSubscription.issueId, id));
       await tx.delete(issueContent).where(eq(issueContent.issueId, id));
       await tx.delete(issueTriageSuggestionT).where(eq(issueTriageSuggestionT.issueId, id));
+      // Rastro de import: sem isto o delete de uma issue IMPORTADA estoura 23503 (a FK
+      // de `issue_import` não é cascade) e a issue vira indelével.
+      await tx.delete(issueImportT).where(eq(issueImportT.issueId, id));
       await tx.delete(attachmentT).where(eq(attachmentT.issueId, id));
       await tx.delete(issue).where(eq(issue.id, id));
    });
@@ -1176,13 +1204,29 @@ export async function deleteIssue(db: Db, id: string): Promise<boolean> {
    return true;
 }
 
-/** Assina uma issue (idempotente) — usado no auto-subscribe e no toggle manual. */
-export async function subscribeToIssue(db: Db, id: string, userId: string): Promise<void> {
+/**
+ * Assina uma issue (idempotente) — usado no auto-subscribe e no toggle manual.
+ * `actorEmail` vem das rotas e liga o gate de escopo; o auto-subscribe interno
+ * (o próprio serviço, já validado) chama sem ele.
+ */
+export async function subscribeToIssue(
+   db: Db,
+   id: string,
+   userId: string,
+   actorEmail?: string
+): Promise<void> {
+   if (actorEmail) await assertCanWriteIssue(db, actorEmail, id);
    await db.insert(issueSubscription).values({ issueId: id, userId }).onConflictDoNothing();
 }
 
 /** Cancela a assinatura de uma issue. */
-export async function unsubscribeFromIssue(db: Db, id: string, userId: string): Promise<void> {
+export async function unsubscribeFromIssue(
+   db: Db,
+   id: string,
+   userId: string,
+   actorEmail?: string
+): Promise<void> {
+   if (actorEmail) await assertCanWriteIssue(db, actorEmail, id);
    await db
       .delete(issueSubscription)
       .where(and(eq(issueSubscription.issueId, id), eq(issueSubscription.userId, userId)));
@@ -1202,8 +1246,10 @@ export async function reorderIssue(
    db: Db,
    id: string,
    beforeId?: string | null,
-   afterId?: string | null
+   afterId?: string | null,
+   actorEmail?: string
 ): Promise<IssueDto | null> {
+   if (actorEmail) await assertCanWriteIssue(db, actorEmail, id);
    const getRank = async (rid?: string | null) => {
       if (!rid) return null;
       const r = await db.select({ r: issue.rank }).from(issue).where(eq(issue.id, rid)).limit(1);
@@ -1231,6 +1277,7 @@ export async function addLabel(
    // valida issue e label antes do insert (senão a FK estoura como 500)
    const issueRows = await db.select({ id: issue.id }).from(issue).where(eq(issue.id, id)).limit(1);
    if (issueRows.length === 0) throw new ApiError(404, `Issue '${id}' não encontrada`);
+   await assertCanWriteIssue(db, actorEmail, id);
    const labelRows = await db
       .select({ id: labelT.id, name: labelT.name, groupId: labelT.groupId })
       .from(labelT)
@@ -1283,6 +1330,7 @@ export async function removeLabel(
    labelId: string,
    actorEmail: string
 ): Promise<IssueDto | null> {
+   await assertCanWriteIssue(db, actorEmail, id);
    const deleted = await db
       .delete(issueLabel)
       .where(and(eq(issueLabel.issueId, id), eq(issueLabel.labelId, labelId)))

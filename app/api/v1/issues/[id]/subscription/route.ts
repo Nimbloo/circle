@@ -13,8 +13,9 @@ type Params = { params: Promise<{ id: string }> };
 export async function POST(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      const me = await getOrCreateUser(db, await requireEmail(req));
-      await subscribeToIssue(db, id, me.id);
+      const email = await requireEmail(req);
+      const me = await getOrCreateUser(db, email);
+      await subscribeToIssue(db, id, me.id, email);
       return ok({ id, subscribed: true });
    }, req);
 }
@@ -23,8 +24,9 @@ export async function POST(req: Request, { params }: Params) {
 export async function DELETE(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      const me = await getOrCreateUser(db, await requireEmail(req));
-      await unsubscribeFromIssue(db, id, me.id);
+      const email = await requireEmail(req);
+      const me = await getOrCreateUser(db, email);
+      await unsubscribeFromIssue(db, id, me.id, email);
       return ok({ id, subscribed: false });
    }, req);
 }

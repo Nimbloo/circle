@@ -21,6 +21,7 @@ import {
 } from '@/db/schema';
 import { ApiError } from './errors';
 import { createIssue, updateIssue } from './issues';
+import { assertCanWriteTeam } from './scope';
 
 export type ImportSource = 'csv' | 'linear' | 'jira';
 
@@ -475,6 +476,8 @@ export async function commitImport(
 
    const teamRows = await db.select().from(teamT).where(eq(teamT.id, input.teamId)).limit(1);
    if (teamRows.length === 0) throw new ApiError(400, `Team '${input.teamId}' não existe`);
+   // O time de destino vem do corpo: sem escopo, o import escrevia em qualquer time.
+   await assertCanWriteTeam(db, actorEmail, input.teamId);
 
    const { rows } = csvToObjects(input.csv);
    const cat = await loadCatalogs(db);
