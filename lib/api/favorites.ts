@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { favorite, issue as issueT, project as projectT, savedView } from '@/db/schema';
+import { visibleTeamIds } from './scope';
 import { getOrCreateUser } from './users';
 import { ApiError } from './errors';
 
@@ -46,24 +47,44 @@ export async function listFavorites(db: Db, userEmail: string): Promise<Favorite
    const projectIds = byType('project');
    const viewIds = byType('view');
 
+   // Escopo (#100): favorito é do usuário, mas o resolve devolve título e identifier da
+   // entidade — se ela saiu do escopo (convidado removido do time), some da lista em vez
+   // de vazar o nome. A linha continua no banco, como nas entidades apagadas.
+   const teamIds = await visibleTeamIds(db, user);
+
    const [issues, projects, views] = await Promise.all([
       issueIds.length
          ? db
               .select({ id: issueT.id, title: issueT.title, identifier: issueT.identifier })
               .from(issueT)
-              .where(inArray(issueT.id, issueIds))
+              .where(
+                 teamIds
+                    ? and(inArray(issueT.id, issueIds), inArray(issueT.teamId, teamIds))
+                    : inArray(issueT.id, issueIds)
+              )
          : Promise.resolve([]),
       projectIds.length
          ? db
               .select({ id: projectT.id, name: projectT.name, iconKey: projectT.iconKey })
               .from(projectT)
-              .where(inArray(projectT.id, projectIds))
+              .where(
+                 teamIds
+                    ? and(inArray(projectT.id, projectIds), inArray(projectT.teamId, teamIds))
+                    : inArray(projectT.id, projectIds)
+              )
          : Promise.resolve([]),
       viewIds.length
          ? db
               .select({ id: savedView.id, name: savedView.name, icon: savedView.icon })
               .from(savedView)
-              .where(inArray(savedView.id, viewIds))
+              .where(
+                 teamIds
+                    ? and(
+                         inArray(savedView.id, viewIds),
+                         or(isNull(savedView.teamId), inArray(savedView.teamId, teamIds))!
+                      )
+                    : inArray(savedView.id, viewIds)
+              )
          : Promise.resolve([]),
    ]);
 

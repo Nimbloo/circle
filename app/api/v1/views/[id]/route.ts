@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { ok, notFound } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
-import { getOrCreateUser } from '@/lib/api/users';
+import { assertTeamInScope, scopeForEmail } from '@/lib/api/scope';
 import { getView, updateView, deleteView } from '@/lib/api/views';
 
 export const runtime = 'nodejs';
@@ -13,8 +13,12 @@ type Params = { params: Promise<{ id: string }> };
 export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
-      const me = await getOrCreateUser(db, await requireEmail(req));
+      const email = await requireEmail(req);
+      const { user: me, teamIds } = await scopeForEmail(db, email);
       const dto = await getView(db, id, me.id); // view pessoal só p/ o dono
+      // View de TIME fora do escopo do convidado (#100): a listagem já filtrava, o acesso
+      // por id direto não. Pessoal sem time já é barrada pelo `ownerId` no serviço.
+      if (dto?.teamId) assertTeamInScope(teamIds, dto.teamId);
       return dto ? ok(dto) : notFound(`View '${id}' não encontrada`);
    }, req);
 }
