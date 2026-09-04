@@ -1,14 +1,23 @@
 import { z } from 'zod';
+import { db } from '@/db';
 import { emailFromRequest } from './auth';
+import { assertActiveEmail } from './users';
 import { problem } from './response';
 import { ApiError } from './errors';
 import { observeHttp } from '@/lib/metrics';
 import type { IssueListOptions } from './issues';
 
-/** E-mail do usuário autenticado (sessão NextAuth; header em teste) ou 401. */
+/**
+ * E-mail do usuário autenticado (sessão NextAuth; header em teste) ou 401.
+ *
+ * Também recusa com 403 quem está desativado (#100): é o chokepoint de TODA rota,
+ * inclusive das que nunca resolvem o `app_user`. `getOrCreateUser` repete a checagem —
+ * defesa em profundidade, porque nem todo serviço passa por aqui.
+ */
 export async function requireEmail(req?: Request): Promise<string> {
    const email = await emailFromRequest(req);
    if (!email) throw new ApiError(401, 'Não autenticado');
+   await assertActiveEmail(db, email);
    return email;
 }
 

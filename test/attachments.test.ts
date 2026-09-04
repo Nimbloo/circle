@@ -253,10 +253,40 @@ describe('POST /attachments (multipart)', () => {
       }
    });
 
+   it('Content-Length acima do limite → 413 SEM materializar o corpo', async () => {
+      const { db } = await setup();
+      __setTestDb(db);
+      // `req.formData()` lê o multipart inteiro na memória: se o 413 só saísse depois
+      // dele, qualquer autenticado inflaria o pod antes de ser recusado. O spy prova
+      // que o corpo nem chega a ser lido.
+      const req = new Request('http://x/api/v1/attachments', {
+         method: 'POST',
+         headers: { 'x-forwarded-email': ANA, 'content-length': String(200 * 1024 * 1024) },
+         body: 'nem-e-multipart',
+      });
+      const formData = vi.spyOn(req, 'formData');
+      try {
+         const res = await postAttachment(req);
+         expect(res.status).toBe(413);
+         expect(formData).not.toHaveBeenCalled();
+      } finally {
+         formData.mockRestore();
+         __setTestDb(null);
+      }
+   });
+
    it('sem autenticação → 401; sem file → 400', async () => {
-      const form = new FormData();
-      form.set('issueId', 'x');
-      expect((await postAttachment(post(form, null))).status).toBe(401);
-      expect((await postAttachment(post(form))).status).toBe(400);
+      // `requireEmail` consulta o banco (gate de conta desativada), então a rota
+      // precisa do db de teste injetado mesmo nos casos que nem chegam ao serviço.
+      const { db } = await setup();
+      __setTestDb(db);
+      try {
+         const form = new FormData();
+         form.set('issueId', 'x');
+         expect((await postAttachment(post(form, null))).status).toBe(401);
+         expect((await postAttachment(post(form))).status).toBe(400);
+      } finally {
+         __setTestDb(null);
+      }
    });
 });

@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { db } from '@/db';
 import { handle, requireEmail } from '@/lib/api/http';
+import { isAdmin } from '@/lib/api/auth';
+import { ApiError } from '@/lib/api/errors';
 import { ok } from '@/lib/api/response';
 import { getOrCreateUser } from '@/lib/api/users';
 import { recordAudit } from '@/lib/api/audit';
@@ -24,7 +26,10 @@ const createSchema = z.object({
 /** GET /webhooks — lista os webhooks (sem o segredo). */
 export async function GET(req: Request) {
    return handle(async () => {
-      await requireEmail(req);
+      const email = await requireEmail(req);
+      // Webhook expõe o fluxo de eventos do workspace inteiro (e `lastError`/`responseCode`
+      // viram oráculo de rede): administração é privilégio de admin.
+      if (!(await isAdmin(email, db))) throw new ApiError(403, 'Apenas admin');
       // Sweep lazy das entregas pendentes (o boot NÃO faz isto: importar webhooks a
       // partir do instrumentation arrasta o cliente Postgres para o bundle Edge).
       // Best-effort: a lista responde mesmo se o reprocessamento falhar.
@@ -37,6 +42,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
    return handle(async () => {
       const email = await requireEmail(req);
+      if (!(await isAdmin(email, db))) throw new ApiError(403, 'Apenas admin');
       const body = createSchema.parse(await req.json());
       const actor = await getOrCreateUser(db, email);
       const created = await createWebhook(
