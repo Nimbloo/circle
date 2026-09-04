@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { useIssuesStore } from '@/store/issues-store';
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import { GitBranchPlus } from 'lucide-react';
+import { useEffect } from 'react';
 
 /**
  * Task item "vivo" do editor com contexto de issue: botão "Create sub-issue" no hover
@@ -24,6 +25,17 @@ export function TaskItemView({ node, editor, extension, getPos, updateAttributes
    const readOnly = linked !== null || !editor.isEditable;
    const canCreate = editor.isEditable && !linked && Boolean(options.onCreateSubIssue);
    const label = `Task item checkbox for ${node.textContent || 'empty task item'}`;
+
+   // Item vinculado: o check é DERIVADO do status da sub-issue, mas o atributo do nó
+   // continua sendo o que a projeção em texto (`- [x] ENG-12`) e o doc persistido leem.
+   // Quando os dois divergem (a sub-issue foi concluída/reaberta em outro lugar), regrava
+   // o atributo — só com o editor editável, e sem tocar na seleção (não rouba o foco).
+   const attrChecked = Boolean(node.attrs.checked);
+   useEffect(() => {
+      if (!linked || linkedIssue === undefined || !editor.isEditable) return;
+      if (attrChecked === checked) return;
+      updateAttributes({ checked });
+   }, [linked, linkedIssue, editor, attrChecked, checked, updateAttributes]);
 
    return (
       <NodeViewWrapper className="group/task" data-checked={checked}>

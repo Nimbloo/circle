@@ -33,7 +33,9 @@ import {
    team as teamT,
    cycle as cycleT,
    projectMilestone as projectMilestoneT,
+   attachment as attachmentT,
 } from '@/db/schema';
+import { issueAttachmentUrls, removeAttachmentObjects } from './attachments';
 import { getOrCreateUser } from './users';
 import { rankAfter, firstRank, rankBetween } from './rank';
 import { ApiError } from './errors';
@@ -1054,6 +1056,9 @@ export async function deleteIssue(db: Db, id: string): Promise<boolean> {
    const existing = await db.select({ id: issue.id }).from(issue).where(eq(issue.id, id)).limit(1);
    if (existing.length === 0) return false;
    const children = await db.select({ id: issue.id }).from(issue).where(eq(issue.parentId, id));
+   // Os anexos (da issue e dos comentários dela) somem por cascade, mas os OBJETOS no
+   // S3 ficariam órfãos — guarda as URLs antes e limpa depois do commit (best-effort).
+   const attachmentUrls = await issueAttachmentUrls(db, id);
 
    // Atômico: limpa todas as dependências (FKs) antes de remover a issue.
    await db.transaction(async (tx) => {
@@ -1082,8 +1087,10 @@ export async function deleteIssue(db: Db, id: string): Promise<boolean> {
       await tx.delete(issueAssignee).where(eq(issueAssignee.issueId, id));
       await tx.delete(issueSubscription).where(eq(issueSubscription.issueId, id));
       await tx.delete(issueContent).where(eq(issueContent.issueId, id));
+      await tx.delete(attachmentT).where(eq(attachmentT.issueId, id));
       await tx.delete(issue).where(eq(issue.id, id));
    });
+   void removeAttachmentObjects(attachmentUrls);
    publish({ entity: 'issue', action: 'deleted', id });
    for (const c of children) publish({ entity: 'issue', action: 'updated', id: c.id });
    return true;
