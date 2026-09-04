@@ -9,6 +9,8 @@ import {
    projectMilestone,
    projectResource,
    projectDetail,
+   projectDependency,
+   projectSnapshot,
    initiativeProject,
    issue as issueT,
    status as statusT,
@@ -415,6 +417,10 @@ export async function deleteProject(db: Db, id: string): Promise<boolean> {
       await tx.delete(projectResource).where(eq(projectResource.projectId, id));
       await tx.delete(projectDetail).where(eq(projectDetail.projectId, id));
       await tx.delete(initiativeProject).where(eq(initiativeProject.projectId, id));
+      // Roadmap (#102): as arestas dos DOIS lados e a série de snapshots do projeto.
+      await tx.delete(projectDependency).where(eq(projectDependency.projectId, id));
+      await tx.delete(projectDependency).where(eq(projectDependency.dependsOnId, id));
+      await tx.delete(projectSnapshot).where(eq(projectSnapshot.projectId, id));
       await tx.delete(projectT).where(eq(projectT.id, id));
    });
    publish({ entity: 'project', action: 'deleted', id });

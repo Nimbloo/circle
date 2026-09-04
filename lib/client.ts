@@ -66,8 +66,22 @@ import type {
    UpdateAutomationInput,
 } from '@/lib/api/automations';
 import type { SearchEntityType, SearchGroup, SearchItem, SearchResult } from '@/lib/api/search';
+import type {
+   RoadmapDto,
+   RoadmapDependency,
+   RoadmapGroup,
+   RoadmapMilestone,
+} from '@/lib/api/roadmap';
+import type { ProjectSnapshotPoint } from '@/lib/api/project-snapshots';
 
 export type { SearchEntityType, SearchGroup, SearchItem, SearchResult };
+export type { RoadmapDto, RoadmapDependency, RoadmapGroup, RoadmapMilestone, ProjectSnapshotPoint };
+
+/** Parâmetros de `api.roadmap.get` (#102). */
+export interface RoadmapQueryOptions {
+   includeCompleted?: boolean;
+   sort?: 'start-date' | 'target-date' | 'title';
+}
 
 /** Parâmetros de `api.search.query` (espelha `SearchOptions` do servidor). */
 export interface SearchQueryOptions {
@@ -561,5 +575,30 @@ export const api = {
          patch<TeamAutomationDto>(`/teams/${teamKey}/automations/${id}`, body),
       remove: (teamKey: string, id: string) =>
          del<{ deleted: boolean }>(`/teams/${teamKey}/automations/${id}`),
+   },
+
+   /** Roadmap: projetos por initiative, marcos e dependências (#102). */
+   roadmap: {
+      get: (opts: RoadmapQueryOptions = {}) => {
+         const sp = new URLSearchParams();
+         if (opts.includeCompleted === false) sp.set('includeCompleted', 'false');
+         if (opts.sort) sp.set('sort', opts.sort);
+         const qs = sp.toString();
+         return get<RoadmapDto>(`/roadmap${qs ? `?${qs}` : ''}`);
+      },
+   },
+
+   /** Dependências entre projetos ("Depends on", #102). Ciclo → 400. */
+   projectDependencies: {
+      list: (projectId: string) => get<string[]>(`/projects/${projectId}/dependencies`),
+      set: (projectId: string, dependsOn: string[]) =>
+         request<string[]>('PUT', `/projects/${projectId}/dependencies`, { dependsOn }),
+   },
+
+   /** Histórico diário de progresso (#102): por projeto e agregado por initiative. */
+   projectSnapshots: {
+      list: (projectId: string) => get<ProjectSnapshotPoint[]>(`/projects/${projectId}/snapshots`),
+      forInitiative: (initiativeId: string) =>
+         get<ProjectSnapshotPoint[]>(`/initiatives/${initiativeId}/snapshots`),
    },
 };
