@@ -29,6 +29,7 @@ import { useParentCandidatesExclusion, useSetParent } from './parent-issue';
 import { SubIssueCreate } from './sub-issue-create';
 import { SubIssueProgress } from '../sub-issue-progress';
 import { SubIssueRow } from './sub-issue-row';
+import { TriageSuggestionCard } from '../triage/triage-suggestion-card';
 import { adaptUser } from '@/lib/adapters';
 
 interface IssueDetailViewProps {
@@ -228,6 +229,14 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
                   <DetailSidePanelTrigger kind="issue" />
                </div>
                {banner}
+               {/* Triagem com IA (#94): o card só existe enquanto a issue está na fila. */}
+               {issue.status.category === 'triage' && (
+                  <TriageSuggestionCard
+                     issueId={issue.id}
+                     className="mb-5"
+                     onResolved={() => setReloadKey((k) => k + 1)}
+                  />
+               )}
                {editingTitle ? (
                   <textarea
                      autoFocus

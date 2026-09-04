@@ -1017,3 +1017,22 @@ export const customEmoji = pgTable('custom_emoji', {
    createdBy: varchar('created_by', { length: 36 }).references(() => appUser.id),
    createdAt: timestamp('created_at').notNull().defaultNow(),
 });
+
+// ── Triage com IA (#94) ──────────────────────────────────────────────────
+/**
+ * Sugestão de triagem de UMA issue (1:1 com a issue, por isso `issue_id` é a PK).
+ * `payload` guarda o JSON proposto (time, prioridade, labels, duplicatas, resumo);
+ * `source` distingue a sugestão do modelo (`ai`) do fallback local por similaridade
+ * de títulos (`heuristic`). `applied_at`/`dismissed_at` registram o desfecho — a
+ * sugestão apenas PROPÕE, quem aplica é o usuário no Accept.
+ */
+export const issueTriageSuggestion = pgTable('issue_triage_suggestion', {
+   issueId: varchar('issue_id', { length: 36 })
+      .primaryKey()
+      .references(() => issue.id),
+   payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+   source: varchar('source', { length: 16 }).notNull(), // ai|heuristic
+   createdAt: timestamp('created_at').notNull().defaultNow(),
+   appliedAt: timestamp('applied_at'),
+   dismissedAt: timestamp('dismissed_at'),
+});
