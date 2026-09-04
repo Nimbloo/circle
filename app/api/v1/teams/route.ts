@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { ok } from '@/lib/api/response';
 import { handle, multi, requireEmail } from '@/lib/api/http';
-import { emailFromRequest } from '@/lib/api/auth';
 import { getOrCreateUser } from '@/lib/api/users';
 import { listTeams, createTeam, type TeamSort } from '@/lib/api/teams';
 import { recordAudit } from '@/lib/api/audit';
@@ -14,12 +13,15 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request) {
    return handle(async () => {
       const sp = new URL(req.url).searchParams;
-      const email = await emailFromRequest(req);
-      const me = email ? await getOrCreateUser(db, email) : undefined;
-      const meId = me?.id;
+      // `emailFromRequest` devolvia null sem sessão e o escopo virava `null` = irrestrito:
+      // fail-OPEN. Um anônimo (bypass do middleware) listava todos os times. `requireEmail`
+      // fecha: sem identidade, 401.
+      const email = await requireEmail(req);
+      const me = await getOrCreateUser(db, email);
+      const meId = me.id;
       const [sort, dir] = (sp.get('sort') ?? 'name-asc').split('-') as [TeamSort, 'asc' | 'desc'];
       // Escopo de Guest (#100): a lista só traz os times de que ele participa.
-      const teamIds = me ? await visibleTeamIds(db, me) : null;
+      const teamIds = await visibleTeamIds(db, me);
       return ok(
          await listTeams(
             db,
