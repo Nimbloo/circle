@@ -108,7 +108,12 @@ describe('sweep de webhooks', () => {
          },
       }) as Db;
 
-      await onCircleEvent(counting, { entity: 'issue', action: 'updated', id: 'i-1' });
+      await onCircleEvent(counting, {
+         entity: 'issue',
+         action: 'updated',
+         id: 'i-1',
+         ts: Date.now(),
+      });
       // Uma única leitura: a dos webhooks assinantes. Sem assinante, sem sweep.
       expect(queries).toBe(1);
    });

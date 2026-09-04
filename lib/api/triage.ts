@@ -304,6 +304,24 @@ export async function generateTriageSuggestion(
    issueId: string,
    opts: GenerateTriageOptions = {}
 ): Promise<TriageSuggestionDto | null> {
+   // Dedupe em voo: o painel, a fila e o `scheduleTriageSuggestion` da mutação podem
+   // pedir a sugestão da MESMA issue ao mesmo tempo. Sem isto são duas chamadas ao
+   // Bedrock e dois upserts (cada um publicando evento, que realimenta o ciclo). O mapa
+   // é por processo — a corrida entre pods segue coberta pelo upsert.
+   const flight = inFlight.get(issueId);
+   if (flight) return flight;
+   const run = generateOnce(db, issueId, opts).finally(() => inFlight.delete(issueId));
+   inFlight.set(issueId, run);
+   return run;
+}
+
+const inFlight = new Map<string, Promise<TriageSuggestionDto | null>>();
+
+async function generateOnce(
+   db: Db,
+   issueId: string,
+   opts: GenerateTriageOptions
+): Promise<TriageSuggestionDto | null> {
    const [target] = await db.select().from(issueT).where(eq(issueT.id, issueId)).limit(1);
    if (!target) return null;
    if (!opts.force) {
@@ -358,12 +376,27 @@ export async function generateTriageSuggestion(
    // A coluna é jsonb genérico (`Record<string, unknown>`); a forma tipada é o
    // `TriageSuggestionPayload`, reconstruído na leitura por `readPayload`.
    const stored = { ...payload } as unknown as Record<string, unknown>;
+   // Uma geração EM VOO não pode ressuscitar um card que o usuário resolveu no meio do
+   // caminho: o upsert só sobrescreve enquanto a sugestão continua pendente, e nunca
+   // limpa `appliedAt`/`dismissedAt`. Regeneração explícita (`force`) é decisão do
+   // usuário e reabre o card.
+   const set: Record<string, unknown> = { payload: stored, source, createdAt: now };
+   if (opts.force) {
+      set.appliedAt = null;
+      set.dismissedAt = null;
+   }
    await db
       .insert(issueTriageSuggestion)
       .values({ issueId, payload: stored, source, createdAt: now })
       .onConflictDoUpdate({
          target: issueTriageSuggestion.issueId,
-         set: { payload: stored, source, createdAt: now, appliedAt: null, dismissedAt: null },
+         set,
+         where: opts.force
+            ? undefined
+            : and(
+                 isNull(issueTriageSuggestion.appliedAt),
+                 isNull(issueTriageSuggestion.dismissedAt)
+              ),
       });
    publish({ entity: 'issue', action: 'updated', id: issueId });
    return getTriageSuggestion(db, issueId);

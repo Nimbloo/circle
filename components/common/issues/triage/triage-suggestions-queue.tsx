@@ -6,7 +6,7 @@ import { ISSUE_CHANGED_EVENT } from '@/lib/use-live-sync';
 import { useIssuesStore } from '@/store/issues-store';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { TriageSuggestionCard } from './triage-suggestion-card';
 
 /**
@@ -20,6 +20,8 @@ export function TriageSuggestionsQueue() {
    const issues = useIssuesStore((s) => s.issues);
    const [suggestions, setSuggestions] = useState<TriageSuggestionDto[]>([]);
 
+   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
    const load = useCallback(() => {
       if (!teamId) return;
       api.triage
@@ -28,16 +30,32 @@ export function TriageSuggestionsQueue() {
          .catch(() => setSuggestions([]));
    }, [teamId]);
 
+   /**
+    * O GET da fila gera as sugestões que faltam, e cada geração publica `issue updated`
+    * — que chega de volta aqui como pedido de recarga. Sem debounce, uma fila com N
+    * issues novas vira uma rajada de recargas que se realimenta. 400 ms agrupa a rajada
+    * sem que a chegada do card pareça lenta.
+    */
+   const reload = useCallback(() => {
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => {
+         timer.current = null;
+         load();
+      }, 400);
+   }, [load]);
+
    useEffect(() => {
       load();
    }, [load]);
 
    // Uma issue mudou (sugestão pronta, accept/dismiss de outra aba): recarrega a lista.
    useEffect(() => {
-      const onChanged = () => load();
-      window.addEventListener(ISSUE_CHANGED_EVENT, onChanged);
-      return () => window.removeEventListener(ISSUE_CHANGED_EVENT, onChanged);
-   }, [load]);
+      window.addEventListener(ISSUE_CHANGED_EVENT, reload);
+      return () => {
+         window.removeEventListener(ISSUE_CHANGED_EVENT, reload);
+         if (timer.current) clearTimeout(timer.current);
+      };
+   }, [reload]);
 
    // Só as pendentes e com algo a dizer (o heurístico sem duplicata não vira card).
    const pending = suggestions.filter(
