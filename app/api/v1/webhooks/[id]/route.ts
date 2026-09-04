@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { db } from '@/db';
 import { handle, requireEmail } from '@/lib/api/http';
+import { isAdmin } from '@/lib/api/auth';
+import { ApiError } from '@/lib/api/errors';
 import { ok, notFound } from '@/lib/api/response';
 import { getOrCreateUser } from '@/lib/api/users';
 import { recordAudit } from '@/lib/api/audit';
@@ -23,7 +25,8 @@ const patchSchema = z.object({
 /** PATCH /webhooks/{id} — edita URL/eventos ou liga/desliga. */
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
    return handle(async () => {
-      await requireEmail(req);
+      const email = await requireEmail(req);
+      if (!(await isAdmin(email, db))) throw new ApiError(403, 'Apenas admin');
       const { id } = await ctx.params;
       const body = patchSchema.parse(await req.json());
       const updated = await updateWebhook(db, id, {
@@ -38,6 +41,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
    return handle(async () => {
       const email = await requireEmail(req);
+      if (!(await isAdmin(email, db))) throw new ApiError(403, 'Apenas admin');
       const { id } = await ctx.params;
       if (!(await deleteWebhook(db, id))) return notFound('Webhook não encontrado');
       const actor = await getOrCreateUser(db, email);
