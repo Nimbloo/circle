@@ -66,6 +66,7 @@ import type {
    UpdateAutomationInput,
 } from '@/lib/api/automations';
 import type { SearchEntityType, SearchGroup, SearchItem, SearchResult } from '@/lib/api/search';
+import type { AcceptTriageInput, TriageSuggestionDto } from '@/lib/api/triage';
 
 export type { SearchEntityType, SearchGroup, SearchItem, SearchResult };
 
@@ -561,5 +562,25 @@ export const api = {
          patch<TeamAutomationDto>(`/teams/${teamKey}/automations/${id}`, body),
       remove: (teamKey: string, id: string) =>
          del<{ deleted: boolean }>(`/teams/${teamKey}/automations/${id}`),
+   },
+
+   /** Triage com IA (#94): sugestão por issue e a fila do time. */
+   triage: {
+      /** Sugestão da issue (gera na hora se ainda não existir). */
+      suggestion: (issueId: string) =>
+         get<TriageSuggestionDto>(`/issues/${encodeURIComponent(issueId)}/triage-suggestion`),
+      /** Sugestões já prontas da fila do time; as que faltam são geradas em background. */
+      queue: (teamKey: string) =>
+         get<TriageSuggestionDto[]>(`/teams/${encodeURIComponent(teamKey)}/triage-suggestions`),
+      accept: (issueId: string, input: AcceptTriageInput = {}) =>
+         post<TriageSuggestionDto>(
+            `/issues/${encodeURIComponent(issueId)}/triage-suggestion/accept`,
+            input
+         ),
+      dismiss: (issueId: string) =>
+         post<TriageSuggestionDto>(
+            `/issues/${encodeURIComponent(issueId)}/triage-suggestion/dismiss`,
+            {}
+         ),
    },
 };

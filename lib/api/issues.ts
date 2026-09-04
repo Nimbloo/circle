@@ -34,6 +34,7 @@ import {
    cycle as cycleT,
    projectMilestone as projectMilestoneT,
    attachment as attachmentT,
+   issueTriageSuggestion as issueTriageSuggestionT,
 } from '@/db/schema';
 import { issueAttachmentUrls, removeAttachmentObjects } from './attachments';
 import { applySla } from './slas';
@@ -677,11 +678,15 @@ export async function createIssue(
    });
 
    // Automações do time (#97): issue que nasce em Triage.
-   if (startCat === 'triage')
+   if (startCat === 'triage') {
       await runAutomations(db, 'issue.created_in_triage', id, {
          actorId: actor.id,
          actorEmail,
       });
+      // Sugestão de triagem (#94): assíncrona, fora do caminho da mutação. Import
+      // dinâmico porque `triage.ts` alcança `agent.ts`, que importa ESTE módulo.
+      void import('./triage').then((m) => m.scheduleTriageSuggestion(db, id));
+   }
 
    publish({ entity: 'issue', action: 'created', id, actorEmail });
    // O rollup do pai mudou (nova filha) → o board atualiza a linha dele.
@@ -998,6 +1003,11 @@ export async function updateIssue(
          toCategory: nextCategory,
       });
 
+   // Sugestão de triagem (#94): a issue ENTROU na fila agora. Assíncrona (import
+   // dinâmico: `triage.ts` alcança `agent.ts`, que importa ESTE módulo).
+   if (nextCategory === 'triage' && prevCategory !== 'triage')
+      void import('./triage').then((m) => m.scheduleTriageSuggestion(db, id));
+
    publish({ entity: 'issue', action: 'updated', id, actorEmail });
    // Rollup dos pais (antigo e novo) mudou quando a issue trocou de pai ou de status.
    const parentsToRefresh = new Set<string>();
@@ -1156,6 +1166,7 @@ export async function deleteIssue(db: Db, id: string): Promise<boolean> {
       await tx.delete(issueAssignee).where(eq(issueAssignee.issueId, id));
       await tx.delete(issueSubscription).where(eq(issueSubscription.issueId, id));
       await tx.delete(issueContent).where(eq(issueContent.issueId, id));
+      await tx.delete(issueTriageSuggestionT).where(eq(issueTriageSuggestionT.issueId, id));
       await tx.delete(attachmentT).where(eq(attachmentT.issueId, id));
       await tx.delete(issue).where(eq(issue.id, id));
    });
