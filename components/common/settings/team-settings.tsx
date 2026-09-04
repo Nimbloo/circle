@@ -393,7 +393,9 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
                   <SettingsRow
                      icon={<Workflow className="size-4" />}
                      title="Workflows & automations"
-                     description="Manage issue automations, git workflows and other workflows"
+                     description="SLAs por prioridade e regras de automação do time"
+                     chevron
+                     onClick={() => router.push(`/${orgId}/settings/teams/${team.id}/workflows`)}
                   />
                   <SettingsRow
                      icon={<CornerLeftUp className="size-4" />}

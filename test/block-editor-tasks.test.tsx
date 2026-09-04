@@ -282,6 +282,49 @@ describe('BlockEditor — task item → sub-issue (com contexto de issue)', () =
       });
    });
 
+   it('sub-issue concluída regrava o atributo `checked` do item vinculado (projeção acompanha)', async () => {
+      const linked: EditorDoc = {
+         type: 'doc',
+         content: [
+            {
+               type: 'taskList',
+               content: [
+                  {
+                     type: 'taskItem',
+                     attrs: { checked: false },
+                     content: [
+                        {
+                           type: 'paragraph',
+                           content: [{ type: 'issueRef', attrs: { identifier: 'ENG-9' } }],
+                        },
+                     ],
+                  },
+               ],
+            },
+         ],
+      };
+      const onChange = vi.fn();
+      const { editor } = await mount({ doc: linked, context: CONTEXT, onChange });
+      await act(async () => {
+         await useIssuesStore.getState().applyRemote(SUB_ISSUE_DTO.id);
+      });
+      expect(docToText(json(editor))).toBe('- [ ] ENG-9');
+
+      act(() => {
+         useIssuesStore.setState((s) => ({
+            issues: s.issues.map((i) => (i.id === 'i9' ? { ...i, status: completed } : i)),
+         }));
+      });
+      // O atributo do nó (e não só o visual) passa a ser `true` → `- [x] ENG-9`.
+      await waitFor(() => expect(docToText(json(editor))).toBe('- [x] ENG-9'));
+      expect(onChange).toHaveBeenCalled();
+
+      // Editor read-only NÃO regrava o doc (documento de outra pessoa/preview).
+      const readOnly = await mount({ doc: linked, context: CONTEXT, editable: false });
+      await new Promise((r) => setTimeout(r, 0));
+      expect(docToText(json(readOnly.editor))).toBe('- [ ] ENG-9');
+   });
+
    it('falha da API mantém o item e mostra toast de erro', async () => {
       apiMocks.create.mockRejectedValue(new Error('boom'));
       const { container } = await mount({ doc: CHECKLIST, context: CONTEXT });
