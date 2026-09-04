@@ -9,6 +9,7 @@ export type SidebarItemKey =
    | 'reviews'
    | 'my-issues'
    | 'initiatives'
+   | 'roadmap'
    | 'projects'
    | 'views'
    | 'teams'
@@ -40,6 +41,7 @@ const DEFAULT_VISIBILITY: Record<SidebarItemKey, SidebarVisibility> = {
    'reviews': 'always',
    'my-issues': 'always',
    'initiatives': 'always',
+   'roadmap': 'always',
    'projects': 'always',
    'views': 'always',
    'teams': 'always',
@@ -53,7 +55,7 @@ const DEFAULT_VISIBILITY: Record<SidebarItemKey, SidebarVisibility> = {
  */
 const DEFAULT_ORDER: Record<SidebarSection, SidebarItemKey[]> = {
    personal: ['inbox', 'reviews', 'my-issues'],
-   workspace: ['initiatives', 'projects', 'views', 'teams', 'members'],
+   workspace: ['initiatives', 'roadmap', 'projects', 'views', 'teams', 'members'],
 };
 
 export const useSidebarPrefsStore = create<SidebarPrefsState>()(
