@@ -23,7 +23,11 @@ vi.mock('nuqs', () => ({
 }));
 
 vi.mock('@/lib/client', () => ({
-   api: { initiatives: { update: vi.fn(), get: vi.fn(), activity: vi.fn(async () => []) } },
+   api: {
+      initiatives: { update: vi.fn(), get: vi.fn(), activity: vi.fn(async () => []) },
+      // O painel também monta o histórico de progresso agregado (#102).
+      projectSnapshots: { forInitiative: vi.fn(async () => []) },
+   },
 }));
 
 function initiative(
