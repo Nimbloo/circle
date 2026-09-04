@@ -4,6 +4,7 @@ import { emailFromRequest } from './auth';
 import { assertActiveEmail } from './users';
 import { problem } from './response';
 import { ApiError } from './errors';
+import { captureServerError } from './observe-error';
 import { observeHttp } from '@/lib/metrics';
 import type { IssueListOptions } from './issues';
 
@@ -106,6 +107,9 @@ export async function handle(fn: () => Promise<Response>, req?: Request): Promis
             res = dbMapped;
          } else {
             console.error(`[circle-api]${reqTag(req)} erro não tratado:`, e);
+            // O ProblemDetail abaixo faz o erro "sumir" antes do onRequestError do Next
+            // — sem esta linha nenhum 5xx da API chega ao Sentry (auditoria v0.29.0).
+            captureServerError(e, req);
             res = problem(500, 'Internal Server Error');
          }
       }

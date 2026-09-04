@@ -17,9 +17,11 @@ type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 export interface BurnupPoint {
    date: string;
-   scope: number;
-   started: number;
-   completed: number;
+   /** null = dia SEM medição (lacuna no gráfico). Ver `buildBurnup`. */
+   scope: number | null;
+   started: number | null;
+   completed: number | null;
+   /** Referência calculada (não é medição): sempre presente. */
    ideal: number;
 }
 
@@ -116,11 +118,16 @@ function daysBetween(from: string, to: string): string[] {
 
 /**
  * Curva de burn-up DIÁRIA. Com >= 2 snapshots (`cycle_snapshot`, gravados no rollover
- * e no GET do detalhe) a série vem deles — scope, started e completed REAIS por dia,
- * interpolando linearmente os dias sem snapshot (dias sem acesso) e segurando o
- * primeiro/último valor fora do intervalo gravado. Sem histórico suficiente cai no
- * sintético: `started`/`completed` reconstruídos de `issue.startedAt`/`completedAt` e
- * `scope` PLANO (não há registro de quando a issue entrou no ciclo).
+ * e no GET do detalhe) a série vem deles — scope, started e completed REAIS por dia.
+ *
+ * Dia sem snapshot vira LACUNA (`null`), não reta: antes os dias sem medição eram
+ * interpolados linearmente, e um ciclo sem acesso por 15 dias desenhava uma cadência
+ * diária que nunca existiu (e "segurava" o primeiro/último valor para fora do intervalo
+ * medido). O gráfico corta a linha na lacuna e marca com ponto o que foi medido.
+ *
+ * Sem histórico suficiente cai no sintético: `started`/`completed` reconstruídos de
+ * `issue.startedAt`/`completedAt` e `scope` PLANO (não há registro de quando a issue
+ * entrou no ciclo) — aí todo dia tem valor, porque cada dia É calculado dos marcos.
  *
  * O sintético é enviesado por sobrevivência em ciclos passados: issue que saiu do
  * ciclo já não aponta para ele e some da série. Aceitável para tendência.
@@ -141,11 +148,17 @@ function buildBurnup(
    const ideal = (idx: number) => (span === 0 ? agg.scope : Math.round((agg.scope * idx) / span));
 
    if (snapshots.length >= 2) {
-      return days.map((date, idx) => ({
-         date,
-         ...interpolate(snapshots, date),
-         ideal: ideal(idx),
-      }));
+      const byDate = new Map(snapshots.map((s) => [s.date, s]));
+      return days.map((date, idx) => {
+         const snap = byDate.get(date);
+         return {
+            date,
+            scope: snap?.scope ?? null,
+            started: snap?.started ?? null,
+            completed: snap?.completed ?? null,
+            ideal: ideal(idx),
+         };
+      });
    }
 
    const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
@@ -161,32 +174,6 @@ function buildBurnup(
       }
       return { date, scope: agg.scope, started, completed, ideal: ideal(idx) };
    });
-}
-
-type Metrics = Pick<SnapshotRow, 'scope' | 'started' | 'completed'>;
-
-/** Valor de `date` a partir dos snapshots (ordenados por data): clamp nas pontas, lerp no meio. */
-function interpolate(snapshots: SnapshotRow[], date: string): Metrics {
-   const pick = ({ scope, started, completed }: SnapshotRow): Metrics => ({
-      scope,
-      started,
-      completed,
-   });
-   if (date <= snapshots[0].date) return pick(snapshots[0]);
-   const lastSnap = snapshots[snapshots.length - 1];
-   if (date >= lastSnap.date) return pick(lastSnap);
-   let i = 0;
-   while (snapshots[i + 1].date <= date) i++;
-   const a = snapshots[i];
-   const b = snapshots[i + 1];
-   if (a.date === date) return pick(a);
-   const t = diffDays(a.date, date) / diffDays(a.date, b.date);
-   const lerp = (x: number, y: number) => Math.round(x + (y - x) * t);
-   return {
-      scope: lerp(a.scope, b.scope),
-      started: lerp(a.started, b.started),
-      completed: lerp(a.completed, b.completed),
-   };
 }
 
 function toDto(row: CycleRow, agg: Agg, snapshots: SnapshotRow[], today: string): CycleDto {

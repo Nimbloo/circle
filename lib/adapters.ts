@@ -83,7 +83,7 @@ function adaptProject(p: ProjectRef): Project {
 }
 
 /** IssueDto (backend) -> Issue (frontend, com ícones dos catálogos). */
-export function adaptIssue(dto: IssueDto): Issue {
+export function adaptIssue(dto: IssueDto & { slaDueAt?: string | null }): Issue {
    return {
       id: dto.id,
       identifier: dto.identifier,
@@ -107,6 +107,10 @@ export function adaptIssue(dto: IssueDto): Issue {
       parentIdentifier: dto.parentIdentifier ?? null,
       snoozedUntil: dto.snoozedUntil,
       slaAppliedAt: dto.slaAppliedAt ?? null,
+      // `slaDueAt` ainda não faz parte do `IssueDto` (o mapeamento vive em
+      // `lib/api/issues.ts`, fora deste grupo do hardening). Enquanto não vier, o
+      // indicador cai no fim do dia do `dueDate` — o comportamento anterior.
+      slaDueAt: dto.slaDueAt ?? null,
       createdById: dto.createdBy?.id ?? undefined,
    };
 }

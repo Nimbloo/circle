@@ -14,6 +14,7 @@ export function slaStateOf(issue: Issue, now?: Date): SlaState {
    return slaState(
       {
          dueDate: issue.dueDate ?? null,
+         slaDueAt: issue.slaDueAt ?? null,
          slaAppliedAt: issue.slaAppliedAt ?? null,
          statusCategory: issue.status.category,
       },

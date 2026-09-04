@@ -485,11 +485,17 @@ export async function sweepWebhookDeliveries(
    const locked = await tryLock(db);
    if (locked === false) return 0; // outro pod está varrendo
    try {
+      // O lote SÓ pega entrega de webhook LIGADO. Sem este filtro, entregas presas de um
+      // webhook desabilitado entopem o lote de 50 (ordenado por createdAt asc) e o
+      // `continue` abaixo as pula sem consumi-las — o retry de TODOS os outros webhooks
+      // morre para sempre. Medido na auditoria com 60 entregas falhadas.
       const due = await db
          .select()
          .from(webhookDelivery)
+         .innerJoin(webhookT, eq(webhookT.id, webhookDelivery.webhookId))
          .where(
             and(
+               eq(webhookT.enabled, true),
                inArray(webhookDelivery.status, ['pending', 'failed']),
                or(
                   isNull(webhookDelivery.nextAttemptAt),
@@ -501,17 +507,11 @@ export async function sweepWebhookDeliveries(
          .limit(limit);
       if (due.length === 0) return 0;
 
-      const hookIds = [...new Set(due.map((d) => d.webhookId))];
-      const hooks = await db.select().from(webhookT).where(inArray(webhookT.id, hookIds));
-      const byId = new Map(hooks.map((h) => [h.id, h]));
-
       let tried = 0;
-      for (const d of due) {
-         const hook = byId.get(d.webhookId);
-         // Webhook desligado depois do enfileiramento: não insiste, mas também não perde
-         // o registro — fica pendente até religarem.
-         if (!hook || !hook.enabled) continue;
-         await attemptDelivery(db, d, hook, fetchImpl);
+      // O join já garante `enabled`; a entrega de webhook desligado continua no banco,
+      // pendente, e volta ao lote assim que religarem.
+      for (const row of due) {
+         await attemptDelivery(db, row.webhook_delivery, row.webhook, fetchImpl);
          tried++;
       }
       return tried;
@@ -532,18 +532,21 @@ export function eventNameFor(e: Pick<CircleEvent, 'entity' | 'action'>): Webhook
 }
 
 /**
- * Chamado por `publish` (fire-and-forget). Monta o payload, enfileira/dispara e aproveita
- * a passagem para varrer as entregas vencidas — é o "sweep a cada publish" da spec.
+ * Chamado por `publish` (fire-and-forget). Monta o payload, enfileira/dispara e — SÓ
+ * quando o evento realmente criou entrega — aproveita a passagem para varrer as
+ * vencidas. Varrer a cada `publish` custava ~5 queries por mutação em workspace sem
+ * webhook nenhum; sem assinante não há fila para varrer.
  */
 export async function onCircleEvent(db: Db, event: CircleEvent): Promise<void> {
    const name = eventNameFor(event);
    if (!name) return;
-   await dispatchEvent(db, name, {
+   const delivered = await dispatchEvent(db, name, {
       entity: event.entity,
       action: event.action,
       id: event.id ?? null,
       actorEmail: event.actorEmail ?? null,
       occurredAt: new Date().toISOString(),
    });
+   if (delivered.length === 0) return;
    await sweepWebhookDeliveries(db);
 }

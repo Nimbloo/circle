@@ -52,8 +52,16 @@ export function ProjectSnapshotChart({
    }
 
    const max = Math.max(1, ...points.map((p) => p.scope));
-   const stepX = 100 / (points.length - 1);
-   const xOf = (index: number) => index * stepX;
+   // Eixo X por DATA, não por índice: os snapshots não são diários (só existem nos dias
+   // em que houve acesso), e espaçar por índice espremia uma semana de silêncio no mesmo
+   // passo de um dia — o gráfico mentia sobre o ritmo.
+   const dayOf = (iso: string) => Date.parse(`${iso}T00:00:00Z`) / 86_400_000;
+   const first = dayOf(points[0].date);
+   const span = dayOf(points[points.length - 1].date) - first;
+   const xOf = (index: number) =>
+      span <= 0
+         ? (index * 100) / (points.length - 1)
+         : ((dayOf(points[index].date) - first) / span) * 100;
    const yOf = (value: number) => 100 - (value / max) * 100;
    const pathOf = (key: (typeof SERIES)[number]['key']) =>
       points
@@ -110,20 +118,26 @@ export function ProjectSnapshotChart({
                )}
             </svg>
 
-            {/* Faixas de hover: uma coluna por dia, para o tooltip do ponto. */}
-            <div className="absolute inset-0 flex" onMouseLeave={() => setHovered(null)}>
-               {points.map((point, index) => (
-                  <button
-                     key={point.date}
-                     type="button"
-                     aria-label={`${shortDay(point.date)}: scope ${point.scope}, started ${point.started}, completed ${point.completed}`}
-                     data-testid={`snapshot-point-${point.date}`}
-                     onMouseEnter={() => setHovered(index)}
-                     onFocus={() => setHovered(index)}
-                     onBlur={() => setHovered(null)}
-                     className="h-full flex-1 cursor-default outline-none"
-                  />
-               ))}
+            {/* Faixas de hover: uma por medição, alinhada ao X do ponto (que é por data). */}
+            <div className="absolute inset-0" onMouseLeave={() => setHovered(null)}>
+               {points.map((point, index) => {
+                  const left = index === 0 ? 0 : (xOf(index - 1) + xOf(index)) / 2;
+                  const right =
+                     index === points.length - 1 ? 100 : (xOf(index) + xOf(index + 1)) / 2;
+                  return (
+                     <button
+                        key={point.date}
+                        type="button"
+                        aria-label={`${shortDay(point.date)}: scope ${point.scope}, started ${point.started}, completed ${point.completed}`}
+                        data-testid={`snapshot-point-${point.date}`}
+                        onMouseEnter={() => setHovered(index)}
+                        onFocus={() => setHovered(index)}
+                        onBlur={() => setHovered(null)}
+                        className="absolute top-0 h-full cursor-default outline-none"
+                        style={{ left: `${left}%`, width: `${right - left}%` }}
+                     />
+                  );
+               })}
             </div>
 
             {active && (

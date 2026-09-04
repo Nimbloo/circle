@@ -30,6 +30,11 @@ interface CycleBurnupChartProps {
 /**
  * Linear-style burn-up chart: gray scope line, yellow started line,
  * indigo completed area and a dashed ideal line.
+ *
+ * As séries medidas (scope/started/completed) podem trazer `null` num dia sem
+ * snapshot. `connectNulls={false}` corta a linha ali — a lacuna aparece como lacuna, em
+ * vez de virar uma reta que sugere uma cadência que não houve. Por isso os pontos
+ * medidos ganham `dot`: uma medição isolada entre lacunas precisa ser visível.
  */
 export function CycleBurnupChart({ cycle, height = 210, compact = false }: CycleBurnupChartProps) {
    const data = cycle.burnup ?? [];
@@ -95,7 +100,8 @@ export function CycleBurnupChart({ cycle, height = 210, compact = false }: Cycle
                name="Scope"
                stroke={COLORS.scope}
                strokeWidth={1.5}
-               dot={false}
+               dot={{ r: 1.5, strokeWidth: 0, fill: COLORS.scope }}
+               connectNulls={false}
                isAnimationActive={false}
             />
             <Line
@@ -104,7 +110,8 @@ export function CycleBurnupChart({ cycle, height = 210, compact = false }: Cycle
                name="Started"
                stroke={COLORS.started}
                strokeWidth={1.5}
-               dot={false}
+               dot={{ r: 1.5, strokeWidth: 0, fill: COLORS.started }}
+               connectNulls={false}
                isAnimationActive={false}
             />
             <Area
@@ -113,6 +120,8 @@ export function CycleBurnupChart({ cycle, height = 210, compact = false }: Cycle
                name="Completed"
                stroke={COLORS.completed}
                strokeWidth={1.75}
+               dot={{ r: 1.5, strokeWidth: 0, fill: COLORS.completed }}
+               connectNulls={false}
                fill={`url(#completed-fill-${cycle.id})`}
                isAnimationActive={false}
             />
