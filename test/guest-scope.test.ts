@@ -29,6 +29,8 @@ import { GET as teamDocumentsRoute } from '@/app/api/v1/teams/[teamKey]/document
 import { GET as teamMembersRoute } from '@/app/api/v1/teams/[teamKey]/members/route';
 import { GET as teamCyclesRoute } from '@/app/api/v1/teams/[teamKey]/cycles/route';
 import { GET as favoritesRoute } from '@/app/api/v1/favorites/route';
+import { GET as searchRoute } from '@/app/api/v1/search/route';
+import { GET as teamTriageRoute } from '@/app/api/v1/teams/[teamKey]/triage-suggestions/route';
 import { GET as listMembersRoute } from '@/app/api/v1/members/route';
 import { GET as listTeamsRoute } from '@/app/api/v1/teams/route';
 import { GET as getTeamRoute } from '@/app/api/v1/teams/[teamKey]/route';
@@ -502,6 +504,37 @@ describe('escopo de Guest nas rotas de ESCRITA', () => {
       ).toBe(403);
       expect(status(await issueActivityRoute(req(`${url}/activity`, GUEST), p))).toBe(403);
       expect(status(await issueAttachmentsRoute(req(`${url}/attachments`, GUEST), p))).toBe(403);
+   });
+
+   it('busca não devolve nada de time fora do escopo, nem com ?teamId= dirigido', async () => {
+      // ERA O ACHADO PRINCIPAL DA AUDITORIA e passou batido em três levas: a rota só
+      // chamava `requireEmail`, então o convidado lia título e snippet do workspace todo.
+      const body = async (r: Response) => {
+         const json = await r.json();
+         if (!json.data) throw new Error(`busca falhou: ${r.status} ${JSON.stringify(json)}`);
+         return json.data;
+      };
+      const livre = await body(await searchRoute(req('http://x/api/v1/search?q=secret', GUEST)));
+      const ids = livre.groups.flatMap((g: { items: { id: string }[] }) =>
+         g.items.map((i) => i.id)
+      );
+      expect(ids).not.toContain(ids.secretIssue);
+      expect(ids).not.toContain(ids.secretProject);
+
+      const dirigido = await body(
+         await searchRoute(req('http://x/api/v1/search?q=secret&teamId=SECRET', GUEST))
+      );
+      expect(dirigido.groups.flatMap((g: { items: unknown[] }) => g.items)).toEqual([]);
+   });
+
+   it('fila de triagem de time alheio: 403', async () => {
+      expect(
+         status(
+            await teamTriageRoute(req('http://x/api/v1/teams/SECRET/triage-suggestions', GUEST), {
+               params: Promise.resolve({ teamKey: 'SECRET' }),
+            })
+         )
+      ).toBe(403);
    });
 
    it('leituras por time (documentos, membros, cycles) e por id (view): 403', async () => {

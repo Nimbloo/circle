@@ -1,6 +1,7 @@
 import { db } from '@/db';
 import { ok } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
+import { assertTeamInScope, scopeForEmail } from '@/lib/api/scope';
 import { listTeamTriageSuggestions } from '@/lib/api/triage';
 
 export const runtime = 'nodejs';
@@ -15,8 +16,11 @@ type Params = { params: Promise<{ teamKey: string }> };
  */
 export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
-      await requireEmail(req);
+      const email = await requireEmail(req);
       const { teamKey } = await params;
+      // Fila de triagem é do time: sem gate um convidado lia (e disparava a geração de)
+      // sugestões de qualquer time (#100).
+      assertTeamInScope((await scopeForEmail(db, email)).teamIds, teamKey);
       return ok(await listTeamTriageSuggestions(db, teamKey));
    }, req);
 }
