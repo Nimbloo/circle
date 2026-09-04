@@ -234,6 +234,25 @@ describe('Gráfico de progresso no tempo (#102)', () => {
       expect(screen.getAllByText('Mar 3').length).toBeGreaterThan(0);
    });
 
+   it('espaça os pontos por DATA, não por índice (lacuna vira distância)', () => {
+      const { container } = render(
+         <ProjectSnapshotChart
+            points={[
+               { date: '2026-03-01', scope: 10, started: 0, completed: 0 },
+               { date: '2026-03-02', scope: 10, started: 0, completed: 2 },
+               // 8 dias sem medição: o ponto final fica LONGE, não no passo seguinte.
+               { date: '2026-03-11', scope: 10, started: 0, completed: 9 },
+            ]}
+         />
+      );
+      const path = container.querySelector('path')!.getAttribute('d')!;
+      const xs = [...path.matchAll(/[ML] ([\d.]+) /g)].map((m) => Number(m[1]));
+      // Por índice seriam 0, 50 e 100; por data, 1 de 10 dias = 10%.
+      expect(xs[0]).toBe(0);
+      expect(xs[1]).toBeCloseTo(10, 5);
+      expect(xs[2]).toBe(100);
+   });
+
    it('com menos de 2 pontos não inventa tendência', () => {
       render(
          <ProjectSnapshotChart

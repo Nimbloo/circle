@@ -299,6 +299,8 @@ async function loadCandidates(db: Db, teamId: string, selfId: string): Promise<C
  * Bedrock, JSON inválido ou credencial ausente caem no heurístico com `source`
  * honesto. Publica `issue updated` para o card aparecer sem refresh.
  */
+const inFlight = new Map<string, Promise<TriageSuggestionDto | null>>();
+
 export async function generateTriageSuggestion(
    db: Db,
    issueId: string,
@@ -314,8 +316,6 @@ export async function generateTriageSuggestion(
    inFlight.set(issueId, run);
    return run;
 }
-
-const inFlight = new Map<string, Promise<TriageSuggestionDto | null>>();
 
 async function generateOnce(
    db: Db,
