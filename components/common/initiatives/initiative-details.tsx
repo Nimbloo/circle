@@ -40,6 +40,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import type { InitiativeUpdateDto } from '@/lib/api/initiative-detail';
 import type { InitiativeActivityDto } from '@/lib/api/initiatives';
+import { ProgressHistory } from '@/components/common/projects/progress-history';
 import { InitiativeProgressPanel } from './initiative-progress-panel';
 import { InitiativeProjectRow } from './initiative-project-row';
 import { InitiativeStatusIcon } from './initiative-status-icon';
@@ -652,6 +653,13 @@ function InitiativeSidePanelContent({ initiative }: { initiative: Initiative }) 
          {initiative.projectIds.length > 0 && (
             <div className="rounded-[10px] border bg-card p-3">
                <InitiativeProgressPanel initiative={initiative} />
+            </div>
+         )}
+
+         {/* Histórico agregado da subárvore (#102): soma os snapshots dos projetos. */}
+         {(initiative.projectIds.length > 0 || initiative.childIds.length > 0) && (
+            <div className="rounded-[10px] border bg-card p-3">
+               <ProgressHistory initiativeId={initiative.id} />
             </div>
          )}
 

@@ -1059,6 +1059,29 @@ export const issueImport = pgTable(
    ]
 );
 
+// ── Roadmap: dependências entre projetos e histórico de progresso (#102) ──
+/**
+ * "Depends on": `projectId` depende de `dependsOnId`. A guarda de ciclo é app-level
+ * (`lib/api/project-dependencies.ts`), como a de `team.parent_id`/`initiative.parent_id`
+ * — o grafo é pequeno e a travessia roda em memória.
+ */
+export const projectDependency = pgTable(
+   'project_dependency',
+   {
+      projectId: varchar('project_id', { length: 36 })
+         .notNull()
+         .references(() => project.id),
+      dependsOnId: varchar('depends_on_id', { length: 36 })
+         .notNull()
+         .references(() => project.id),
+      createdAt: timestamp('created_at').notNull().defaultNow(),
+   },
+   (t) => [
+      primaryKey({ columns: [t.projectId, t.dependsOnId] }),
+      index('idx_project_dependency_depends_on').on(t.dependsOnId),
+   ]
+);
+
 /**
  * Token da API pública (`/api/public/v1/*`). Guardamos só o HASH (SHA-256) — o token
  * em claro (`circle_<random>`) é mostrado UMA vez na criação e nunca mais. `prefix`
@@ -1121,4 +1144,23 @@ export const webhookDelivery = pgTable(
       index('idx_webhook_delivery_hook').on(t.webhookId, t.createdAt),
       index('idx_webhook_delivery_pending').on(t.status, t.nextAttemptAt),
    ]
+);
+
+/**
+ * Snapshot diário do projeto (#102): matéria-prima do gráfico de progresso no tempo.
+ * Sem job — o upsert do dia acontece no boot do workspace, no GET do roadmap e no GET
+ * da própria série (mesmo padrão idempotente de `cycle_snapshot`).
+ */
+export const projectSnapshot = pgTable(
+   'project_snapshot',
+   {
+      projectId: varchar('project_id', { length: 36 })
+         .notNull()
+         .references(() => project.id, { onDelete: 'cascade' }),
+      date: date('date').notNull(),
+      scope: integer('scope').notNull(),
+      started: integer('started').notNull(),
+      completed: integer('completed').notNull(),
+   },
+   (t) => [primaryKey({ columns: [t.projectId, t.date] })]
 );

@@ -8,6 +8,7 @@ import {
    LayoutList,
    LucideIcon,
    MoreHorizontal,
+   Route,
    UserRound,
 } from 'lucide-react';
 
@@ -46,6 +47,7 @@ interface WorkspaceNavItem {
 
 const WORKSPACE_NAV: WorkspaceNavItem[] = [
    { key: 'initiatives', name: 'Initiatives', icon: Compass, url: '/initiatives' },
+   { key: 'roadmap', name: 'Roadmap', icon: Route, url: '/roadmap' },
    { key: 'projects', name: 'Projects', icon: Box, url: '/projects' },
    { key: 'views', name: 'Views', icon: Layers, url: '/views' },
    { key: 'teams', name: 'Teams', icon: ContactRound, url: '/teams' },

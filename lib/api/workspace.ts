@@ -15,6 +15,7 @@ import { listViews, type ViewDto } from './views';
 import { listCyclesForTeams, rolloverCyclesForTeam, type CycleDto } from './cycles';
 import { getMe, type MeDto } from './users';
 import { visibleTeamIds } from './scope';
+import { snapshotProjects } from './project-snapshots';
 
 export interface TeamFull extends TeamDto {
    members: MemberDto[];
@@ -109,6 +110,12 @@ export async function bootstrapWorkspace(
    const teamIds = teams.map((t) => t.id);
    if (opts.rollover !== false) {
       await Promise.all(teamIds.map((id) => rolloverCyclesForTeam(db, id)));
+      // Roadmap (#102): o snapshot diário do projeto também é lazy — o boot grava o
+      // dia (upsert idempotente) para o gráfico de progresso ter história sem job.
+      await snapshotProjects(
+         db,
+         projects.map((p) => p.id)
+      );
    }
 
    // cycles de todos os times — 2 queries no total (era N+1: 1 chamada por time,

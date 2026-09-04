@@ -28,6 +28,7 @@ import {
    Inbox,
    Layers,
    LucideIcon,
+   Route,
    UserRound,
 } from 'lucide-react';
 import { useRef, useState } from 'react';
@@ -48,6 +49,7 @@ export const PERSONAL_ITEMS: ItemConfig[] = [
 
 export const WORKSPACE_ITEMS: ItemConfig[] = [
    { key: 'initiatives', label: 'Initiatives', icon: Compass },
+   { key: 'roadmap', label: 'Roadmap', icon: Route },
    { key: 'projects', label: 'Projects', icon: Box },
    { key: 'views', label: 'Views', icon: Layers },
    { key: 'teams', label: 'Teams', icon: ContactRound },

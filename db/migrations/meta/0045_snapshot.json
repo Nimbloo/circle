@@ -1,5 +1,5 @@
 {
-   "id": "5498fded-f753-4ea6-92da-994cbb7b9425",
+   "id": "8aed5361-02d0-4506-9d94-a9beff6526ed",
    "prevId": "6e6657bd-80bf-471c-9fbd-c12a24ee31fa",
    "version": "7",
    "dialect": "postgresql",
@@ -3221,6 +3221,78 @@
          "checkConstraints": {},
          "isRLSEnabled": false
       },
+      "public.project_dependency": {
+         "name": "project_dependency",
+         "schema": "",
+         "columns": {
+            "project_id": {
+               "name": "project_id",
+               "type": "varchar(36)",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "depends_on_id": {
+               "name": "depends_on_id",
+               "type": "varchar(36)",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "created_at": {
+               "name": "created_at",
+               "type": "timestamp",
+               "primaryKey": false,
+               "notNull": true,
+               "default": "now()"
+            }
+         },
+         "indexes": {
+            "idx_project_dependency_depends_on": {
+               "name": "idx_project_dependency_depends_on",
+               "columns": [
+                  {
+                     "expression": "depends_on_id",
+                     "isExpression": false,
+                     "asc": true,
+                     "nulls": "last"
+                  }
+               ],
+               "isUnique": false,
+               "concurrently": false,
+               "method": "btree",
+               "with": {}
+            }
+         },
+         "foreignKeys": {
+            "project_dependency_project_id_project_id_fk": {
+               "name": "project_dependency_project_id_project_id_fk",
+               "tableFrom": "project_dependency",
+               "tableTo": "project",
+               "columnsFrom": ["project_id"],
+               "columnsTo": ["id"],
+               "onDelete": "no action",
+               "onUpdate": "no action"
+            },
+            "project_dependency_depends_on_id_project_id_fk": {
+               "name": "project_dependency_depends_on_id_project_id_fk",
+               "tableFrom": "project_dependency",
+               "tableTo": "project",
+               "columnsFrom": ["depends_on_id"],
+               "columnsTo": ["id"],
+               "onDelete": "no action",
+               "onUpdate": "no action"
+            }
+         },
+         "compositePrimaryKeys": {
+            "project_dependency_project_id_depends_on_id_pk": {
+               "name": "project_dependency_project_id_depends_on_id_pk",
+               "columns": ["project_id", "depends_on_id"]
+            }
+         },
+         "uniqueConstraints": {},
+         "policies": {},
+         "checkConstraints": {},
+         "isRLSEnabled": false
+      },
       "public.project_detail": {
          "name": "project_detail",
          "schema": "",
@@ -3445,6 +3517,64 @@
             }
          },
          "compositePrimaryKeys": {},
+         "uniqueConstraints": {},
+         "policies": {},
+         "checkConstraints": {},
+         "isRLSEnabled": false
+      },
+      "public.project_snapshot": {
+         "name": "project_snapshot",
+         "schema": "",
+         "columns": {
+            "project_id": {
+               "name": "project_id",
+               "type": "varchar(36)",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "date": {
+               "name": "date",
+               "type": "date",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "scope": {
+               "name": "scope",
+               "type": "integer",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "started": {
+               "name": "started",
+               "type": "integer",
+               "primaryKey": false,
+               "notNull": true
+            },
+            "completed": {
+               "name": "completed",
+               "type": "integer",
+               "primaryKey": false,
+               "notNull": true
+            }
+         },
+         "indexes": {},
+         "foreignKeys": {
+            "project_snapshot_project_id_project_id_fk": {
+               "name": "project_snapshot_project_id_project_id_fk",
+               "tableFrom": "project_snapshot",
+               "tableTo": "project",
+               "columnsFrom": ["project_id"],
+               "columnsTo": ["id"],
+               "onDelete": "cascade",
+               "onUpdate": "no action"
+            }
+         },
+         "compositePrimaryKeys": {
+            "project_snapshot_project_id_date_pk": {
+               "name": "project_snapshot_project_id_date_pk",
+               "columns": ["project_id", "date"]
+            }
+         },
          "uniqueConstraints": {},
          "policies": {},
          "checkConstraints": {},
