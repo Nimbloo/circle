@@ -17,6 +17,11 @@ export interface ViewFilter {
    hasProject?: boolean;
    /** Only issues assigned to nobody. */
    unassigned?: boolean;
+   /**
+    * Saved search (#99): full-text term. Resolved SERVER-side (`/api/v1/search`),
+    * so the saved view lists exactly what the search screen showed.
+    */
+   q?: string;
 }
 
 export interface View {

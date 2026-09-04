@@ -6,6 +6,7 @@ import { getOrCreateUser } from './users';
 import { isAdmin } from './auth';
 import { listIssues, type IssueDto } from './issues';
 import { listProjects, type ProjectDto } from './projects';
+import { searchIssueIds } from './search';
 import { ApiError } from './errors';
 import { publish } from './events';
 
@@ -16,6 +17,11 @@ export interface ViewFilter {
    priorityIds?: string[];
    hasProject?: boolean;
    unassigned?: boolean;
+   /**
+    * Saved search (#99): termo full-text. A view resolve pelo MESMO motor da busca
+    * (`lib/api/search.ts`), então o resultado salvo é idêntico ao que a tela mostrou.
+    */
+   q?: string;
 }
 
 type ViewRow = typeof savedView.$inferSelect;
@@ -205,6 +211,19 @@ export async function resolveView(
          assignee: f.unassigned ? ['unassigned'] : undefined,
       });
       if (f.hasProject) issues = issues.filter((i) => i.project !== null);
+      if (f.q?.trim()) {
+         // Saved search: mesmo motor da busca. Os ids vêm ranqueados, e a ordem do
+         // ranking manda — os demais filtros da view continuam valendo por interseção.
+         const ranked = await searchIssueIds(db, {
+            q: f.q,
+            teamId: view.teamId ?? undefined,
+            limit: 100,
+         });
+         const position = new Map(ranked.map((id, i) => [id, i]));
+         issues = issues
+            .filter((i) => position.has(i.id))
+            .sort((a, b) => position.get(a.id)! - position.get(b.id)!);
+      }
       return { type: 'issue', issues };
    }
 

@@ -6,6 +6,7 @@ import type { Column, FiltersState } from '@/components/data-table-filter/core/t
 import { useIssueFilterColumns } from '@/components/common/issues/issue-filter-columns';
 import { useProjectFilterColumns } from '@/components/common/projects/project-filter-columns';
 import { projectViewFilterToFilters, viewFilterToFilters, View } from '@/data/views';
+import { Search } from 'lucide-react';
 import { useMemo } from 'react';
 
 function ChipsBar<TData>({
@@ -33,7 +34,25 @@ function IssueViewChips({ view }: { view: View }) {
    const filters = useMemo(() => viewFilterToFilters(view.filter), [view.filter]);
    // Options vêm dos catálogos (estáticas na config), então a lista de dados é irrelevante.
    const columns = useMemo(() => createColumns([], columnsConfig, 'client'), [columnsConfig]);
-   return <ChipsBar columns={columns} filters={filters} />;
+   // Saved search (#99): o termo não é uma coluna do filtro — vira um chip próprio,
+   // à esquerda dos demais, para a view salva dizer de onde veio o recorte.
+   const q = view.filter.q?.trim();
+   return (
+      <div className="flex w-auto items-center">
+         {q && (
+            <div
+               role="group"
+               aria-label="Search term"
+               className="ml-2 flex h-[46px] items-center gap-1.5 rounded-lg border bg-[var(--filter-bar)] px-2.5 text-sm"
+            >
+               <Search className="size-3.5 shrink-0 text-muted-foreground" />
+               <span className="text-muted-foreground">Search</span>
+               <span className="max-w-[220px] truncate font-medium">{q}</span>
+            </div>
+         )}
+         <ChipsBar columns={columns} filters={filters} />
+      </div>
+   );
 }
 
 function ProjectViewChips({ view }: { view: View }) {

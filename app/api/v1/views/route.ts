@@ -26,6 +26,8 @@ const FilterSchema = z.object({
    priorityIds: z.array(z.string()).optional(),
    hasProject: z.boolean().optional(),
    unassigned: z.boolean().optional(),
+   // Saved search (#99): termo full-text resolvido por `lib/api/search.ts`.
+   q: z.string().max(200).optional(),
 });
 
 const CreateSchema = z.object({

@@ -59,6 +59,18 @@ import type { InviteDto } from '@/lib/api/invites';
 import type { FavoriteDto, FavoriteEntityType } from '@/lib/api/favorites';
 import type { SlackConfigDto } from '@/lib/api/integrations/slack';
 import type { AttachmentDto } from '@/lib/api/attachments';
+import type { SearchEntityType, SearchGroup, SearchItem, SearchResult } from '@/lib/api/search';
+
+export type { SearchEntityType, SearchGroup, SearchItem, SearchResult };
+
+/** Parâmetros de `api.search.query` (espelha `SearchOptions` do servidor). */
+export interface SearchQueryOptions {
+   q: string;
+   types?: SearchEntityType[];
+   teamId?: string;
+   statusId?: string;
+   limit?: number;
+}
 
 /**
  * `parentId` é o contrato compartilhado da spec de sub-issues (cria a issue já vinculada
@@ -504,5 +516,18 @@ export const api = {
          del<{ deleted: boolean }>(
             `/reviews/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`
          ),
+   },
+
+   /** Busca full-text agrupada por tipo (#99). */
+   search: {
+      query: (opts: SearchQueryOptions) => {
+         const sp = new URLSearchParams();
+         sp.set('q', opts.q);
+         opts.types?.forEach((t) => sp.append('types', t));
+         if (opts.teamId) sp.set('teamId', opts.teamId);
+         if (opts.statusId) sp.set('statusId', opts.statusId);
+         if (opts.limit != null) sp.set('limit', String(opts.limit));
+         return get<SearchResult>(`/search?${sp.toString()}`);
+      },
    },
 };
