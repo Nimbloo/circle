@@ -120,6 +120,109 @@ export interface CreateWebhookInput {
    secret?: string;
 }
 
+/* ------------------------------- Anti-SSRF -------------------------------- */
+
+/**
+ * Sufixos de host sempre bloqueados: nomes que só resolvem DENTRO da rede (DNS do
+ * cluster, resolvers de VPC, mDNS). Um webhook apontando pra cá transforma o Circle
+ * em proxy pra rede interna.
+ */
+const BLOCKED_HOST_SUFFIXES = [
+   'localhost',
+   '.localhost',
+   '.local',
+   '.internal',
+   '.svc',
+   '.svc.cluster.local',
+   '.cluster.local',
+];
+
+/**
+ * Escape hatch de DESENVOLVIMENTO: libera destino privado (os testes sobem um receptor
+ * em `127.0.0.1`). Fail-closed em produção — lá o flag é ignorado, ponto.
+ */
+function privateTargetsAllowed(): boolean {
+   return (
+      process.env.NODE_ENV !== 'production' && process.env.CIRCLE_WEBHOOK_ALLOW_PRIVATE === 'true'
+   );
+}
+
+/** IPv4 em octetos, ou null se não for um literal IPv4. */
+function ipv4Octets(host: string): number[] | null {
+   const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+   if (!m) return null;
+   const parts = m.slice(1).map(Number);
+   return parts.every((n) => n >= 0 && n <= 255) ? parts : null;
+}
+
+/**
+ * `true` para endereços que nunca devem ser alvo de webhook: loopback, link-local
+ * (169.254 — o metadata do EC2/IMDS mora aí), RFC1918, CGNAT, `0.0.0.0/8`, multicast
+ * e os equivalentes IPv6 (`::1`, `fc00::/7`, `fe80::/10`, IPv4 mapeado).
+ */
+export function isPrivateAddress(address: string): boolean {
+   const host = address.replace(/^\[|\]$/g, '').toLowerCase();
+   const v4 = ipv4Octets(host);
+   if (v4) {
+      const [a, b] = v4;
+      return (
+         a === 0 ||
+         a === 127 ||
+         a === 10 ||
+         (a === 169 && b === 254) ||
+         (a === 172 && b >= 16 && b <= 31) ||
+         (a === 192 && b === 168) ||
+         (a === 100 && b >= 64 && b <= 127) ||
+         a >= 224
+      );
+   }
+   if (!host.includes(':')) return false; // não é IP literal — o gate de DNS resolve
+   if (host === '::' || host === '::1') return true;
+   // IPv4 mapeado/compatível (`::ffff:169.254.169.254`) reaproveita a régua acima.
+   const mapped = /(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(host);
+   if (mapped) return isPrivateAddress(mapped[1]);
+   const head = host.split(':')[0];
+   if (/^f[cd]/.test(head)) return true; // fc00::/7 (ULA)
+   if (/^fe[89ab]/.test(head)) return true; // fe80::/10 (link-local)
+   return false;
+}
+
+/** `true` se o hostname é um nome que só existe na rede interna. */
+export function isBlockedHostname(hostname: string): boolean {
+   const h = hostname.trim().toLowerCase().replace(/\.$/, '');
+   return BLOCKED_HOST_SUFFIXES.some((s) => (s.startsWith('.') ? h.endsWith(s) : h === s));
+}
+
+/**
+ * 400 quando a URL do webhook aponta para a rede interna (SSRF). Resolve o DNS ANTES
+ * de gravar, então um nome público que aponta para `169.254.169.254` também cai aqui —
+ * e a checagem é repetida no disparo, fechando o rebind entre criar e entregar.
+ */
+export async function assertSafeWebhookTarget(url: string): Promise<void> {
+   let parsed: URL;
+   try {
+      parsed = new URL(url);
+   } catch {
+      throw new ApiError(400, 'URL inválida');
+   }
+   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:')
+      throw new ApiError(400, 'A URL precisa ser http(s)');
+   if (privateTargetsAllowed()) return;
+   const host = parsed.hostname;
+   if (isBlockedHostname(host)) throw new ApiError(400, 'Destino não permitido (host interno)');
+   if (isPrivateAddress(host)) throw new ApiError(400, 'Destino não permitido (endereço privado)');
+   if (ipv4Octets(host) || host.includes(':')) return; // literal público: nada a resolver
+   const { lookup } = await import('node:dns/promises');
+   let addresses: { address: string }[];
+   try {
+      addresses = await lookup(host, { all: true });
+   } catch {
+      throw new ApiError(400, 'Destino não permitido (host não resolve)');
+   }
+   if (addresses.length === 0 || addresses.some((a) => isPrivateAddress(a.address)))
+      throw new ApiError(400, 'Destino não permitido (resolve para endereço privado)');
+}
+
 function assertValid(url: string, events: string[]): void {
    let parsed: URL;
    try {
@@ -140,6 +243,7 @@ export async function createWebhook(
    actorId: string | null
 ): Promise<WebhookDto> {
    assertValid(input.url, input.events);
+   await assertSafeWebhookTarget(input.url);
    const id = randomUUID();
    const secret = input.secret?.trim() || randomBytes(24).toString('hex');
    await db.insert(webhookT).values({
@@ -171,6 +275,7 @@ export async function updateWebhook(
    const url = patch.url ?? existing.url;
    const events = patch.events ?? ((existing.events ?? []) as WebhookEvent[]);
    assertValid(url, events);
+   if (url !== existing.url) await assertSafeWebhookTarget(url);
    await db
       .update(webhookT)
       .set({
@@ -233,6 +338,9 @@ export async function attemptDelivery(
    let error: string | null = null;
 
    try {
+      // Revalida o destino A CADA disparo: fecha o DNS rebind entre criar o webhook
+      // (onde o nome resolvia público) e entregar (onde já aponta pra rede interna).
+      await assertSafeWebhookTarget(hook.url);
       const res = await fetchImpl(hook.url, {
          method: 'POST',
          headers: {
@@ -242,10 +350,17 @@ export async function attemptDelivery(
             'X-Circle-Signature': signPayload(hook.secret, body),
          },
          body,
+         // Sem seguir redirect: um 302 para `169.254.169.254` burlaria a allow-list,
+         // que só validou a URL cadastrada.
+         redirect: 'manual',
          signal: AbortSignal.timeout(TIMEOUT_MS),
       });
       responseCode = res.status;
-      if (!res.ok) error = `HTTP ${res.status}`;
+      // O CORPO da resposta remota NUNCA é lido nem guardado: `lastError` fica só com
+      // o status, senão a tela de entregas viraria um leitor de páginas internas.
+      if (res.status >= 300 && res.status < 400)
+         error = `HTTP ${res.status} (redirect não seguido)`;
+      else if (!res.ok) error = `HTTP ${res.status}`;
    } catch (e) {
       error = (e as Error).message.slice(0, 500);
    }
