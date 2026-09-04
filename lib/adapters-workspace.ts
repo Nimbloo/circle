@@ -170,6 +170,10 @@ export function adaptInitiative(i: InitiativeDto, users: Map<string, User>): Ini
       health: toHealth(i.health),
       labels: i.labels,
       projectIds: i.projectIds,
+      parentId: i.parentId ?? null,
+      childIds: i.childIds ?? [],
+      rollupProjectCount: i.rollupProjectCount ?? i.projectIds.length,
+      rollupCompletedProjectCount: i.rollupCompletedProjectCount ?? i.completedProjectCount,
       createdAt: i.createdAt,
    };
 }

@@ -23,6 +23,12 @@ export interface Initiative {
    health: Health;
    labels: LabelInterface[];
    projectIds: string[];
+   /** Sub-initiatives (#100): parent id (null when top-level) and direct children. */
+   parentId: string | null;
+   childIds: string[];
+   /** Rollup over the whole subtree (this initiative + descendants). */
+   rollupProjectCount: number;
+   rollupCompletedProjectCount: number;
    createdAt: string;
 }
 

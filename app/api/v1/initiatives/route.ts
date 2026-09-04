@@ -37,6 +37,7 @@ const CreateSchema = z.object({
    targetDate: z.string().date().nullish(),
    projectIds: z.array(z.string()).optional(),
    labelIds: z.array(z.string().max(64)).max(100).optional(),
+   parentId: z.string().max(36).nullish(),
 });
 
 export async function POST(req: Request) {
