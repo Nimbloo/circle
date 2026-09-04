@@ -77,6 +77,20 @@ export async function register() {
       // Encerra a conexão dedicada do lock (libera o advisory lock junto, se ainda ativo).
       await lockClient.end().catch(() => {});
    }
+
+   // Webhooks de saída (#101): retenta no boot as entregas que ficaram pendentes do
+   // processo anterior. Lazy, sem CronJob; o próprio sweep pega um advisory lock, então
+   // subir várias réplicas não duplica entrega. Best-effort — não derruba o pod.
+   void (async () => {
+      try {
+         const { getDb } = await import('@/db');
+         const { sweepWebhookDeliveries } = await import('@/lib/api/webhooks');
+         const tried = await sweepWebhookDeliveries(getDb());
+         if (tried > 0) console.log(`[circle] webhooks: ${tried} entrega(s) retentada(s) no boot`);
+      } catch (e) {
+         console.warn('[circle] sweep de webhooks no boot falhou:', (e as Error).message);
+      }
+   })();
 }
 
 /**
