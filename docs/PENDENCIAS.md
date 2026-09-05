@@ -404,6 +404,27 @@ Fora do repositório: conferir no chart `nimbloo-k8s/circle-prd` o valor de
 `CIRCLE_KEYCLOAK_ALLOWED_CLIENTS` — o default do repo é seguro (vazio desliga o Bearer), mas o
 risco depende do valor implantado.
 
+### A busca ficou sem escopo até a v0.29.4 — e por quê (04/09/2026)
+
+**O achado principal da auditoria passou batido em três levas.** `GET /api/v1/search` só
+chamava `requireEmail`: um convidado lia título e snippet de issues, projetos, initiatives e
+documentos do workspace inteiro, e com `?teamId=` o vazamento ficava **dirigido** ao time
+proibido.
+
+Causa da falha de processo, registrada para não repetir: o gate foi distribuído por
+**propriedade de arquivo**, e `lib/api/search.ts` estava com o grupo que cuidava de acento e
+ranking, enquanto as rotas de escopo estavam com outro grupo. Ninguém era dono do cruzamento.
+Pior: as verificações seguintes checaram **amostras** de rota, não todas — e o guarda
+automático só cobre ESCRITA, então a leitura não acusa.
+
+Corrigido: `SearchOptions.teamIds` aplicado nas quatro consultas indexadas e nas do fallback;
+initiative (que não tem time) segue a regra da listagem — só aparece se agrega projeto de time
+visível. A fila de triagem por time tinha o mesmo furo e entrou junto.
+
+**Regra que fica:** ao fechar auditoria, varrer **todas** as rotas (`git ls-files app/api/v1`)
+e conferir handler **ou** serviço, em vez de amostrar; e nunca declarar um achado fechado sem
+executar a checagem contra o código.
+
 ### Escopo nas LEITURAS e integridade entre times (04/09/2026)
 
 Terceira passada: o hardening e os resíduos cobriram escrita e alguns detalhes, mas sete
