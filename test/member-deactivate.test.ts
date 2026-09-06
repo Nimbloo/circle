@@ -80,6 +80,7 @@ describe('desativar membro (#100)', () => {
       expect(await decideKeycloakLogin(db, profile(), LIA)).toEqual({
          allowed: true,
          via: 'group',
+         role: 'Member',
       });
    });
 
