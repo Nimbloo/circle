@@ -1,6 +1,6 @@
 # Pendências do Circle
 
-Estado em **2026-09-03**, com `main` e `develop` sincronizadas na v0.29.1.
+Estado em **2026-09-07**, com `main` e `develop` sincronizadas na v0.32.0.
 
 > **As [issues](https://github.com/Nimbloo/circle/issues) são a fonte da verdade** sobre
 > escopo. Este documento registra o que elas **não** capturam: bloqueios que vivem em
@@ -400,9 +400,9 @@ webhook viraram exclusivos de administrador.
 `Synced/Healthy`, `healthz`/`readyz` em `200`, webhook para `169.254.169.254` recusado com 400,
 busca respondendo pelo índice e `slaDueAt` no contrato.
 
-Fora do repositório: conferir no chart `nimbloo-k8s/circle-prd` o valor de
-`CIRCLE_KEYCLOAK_ALLOWED_CLIENTS` — o default do repo é seguro (vazio desliga o Bearer), mas o
-risco depende do valor implantado.
+~~Fora do repositório: conferir o valor implantado de `CIRCLE_KEYCLOAK_ALLOWED_CLIENTS`.~~
+**Resolvido em 06–07/09**: a variável não existia no chart (Bearer desligado) e depois deixou de
+existir no código — quem pode chamar a API virou uma decisão do Keycloak. Ver a seção abaixo.
 
 ### A busca ficou sem escopo até a v0.29.4 — e por quê (04/09/2026)
 
@@ -464,7 +464,7 @@ Uma segunda passada depois da v0.29.1 achou débito remanescente do mesmo tipo, 
 - Código morto removido (`snapshotAllProjects`) e três notas de "fica de fora" que descreviam
   itens já corrigidos.
 
-### API pública migrada para o Keycloak — o cofre de tokens saiu (06/09/2026)
+### Acesso de máquina inteiro no Keycloak (06–07/09/2026, v0.31.0 e v0.32.0)
 
 A API pública nasceu com cofre próprio: o Circle emitia `circle_<hex>`, guardava o hash e
 uma tela de Settings criava e revogava. Isso é um segundo lugar para dar e tirar acesso —
@@ -482,14 +482,62 @@ O que ficou de rastro, de propósito:
   realm (o `Viewer` do Grafana é o precedente), não um escopo de API inventado aqui.
 - **Não existe variável listando quem pode chamar.** A primeira versão desta migração
   tinha uma (`CIRCLE_KEYCLOAK_ALLOWED_CLIENTS`), e ela era o mesmo defeito do cofre: um
-  segundo lugar para conceder acesso, com deploy no meio. Saiu. O corte é `token de
-service account` + client role de `circle`, dois fatos do IdP. Abrir para um robô =
-  criar o client com service account e atribuir a role; fechar = revogar a role.
+  segundo lugar para conceder acesso, com deploy no meio. Saiu na v0.32.0. O corte passou
+  a ser: token de service account somado à client role de `circle` — dois fatos do IdP.
+  Abrir para um robô = criar o client com service account e atribuir a role; fechar =
+  revogar a role.
 - **Por que não bastou validar a audiência:** `grafana` e `kiali` emitem token com escopo
   completo, então o token de uma pessoa logada no Grafana carrega as roles do Circle e,
   por tabela, a audiência do Circle. O corte por service account não depende de como os
   outros clients estão configurados. Se um dia esses clients passarem a ter escopo
   fechado, validar audiência vira uma segunda barreira barata.
+
+### Lentidão: o que foi medido, o que foi corrigido, o que sobrou (07/09/2026)
+
+Investigação com dados, não com impressão: banco de teste com 2.000 e 10.000 issues,
+medição de query por chamada, peso de payload por campo, e a cascata real no navegador.
+
+**O que NÃO era o problema** (medido, para não gastar esforço de novo):
+
+- **Banco.** `listIssues` faz 6 queries por página, constante — sem N+1. O keyset por
+  `rank` usa `idx_issue_rank` (index scan, 0,1 ms). Com 10.000 issues, cada página custa
+  12 ms. `bootstrapWorkspace` = 40 queries em 84 ms; detalhe de issue, 7 queries em 3 ms.
+- **Renderização da lista.** Já é virtualizada: 2.000 issues viram ~2.000 nós de DOM com
+  40 linhas montadas. Os stores usam seletores, não assinam o objeto inteiro.
+- **Pipeline no cliente.** `JSON.parse` de 2,3 MB = 6 ms; `adaptIssues` = 2 ms.
+- **CPU do pod.** 5 m em uso, nó a 3%. Não havia contenção.
+
+**O que era** (e foi corrigido nesta release):
+
+1. **Resposta de API sem compressão.** O Next comprime HTML e assets, mas não o que sai de
+   route handler — confirmado no build de produção (`/login` gzip, `/api/metrics` cru). O
+   hydrate do board mandava **2.283 KB** de JSON cru. Com gzip no `handle()`: **106 KB**
+   (21x), 0,9 ms de CPU por resposta. Verificado na ponta: 233.746 -> 12.870 bytes.
+2. **Dez idas ao servidor, em sequência.** Paginação keyset com teto de 200 por página.
+   Medido no navegador: 10 requisições encadeadas, ~7,7 s de espera. Teto para 1.000:
+   **2 requisições**. Ponta a ponta, na mesma tela: **2.354 KB -> 118 KB**.
+3. **Métrica cega.** `http_request_duration_seconds` não tinha rótulo de rota, então dizia
+   'algo entre 30 ms e 245 ms' sem apontar onde. Agora tem `route`, com identificadores
+   normalizados para `:id` (conjunto fechado; `routePattern` tem teste).
+
+**Hipótese que os dados derrubaram:** o editor (Tiptap) entra pelo sidebar, que vive no
+layout, então parecia estar no primeiro carregamento de toda página. Carregá-lo sob demanda
+**não mudou nada** (±1 kB em todas as rotas) — o Next já resolvia isso. A mudança foi
+revertida em vez de ficar como complexidade sem ganho.
+
+**O que sobrou, com número:**
+
+- **O cliente ainda baixa TODAS as issues do workspace.** Com 2.000, são 2 requisições e
+  118 KB; com 10.000, viram 10 requisições e ~530 KB comprimidos — cresce linear, para
+  sempre, e acontece a cada carga de página. O caminho é carregar o que a view precisa
+  (filtro no servidor + paginação por scroll), tratando o store como cache. É refatoração
+  de verdade, não ajuste: precisa de decisão antes.
+- **JS por rota entre 483 e 562 kB** (gzip) nas telas pesadas, com 188 kB de shared. É
+  custo de primeira visita (cache imutável de 1 ano cobre o resto). Para atacar com método,
+  falta um `@next/bundle-analyzer` — sem ele é chute.
+- **Infra:** 1 réplica com `requests.cpu: 50m`. O barramento de eventos já é cross-pod
+  (LISTEN/NOTIFY) e as migrations têm advisory lock, então subir para 2 réplicas é seguro
+  quando fizer sentido; hoje não há contenção que justifique.
 
 ## Decisões suas (não é falta de código)
 

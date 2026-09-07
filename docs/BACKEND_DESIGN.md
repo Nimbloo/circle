@@ -139,6 +139,18 @@ Rotas de listagem por domínio (`/projects`, `/initiatives`, `/views`, `/members
 como API canônica, mas **a UI não as usa**: o bootstrap `GET /workspace` traz tudo num só
 GET e hidrata os stores.
 
+**Compressão:** `handle()` comprime a resposta JSON com gzip quando o cliente aceita e o
+corpo passa de 1 KB. Não é redundante com o Next: ele comprime HTML e assets, mas **não** o
+que sai de um route handler — medido no build de produção, `/login` volta com
+`content-encoding: gzip` e `/api/metrics` (8 KB) volta cru. Sem esta camada o hydrate do
+board mandava 2.283 KB de JSON sem compressão; com ela, 106 KB, ao custo de ~0,9 ms de CPU
+por resposta (no threadpool do libuv, fora do event loop). `test/api-compression.test.ts`
+tranca o comportamento.
+
+**Teto de página:** `MAX_LIST_LIMIT` (1.000). A paginação das issues é keyset por `rank`,
+então cada página é uma ida SEQUENCIAL ao servidor: com o teto antigo de 200, 2.000 issues
+custavam 10 idas encadeadas. O teto existe para ninguém pedir o banco inteiro numa query.
+
 ## 5. Realtime
 
 Barramento pub/sub in-process (`lib/api/events.ts`), com fan-out entre pods via **Postgres

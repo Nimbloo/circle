@@ -164,9 +164,3 @@ export function identityFromPayload(payload: Record<string, unknown>): string | 
       return `service-account-${azp.toLowerCase()}@circle.local`;
    return null;
 }
-
-/** Conveniência: valida o Bearer e retorna a identidade (e-mail) ou null. */
-export async function emailFromBearer(token: string): Promise<string | null> {
-   const payload = await verifyKeycloakJwt(token);
-   return payload ? identityFromPayload(payload) : null;
-}
