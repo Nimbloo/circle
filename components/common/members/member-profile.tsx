@@ -3,7 +3,17 @@
 import { DetailSidePanel } from '@/components/common/detail-side-panel';
 import { applyIssueFilters } from '@/components/common/issues/issue-filter-columns';
 import { GroupedIssuesView } from '@/components/common/issues/grouped-issues-view';
-import { InsightsPanel } from '@/components/common/issues/insights-panel';
+import dynamic from 'next/dynamic';
+
+// O painel de insights carrega recharts (357 KB no bundle) e só renderiza quando
+// aberto — sob demanda, como no `all-issues`.
+const InsightsPanel = dynamic(
+   () =>
+      import('@/components/common/issues/insights-panel').then((m) => ({
+         default: m.InsightsPanel,
+      })),
+   { ssr: false }
+);
 import { IssueFilterBar } from '@/components/common/issues/issue-filter-bar';
 import { SearchIssues } from '@/components/common/issues/search-issues';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';

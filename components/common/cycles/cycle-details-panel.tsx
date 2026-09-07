@@ -11,7 +11,13 @@ import { useRightPanelStore } from '@/store/right-panel-store';
 import { User, X } from 'lucide-react';
 import { useMemo } from 'react';
 import { CapacityRing } from './capacity-ring';
-import { CycleBurnupChart } from './cycle-burnup-chart';
+import dynamic from 'next/dynamic';
+
+/** Mesmo motivo de `cycles.tsx`: recharts só entra quando há gráfico para desenhar. */
+const CycleBurnupChart = dynamic(
+   () => import('./cycle-burnup-chart').then((m) => m.CycleBurnupChart),
+   { ssr: false, loading: () => <div className="h-[150px]" /> }
+);
 import { CyclePlayIcon } from './cycle-line';
 
 interface BreakdownRow {
