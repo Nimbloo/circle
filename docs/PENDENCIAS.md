@@ -525,6 +525,14 @@ layout, então parecia estar no primeiro carregamento de toda página. Carregá-
 **não mudou nada** (±1 kB em todas as rotas) — o Next já resolvia isso. A mudança foi
 revertida em vez de ficar como complexidade sem ganho.
 
+**Terceira medição — interação (07/09, noite):** faltava responder se a INTERAÇÃO travava,
+que era a pergunta original ("fluida"). Medido com as funções reais do app sobre 2.000
+issues: `adaptIssues` 0,90 ms · `groupIssuesByStatus` 0,10 ms · ordenar por rank 0,34 ms ·
+por título 1,79 ms · por data 1,66 ms · filtrar por texto (cada tecla na busca) 0,24 ms ·
+splice de uma issue no update otimista 0,08 ms. **Tudo abaixo de um frame (16 ms).** Não há
+jank de processamento: o custo de uma interação é o React redesenhar ~40 linhas
+virtualizadas. Não otimizar nada aqui sem um sintoma novo.
+
 **Segunda rodada, no bundle (07/09, tarde):**
 
 Com `@next/bundle-analyzer` instalado (`ANALYZE=true pnpm build`, que escreve em
