@@ -8,6 +8,7 @@ import { problem } from './response';
 import { ApiError } from './errors';
 import { captureServerError } from './observe-error';
 import { observeHttp, routePattern } from '@/lib/metrics';
+import { REQUEST_ID_HEADER, currentTraceId, logError, logRequest, requestIdFrom } from './log';
 import type { IssueListOptions } from './issues';
 
 /**
@@ -81,14 +82,6 @@ function mapDbError(e: unknown): Response | null {
 }
 
 /** Contexto `METHOD /path` da request pra correlacionar o log com o endpoint. */
-function reqTag(req?: Request): string {
-   if (!req) return '';
-   try {
-      return ` ${req.method} ${new URL(req.url).pathname}`;
-   } catch {
-      return '';
-   }
-}
 
 /**
  * Envolve um handler mapeando ApiError/ZodError/erros do Postgres para ProblemDetail.
@@ -161,6 +154,9 @@ async function compressJson(res: Response, req?: Request): Promise<Response> {
 
 export async function handle(fn: () => Promise<Response>, req?: Request): Promise<Response> {
    const start = Date.now();
+   const requestId = requestIdFrom(req);
+   const route = routePattern(req?.url);
+   const method = req?.method ?? 'UNKNOWN';
    let res: Response;
    try {
       res = await fn();
@@ -174,10 +170,10 @@ export async function handle(fn: () => Promise<Response>, req?: Request): Promis
          if (dbMapped) {
             // 4xx derivado de SQLSTATE: loga warn pra não mascarar query malformada como erro do cliente.
             const code = (e as { code?: unknown })?.code;
-            console.warn(`[circle-api]${reqTag(req)} db-mapped (SQLSTATE ${String(code)})`, e);
+            logError(`db-mapped (SQLSTATE ${String(code)})`, e, { requestId, method, route });
             res = dbMapped;
          } else {
-            console.error(`[circle-api]${reqTag(req)} erro não tratado:`, e);
+            logError('erro não tratado', e, { requestId, method, route });
             // O ProblemDetail abaixo faz o erro "sumir" antes do onRequestError do Next
             // — sem esta linha nenhum 5xx da API chega ao Sentry (auditoria v0.29.0).
             captureServerError(e, req);
@@ -185,13 +181,23 @@ export async function handle(fn: () => Promise<Response>, req?: Request): Promis
          }
       }
    }
-   const out = await compressJson(res, req);
-   observeHttp(
-      req?.method ?? 'UNKNOWN',
-      out.status,
-      (Date.now() - start) / 1000,
-      routePattern(req?.url)
-   );
+   const compressed = await compressJson(res, req);
+   const durationMs = Date.now() - start;
+   observeHttp(method, compressed.status, durationMs / 1000, route);
+
+   // O id volta na resposta: quem relatar um erro tem como apontar a linha exata do log.
+   const headers = new Headers(compressed.headers);
+   headers.set(REQUEST_ID_HEADER, requestId);
+   const out = new Response(compressed.body, { status: compressed.status, headers });
+
+   logRequest({
+      requestId,
+      method,
+      route,
+      status: out.status,
+      durationMs,
+      traceId: currentTraceId(),
+   });
    return out;
 }
 
