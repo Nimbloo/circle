@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { appUser, teamMember, issueSubscription } from '@/db/schema';
-import { isAdmin } from './auth';
+import { isAdmin, isBreakGlassAdmin } from './auth';
 import { ApiError } from './errors';
 
 export type UserRow = typeof appUser.$inferSelect;
@@ -148,25 +148,40 @@ async function provisionUser(db: Db, normalizedEmail: string, role: string): Pro
 }
 
 /**
- * Resolve o usuário pelo e-mail da sessão; provisiona no 1º acesso (role via allowlist).
+ * Resolve o usuário pelo e-mail da sessão; provisiona no 1º acesso.
  * Idempotente por e-mail (unique).
  *
- * `defaultRole` (#100) vem do convite (Member|Guest) e só vale na CRIAÇÃO — quem já
- * existe mantém a role do banco, e a allowlist de admin continua tendo precedência.
+ * `defaultRole` vem do Keycloak (client role, grupo como piso, ou papel do convite) e
+ * vale na CRIAÇÃO. Com `syncRole` — que só o callback de login usa — ele também
+ * ATUALIZA quem já existe: é o que faz revogar no Orbis rebaixar de fato no acesso
+ * seguinte, no mesmo espírito do `role_attribute_strict` do Grafana. Chamada de rota
+ * (sem `syncRole`) nunca mexe no papel.
+ *
+ * A allowlist `CIRCLE_ADMIN_EMAILS` continua tendo precedência: é o break-glass para
+ * não ficar sem admin se o realm estiver mal configurado.
  */
 export async function getOrCreateUser(
    db: Db,
    email: string,
-   defaultRole = 'Member'
+   defaultRole = 'Member',
+   opts: { syncRole?: boolean } = {}
 ): Promise<UserRow> {
    const normalized = email.trim().toLowerCase();
    const existing = await db.select().from(appUser).where(eq(appUser.email, normalized)).limit(1);
    if (existing.length > 0) {
       assertActiveUser(existing[0]);
-      return existing[0];
+      if (!opts.syncRole) return existing[0];
+      const role = isBreakGlassAdmin(normalized) ? 'Admin' : defaultRole;
+      if (role === existing[0].role) return existing[0];
+      const [updated] = await db
+         .update(appUser)
+         .set({ role, updatedAt: new Date() })
+         .where(eq(appUser.id, existing[0].id))
+         .returning();
+      return updated ?? existing[0];
    }
 
-   const role = (await isAdmin(normalized, db)) ? 'Admin' : defaultRole;
+   const role = isBreakGlassAdmin(normalized) ? 'Admin' : defaultRole;
    return provisionUser(db, normalized, role);
 }
 

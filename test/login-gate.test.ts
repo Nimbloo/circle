@@ -36,7 +36,7 @@ describe('gate de login (grupo OU convite)', () => {
          profile({ groups: ['app-circle'] }),
          'novo@nimbloo.ai'
       );
-      expect(d).toEqual({ allowed: true, via: 'group' });
+      expect(d).toEqual({ allowed: true, via: 'group', role: 'Member' });
    });
 
    it('sem grupo e sem convite: negado', async () => {

@@ -55,13 +55,23 @@ export async function emailFromRequest(req?: Request): Promise<string | null> {
  * Admin = e-mail na allowlist (CIRCLE_ADMIN_EMAILS) OU usuário com role='Admin' no
  * banco (coluna autoritativa). Async por precisar consultar o banco.
  */
-export async function isAdmin(email: string, db: Db): Promise<boolean> {
+/**
+ * Break-glass: allowlist `CIRCLE_ADMIN_EMAILS`. NÃO consulta o banco de propósito — é o
+ * que permite ao login REBAIXAR alguém quando o Keycloak revoga a role. Usar `isAdmin`
+ * aqui seria circular: quem já é Admin no banco continuaria Admin para sempre.
+ */
+export function isBreakGlassAdmin(email: string): boolean {
    const normalized = email.trim().toLowerCase();
-   const admins = (process.env.CIRCLE_ADMIN_EMAILS ?? '')
+   return (process.env.CIRCLE_ADMIN_EMAILS ?? '')
       .split(',')
       .map((s) => s.trim().toLowerCase())
-      .filter(Boolean);
-   if (admins.includes(normalized)) return true;
+      .filter(Boolean)
+      .includes(normalized);
+}
+
+export async function isAdmin(email: string, db: Db): Promise<boolean> {
+   const normalized = email.trim().toLowerCase();
+   if (isBreakGlassAdmin(normalized)) return true;
    const rows = await db
       .select({ role: appUser.role })
       .from(appUser)
