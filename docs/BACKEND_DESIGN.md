@@ -71,6 +71,12 @@ O realm declara as client roles `member`, `admin` e `guest` (minúsculas) para o
 `circle` (`nimbloo-k8s`, `keycloak-prd/templates/configmap-realm.yaml`). O casamento é
 case-insensitive, então mudar a grafia no realm não exige deploy do Circle.
 
+O claim precisa chegar no **ID token**: quem lê é o callback `signIn`, e ele enxerga o ID
+token, não o access token. O client scope `roles` embutido do Keycloak emite
+`resource_access`, mas o destino varia entre versões, então o realm declara um mapeador
+explícito no client `circle` — mesma razão pela qual o mapeador de `groups` já era
+explícito ali. Se o papel parar de vir, é esse mapeador que se olha primeiro.
+
 **Auth de máquina — mesma porta, mesmo IdP.** A credencial de um robô é o access token de
 um **service account** do realm (`client_credentials`), validado contra o JWKS
 (`lib/api/keycloak-jwt.ts`). Não existe mais cofre de tokens no Circle: o app não emite
