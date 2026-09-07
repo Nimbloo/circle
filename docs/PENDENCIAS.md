@@ -1,6 +1,6 @@
 # Pendências do Circle
 
-Estado em **2026-09-03**, com `main` e `develop` sincronizadas na v0.29.1.
+Estado em **2026-09-07**, com `main` e `develop` sincronizadas na v0.32.0.
 
 > **As [issues](https://github.com/Nimbloo/circle/issues) são a fonte da verdade** sobre
 > escopo. Este documento registra o que elas **não** capturam: bloqueios que vivem em
@@ -400,9 +400,9 @@ webhook viraram exclusivos de administrador.
 `Synced/Healthy`, `healthz`/`readyz` em `200`, webhook para `169.254.169.254` recusado com 400,
 busca respondendo pelo índice e `slaDueAt` no contrato.
 
-Fora do repositório: conferir no chart `nimbloo-k8s/circle-prd` o valor de
-`CIRCLE_KEYCLOAK_ALLOWED_CLIENTS` — o default do repo é seguro (vazio desliga o Bearer), mas o
-risco depende do valor implantado.
+~~Fora do repositório: conferir o valor implantado de `CIRCLE_KEYCLOAK_ALLOWED_CLIENTS`.~~
+**Resolvido em 06–07/09**: a variável não existia no chart (Bearer desligado) e depois deixou de
+existir no código — quem pode chamar a API virou uma decisão do Keycloak. Ver a seção abaixo.
 
 ### A busca ficou sem escopo até a v0.29.4 — e por quê (04/09/2026)
 
@@ -464,7 +464,7 @@ Uma segunda passada depois da v0.29.1 achou débito remanescente do mesmo tipo, 
 - Código morto removido (`snapshotAllProjects`) e três notas de "fica de fora" que descreviam
   itens já corrigidos.
 
-### API pública migrada para o Keycloak — o cofre de tokens saiu (06/09/2026)
+### Acesso de máquina inteiro no Keycloak (06–07/09/2026, v0.31.0 e v0.32.0)
 
 A API pública nasceu com cofre próprio: o Circle emitia `circle_<hex>`, guardava o hash e
 uma tela de Settings criava e revogava. Isso é um segundo lugar para dar e tirar acesso —
@@ -482,9 +482,10 @@ O que ficou de rastro, de propósito:
   realm (o `Viewer` do Grafana é o precedente), não um escopo de API inventado aqui.
 - **Não existe variável listando quem pode chamar.** A primeira versão desta migração
   tinha uma (`CIRCLE_KEYCLOAK_ALLOWED_CLIENTS`), e ela era o mesmo defeito do cofre: um
-  segundo lugar para conceder acesso, com deploy no meio. Saiu. O corte é `token de
-service account` + client role de `circle`, dois fatos do IdP. Abrir para um robô =
-  criar o client com service account e atribuir a role; fechar = revogar a role.
+  segundo lugar para conceder acesso, com deploy no meio. Saiu na v0.32.0. O corte passou
+  a ser: token de service account somado à client role de `circle` — dois fatos do IdP.
+  Abrir para um robô = criar o client com service account e atribuir a role; fechar =
+  revogar a role.
 - **Por que não bastou validar a audiência:** `grafana` e `kiali` emitem token com escopo
   completo, então o token de uma pessoa logada no Grafana carrega as roles do Circle e,
   por tabela, a audiência do Circle. O corte por service account não depende de como os
