@@ -109,7 +109,11 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          // Paginação KEYSET por rank (cursor = último rank): carrega TODAS as issues em
          // páginas (fim do truncamento silencioso do cap de 500).
          // Só pagina na ordem default (rank); em outras ordens, uma página (cap do server).
-         const PAGE = 200;
+         // Página GRANDE de propósito: a paginação é keyset (a próxima precisa do rank
+         // da anterior), então cada página é uma ida SEQUENCIAL ao servidor. Com 200,
+         // 2.000 issues custavam 10 idas encadeadas; com 1.000, custam 2. A resposta é
+         // comprimida (ver `compressJson`), então uma página de 1.000 pesa ~53 KB.
+         const PAGE = 1000;
          const canPaginate = !opts?.orderBy || opts.orderBy === 'rank';
          const acc: Awaited<ReturnType<typeof api.issues.list>> = [];
          let cursor: string | undefined;
