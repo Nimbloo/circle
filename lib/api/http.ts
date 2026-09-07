@@ -1,3 +1,5 @@
+import { gzip } from 'node:zlib';
+import { promisify } from 'node:util';
 import { z } from 'zod';
 import { db } from '@/db';
 import { identityFromRequest } from './auth';
@@ -5,7 +7,7 @@ import { assertActiveEmail, getOrCreateUser } from './users';
 import { problem } from './response';
 import { ApiError } from './errors';
 import { captureServerError } from './observe-error';
-import { observeHttp } from '@/lib/metrics';
+import { observeHttp, routePattern } from '@/lib/metrics';
 import type { IssueListOptions } from './issues';
 
 /**
@@ -92,6 +94,71 @@ function reqTag(req?: Request): string {
  * Envolve um handler mapeando ApiError/ZodError/erros do Postgres para ProblemDetail.
  * Passe `req` (opcional) pra correlacionar os logs de erro com rota/método.
  */
+/**
+ * Teto de itens por página das listagens.
+ *
+ * Era 200, o que fazia o hydrate do board buscar as issues em N idas SEQUENCIAIS ao
+ * servidor (keyset por rank: a página seguinte precisa do rank da anterior). Medido
+ * com 2.000 issues: 10 requisições em série, ~7,7 s só de espera encadeada.
+ *
+ * Com a resposta comprimida, uma página de 1.000 custa ~53 KB na rede e ~35 ms de
+ * servidor — cabe numa ida só. O teto continua existindo para não deixar um cliente
+ * pedir o banco inteiro numa query.
+ */
+export const MAX_LIST_LIMIT = 1000;
+
+const gzipAsync = promisify(gzip);
+
+/**
+ * Abaixo disto o cabeçalho do gzip custa mais do que economiza.
+ * (O `compression` do Express usa o mesmo corte de 1 KB.)
+ */
+const MIN_COMPRESS_BYTES = 1024;
+
+/**
+ * COMPRIME a resposta JSON quando o cliente aceita gzip.
+ *
+ * O Next comprime HTML e assets, mas NÃO o que sai de um route handler — medido no
+ * build de produção: `/login` volta com `content-encoding: gzip`, `/api/metrics` (8 KB)
+ * volta cru. Com isso, o hydrate do board mandava 2.283 KB de JSON sem compressão.
+ * Medido em 2.000 issues: 2.283 KB -> 106 KB (21x), ao custo de ~0,9 ms de CPU por
+ * resposta. `gzip` assíncrono roda no threadpool do libuv, então não segura o event
+ * loop do processo (que é único, com 1 réplica).
+ *
+ * Só toca em JSON: binário (upload, avatar) e stream (SSE, que nem passa por aqui)
+ * ficam intactos.
+ */
+async function compressJson(res: Response, req?: Request): Promise<Response> {
+   try {
+      const accepts = req?.headers.get('accept-encoding') ?? '';
+      if (!/\bgzip\b/i.test(accepts)) return res;
+      if (res.headers.get('content-encoding')) return res; // já comprimido
+      const type = res.headers.get('content-type') ?? '';
+      if (!/^application\/(problem\+)?json/.test(type)) return res;
+      if (!res.body) return res;
+
+      const raw = Buffer.from(await res.arrayBuffer());
+      if (raw.byteLength < MIN_COMPRESS_BYTES) {
+         // Recria: o corpo original já foi consumido pelo arrayBuffer acima.
+         return new Response(raw, { status: res.status, headers: res.headers });
+      }
+
+      const body = await gzipAsync(raw, { level: 6 });
+      const headers = new Headers(res.headers);
+      headers.set('content-encoding', 'gzip');
+      headers.set('content-length', String(body.byteLength));
+      // Sem isto, um cache intermediário poderia servir o corpo comprimido a um
+      // cliente que não pediu gzip.
+      headers.set(
+         'vary',
+         headers.get('vary') ? `${headers.get('vary')}, accept-encoding` : 'accept-encoding'
+      );
+      return new Response(body, { status: res.status, headers });
+   } catch {
+      return res; // compressão é otimização: nunca pode derrubar a resposta
+   }
+}
+
 export async function handle(fn: () => Promise<Response>, req?: Request): Promise<Response> {
    const start = Date.now();
    let res: Response;
@@ -118,8 +185,14 @@ export async function handle(fn: () => Promise<Response>, req?: Request): Promis
          }
       }
    }
-   observeHttp(req?.method ?? 'UNKNOWN', res.status, (Date.now() - start) / 1000);
-   return res;
+   const out = await compressJson(res, req);
+   observeHttp(
+      req?.method ?? 'UNKNOWN',
+      out.status,
+      (Date.now() - start) / 1000,
+      routePattern(req?.url)
+   );
+   return out;
 }
 
 /** Lê um parâmetro multivalorado: repetido (?x=a&x=b) ou CSV (?x=a,b). */
@@ -152,7 +225,8 @@ export function parseIssueListOptions(
       cursor: sp.get('cursor') ?? undefined,
    };
    const rawLimit = Number(sp.get('limit'));
-   if (Number.isFinite(rawLimit) && rawLimit > 0) opts.limit = Math.min(Math.floor(rawLimit), 200);
+   if (Number.isFinite(rawLimit) && rawLimit > 0)
+      opts.limit = Math.min(Math.floor(rawLimit), MAX_LIST_LIMIT);
    if (sp.get('assignee') === 'me' || sp.get('mine') === 'true') opts.assigneeMe = meEmail;
    if (sp.get('createdBy') === 'me') opts.createdByMe = meEmail;
    return { opts, meEmail };
