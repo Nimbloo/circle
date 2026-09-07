@@ -147,6 +147,14 @@ board mandava 2.283 KB de JSON sem compressão; com ela, 106 KB, ao custo de ~0,
 por resposta (no threadpool do libuv, fora do event loop). `test/api-compression.test.ts`
 tranca o comportamento.
 
+**Log estruturado:** `handle()` emite uma linha JSON por requisição —
+`{msg: "<< GET /api/v1/issues/:id", requestId, route, status, durationMs, traceId?}` — com
+chaves em camelCase, a mesma convenção MDC dos serviços Java. A rota é o PADRÃO (ids viram
+`:id`), o `requestId` respeita o `x-request-id` do chamador e VOLTA na resposta (quem
+relatar um erro aponta a linha exata no Loki), e o `traceId` liga a linha ao evento do
+Sentry. Requisição ≥ 1 s sobe para `warn`; 5xx sai em `error` com stack (cortado em 2 KB —
+linha gigante é linha que o Loki descarta). `test/api-log.test.ts` trava o formato.
+
 **Teto de página:** `MAX_LIST_LIMIT` (1.000). A paginação das issues é keyset por `rank`,
 então cada página é uma ida SEQUENCIAL ao servidor: com o teto antigo de 200, 2.000 issues
 custavam 10 idas encadeadas. O teto existe para ninguém pedir o banco inteiro numa query.

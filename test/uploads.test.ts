@@ -60,15 +60,22 @@ describe('POST /uploads (imagens do editor) #16', () => {
       expect(res.status).toBe(400);
    });
 
-   it('recusa o data-URL gigante sem alocar o Buffer', async () => {
+   it('recusa o data-URL gigante sem alocar o Buffer do payload', async () => {
       // 3/4 do comprimento da string base64 já diz que estoura: recusar aqui evita
       // decodificar (e duplicar na memória) só para depois responder 413.
+      //
+      // O guarda vigia alocação GRANDE (na ordem do payload), não "nenhum Buffer":
+      // escrever a linha de log da requisição no stdout também passa por Buffer.from,
+      // e uma linha de ~200 bytes não é o vazamento que este teste existe para pegar.
       const alloc = vi.spyOn(Buffer, 'from');
       try {
          const big = 'A'.repeat(Math.ceil(((MAX_UPLOAD_BYTES + 1) * 4) / 3));
          const res = await POST(post({ dataUrl: big, contentType: 'image/png' }));
          expect(res.status).toBe(413);
-         expect(alloc).not.toHaveBeenCalled();
+         const grandes = alloc.mock.calls.filter(
+            ([src]) => typeof src === 'string' && src.length > 64 * 1024
+         );
+         expect(grandes).toHaveLength(0);
       } finally {
          alloc.mockRestore();
       }
