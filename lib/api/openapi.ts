@@ -1,5 +1,5 @@
 /**
- * Documento OpenAPI 3.1 da API pública (#101).
+ * Documento OpenAPI 3.1 da API pública.
  *
  * Objeto ESTÁTICO tipado — sem lib de geração. O documento é pequeno e fechado (5
  * recursos), então uma dependência a mais custaria mais do que resolve; a tipagem
@@ -48,7 +48,10 @@ interface OpenApiDocument {
    tags: { name: string; description: string }[];
    paths: Record<string, Partial<Record<'get' | 'post' | 'patch', OpenApiOperation>>>;
    components: {
-      securitySchemes: Record<string, { type: string; scheme: string; description: string }>;
+      securitySchemes: Record<
+         string,
+         { type: string; scheme: string; bearerFormat?: string; description: string }
+      >;
       schemas: Record<string, OpenApiSchema>;
    };
 }
@@ -77,11 +80,11 @@ const PROBLEM: OpenApiSchema = {
 /** Respostas de erro compartilhadas por toda operação. */
 const ERRORS: Record<string, OpenApiResponse> = {
    '401': {
-      description: 'Token ausente, inválido ou revogado',
+      description: 'Token ausente, inválido, expirado ou de um client não autorizado',
       content: { 'application/problem+json': { schema: PROBLEM } },
    },
    '403': {
-      description: 'Token sem o escopo necessário, ou recurso fora do escopo do usuário',
+      description: 'Sem papel no Circle, ou recurso fora do escopo de times do chamador',
       content: { 'application/problem+json': { schema: PROBLEM } },
    },
    '404': {
@@ -90,8 +93,11 @@ const ERRORS: Record<string, OpenApiResponse> = {
    },
 };
 
-const READ = [{ bearerAuth: ['read'] }];
-const WRITE = [{ bearerAuth: ['write'] }];
+/**
+ * Uma credencial só: o token do Keycloak. Não há dimensão `read`/`write` própria da API
+ * — a permissão da máquina é a do papel dela no Circle, igual à de uma pessoa.
+ */
+const AUTH = [{ bearerAuth: [] }];
 
 const ISSUE_FILTERS: OpenApiParameter[] = [
    { name: 'team', in: 'query', schema: { type: 'string' }, description: 'Chave do time (CORE)' },
@@ -118,9 +124,11 @@ export const OPENAPI_DOCUMENT: OpenApiDocument = {
       title: 'Circle Public API',
       version: '1.0.0',
       description:
-         'API pública do Circle. Autenticação por token (`Authorization: Bearer circle_…`) ' +
-         'criado em Settings → API tokens, com escopos `read` e `write`. Erros seguem RFC 7807. ' +
-         'Sucesso vem no envelope `{ data }`.',
+         'API pública do Circle. Autenticação com o access token de um service account do ' +
+         'Keycloak (`Authorization: Bearer <token>`, fluxo client_credentials no realm). O ' +
+         'client precisa estar liberado no Circle e ter a client role `member`, `admin` ou ' +
+         '`guest` de `circle`; o que ele enxerga e escreve é o mesmo que uma pessoa com esse ' +
+         'papel. Erros seguem RFC 7807. Sucesso vem no envelope `{ data }`.',
    },
    servers: [{ url: '/api/public/v1', description: 'Base da API pública' }],
    tags: [
@@ -134,7 +142,7 @@ export const OPENAPI_DOCUMENT: OpenApiDocument = {
             summary: 'Lista issues',
             operationId: 'listIssues',
             tags: ['Issues'],
-            security: READ,
+            security: AUTH,
             parameters: ISSUE_FILTERS,
             responses: {
                '200': {
@@ -148,7 +156,7 @@ export const OPENAPI_DOCUMENT: OpenApiDocument = {
             summary: 'Cria uma issue',
             operationId: 'createIssue',
             tags: ['Issues'],
-            security: WRITE,
+            security: AUTH,
             requestBody: {
                required: true,
                content: { 'application/json': { schema: ref('IssueCreate') } },
@@ -167,7 +175,7 @@ export const OPENAPI_DOCUMENT: OpenApiDocument = {
             summary: 'Detalhe da issue',
             operationId: 'getIssue',
             tags: ['Issues'],
-            security: READ,
+            security: AUTH,
             parameters: [ID_PARAM],
             responses: {
                '200': {
@@ -181,7 +189,7 @@ export const OPENAPI_DOCUMENT: OpenApiDocument = {
             summary: 'Atualiza parcialmente a issue',
             operationId: 'updateIssue',
             tags: ['Issues'],
-            security: WRITE,
+            security: AUTH,
             parameters: [ID_PARAM],
             requestBody: {
                required: true,
@@ -201,7 +209,7 @@ export const OPENAPI_DOCUMENT: OpenApiDocument = {
             summary: 'Lista projetos',
             operationId: 'listProjects',
             tags: ['Projects'],
-            security: READ,
+            security: AUTH,
             parameters: [
                { name: 'team', in: 'query', schema: { type: 'string' } },
                { name: 'initiative', in: 'query', schema: { type: 'string' } },
@@ -218,7 +226,7 @@ export const OPENAPI_DOCUMENT: OpenApiDocument = {
             summary: 'Cria um projeto',
             operationId: 'createProject',
             tags: ['Projects'],
-            security: WRITE,
+            security: AUTH,
             requestBody: {
                required: true,
                content: { 'application/json': { schema: ref('ProjectCreate') } },
@@ -237,7 +245,7 @@ export const OPENAPI_DOCUMENT: OpenApiDocument = {
             summary: 'Detalhe do projeto',
             operationId: 'getProject',
             tags: ['Projects'],
-            security: READ,
+            security: AUTH,
             parameters: [{ ...ID_PARAM, description: 'Id do projeto' }],
             responses: {
                '200': {
@@ -251,7 +259,7 @@ export const OPENAPI_DOCUMENT: OpenApiDocument = {
             summary: 'Atualiza parcialmente o projeto',
             operationId: 'updateProject',
             tags: ['Projects'],
-            security: WRITE,
+            security: AUTH,
             parameters: [{ ...ID_PARAM, description: 'Id do projeto' }],
             requestBody: {
                required: true,
@@ -271,7 +279,7 @@ export const OPENAPI_DOCUMENT: OpenApiDocument = {
             summary: 'Lista times',
             operationId: 'listTeams',
             tags: ['Catalogs'],
-            security: READ,
+            security: AUTH,
             responses: {
                '200': {
                   description: 'Lista de times',
@@ -286,7 +294,7 @@ export const OPENAPI_DOCUMENT: OpenApiDocument = {
             summary: 'Catálogo de status',
             operationId: 'listStatuses',
             tags: ['Catalogs'],
-            security: READ,
+            security: AUTH,
             responses: {
                '200': {
                   description: 'Lista de status',
@@ -301,7 +309,7 @@ export const OPENAPI_DOCUMENT: OpenApiDocument = {
             summary: 'Catálogo de labels',
             operationId: 'listLabels',
             tags: ['Catalogs'],
-            security: READ,
+            security: AUTH,
             responses: {
                '200': {
                   description: 'Lista de labels',
@@ -317,7 +325,10 @@ export const OPENAPI_DOCUMENT: OpenApiDocument = {
          bearerAuth: {
             type: 'http',
             scheme: 'bearer',
-            description: 'Token `circle_…` criado em Settings → API tokens.',
+            bearerFormat: 'JWT',
+            description:
+               'Access token de um service account do Keycloak (client_credentials no realm ' +
+               'nimbloo-internal). O Circle não emite credencial própria.',
          },
       },
       schemas: {

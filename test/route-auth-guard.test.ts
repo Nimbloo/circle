@@ -16,7 +16,7 @@ import { isPublicApiPath, TOKEN_API_PREFIX } from '@/lib/api/public-routes';
  * barrar, então a rota continuaria respondendo a um request não autenticado.
  */
 
-const HARD_AUTH = /\brequireEmail\b|\bgetOrCreateUser\b|\brequireUser\b|\brequireApiToken\b/;
+const HARD_AUTH = /\brequireEmail\b|\bgetOrCreateUser\b|\brequireUser\b|\brequireApiClient\b/;
 /**
  * Ponto cego 1: gate em posição de TERNÁRIO (`cond ? await requireEmail(req) : null`)
  * não barra ninguém — o handler segue respondendo quando a condição é falsa. Um
@@ -24,7 +24,7 @@ const HARD_AUTH = /\brequireEmail\b|\bgetOrCreateUser\b|\brequireUser\b|\brequir
  * `stripComments`) não conta como autenticação.
  */
 const TERNARY_AUTH =
-   /[?:]\s*(?:\(?\s*await\s+)?(?:requireEmail|getOrCreateUser|requireUser|requireApiToken)\s*\(/;
+   /[?:]\s*(?:\(?\s*await\s+)?(?:requireEmail|getOrCreateUser|requireUser|requireApiClient)\s*\(/;
 /** Comentário não é código: menção a `requireEmail` em comentário não autentica. */
 function stripComments(src: string): string {
    return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
@@ -32,7 +32,7 @@ function stripComments(src: string): string {
 /** Todas as ocorrências do gate são condicionais? Então não há gate de verdade. */
 function onlyConditionalAuth(body: string): boolean {
    const hits = body.match(
-      /(?:[?:]\s*(?:\(?\s*await\s+)?)?(?:requireEmail|getOrCreateUser|requireUser|requireApiToken)\s*\(/g
+      /(?:[?:]\s*(?:\(?\s*await\s+)?)?(?:requireEmail|getOrCreateUser|requireUser|requireApiClient)\s*\(/g
    );
    return Boolean(hits?.length) && hits!.every((h) => TERNARY_AUTH.test(h));
 }
@@ -78,7 +78,7 @@ describe('guarda de auth nas rotas de API', () => {
       for (const file of routeFiles()) {
          const pathname = pathnameOf(file);
          // `/api/public/*` dispensa SESSÃO mas não dispensa auth: a credencial é o
-         // token (`requireApiToken`), então segue sendo checado abaixo.
+         // token (`requireApiClient`), então segue sendo checado abaixo.
          if (isPublicApiPath(pathname) && !pathname.startsWith(TOKEN_API_PREFIX)) continue;
          const src = stripComments(readFileSync(file, 'utf8'));
 
@@ -107,7 +107,7 @@ describe('guarda de auth nas rotas de API', () => {
       const files = routeFiles()
          .filter((f) => isPublicApiPath(pathnameOf(f)))
          // A API pública (#101) é autenticada por token — coberta pelo teste acima,
-         // que exige `requireApiToken` nela. Não entra na conta de rota anônima.
+         // que exige `requireApiClient` nela. Não entra na conta de rota anônima.
          .filter((f) => !pathnameOf(f).startsWith(TOKEN_API_PREFIX));
       expect(files.sort()).toEqual([
          'app/api/auth/[...nextauth]/route.ts',

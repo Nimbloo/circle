@@ -2,17 +2,17 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { handle } from '@/lib/api/http';
 import { ok, notFound } from '@/lib/api/response';
-import { requireApiToken } from '@/lib/api/public-auth';
+import { requireApiClient } from '@/lib/api/public-auth';
 import { assertProjectInScope } from '@/lib/api/scope';
 import { getProject, updateProject } from '@/lib/api/projects';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/** GET /api/public/v1/projects/{id} — detalhe do projeto (escopo `read`). */
+/** GET /api/public/v1/projects/{id} — detalhe do projeto. */
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
    return handle(async () => {
-      const auth = await requireApiToken(db, req, 'read');
+      const auth = await requireApiClient(db, req);
       const { id } = await ctx.params;
       await assertProjectInScope(db, auth.teamIds, id);
       const project = await getProject(db, id);
@@ -31,10 +31,10 @@ const patchSchema = z.object({
    initiativeId: z.string().nullable().optional(),
 });
 
-/** PATCH /api/public/v1/projects/{id} — atualização parcial (escopo `write`). */
+/** PATCH /api/public/v1/projects/{id} — atualização parcial. */
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
    return handle(async () => {
-      const auth = await requireApiToken(db, req, 'write');
+      const auth = await requireApiClient(db, req);
       const { id } = await ctx.params;
       await assertProjectInScope(db, auth.teamIds, id);
       const body = patchSchema.parse(await req.json());

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { handle, multi } from '@/lib/api/http';
 import { ok } from '@/lib/api/response';
-import { requireApiToken } from '@/lib/api/public-auth';
+import { requireApiClient } from '@/lib/api/public-auth';
 import { assertTeamInScope } from '@/lib/api/scope';
 import { createIssue, listIssues } from '@/lib/api/issues';
 
@@ -10,12 +10,12 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
- * GET /api/public/v1/issues — lista as issues visíveis ao dono do token (escopo `read`).
+ * GET /api/public/v1/issues — lista as issues visíveis ao chamador.
  * Mesmo DTO da API interna; filtros por query (team/status/priority/project/labels/q).
  */
 export async function GET(req: Request) {
    return handle(async () => {
-      const ctx = await requireApiToken(db, req, 'read');
+      const ctx = await requireApiClient(db, req);
       const sp = new URL(req.url).searchParams;
       const limit = Number(sp.get('limit'));
       return ok(
@@ -49,10 +49,10 @@ const createSchema = z.object({
    parentId: z.string().nullable().optional(),
 });
 
-/** POST /api/public/v1/issues — cria uma issue (escopo `write`). */
+/** POST /api/public/v1/issues — cria uma issue. */
 export async function POST(req: Request) {
    return handle(async () => {
-      const ctx = await requireApiToken(db, req, 'write');
+      const ctx = await requireApiClient(db, req);
       const body = createSchema.parse(await req.json());
       assertTeamInScope(ctx.teamIds, body.teamId);
       return ok(

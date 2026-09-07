@@ -1,21 +1,34 @@
 /**
- * Autenticação da API pública (#101): `Authorization: Bearer circle_<...>`.
+ * Autenticação da API pública: `Authorization: Bearer <access_token do Keycloak>`.
  *
- * As rotas sob `/api/public/v1` não têm sessão — o token É a credencial. Cada request
- * resolve o token, checa o escopo (`read`/`write`) e devolve o escopo de TIMES do dono
- * do token, para que um token de um usuário `Guest` enxergue exatamente o que ele
- * enxerga na UI (`lib/api/scope.ts`). Nada de rate limit aqui: isso é na borda.
+ * SSO total — quem dá e tira acesso é o Keycloak, não o Circle. A credencial de uma
+ * máquina é o token de um SERVICE ACCOUNT (client_credentials) do realm; o Circle não
+ * emite nem guarda segredo nenhum. Três camadas, todas no IdP:
+ *
+ *  1. `CIRCLE_KEYCLOAK_ALLOWED_CLIENTS` — quais clients do realm podem falar com esta
+ *     API. Vazio = Bearer desligado (fail-closed). Checado em `verifyKeycloakJwt`.
+ *  2. Client role em `circle` (`member`/`admin`/`guest`) — sem papel, 403. É a mesma
+ *     regra do login humano (`roleFromProfile`), então revogar a role no Keycloak
+ *     desliga a máquina no próximo token, sem deploy.
+ *  3. Escopo de TIMES do `app_user` correspondente — um service account com papel
+ *     `guest` enxerga exatamente o que aquele convidado enxerga na UI (`scope.ts`).
+ *
+ * Não há dimensão de escopo `read`/`write` própria da API: a permissão de uma máquina é
+ * a MESMA de uma pessoa com aquele papel. Read-only, se um dia for preciso, é um papel
+ * novo no realm (como o `Viewer` do Grafana), não um escopo inventado aqui.
  */
+import { roleFromProfile } from '@/auth.config';
 import type { Db } from '@/db';
-import { authenticateApiToken, type ApiScope } from './api-tokens';
 import { ApiError } from './errors';
+import { identityFromPayload, verifyKeycloakJwt } from './keycloak-jwt';
 import { visibleTeamIds } from './scope';
+import { assertActiveUser, getOrCreateUser } from './users';
 
 export interface PublicApiContext {
-   tokenId: string;
-   scopes: ApiScope[];
+   /** `azp` do token — o client do realm que chamou (aparece no log/auditoria). */
+   client: string | null;
    user: { id: string; role: string; email: string };
-   /** Times visíveis ao dono do token; `null` = sem restrição (Member/Admin). */
+   /** Times visíveis ao chamador; `null` = sem restrição (Member/Admin). */
    teamIds: string[] | null;
 }
 
@@ -27,19 +40,36 @@ function bearer(req: Request): string | null {
 }
 
 /**
- * 401 sem token válido, 403 sem o escopo pedido. Devolve o contexto da chamada
- * (usuário dono do token + escopo de times) para os handlers filtrarem no servidor.
+ * 401 sem token válido do realm; 403 sem papel no Circle. Devolve o contexto da chamada
+ * (usuário correspondente + escopo de times) para os handlers filtrarem no servidor.
+ *
+ * O papel do token é gravado no `app_user` a cada chamada (`syncRole`): promover ou
+ * rebaixar no Keycloak vale na hora, e desativar a conta no Circle continua cortando
+ * o acesso (`assertActiveUser`) mesmo com token válido.
  */
-export async function requireApiToken(
-   db: Db,
-   req: Request,
-   scope: ApiScope
-): Promise<PublicApiContext> {
+export async function requireApiClient(db: Db, req: Request): Promise<PublicApiContext> {
    const raw = bearer(req);
-   if (!raw) throw new ApiError(401, 'Informe um token em Authorization: Bearer');
-   const auth = await authenticateApiToken(db, raw);
-   if (!auth) throw new ApiError(401, 'Token inválido ou revogado');
-   if (!auth.scopes.includes(scope))
-      throw new ApiError(403, `Token sem o escopo '${scope}' necessário`);
-   return { ...auth, teamIds: await visibleTeamIds(db, auth.user) };
+   if (!raw) throw new ApiError(401, 'Informe um token do Keycloak em Authorization: Bearer');
+
+   const payload = await verifyKeycloakJwt(raw);
+   if (!payload) throw new ApiError(401, 'Token inválido, expirado ou de um client não autorizado');
+
+   const role = roleFromProfile(payload);
+   if (!role)
+      throw new ApiError(
+         403,
+         "Sem papel no Circle: atribua a client role 'member' (ou 'admin'/'guest') de `circle` a este service account no Keycloak"
+      );
+
+   const email = identityFromPayload(payload);
+   if (!email) throw new ApiError(401, 'Token sem identidade (email verificado ou azp)');
+
+   const user = await getOrCreateUser(db, email, role, { syncRole: true });
+   assertActiveUser(user);
+
+   return {
+      client: typeof payload.azp === 'string' ? payload.azp : null,
+      user: { id: user.id, role: user.role, email: user.email },
+      teamIds: await visibleTeamIds(db, user),
+   };
 }

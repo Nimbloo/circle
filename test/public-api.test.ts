@@ -1,14 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { generateKeyPairSync, sign as cryptoSign } from 'node:crypto';
+import { eq } from 'drizzle-orm';
 import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
 import { __setTestDb, type Db } from '@/db';
-import {
-   authenticateApiToken,
-   createApiToken,
-   listApiTokens,
-   revokeApiToken,
-} from '@/lib/api/api-tokens';
+import { appUser } from '@/db/schema';
 import { createIssue } from '@/lib/api/issues';
+import { setMemberDeactivated } from '@/lib/api/members';
 import {
    GET as listPublicIssues,
    POST as createPublicIssue,
@@ -20,84 +18,121 @@ import {
 import { GET as listPublicTeams } from '@/app/api/public/v1/teams/route';
 import { GET as openapi } from '@/app/api/public/v1/openapi.json/route';
 
+/**
+ * API pública autenticada pelo KEYCLOAK (SSO total): a credencial é o access token de um
+ * service account do realm, não um segredo emitido pelo Circle. Os tokens abaixo são
+ * assinados de verdade (RS256) contra um JWKS falso, para exercitar o caminho real —
+ * assinatura, allowlist de client, papel e escopo de times.
+ */
+const ISS = 'https://kc.example.com/realms/nimbloo-internal';
+const KID = 'test-key-1';
 const OWNER = 'owner@circle.dev';
-const GUEST = 'guest@circle.dev';
+const CI_BOT = 'service-account-circle-ci@circle.local';
 
-let db: Db;
+const { publicKey, privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+const jwk = {
+   ...(publicKey.export({ format: 'jwk' }) as Record<string, unknown>),
+   kid: KID,
+   kty: 'RSA',
+};
 
-beforeEach(async () => {
-   db = await makeTestDb();
-   await seedTeam(db, 'CORE', 'Core');
-   await seedTeam(db, 'OPS', 'Ops');
-   await seedUser(db, { name: 'Owner', email: OWNER, teamIds: ['CORE', 'OPS'] });
-   await seedUser(db, { name: 'Guest', email: GUEST, role: 'Guest', teamIds: ['CORE'] });
-   __setTestDb(db);
-});
-afterEach(() => __setTestDb(null));
+const b64url = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
 
-function req(url: string, token?: string, init: RequestInit = {}) {
+/** Token de service account: `azp` é o client, e o papel vem de resource_access.circle. */
+function token(opts: { client?: string; roles?: string[] } = {}) {
+   const client = opts.client ?? 'circle-ci';
+   const payload: Record<string, unknown> = {
+      iss: ISS,
+      exp: Math.floor(Date.now() / 1000) + 300,
+      azp: client,
+      preferred_username: `service-account-${client}`,
+      ...(opts.roles ? { resource_access: { circle: { roles: opts.roles } } } : {}),
+   };
+   const input = `${b64url({ alg: 'RS256', kid: KID, typ: 'JWT' })}.${b64url(payload)}`;
+   const sig = cryptoSign('RSA-SHA256', Buffer.from(input), privateKey).toString('base64url');
+   return `${input}.${sig}`;
+}
+
+function req(url: string, jwt?: string, init: RequestInit = {}) {
    return new Request(url, {
       ...init,
       headers: {
-         ...(token ? { authorization: `Bearer ${token}` } : {}),
+         ...(jwt ? { authorization: `Bearer ${jwt}` } : {}),
          ...(init.body ? { 'content-type': 'application/json' } : {}),
       },
    });
 }
 
-async function tokenFor(email: string, scopes: ('read' | 'write')[] = ['read']) {
-   return (await createApiToken(db, { name: `t-${scopes.join('-')}`, scopes }, email)).token;
-}
+const rowOf = async (db: Db, email: string) =>
+   (await db.select().from(appUser).where(eq(appUser.email, email)))[0];
 
-describe('tokens da API pública (#101)', () => {
-   it('mostra o token em claro uma única vez e guarda só o hash', async () => {
-      const created = await createApiToken(db, { name: 'CI', scopes: ['read', 'write'] }, OWNER);
-      expect(created.token).toMatch(/^circle_[0-9a-f]{64}$/);
-      expect(created.prefix).toBe(created.token.slice(0, 13));
+let db: Db;
 
-      const listed = await listApiTokens(db);
-      expect(listed).toHaveLength(1);
-      expect(JSON.stringify(listed)).not.toContain(created.token);
-      expect(listed[0].scopes.sort()).toEqual(['read', 'write']);
-      expect(listed[0].lastUsedAt).toBeNull();
-   });
-
-   it('autentica o token, marca last_used_at e recusa depois de revogar', async () => {
-      const created = await createApiToken(db, { name: 'CI', scopes: ['read'] }, OWNER);
-      const auth = await authenticateApiToken(db, created.token);
-      expect(auth?.user.email).toBe(OWNER);
-      expect((await listApiTokens(db))[0].lastUsedAt).not.toBeNull();
-
-      expect(await authenticateApiToken(db, 'circle_deadbeef')).toBeNull();
-      expect(await authenticateApiToken(db, 'não-é-token')).toBeNull();
-
-      expect(await revokeApiToken(db, created.id)).toBe(true);
-      expect(await authenticateApiToken(db, created.token)).toBeNull();
-      expect((await listApiTokens(db))[0].revokedAt).not.toBeNull();
-   });
+beforeEach(async () => {
+   process.env.AUTH_KEYCLOAK_ISSUER = ISS;
+   process.env.CIRCLE_KEYCLOAK_ALLOWED_CLIENTS = 'circle-ci,circle-guest';
+   vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ({ keys: [jwk] }) }))
+   );
+   db = await makeTestDb();
+   await seedTeam(db, 'CORE', 'Core');
+   await seedTeam(db, 'OPS', 'Ops');
+   await seedUser(db, { name: 'Owner', email: OWNER, teamIds: ['CORE', 'OPS'] });
+   __setTestDb(db);
+});
+afterEach(() => {
+   __setTestDb(null);
+   delete process.env.CIRCLE_KEYCLOAK_ALLOWED_CLIENTS;
+   vi.unstubAllGlobals();
 });
 
-describe('rotas /api/public/v1 (#101)', () => {
-   it('401 sem token e 403 sem o escopo', async () => {
+describe('quem entra na API pública', () => {
+   it('401 sem token, 401 de client fora da allowlist, 403 sem papel no Circle', async () => {
       const anon = await listPublicIssues(req('http://x/api/public/v1/issues'));
       expect(anon.status).toBe(401);
       expect(anon.headers.get('content-type')).toContain('application/problem+json');
 
-      const readOnly = await tokenFor(OWNER, ['read']);
-      const forbidden = await createPublicIssue(
-         req('http://x/api/public/v1/issues', readOnly, {
-            method: 'POST',
-            body: JSON.stringify({ teamId: 'CORE', title: 'X' }),
-         })
+      const outsider = await listPublicIssues(
+         req('http://x/api/public/v1/issues', token({ client: 'outro-app', roles: ['member'] }))
       );
-      expect(forbidden.status).toBe(403);
+      expect(outsider.status).toBe(401);
+
+      // Client liberado, mas sem client role de `circle`: 403, não 200.
+      const roleless = await listPublicIssues(req('http://x/api/public/v1/issues', token()));
+      expect(roleless.status).toBe(403);
    });
 
-   it('lista, cria e atualiza issues com o escopo certo', async () => {
-      const token = await tokenFor(OWNER, ['read', 'write']);
+   it('provisiona o service account e sincroniza o papel a cada chamada', async () => {
+      await listPublicIssues(req('http://x/api/public/v1/issues', token({ roles: ['member'] })));
+      expect((await rowOf(db, CI_BOT)).role).toBe('Member');
+
+      // Promover no Keycloak vale na chamada seguinte, sem deploy.
+      await listPublicIssues(req('http://x/api/public/v1/issues', token({ roles: ['admin'] })));
+      expect((await rowOf(db, CI_BOT)).role).toBe('Admin');
+
+      // E rebaixar também.
+      await listPublicIssues(req('http://x/api/public/v1/issues', token({ roles: ['guest'] })));
+      expect((await rowOf(db, CI_BOT)).role).toBe('Guest');
+   });
+
+   it('desativar a conta no Circle corta o acesso mesmo com token válido', async () => {
+      await listPublicIssues(req('http://x/api/public/v1/issues', token({ roles: ['member'] })));
+      await setMemberDeactivated(db, (await rowOf(db, CI_BOT)).id, true);
+
+      const res = await listPublicIssues(
+         req('http://x/api/public/v1/issues', token({ roles: ['member'] }))
+      );
+      expect(res.status).toBe(403);
+   });
+});
+
+describe('rotas /api/public/v1', () => {
+   it('lista, cria, lê e atualiza issues com um service account Member', async () => {
+      const jwt = token({ roles: ['member'] });
 
       const created = await createPublicIssue(
-         req('http://x/api/public/v1/issues', token, {
+         req('http://x/api/public/v1/issues', jwt, {
             method: 'POST',
             body: JSON.stringify({ teamId: 'CORE', title: 'Via API', priorityId: 'high' }),
          })
@@ -105,19 +140,18 @@ describe('rotas /api/public/v1 (#101)', () => {
       expect(created.status).toBe(200);
       const issue = (await created.json()).data;
       expect(issue.identifier).toBe('CORE-1');
-      expect(issue.createdBy.email).toBe(OWNER);
+      expect(issue.createdBy.email).toBe(CI_BOT);
 
-      const listed = await listPublicIssues(req('http://x/api/public/v1/issues', token));
+      const listed = await listPublicIssues(req('http://x/api/public/v1/issues', jwt));
       expect((await listed.json()).data).toHaveLength(1);
 
-      const detail = await getPublicIssue(
-         req(`http://x/api/public/v1/issues/${issue.identifier}`, token),
-         { params: Promise.resolve({ id: issue.identifier }) }
-      );
+      const detail = await getPublicIssue(req('http://x/api/public/v1/issues/CORE-1', jwt), {
+         params: Promise.resolve({ id: 'CORE-1' }),
+      });
       expect((await detail.json()).data.id).toBe(issue.id);
 
       const patched = await patchPublicIssue(
-         req(`http://x/api/public/v1/issues/${issue.id}`, token, {
+         req(`http://x/api/public/v1/issues/${issue.id}`, jwt, {
             method: 'PATCH',
             body: JSON.stringify({ title: 'Renomeada' }),
          }),
@@ -126,21 +160,26 @@ describe('rotas /api/public/v1 (#101)', () => {
       expect((await patched.json()).data.title).toBe('Renomeada');
    });
 
-   it('token de convidado só enxerga os times dele', async () => {
+   it('service account Guest fica preso aos times dele, na leitura e na escrita', async () => {
+      await seedUser(db, {
+         name: 'Bot convidado',
+         email: 'service-account-circle-guest@circle.local',
+         role: 'Guest',
+         teamIds: ['CORE'],
+      });
       await createIssue(db, { teamId: 'CORE', title: 'Do guest', priorityId: 'high' }, OWNER);
       await createIssue(db, { teamId: 'OPS', title: 'Fora', priorityId: 'high' }, OWNER);
 
-      const guestToken = await tokenFor(GUEST, ['read', 'write']);
-      const listed = await listPublicIssues(req('http://x/api/public/v1/issues', guestToken));
+      const jwt = token({ client: 'circle-guest', roles: ['guest'] });
+      const listed = await listPublicIssues(req('http://x/api/public/v1/issues', jwt));
       const titles = (await listed.json()).data.map((i: { title: string }) => i.title);
       expect(titles).toEqual(['Do guest']);
 
-      const teams = await listPublicTeams(req('http://x/api/public/v1/teams', guestToken));
+      const teams = await listPublicTeams(req('http://x/api/public/v1/teams', jwt));
       expect((await teams.json()).data.map((t: { id: string }) => t.id)).toEqual(['CORE']);
 
-      // Criar fora do escopo é 403, não 200 silencioso.
       const denied = await createPublicIssue(
-         req('http://x/api/public/v1/issues', guestToken, {
+         req('http://x/api/public/v1/issues', jwt, {
             method: 'POST',
             body: JSON.stringify({ teamId: 'OPS', title: 'Não pode' }),
          })
@@ -148,9 +187,12 @@ describe('rotas /api/public/v1 (#101)', () => {
       expect(denied.status).toBe(403);
    });
 
-   it('openapi.json descreve os recursos e o esquema de segurança', async () => {
-      const token = await tokenFor(OWNER, ['read']);
-      const res = await openapi(req('http://x/api/public/v1/openapi.json', token));
+   it('openapi.json exige credencial e descreve um esquema só, sem escopos', async () => {
+      expect((await openapi(req('http://x/api/public/v1/openapi.json'))).status).toBe(401);
+
+      const res = await openapi(
+         req('http://x/api/public/v1/openapi.json', token({ roles: ['member'] }))
+      );
       expect(res.status).toBe(200);
       const doc = await res.json();
       expect(doc.openapi).toBe('3.1.0');
@@ -163,7 +205,7 @@ describe('rotas /api/public/v1 (#101)', () => {
          '/statuses',
          '/teams',
       ]);
-      expect(doc.components.securitySchemes.bearerAuth.scheme).toBe('bearer');
-      expect(doc.paths['/issues'].post.security).toEqual([{ bearerAuth: ['write'] }]);
+      expect(doc.components.securitySchemes.bearerAuth.bearerFormat).toBe('JWT');
+      expect(doc.paths['/issues'].post.security).toEqual([{ bearerAuth: [] }]);
    });
 });

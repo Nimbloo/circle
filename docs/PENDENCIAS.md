@@ -464,6 +464,27 @@ Uma segunda passada depois da v0.29.1 achou débito remanescente do mesmo tipo, 
 - Código morto removido (`snapshotAllProjects`) e três notas de "fica de fora" que descreviam
   itens já corrigidos.
 
+### API pública migrada para o Keycloak — o cofre de tokens saiu (06/09/2026)
+
+A API pública nasceu com cofre próprio: o Circle emitia `circle_<hex>`, guardava o hash e
+uma tela de Settings criava e revogava. Isso é um segundo lugar para dar e tirar acesso —
+o oposto de SSO total. A credencial agora é o access token de um **service account do
+realm**, e quem dá e tira é o Keycloak (ver `docs/BACKEND_DESIGN.md`, seção 2).
+
+O que ficou de rastro, de propósito:
+
+- **A tabela `api_token` continua no banco.** Migration que apaga dado não entra (regra do
+  projeto), então ela segue declarada em `db/schema.ts` marcada como aposentada, sem
+  nenhum código lendo ou escrevendo. Um token `circle_…` não autentica mais nada. Remover
+  a tabela é uma limpeza futura, para quando o histórico não interessar mais.
+- **Não existe credencial read-only.** A permissão de uma máquina é a do papel dela, igual
+  à de uma pessoa. Se um dia for preciso um robô que só lê, o caminho é um papel novo no
+  realm (o `Viewer` do Grafana é o precedente), não um escopo de API inventado aqui.
+- **Em produção a API pública está fechada**: `CIRCLE_KEYCLOAK_ALLOWED_CLIENTS` não está
+  no chart, e sem allowlist o Bearer é recusado (fail-closed). Para abrir, é preciso criar
+  o client com service account no realm, dar a ele a client role de `circle` e listar o
+  `clientId` na variável — os três passos são no `nimbloo-k8s`, nenhum no Circle.
+
 ## Decisões suas (não é falta de código)
 
 Nenhuma pendente em 02/09/2026: datas de initiatives, snapshot de cycles e editor de blocos

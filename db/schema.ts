@@ -1093,9 +1093,13 @@ export const projectDependency = pgTable(
 );
 
 /**
- * Token da API pública (`/api/public/v1/*`). Guardamos só o HASH (SHA-256) — o token
- * em claro (`circle_<random>`) é mostrado UMA vez na criação e nunca mais. `prefix`
- * são os primeiros caracteres, exibidos na lista para o usuário reconhecer o token.
+ * APOSENTADA. Era o cofre de tokens da API pública, antes de a autenticação passar a ser
+ * o token de service account do Keycloak (SSO total — ver `lib/api/public-auth.ts`).
+ * Nenhum código lê ou escreve aqui: um token `circle_…` não autentica mais nada.
+ *
+ * A tabela continua declarada só para o schema bater com o banco — migration que apaga
+ * dado não entra (regra do projeto). A remoção física é uma limpeza futura, registrada
+ * em `docs/PENDENCIAS.md`.
  */
 export const apiToken = pgTable(
    'api_token',
