@@ -39,13 +39,13 @@ const jwk = {
 const b64url = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
 
 /** Token de service account: `azp` é o client, e o papel vem de resource_access.circle. */
-function token(opts: { client?: string; roles?: string[] } = {}) {
+function token(opts: { client?: string; roles?: string[]; human?: boolean } = {}) {
    const client = opts.client ?? 'circle-ci';
    const payload: Record<string, unknown> = {
       iss: ISS,
       exp: Math.floor(Date.now() / 1000) + 300,
       azp: client,
-      preferred_username: `service-account-${client}`,
+      preferred_username: opts.human ? 'danilo' : `service-account-${client}`,
       ...(opts.roles ? { resource_access: { circle: { roles: opts.roles } } } : {}),
    };
    const input = `${b64url({ alg: 'RS256', kid: KID, typ: 'JWT' })}.${b64url(payload)}`;
@@ -70,7 +70,6 @@ let db: Db;
 
 beforeEach(async () => {
    process.env.AUTH_KEYCLOAK_ISSUER = ISS;
-   process.env.CIRCLE_KEYCLOAK_ALLOWED_CLIENTS = 'circle-ci,circle-guest';
    vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({ ok: true, json: async () => ({ keys: [jwk] }) }))
@@ -83,20 +82,25 @@ beforeEach(async () => {
 });
 afterEach(() => {
    __setTestDb(null);
-   delete process.env.CIRCLE_KEYCLOAK_ALLOWED_CLIENTS;
    vi.unstubAllGlobals();
 });
 
 describe('quem entra na API pública', () => {
-   it('401 sem token, 401 de client fora da allowlist, 403 sem papel no Circle', async () => {
+   it('401 sem token, 401 para token de pessoa, 403 sem papel no Circle', async () => {
       const anon = await listPublicIssues(req('http://x/api/public/v1/issues'));
       expect(anon.status).toBe(401);
       expect(anon.headers.get('content-type')).toContain('application/problem+json');
 
-      const outsider = await listPublicIssues(
-         req('http://x/api/public/v1/issues', token({ client: 'outro-app', roles: ['member'] }))
+      // Token de PESSOA do realm (o do Grafana carrega as roles do Circle, porque aquele
+      // client emite com escopo completo): assinado e válido, mas não entra na porta de
+      // máquina. Gente entra pela sessão.
+      const human = await listPublicIssues(
+         req(
+            'http://x/api/public/v1/issues',
+            token({ client: 'grafana', roles: ['admin'], human: true })
+         )
       );
-      expect(outsider.status).toBe(401);
+      expect(human.status).toBe(401);
 
       // Client liberado, mas sem client role de `circle`: 403, não 200.
       const roleless = await listPublicIssues(req('http://x/api/public/v1/issues', token()));

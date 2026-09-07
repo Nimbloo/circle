@@ -9,9 +9,15 @@
  * HARDCODED — qualquer outro `alg` (incl. `none`/HS*) é rejeitado (previne
  * alg-confusion). Valida `iss` e `exp`.
  *
- * Identidade: usa o claim `email` se presente; senão sintetiza a partir de
- * `azp`/`client_id` (`service-account-<client>@circle.local`). O usuário é
- * provisionado como Member (mesmo JIT dos humanos); elevar role é ação de admin.
+ * QUEM PODE: só token de SERVICE ACCOUNT (`client_credentials`). Um token de
+ * PESSOA — inclusive o do Grafana, que hoje emite com escopo completo e por isso
+ * carrega as roles do Circle — é recusado nesta porta: gente entra pela sessão.
+ * É isto que substitui a antiga allowlist de clients em variável de ambiente, que
+ * era um segundo lugar (e um deploy) para dar acesso. Agora o único lugar é o
+ * Keycloak: quem chama é quem tem service account COM client role de `circle`.
+ *
+ * Identidade: sempre `service-account-<client>@circle.local`, derivada do `azp`. O
+ * e-mail do token é ignorado de propósito — um robô é ele mesmo, nunca uma pessoa.
  */
 
 interface Jwk {
@@ -33,12 +39,19 @@ const FORCED_REFRESH_THROTTLE_MS = 60 * 1000; // no máx 1 refetch forçado/min
 let cache: JwksCache | null = null;
 let lastForcedRefreshAt = 0;
 
-/** Clientes autorizados (azp/aud). Sem allowlist → Bearer desligado (fail-closed). */
-function allowedClients(): string[] {
-   return (process.env.CIRCLE_KEYCLOAK_ALLOWED_CLIENTS ?? '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
+/**
+ * `true` quando o token foi emitido por `client_credentials`. O Keycloak nomeia o
+ * usuário do service account como `service-account-<clientId>` — é o que separa,
+ * no próprio token, a máquina da pessoa.
+ */
+function isServiceAccount(payload: Record<string, unknown>): boolean {
+   const azp = payload.azp;
+   const username = payload.preferred_username;
+   if (typeof azp !== 'string' || !azp) return false;
+   return (
+      typeof username === 'string' &&
+      username.toLowerCase() === `service-account-${azp.toLowerCase()}`
+   );
 }
 
 /** Decodifica um segmento base64url (edge-safe, sem Buffer). */
@@ -89,11 +102,12 @@ export async function verifyKeycloakJwt(token: string): Promise<Record<string, u
       if (header.alg !== 'RS256') return null; // hardcode: rejeita none/HS*/etc
       const kid = typeof header.kid === 'string' ? header.kid : null;
 
-      // Allowlist de clientes ANTES de qualquer trabalho caro (assinatura/JWKS): num
-      // realm SSO compartilhado, sem isto qualquer token do realm autenticaria. Também
-      // corta o refetch de JWKS disparado por tokens não-autorizados. Fail-closed.
-      const allowed = allowedClients();
-      if (allowed.length === 0) return null;
+      // Máquina ANTES de qualquer trabalho caro (assinatura/JWKS): o corte é sobre um
+      // claim, então descarta token de pessoa sem pagar verificação, e corta o refetch
+      // de JWKS disparado por token alheio. A assinatura ainda é conferida depois — o
+      // claim aqui só decide se vale a pena olhar.
+      const unverified = b64urlToJson(payloadB64);
+      if (!isServiceAccount(unverified)) return null;
 
       let keys = await getJwks(iss);
       let jwk = keys.find((k) => k.kid === kid && k.kty === 'RSA');
@@ -127,15 +141,9 @@ export async function verifyKeycloakJwt(token: string): Promise<Record<string, u
       if (typeof payload.exp !== 'number' || payload.exp + 30 < now) return null; // skew 30s
       if (typeof payload.nbf === 'number' && payload.nbf - 30 > now) return null;
 
-      // Client autorizado: azp OU algum aud na allowlist (checada no topo).
-      const azp = typeof payload.azp === 'string' ? payload.azp : null;
-      const audList = Array.isArray(payload.aud)
-         ? (payload.aud as unknown[]).filter((a): a is string => typeof a === 'string')
-         : typeof payload.aud === 'string'
-           ? [payload.aud]
-           : [];
-      const clientOk = (azp && allowed.includes(azp)) || audList.some((a) => allowed.includes(a));
-      if (!clientOk) return null;
+      // De novo sobre o payload VERIFICADO — o teste acima foi sobre bytes ainda não
+      // conferidos e serve só para descartar cedo.
+      if (!isServiceAccount(payload)) return null;
 
       return payload;
    } catch {
@@ -144,15 +152,13 @@ export async function verifyKeycloakJwt(token: string): Promise<Record<string, u
 }
 
 /**
- * Extrai o e-mail (identidade do app) de um payload já validado do Keycloak.
- * Prioriza `email`; para service accounts sem e-mail, sintetiza de `azp`/`client_id`.
+ * Identidade do app a partir de um payload já validado: o CLIENT que chamou.
+ *
+ * O `email` do token é ignorado de propósito. Se fosse usado, um service account com
+ * e-mail configurado no realm agiria como aquela pessoa — inclusive como um dos
+ * `CIRCLE_ADMIN_EMAILS`. Robô é robô.
  */
 export function identityFromPayload(payload: Record<string, unknown>): string | null {
-   const email = payload.email;
-   // Só confia no e-mail se VERIFICADO — senão um realm com auto-registro/e-mail
-   // arbitrário permitiria forjar um dos CIRCLE_ADMIN_EMAILS e provisionar como Admin.
-   if (typeof email === 'string' && email.includes('@') && payload.email_verified === true)
-      return email.trim().toLowerCase();
    const azp = payload.azp ?? payload.client_id ?? payload.clientId;
    if (typeof azp === 'string' && azp.length > 0)
       return `service-account-${azp.toLowerCase()}@circle.local`;

@@ -71,26 +71,36 @@ O realm declara as client roles `member`, `admin` e `guest` (minúsculas) para o
 `circle` (`nimbloo-k8s`, `keycloak-prd/templates/configmap-realm.yaml`). O casamento é
 case-insensitive, então mudar a grafia no realm não exige deploy do Circle.
 
+O claim precisa chegar no **ID token**: quem lê é o callback `signIn`, e ele enxerga o ID
+token, não o access token. O client scope `roles` embutido do Keycloak emite
+`resource_access`, mas o destino varia entre versões, então o realm declara um mapeador
+explícito no client `circle` — mesma razão pela qual o mapeador de `groups` já era
+explícito ali. Se o papel parar de vir, é esse mapeador que se olha primeiro.
+
 **Auth de máquina — mesma porta, mesmo IdP.** A credencial de um robô é o access token de
 um **service account** do realm (`client_credentials`), validado contra o JWKS
 (`lib/api/keycloak-jwt.ts`). Não existe mais cofre de tokens no Circle: o app não emite
 nem guarda segredo de API. Três camadas, todas no Keycloak:
 
-1. `CIRCLE_KEYCLOAK_ALLOWED_CLIENTS` — quais clients do realm podem falar com esta API.
-   Vazio (o caso de hoje em produção) = Bearer desligado, fail-closed.
+1. Ser token de **service account** (`client_credentials`). O Keycloak nomeia esse usuário
+   como `service-account-<clientId>`, e é isso que separa máquina de pessoa no próprio
+   token. Token de gente é recusado nesta porta — inclusive o do Grafana, que emite com
+   escopo completo e por isso carrega as roles do Circle.
 2. Client role de `circle` — sem papel, 403. Igual ao login humano, e sincronizada a cada
    chamada: promover ou rebaixar no Orbis vale na requisição seguinte.
 3. Escopo de times do `app_user` correspondente — um service account `guest` enxerga o
-   que aquele convidado enxerga. A identidade é `service-account-<client>@circle.local`
-   quando o token não traz e-mail verificado.
+   que aquele convidado enxerga. A identidade é sempre `service-account-<client>@circle.local`:
+   o `email` do token é ignorado de propósito, senão um robô com e-mail configurado no realm
+   agiria como aquela pessoa.
 
 Não há dimensão `read`/`write` própria da API: a permissão da máquina é a da pessoa com
 aquele papel. Read-only, se for preciso, é um papel novo no realm (como o `Viewer` do
 Grafana), não um escopo inventado no app.
 
-**Para dar acesso a um robô:** criar o client com service account no realm, atribuir a
-client role de `circle`, e incluir o `clientId` em `CIRCLE_KEYCLOAK_ALLOWED_CLIENTS` no
-chart. Para tirar: remover a role (ou o client da lista). Nenhum passo é no Circle.
+**Para dar acesso a um robô:** criar o client com service account no realm e atribuir a
+client role de `circle`. Para tirar: revogar a role. Nenhum passo é no Circle e nenhum é
+deploy — não existe variável de ambiente listando quem pode chamar, de propósito: seria um
+segundo lugar para conceder acesso, que é exatamente o que o cofre de tokens era.
 
 As duas camadas de enforcement:
 
