@@ -73,7 +73,6 @@ import type {
    ImportResultDto,
    ImportSource,
 } from '@/lib/api/import';
-import type { ApiScope, ApiTokenDto, CreatedApiTokenDto } from '@/lib/api/api-tokens';
 import type { WebhookDeliveryDto, WebhookDto, WebhookEvent } from '@/lib/api/webhooks';
 import type {
    RoadmapDto,
@@ -624,14 +623,6 @@ export const api = {
          mapping: ImportMapping;
          createMissingLabels?: boolean;
       }) => post<ImportResultDto>('/import/commit', input),
-   },
-
-   /** Tokens da API pública (#101). O valor em claro só vem no `create`. */
-   apiTokens: {
-      list: () => get<ApiTokenDto[]>('/api-tokens'),
-      create: (name: string, scopes: ApiScope[]) =>
-         post<CreatedApiTokenDto>('/api-tokens', { name, scopes }),
-      revoke: (id: string) => del<{ revoked: boolean }>(`/api-tokens/${encodeURIComponent(id)}`),
    },
 
    /** Webhooks de saída (#101). O segredo só vem no `create`. */

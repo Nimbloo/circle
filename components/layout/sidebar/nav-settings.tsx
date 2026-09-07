@@ -14,7 +14,6 @@ import {
    Bot,
    Code,
    FileText,
-   KeyRound,
    LucideIcon,
    Settings,
    Smile,
@@ -81,7 +80,6 @@ export const settingsNav: SettingsNavGroup[] = [
       items: [
          { name: 'Audit log', url: '/settings/audit-log', icon: ScrollText },
          { name: 'Import / Export', url: '/settings/import-export', icon: ArrowLeftRight },
-         { name: 'API tokens', url: '/settings/api-tokens', icon: KeyRound },
          { name: 'Webhooks', url: '/settings/webhooks', icon: Webhook },
       ],
    },

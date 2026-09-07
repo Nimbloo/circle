@@ -29,13 +29,14 @@ export const PUBLIC_API_EXACT: ReadonlySet<string> = new Set([
 /**
  * Subtrees inteiros liberados do gate de SESSÃO:
  *  - `/api/auth/*`: o fluxo do NextAuth.
- *  - `/api/public/*`: a API pública (#101) — a credencial é o token
- *    (`Authorization: Bearer circle_…`), validado em `requireApiToken`. "Sem sessão"
- *    NÃO é "sem auth": o teste-guarda exige `requireApiToken` em todo handler daqui.
+ *  - `/api/public/*`: a API pública — a credencial é o access token de um service
+ *    account do Keycloak (`Authorization: Bearer <jwt>`), validado em
+ *    `requireApiClient`. "Sem sessão" NÃO é "sem auth": o teste-guarda exige
+ *    `requireApiClient` em todo handler daqui.
  */
 export const PUBLIC_API_PREFIXES: readonly string[] = ['/api/auth', '/api/public'];
 
-/** Prefixo da API pública autenticada por token (não é rota anônima). */
+/** Prefixo da API pública autenticada por Bearer do Keycloak (não é rota anônima). */
 export const TOKEN_API_PREFIX = '/api/public/';
 
 /** True se o path dispensa sessão. */
