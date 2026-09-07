@@ -1,7 +1,17 @@
 'use client';
 
 import { DetailSidePanel } from '@/components/common/detail-side-panel';
-import { InsightsPanel } from '@/components/common/issues/insights-panel';
+import dynamic from 'next/dynamic';
+
+// O painel de insights carrega recharts (357 KB no bundle) e só renderiza quando
+// aberto — sob demanda, como no `all-issues`.
+const InsightsPanel = dynamic(
+   () =>
+      import('@/components/common/issues/insights-panel').then((m) => ({
+         default: m.InsightsPanel,
+      })),
+   { ssr: false }
+);
 import { Issue } from '@/data/issues';
 import { ProjectDetail } from '@/data/project-details';
 import { Project } from '@/data/projects';

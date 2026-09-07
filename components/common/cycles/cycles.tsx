@@ -7,7 +7,17 @@ import { Hourglass } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useMemo } from 'react';
 import CycleLine, { CyclePlayIcon } from './cycle-line';
-import { CycleBurnupChart, CycleProgressLegend } from './cycle-burnup-chart';
+import dynamic from 'next/dynamic';
+import { CycleProgressLegend } from './cycle-progress-legend';
+
+/**
+ * O gráfico carrega recharts (357 KB no bundle, medido com o analisador). Sob demanda,
+ * quem abre a lista de cycles não paga a biblioteca antes de ver a tela.
+ */
+const CycleBurnupChart = dynamic(
+   () => import('./cycle-burnup-chart').then((m) => m.CycleBurnupChart),
+   { ssr: false, loading: () => <div className="h-[216px]" /> }
+);
 
 /**
  * Cycles timeline: a date rail on the left and one row per cycle,

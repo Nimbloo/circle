@@ -53,3 +53,6 @@ next-env.d.ts
 # que um `git add -A` distraído não os capture — ja aconteceu nesta base.
 /_devseed.ts
 /test/_tmp-*.test.ts
+
+# Build de análise de bundle (ANALYZE=true pnpm build)
+.next-analyze/

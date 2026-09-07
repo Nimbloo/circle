@@ -33,7 +33,6 @@ export const metadata: Metadata = {
 };
 
 import { ThemeProvider } from '@/components/layout/theme-provider';
-import { AuthSessionProvider } from '@/components/providers/session-provider';
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
 
 export default function RootLayout({
@@ -52,7 +51,12 @@ export default function RootLayout({
          >
             <NuqsAdapter>
                <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-                  <AuthSessionProvider>{children}</AuthSessionProvider>
+                  {/* Sem SessionProvider: NADA no app consome `useSession` — quem
+                      identifica o usuário é o `me` do bootstrap. O provider fazia um
+                      GET /api/auth/session a cada carga de página (e outro a cada foco
+                      da janela) para um dado que ninguém lia. `signOut` não depende
+                      dele: usa a config de módulo do next-auth/react. */}
+                  {children}
                   <Toaster />
                </ThemeProvider>
             </NuqsAdapter>

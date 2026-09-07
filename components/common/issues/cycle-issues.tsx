@@ -13,7 +13,15 @@ import { useViewStore } from '@/store/view-store';
 import { useParams } from 'next/navigation';
 import { useMemo } from 'react';
 import { GroupedIssuesView } from './grouped-issues-view';
-import { InsightsPanel } from './insights-panel';
+import dynamic from 'next/dynamic';
+
+// Mesmo code-split do `all-issues`: o painel de insights carrega recharts (357 KB no
+// bundle) e só renderiza quando aberto. Estático aqui, ele entrava no primeiro
+// carregamento das rotas de cycle — 549 kB, das mais pesadas do app.
+const InsightsPanel = dynamic(
+   () => import('./insights-panel').then((m) => ({ default: m.InsightsPanel })),
+   { ssr: false }
+);
 import { SearchIssues } from './search-issues';
 
 export type CycleView = 'active' | 'upcoming';

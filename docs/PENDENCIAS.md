@@ -525,6 +525,38 @@ layout, então parecia estar no primeiro carregamento de toda página. Carregá-
 **não mudou nada** (±1 kB em todas as rotas) — o Next já resolvia isso. A mudança foi
 revertida em vez de ficar como complexidade sem ganho.
 
+**Segunda rodada, no bundle (07/09, tarde):**
+
+Com `@next/bundle-analyzer` instalado (`ANALYZE=true pnpm build`, que escreve em
+`.next-analyze/` para não atropelar um `next dev` em uso), o mapa mostrou onde o peso
+estava de verdade: **recharts, 357 KB**, entrando no primeiro carregamento de sete telas
+porque o painel de insights e o gráfico de burn-up eram importados de forma estática — o
+`all-issues` já os carregava sob demanda, os outros não. Corrigido, com medição:
+
+| rota                                   | antes        | depois     |
+| -------------------------------------- | ------------ | ---------- |
+| `project/[id]/overview`                | 561 kB       | **462 kB** |
+| `team/[id]/cycle/active` e `/upcoming` | 549 kB       | **440 kB** |
+| `profiles/[memberId]`                  | 542 kB       | **442 kB** |
+| `project/[id]/issues`                  | 541 kB       | **442 kB** |
+| `view/[viewId]`                        | 540 kB       | **441 kB** |
+| `team/[id]/cycles`                     | com recharts | **280 kB** |
+
+Recharts não está mais no primeiro carregamento de nenhuma rota. A legenda do burn-up
+virou módulo próprio (`cycle-progress-legend.tsx`): ela não usa recharts, mas morava no
+mesmo arquivo do gráfico, então quem só queria a legenda pagava a biblioteca inteira.
+
+Também saiu o `SessionProvider` do NextAuth: **nada no app consome `useSession`** (a
+identidade vem do `me` do bootstrap), e ele fazia um GET `/api/auth/session` por carga de
+página, mais um a cada foco da janela, para um dado que ninguém lia. `signOut` não depende
+dele — confirmado no código do pacote instalado.
+
+**Duas hipóteses derrubadas pela medição, nesta ordem:** carregar o editor sob demanda
+(±1 kB — o Next já o separava num chunk assíncrono) e as exclusões de Replay/debug do
+Sentry (`bundleSizeOptimizations`: 4443 KB antes e depois). As duas foram revertidas.
+O Sentry ocupa ~309 KB nos chunks sempre carregados e não há botão oficial que corte isso
+sem desligar o tracing, que está em uso.
+
 **O que sobrou, com número:**
 
 - **O cliente ainda baixa TODAS as issues do workspace.** Com 2.000, são 2 requisições e

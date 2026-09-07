@@ -1,5 +1,6 @@
 import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs/config';
+import withBundleAnalyzer from '@next/bundle-analyzer';
 import { buildContentSecurityPolicy } from './lib/security/content-security-policy';
 
 // Headers de segurança em toda resposta (defesa em profundidade além do gateway Istio).
@@ -31,6 +32,9 @@ const SECURITY_HEADERS = [
 const nextConfig: NextConfig = {
    /* config options here */
    output: 'standalone',
+   // O build de análise escreve em outro diretório para não atropelar o `.next` de um
+   // `next dev` em uso (que passaria a servir chunks de um build que ele não fez).
+   ...(process.env.ANALYZE === 'true' ? { distDir: '.next-analyze' } : {}),
    devIndicators: false,
    // Vira o `release` do Sentry (`circle@X.Y.Z`), ligando o erro à versão da imagem.
    env: { NEXT_PUBLIC_APP_VERSION: process.env.npm_package_version ?? 'dev' },
@@ -127,7 +131,14 @@ const nextConfig: NextConfig = {
  * O upload de source maps depende de `SENTRY_AUTH_TOKEN` — desligado quando o token
  * não existe para o build local e o CI não quebrarem por falta de credencial.
  */
-export default withSentryConfig(nextConfig, {
+/**
+ * `ANALYZE=true pnpm build` abre o mapa do bundle. Existe porque otimizar bundle sem
+ * medir é chute: a primeira tentativa (carregar o editor sob demanda) parecia óbvia e
+ * não mudou nada — ±1 kB em todas as rotas.
+ */
+const analyze = withBundleAnalyzer({ enabled: process.env.ANALYZE === 'true' });
+
+export default withSentryConfig(analyze(nextConfig), {
    org: 'nimbloo',
    project: 'circle',
    silent: true,
