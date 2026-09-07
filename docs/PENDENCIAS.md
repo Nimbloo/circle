@@ -480,10 +480,16 @@ O que ficou de rastro, de propósito:
 - **Não existe credencial read-only.** A permissão de uma máquina é a do papel dela, igual
   à de uma pessoa. Se um dia for preciso um robô que só lê, o caminho é um papel novo no
   realm (o `Viewer` do Grafana é o precedente), não um escopo de API inventado aqui.
-- **Em produção a API pública está fechada**: `CIRCLE_KEYCLOAK_ALLOWED_CLIENTS` não está
-  no chart, e sem allowlist o Bearer é recusado (fail-closed). Para abrir, é preciso criar
-  o client com service account no realm, dar a ele a client role de `circle` e listar o
-  `clientId` na variável — os três passos são no `nimbloo-k8s`, nenhum no Circle.
+- **Não existe variável listando quem pode chamar.** A primeira versão desta migração
+  tinha uma (`CIRCLE_KEYCLOAK_ALLOWED_CLIENTS`), e ela era o mesmo defeito do cofre: um
+  segundo lugar para conceder acesso, com deploy no meio. Saiu. O corte é `token de
+service account` + client role de `circle`, dois fatos do IdP. Abrir para um robô =
+  criar o client com service account e atribuir a role; fechar = revogar a role.
+- **Por que não bastou validar a audiência:** `grafana` e `kiali` emitem token com escopo
+  completo, então o token de uma pessoa logada no Grafana carrega as roles do Circle e,
+  por tabela, a audiência do Circle. O corte por service account não depende de como os
+  outros clients estão configurados. Se um dia esses clients passarem a ter escopo
+  fechado, validar audiência vira uma segunda barreira barata.
 
 ## Decisões suas (não é falta de código)
 

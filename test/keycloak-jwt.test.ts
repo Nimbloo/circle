@@ -35,17 +35,25 @@ const validPayload = () => ({
    preferred_username: 'service-account-circle-ci',
 });
 
+/** Token de PESSOA: mesmo realm, mesma assinatura — só não é service account. */
+const humanPayload = () => ({
+   iss: ISS,
+   exp: now() + 300,
+   azp: 'grafana',
+   preferred_username: 'danilo',
+   email: 'danilo@nimbloo.ai',
+   email_verified: true,
+});
+
 describe('verifyKeycloakJwt', () => {
    beforeEach(() => {
       process.env.AUTH_KEYCLOAK_ISSUER = ISS;
-      process.env.CIRCLE_KEYCLOAK_ALLOWED_CLIENTS = 'circle-ci,another';
       vi.stubGlobal(
          'fetch',
          vi.fn(async () => ({ ok: true, json: async () => ({ keys: [jwk] }) }))
       );
    });
    afterEach(() => {
-      delete process.env.CIRCLE_KEYCLOAK_ALLOWED_CLIENTS;
       vi.unstubAllGlobals();
       vi.restoreAllMocks();
    });
@@ -91,20 +99,23 @@ describe('verifyKeycloakJwt', () => {
       expect(await verifyKeycloakJwt(makeToken(validPayload()))).toBeNull();
    });
 
-   it('rejects a token whose azp is not in the allowlist', async () => {
-      const p = await verifyKeycloakJwt(makeToken({ ...validPayload(), azp: 'rogue-client' }));
+   // A porta de máquina é só para máquina: o token de uma PESSOA do realm é válido e
+   // assinado, mas não entra por aqui. Vale inclusive para o Grafana, que emite com
+   // escopo completo e por isso carrega as roles do Circle no token do usuário.
+   it('rejects a human token from the realm (not a service account)', async () => {
+      expect(await verifyKeycloakJwt(makeToken(humanPayload()))).toBeNull();
+   });
+
+   it('rejects a service-account name that does not match the azp', async () => {
+      const p = await verifyKeycloakJwt(
+         makeToken({ ...validPayload(), preferred_username: 'service-account-outro' })
+      );
       expect(p).toBeNull();
    });
 
-   it('rejects all bearer tokens when the allowlist is unset (fail-closed)', async () => {
-      delete process.env.CIRCLE_KEYCLOAK_ALLOWED_CLIENTS;
-      expect(await verifyKeycloakJwt(makeToken(validPayload()))).toBeNull();
-   });
-
-   it('accepts via aud when azp is absent but aud is allowed', async () => {
+   it('rejects a token without azp', async () => {
       const { azp: _omit, ...noAzp } = validPayload();
-      const p = await verifyKeycloakJwt(makeToken({ ...noAzp, aud: ['another', 'account'] }));
-      expect(p).not.toBeNull();
+      expect(await verifyKeycloakJwt(makeToken(noAzp))).toBeNull();
    });
 
    it('rejects a token without exp (would never expire)', async () => {
@@ -114,22 +125,21 @@ describe('verifyKeycloakJwt', () => {
 });
 
 describe('identityFromPayload', () => {
-   it('prefers the email claim when verified', () => {
-      expect(identityFromPayload({ email: 'Bot@Nimbloo.AI', email_verified: true, azp: 'x' })).toBe(
-         'bot@nimbloo.ai'
-      );
-   });
-   it('ignores an unverified email and falls back to azp synthesis', () => {
-      expect(identityFromPayload({ email: 'spoof@admin.com', azp: 'circle-ci' })).toBe(
-         'service-account-circle-ci@circle.local'
-      );
-   });
-   it('synthesizes from azp for service accounts without email', () => {
+   it('identifies the CLIENT, always', () => {
       expect(identityFromPayload({ azp: 'circle-CI' })).toBe(
          'service-account-circle-ci@circle.local'
       );
    });
-   it('returns null with neither', () => {
-      expect(identityFromPayload({ sub: 'x' })).toBeNull();
+
+   // Se o e-mail do token valesse, um service account com e-mail configurado no realm
+   // agiria como aquela pessoa — inclusive como um dos CIRCLE_ADMIN_EMAILS.
+   it('ignores the email claim even when verified', () => {
+      expect(
+         identityFromPayload({ email: 'danilo@nimbloo.ai', email_verified: true, azp: 'circle-ci' })
+      ).toBe('service-account-circle-ci@circle.local');
+   });
+
+   it('returns null without azp', () => {
+      expect(identityFromPayload({ sub: 'x', email: 'x@y.z' })).toBeNull();
    });
 });

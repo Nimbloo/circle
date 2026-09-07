@@ -5,8 +5,8 @@
  * máquina é o token de um SERVICE ACCOUNT (client_credentials) do realm; o Circle não
  * emite nem guarda segredo nenhum. Três camadas, todas no IdP:
  *
- *  1. `CIRCLE_KEYCLOAK_ALLOWED_CLIENTS` — quais clients do realm podem falar com esta
- *     API. Vazio = Bearer desligado (fail-closed). Checado em `verifyKeycloakJwt`.
+ *  1. Ser token de SERVICE ACCOUNT (`client_credentials`) — token de pessoa é recusado
+ *     nesta porta, gente entra pela sessão. Checado em `verifyKeycloakJwt`.
  *  2. Client role em `circle` (`member`/`admin`/`guest`) — sem papel, 403. É a mesma
  *     regra do login humano (`roleFromProfile`), então revogar a role no Keycloak
  *     desliga a máquina no próximo token, sem deploy.
@@ -52,7 +52,8 @@ export async function requireApiClient(db: Db, req: Request): Promise<PublicApiC
    if (!raw) throw new ApiError(401, 'Informe um token do Keycloak em Authorization: Bearer');
 
    const payload = await verifyKeycloakJwt(raw);
-   if (!payload) throw new ApiError(401, 'Token inválido, expirado ou de um client não autorizado');
+   if (!payload)
+      throw new ApiError(401, 'Token inválido, expirado, ou que não é de um service account');
 
    const role = roleFromProfile(payload);
    if (!role)
@@ -62,7 +63,7 @@ export async function requireApiClient(db: Db, req: Request): Promise<PublicApiC
       );
 
    const email = identityFromPayload(payload);
-   if (!email) throw new ApiError(401, 'Token sem identidade (email verificado ou azp)');
+   if (!email) throw new ApiError(401, 'Token sem `azp` — não dá para saber qual client chamou');
 
    const user = await getOrCreateUser(db, email, role, { syncRole: true });
    assertActiveUser(user);
