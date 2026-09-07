@@ -51,6 +51,26 @@ que é concedido pelo **Orbis**, não pelo Circle. Isso depende do client emitir
 O usuário é provisionado no primeiro login (`getOrCreateUser`, no callback `signIn`).
 Adicionar alguém a um time **não** provisiona — quem não logou ainda não existe aqui.
 
+**Papel também vem do Keycloak**, no mesmo padrão do Grafana aqui (`role_attribute_path`
+
+- `role_attribute_strict`): a client role do client `circle` manda, o grupo `app-circle`
+  é o piso `Member`, e sem os dois o login é NEGADO em vez de rebaixado. O papel é
+  sincronizado a cada login, então revogar no Orbis rebaixa no acesso seguinte. A allowlist
+  `CIRCLE_ADMIN_EMAILS` é break-glass e não consulta o banco — se consultasse, quem já
+  fosse Admin nunca poderia ser rebaixado.
+
+**Colocar e tirar gente é no Orbis**, mexendo no grupo/role do Keycloak. O Circle não
+escreve no IdP. Duas garantias de propagação:
+
+- Sessão de **8 horas** (`auth.config.ts`): é o teto para uma revogação valer, porque o
+  gate roda a cada login. Sem `maxAge` o NextAuth usaria 30 dias e tirar do grupo não
+  derrubaria a sessão viva.
+- **Corte imediato**: desativar o membro no Circle, checado em toda requisição.
+
+O realm declara hoje só a client role `member` (minúsculo) para o client `circle`; o
+casamento é case-insensitive, então `admin`/`guest` passam a valer assim que o realm as
+declarar, sem deploy do Circle.
+
 **Auth de máquina:** `Authorization: Bearer <jwt>` emitido pelo Keycloak (service accounts),
 validado contra o JWKS do realm (`lib/api/keycloak-jwt.ts`).
 

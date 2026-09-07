@@ -1,5 +1,5 @@
 import type { Db } from '@/db';
-import { hasCircleGroup, hasNimblooIdentity } from '@/auth.config';
+import { hasNimblooIdentity, roleFromProfile } from '@/auth.config';
 import { consumeInvite } from './invites';
 import { isDeactivatedEmail } from './members';
 
@@ -10,8 +10,8 @@ export type LoginDecision =
    | { allowed: false; reason: 'unauthorized' }
    /** Conta desativada por um admin (#100): nem grupo nem convite reabrem. */
    | { allowed: false; reason: 'deactivated' }
-   /** Caminho normal: grupo concedido via Orbis. */
-   | { allowed: true; via: 'group' }
+   /** Caminho normal: papel vindo do Keycloak (client role, ou grupo como piso). */
+   | { allowed: true; via: 'group'; role: string }
    /** Exceção: convite pendente e válido, consumido agora (single-use). */
    | { allowed: true; via: 'invite'; role: string };
 
@@ -38,7 +38,10 @@ export async function decideKeycloakLogin(
 ): Promise<LoginDecision> {
    if (!hasNimblooIdentity(profile)) return { allowed: false, reason: 'identity' };
    if (await isDeactivatedEmail(db, email)) return { allowed: false, reason: 'deactivated' };
-   if (hasCircleGroup(profile)) return { allowed: true, via: 'group' };
+   // Papel PELO KEYCLOAK, no padrão do Grafana aqui: client role manda, grupo é o piso,
+   // e a ausência dos dois nega o login (o Orbis concede e revoga pela Admin API).
+   const role = roleFromProfile(profile);
+   if (role) return { allowed: true, via: 'group', role };
    const invited = await consumeInvite(db, email);
    // O papel do convite (Member|Guest, #100) provisiona o usuário no 1º login.
    if (invited) return { allowed: true, via: 'invite', role: invited.role };
