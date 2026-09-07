@@ -2,17 +2,17 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { handle, multi } from '@/lib/api/http';
 import { ok } from '@/lib/api/response';
-import { requireApiToken } from '@/lib/api/public-auth';
+import { requireApiClient } from '@/lib/api/public-auth';
 import { assertTeamInScope } from '@/lib/api/scope';
 import { createProject, listProjects } from '@/lib/api/projects';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/** GET /api/public/v1/projects — projetos visíveis ao dono do token (escopo `read`). */
+/** GET /api/public/v1/projects — projetos visíveis ao chamador. */
 export async function GET(req: Request) {
    return handle(async () => {
-      const ctx = await requireApiToken(db, req, 'read');
+      const ctx = await requireApiClient(db, req);
       const sp = new URL(req.url).searchParams;
       return ok(
          await listProjects(db, {
@@ -38,10 +38,10 @@ const createSchema = z.object({
    initiativeId: z.string().nullable().optional(),
 });
 
-/** POST /api/public/v1/projects — cria um projeto (escopo `write`). */
+/** POST /api/public/v1/projects — cria um projeto. */
 export async function POST(req: Request) {
    return handle(async () => {
-      const ctx = await requireApiToken(db, req, 'write');
+      const ctx = await requireApiClient(db, req);
       const body = createSchema.parse(await req.json());
       assertTeamInScope(ctx.teamIds, body.teamId);
       return ok(await createProject(db, body));

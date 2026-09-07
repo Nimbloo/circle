@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { db } from '@/db';
-import { emailFromRequest } from './auth';
-import { assertActiveEmail } from './users';
+import { identityFromRequest } from './auth';
+import { assertActiveEmail, getOrCreateUser } from './users';
 import { problem } from './response';
 import { ApiError } from './errors';
 import { captureServerError } from './observe-error';
@@ -16,10 +16,14 @@ import type { IssueListOptions } from './issues';
  * defesa em profundidade, porque nem todo serviço passa por aqui.
  */
 export async function requireEmail(req?: Request): Promise<string> {
-   const email = await emailFromRequest(req);
-   if (!email) throw new ApiError(401, 'Não autenticado');
-   await assertActiveEmail(db, email);
-   return email;
+   const id = await identityFromRequest(req);
+   if (!id) throw new ApiError(401, 'Não autenticado');
+   // Máquina (Bearer do Keycloak): o papel do token manda no `app_user`, igual ao login
+   // humano. Sem isto, um service account com role `guest` agiria como o `Member` que
+   // ficou gravado no provisionamento da primeira chamada.
+   if (id.machineRole) await getOrCreateUser(db, id.email, id.machineRole, { syncRole: true });
+   await assertActiveEmail(db, id.email);
+   return id.email;
 }
 
 function titleFor(status: number): string {

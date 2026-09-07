@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { handle } from '@/lib/api/http';
 import { ok, notFound } from '@/lib/api/response';
-import { requireApiToken } from '@/lib/api/public-auth';
+import { requireApiClient } from '@/lib/api/public-auth';
 import { assertIssueInScope } from '@/lib/api/scope';
 import { getIssue, getIssueByIdentifier, updateIssue } from '@/lib/api/issues';
 
@@ -14,10 +14,10 @@ async function resolve(id: string) {
    return (await getIssue(db, id)) ?? (await getIssueByIdentifier(db, id));
 }
 
-/** GET /api/public/v1/issues/{id|identifier} — detalhe da issue (escopo `read`). */
+/** GET /api/public/v1/issues/{id|identifier} — detalhe da issue. */
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
    return handle(async () => {
-      const auth = await requireApiToken(db, req, 'read');
+      const auth = await requireApiClient(db, req);
       const { id } = await ctx.params;
       await assertIssueInScope(db, auth.teamIds, id);
       const issue = await resolve(id);
@@ -36,10 +36,10 @@ const patchSchema = z.object({
    parentId: z.string().nullable().optional(),
 });
 
-/** PATCH /api/public/v1/issues/{id|identifier} — atualização parcial (escopo `write`). */
+/** PATCH /api/public/v1/issues/{id|identifier} — atualização parcial. */
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
    return handle(async () => {
-      const auth = await requireApiToken(db, req, 'write');
+      const auth = await requireApiClient(db, req);
       const { id } = await ctx.params;
       await assertIssueInScope(db, auth.teamIds, id);
       const existing = await resolve(id);

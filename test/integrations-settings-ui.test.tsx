@@ -5,7 +5,6 @@ import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import ApiTokensSettings from '@/components/common/settings/api-tokens-settings';
 import WebhooksSettings from '@/components/common/settings/webhooks-settings';
 import ImportExportSettings from '@/components/common/settings/import-export-settings';
 import { SidebarProvider } from '@/components/ui/sidebar';
@@ -28,9 +27,6 @@ function mount(ui: React.ReactElement) {
 }
 
 const apiMocks = vi.hoisted(() => ({
-   tokensList: vi.fn(),
-   tokensCreate: vi.fn(),
-   tokensRevoke: vi.fn(),
    hooksList: vi.fn(),
    hooksCreate: vi.fn(),
    hooksUpdate: vi.fn(),
@@ -43,11 +39,6 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/client', () => ({
    api: {
-      apiTokens: {
-         list: apiMocks.tokensList,
-         create: apiMocks.tokensCreate,
-         revoke: apiMocks.tokensRevoke,
-      },
       webhooks: {
          list: apiMocks.hooksList,
          create: apiMocks.hooksCreate,
@@ -66,73 +57,10 @@ vi.mock('next/navigation', () => ({ useParams: () => ({ orgId: 'nimbloo' }) }));
 
 beforeEach(() => {
    vi.clearAllMocks();
-   apiMocks.tokensList.mockResolvedValue([]);
    apiMocks.hooksList.mockResolvedValue([]);
    apiMocks.hooksDeliveries.mockResolvedValue([]);
    useWorkspaceStore.setState({
       teams: [{ id: 'CORE', name: 'Core' } as unknown as Team],
-   });
-});
-
-describe('Settings → API tokens (#101)', () => {
-   it('cria o token e mostra o valor em claro uma única vez', async () => {
-      const user = userEvent.setup();
-      apiMocks.tokensCreate.mockResolvedValue({
-         id: 't1',
-         name: 'CI',
-         prefix: 'circle_abc123',
-         scopes: ['read', 'write'],
-         createdAt: '2026-09-01T00:00:00.000Z',
-         lastUsedAt: null,
-         revokedAt: null,
-         createdByName: 'Owner',
-         token: 'circle_segredo',
-      });
-
-      mount(<ApiTokensSettings />);
-      await screen.findByText('Nenhum token ainda');
-
-      await user.click(screen.getByRole('button', { name: /Novo token/ }));
-      await user.type(screen.getByLabelText('Nome'), 'CI');
-      await user.click(screen.getByLabelText('Escopo write'));
-      await user.click(screen.getByRole('button', { name: 'Criar token' }));
-
-      await waitFor(() =>
-         expect(apiMocks.tokensCreate).toHaveBeenCalledWith('CI', ['read', 'write'])
-      );
-      // Toast de sucesso só DEPOIS da API confirmar.
-      expect(toastMocks.success).toHaveBeenCalledWith('Token criado');
-      expect(await screen.findByText('circle_segredo')).toBeTruthy();
-
-      // Fechado o diálogo, a linha mostra só o prefixo — o valor não volta.
-      await user.click(screen.getByRole('button', { name: 'Copiar e fechar' }));
-      await waitFor(() => expect(screen.queryByText('circle_segredo')).toBeNull());
-      expect(screen.getByText('circle_abc123…')).toBeTruthy();
-   });
-
-   it('revoga de forma otimista e faz rollback quando a API falha', async () => {
-      const user = userEvent.setup();
-      apiMocks.tokensList.mockResolvedValue([
-         {
-            id: 't1',
-            name: 'CI',
-            prefix: 'circle_abc123',
-            scopes: ['read'],
-            createdAt: '2026-09-01T00:00:00.000Z',
-            lastUsedAt: null,
-            revokedAt: null,
-            createdByName: 'Owner',
-         },
-      ]);
-      apiMocks.tokensRevoke.mockRejectedValue(new Error('boom'));
-
-      mount(<ApiTokensSettings />);
-      await user.click(await screen.findByRole('button', { name: 'Revogar CI' }));
-      await user.click(screen.getByRole('button', { name: 'Revogar' }));
-
-      await waitFor(() => expect(toastMocks.error).toHaveBeenCalled());
-      // Rollback: o botão de revogar volta.
-      expect(screen.getByRole('button', { name: 'Revogar CI' })).toBeTruthy();
    });
 });
 

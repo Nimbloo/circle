@@ -25,16 +25,24 @@ function bearerToken(req?: Request): string | null {
    return m ? m[1].trim() : null;
 }
 
+/** Quem está chamando. `machineRole` só vem preenchido na auth de máquina (Bearer). */
+export interface RequestIdentity {
+   email: string;
+   /** Papel vindo do token do Keycloak — o `app_user` é sincronizado com ele. */
+   machineRole: string | null;
+}
+
 /**
- * E-mail do usuário autenticado (minúsculo) ou null.
+ * Identidade do chamador (e-mail minúsculo) ou null.
  * Async: em produção consulta a sessão do NextAuth.
  */
-export async function emailFromRequest(req?: Request): Promise<string | null> {
+export async function identityFromRequest(req?: Request): Promise<RequestIdentity | null> {
    // Guard DUPLO: só ativa o seam de header em teste (vitest) E fora do runtime do
    // Next. O server de produção (`next start`) sempre define NEXT_RUNTIME → o bypass
    // do header NUNCA liga em prod, mesmo que NODE_ENV venha errado por acidente.
    if (process.env.NODE_ENV === 'test' && !process.env.NEXT_RUNTIME) {
-      return emailFromTestHeader(req);
+      const testEmail = emailFromTestHeader(req);
+      return testEmail ? { email: testEmail, machineRole: null } : null;
    }
    // Auth de MÁQUINA: Bearer JWT emitido pelo Keycloak (service accounts). Valida
    // contra o JWKS do realm — coerente com o SSO único, sem cofre de tokens no app.
@@ -42,13 +50,27 @@ export async function emailFromRequest(req?: Request): Promise<string | null> {
    if (bearer) {
       const { verifyKeycloakJwt, identityFromPayload } = await import('./keycloak-jwt');
       const payload = await verifyKeycloakJwt(bearer);
-      return payload ? identityFromPayload(payload) : null;
+      if (!payload) return null;
+      // Papel PELO KEYCLOAK também para máquina: sem client role de `circle` (nem o
+      // grupo `app-circle`) o token não vale aqui. Mesma regra do login humano — então
+      // revogar a role no IdP desliga a máquina no próximo token, e o papel dela é o do
+      // token, em vez de ficar preso ao `Member` do provisionamento.
+      const { roleFromProfile } = await import('@/auth.config');
+      const machineRole = roleFromProfile(payload);
+      if (!machineRole) return null;
+      const identity = identityFromPayload(payload);
+      return identity ? { email: identity, machineRole } : null;
    }
    // Import dinâmico: mantém o next-auth fora do grafo estático (edge + testes).
    const { auth } = await import('@/auth');
    const session = await auth();
    const email = session?.user?.email;
-   return email ? email.trim().toLowerCase() : null;
+   return email ? { email: email.trim().toLowerCase(), machineRole: null } : null;
+}
+
+/** Conveniência: só o e-mail do chamador (a maioria das rotas não precisa do resto). */
+export async function emailFromRequest(req?: Request): Promise<string | null> {
+   return (await identityFromRequest(req))?.email ?? null;
 }
 
 /**
