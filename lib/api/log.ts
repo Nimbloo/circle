@@ -60,7 +60,14 @@ export function currentTraceId(): string | undefined {
 }
 
 function emit(level: Level, payload: Record<string, unknown>): void {
-   const line = JSON.stringify({ level, ts: new Date().toISOString(), ...payload });
+   const ts = new Date().toISOString();
+   // O TIMESTAMP NA FRENTE NÃO É ENFEITE. O Fluent Bit do cluster corta tudo até o
+   // primeiro espaço da linha (`^[^ ]+%s+(.*)`), assumindo que toda linha começa com
+   // timestamp — que é como os serviços Java logam. Sem o prefixo, a linha JSON era
+   // cortada no primeiro espaço DE DENTRO do JSON e chegava ao Loki como `{}`:
+   // 72 linhas vazias em 24h, medidas no Loki. O log parecia certo no `kubectl logs`
+   // e estava destruído no destino.
+   const line = `${ts} ${JSON.stringify({ level, ts, ...payload })}`;
    if (level === 'error') console.error(line);
    else if (level === 'warn') console.warn(line);
    else console.log(line);

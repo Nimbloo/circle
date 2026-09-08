@@ -154,6 +154,13 @@ board mandava 2.283 KB de JSON sem compressão; com ela, 106 KB, ao custo de ~0,
 por resposta (no threadpool do libuv, fora do event loop). `test/api-compression.test.ts`
 tranca o comportamento.
 
+**A linha começa com timestamp + espaço, e isso é obrigatório.** O Fluent Bit do cluster
+corta tudo até o primeiro espaço (`^[^ ]+%s+(.*)`), assumindo que toda linha começa com
+timestamp — como os serviços Java fazem. Sem o prefixo, a linha JSON era cortada no primeiro
+espaço DE DENTRO do JSON e chegava ao Loki como `{}`: medido em produção, 72 linhas vazias em
+24h, com o `kubectl logs` mostrando tudo certo. `test/api-log.test.ts` reproduz o corte do Lua
+e exige que o resto seja JSON válido.
+
 **Log estruturado:** `handle()` emite uma linha JSON por requisição —
 `{msg: "<< GET /api/v1/issues/:id", requestId, route, status, durationMs, traceId?}` — com
 chaves em camelCase, a mesma convenção MDC dos serviços Java. A rota é o PADRÃO (ids viram
