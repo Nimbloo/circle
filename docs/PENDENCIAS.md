@@ -613,6 +613,15 @@ não escutava evento; só o DETALHE reagia, e só a comentário. Entrou a entida
 publicada no webhook de PR (por review) e no sync do GitHub (uma vez, e só quando o sync
 mudou algo). A lista escuta o mesmo evento de janela do detalhe, com refetch silencioso.
 
+**Falha de método da própria auditoria, corrigida depois (v0.38.0):** a varredura inicial foi
+por ROTA, e rota não enxerga serviço que ela não importa direto. Revarrendo por SERVIÇO
+apareceram dois casos da mesma família já corrigida — `avatar.ts` (a foto aparece na autoria
+alheia; o publish tinha entrado só no `updateProfile`) e `project-templates.ts` (corrigi o
+`templates.ts` de issue sem notar que template de projeto é outro arquivo). Ficam sem evento
+de propósito: favoritos e convites (por usuário / tela de admin), webhooks (config de admin)
+e `s3-assets` (utilitário) — nenhum tem consumidor escutando, e publicar sem consumidor é
+ruído.
+
 **Conferido e sem problema:** toast de sucesso só depois da confirmação da API (com rollback
 no catch) em todos os stores; o log estruturado não carrega corpo nem query string; as rotas
 sem Zod são as sem corpo (`read-all`, `dismiss`, `redeliver`, `sync`).
