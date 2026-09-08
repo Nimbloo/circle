@@ -30,6 +30,7 @@ const SWATCHES: Record<string, ThemeOption['swatch']> = {
    'dark': { bg: '#18181b', fg: '#f4f4f5', accent: '#6771c5' },
    'magic-blue': { bg: '#1c1b2e', fg: '#e4e4fb', accent: '#575bc7' },
    'classic-dark': { bg: '#191a1f', fg: '#eef0f3', accent: '#8a8f98' },
+   'dracula': { bg: '#282a36', fg: '#f8f8f2', accent: '#bd93f9' },
    'custom': { bg: '#1c1a2b', fg: '#eeeefc', accent: '#605e92' },
 };
 
@@ -40,13 +41,14 @@ const LABELS: Record<string, string> = {
    'dark': 'Dark',
    'magic-blue': 'Magic Blue',
    'classic-dark': 'Classic Dark',
+   'dracula': 'Dracula',
    'custom': 'Custom',
 };
 
 const option = (id: string): ThemeOption => ({ id, label: LABELS[id], swatch: SWATCHES[id] });
 
 const LIGHT_VARIANTS = ['light', 'pure-light'].map(option);
-const DARK_VARIANTS = ['dark', 'magic-blue', 'classic-dark'].map(option);
+const DARK_VARIANTS = ['dark', 'magic-blue', 'classic-dark', 'dracula'].map(option);
 const ALL_OPTIONS = [option('system'), ...LIGHT_VARIANTS, ...DARK_VARIANTS, option('custom')];
 
 function ThemeSwatch({ swatch }: { swatch: ThemeOption['swatch'] }) {

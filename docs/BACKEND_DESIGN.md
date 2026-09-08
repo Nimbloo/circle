@@ -150,8 +150,8 @@ tranca o comportamento.
 **Log estruturado:** `handle()` emite uma linha JSON por requisição —
 `{msg: "<< GET /api/v1/issues/:id", requestId, route, status, durationMs, traceId?}` — com
 chaves em camelCase, a mesma convenção MDC dos serviços Java. A rota é o PADRÃO (ids viram
-`:id`), o `requestId` respeita o `x-request-id` do chamador e VOLTA na resposta (quem
-relatar um erro aponta a linha exata no Loki), e o `traceId` liga a linha ao evento do
+`:id`), o `requestId` vem do `x-request-id` (em produção quem o define é o Istio, verificado em
+prd — então o id casa com o access log da malha) e VOLTA na resposta, e o `traceId` liga a linha ao evento do
 Sentry. Requisição ≥ 1 s sobe para `warn`; 5xx sai em `error` com stack (cortado em 2 KB —
 linha gigante é linha que o Loki descarta). `test/api-log.test.ts` trava o formato.
 
@@ -172,6 +172,24 @@ Os eventos são grossos de propósito (`{entity, action}`), o que é simples e r
 faz cada cliente re-hidratar o store inteiro. É o limite de escala conhecido — ver a issue
 de payload fino. A decisão de **não** adotar Pusher, com os gatilhos que a revisariam,
 está registrada em issue própria.
+
+**Cobertura (auditada em 08/09):** toda rota de escrita chega a um `publish`. A entidade
+`catalog` cobre o dado de referência que não tem store próprio — status (que são as
+COLUNAS do board), templates, SLA e emoji: chegam pelo bootstrap, então o cliente responde
+re-hidratando o workspace. Editar o próprio perfil publica `member`, porque nome e avatar
+aparecem na autoria e na atribuição de todo mundo. `test/realtime-cobertura.test.ts` trava
+isso: escrita nova sem `publish` derruba a suíte.
+
+**O stream é a única rota que não passa pelo `handle`/`requireEmail`** — ele roda o gate uma
+vez e entrega eventos por horas. Por isso confere a conta desativada na abertura E reconfere
+a cada ~5 min no heartbeat: sem isso, desativar alguém não silenciava a aba já aberta.
+
+**Uma conexão por aba, e o browser tem teto.** `circle.nimbloo.ai` serve **HTTP/1.1**
+(medido no navegador via `nextHopProtocol`), onde o limite é ~6 conexões por origem — e o
+SSE segura uma delas de forma permanente. Com 6 abas abertas o app trava esperando conexão.
+Mitigação no cliente: aba escondida por 1 min solta o stream e, ao voltar, reconecta e
+re-hidrata (senão volta com estado velho). A correção de fundo é **ligar HTTP/2 no gateway**,
+onde o limite passa a ser de streams multiplexados — está em `docs/PENDENCIAS.md`.
 
 ## 6. Observabilidade
 

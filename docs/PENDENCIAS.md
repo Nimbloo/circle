@@ -579,6 +579,45 @@ sem desligar o tracing, que está em uso.
   (LISTEN/NOTIFY) e as migrations têm advisory lock, então subir para 2 réplicas é seguro
   quando fizer sentido; hoje não há contenção que justifique.
 
+### Auditoria de tempo real e sanidade (08/09/2026)
+
+Varredura das 84 rotas de escrita seguindo a cadeia de imports (não só o import direto,
+que dava falso negativo em `import.ts` e na integração do Sentry — as duas publicam via
+`createIssue`).
+
+**Corrigido nesta rodada:**
+
+- **Status não publicava evento.** São as COLUNAS do board: um admin mudava o workflow do
+  time e todo mundo seguia com as colunas velhas até dar refresh. Idem templates, SLA e
+  emoji. Entrou a entidade `catalog`, que o cliente responde re-hidratando o workspace.
+- **Editar o próprio perfil não avisava ninguém.** Nome e avatar aparecem em autoria e
+  atribuição na tela dos outros; agora publica `member`.
+- **O stream aceitava conta desativada.** `GET /api/v1/events` é a única rota que não passa
+  pelo `handle`/`requireEmail`, e usava só `emailFromRequest` — que não checa desativação.
+  Era a última porta aberta de quem foi desligado. Agora checa na abertura e reconfere a
+  cada ~5 min no heartbeat (o stream vive horas; checar uma vez não basta).
+- **Aba escondida segurava conexão para sempre.** Ver o item de HTTP/1.1 abaixo.
+- **Reconexão sem backoff.** Era 1 s fixo: no deploy, todo cliente voltava em uníssono
+  contra o pod que acabou de subir. Agora é exponencial com jitter, teto de 30 s.
+
+**Achado de infraestrutura, não corrigido aqui:** `circle.nimbloo.ai` serve **HTTP/1.1**
+(medido no navegador, `nextHopProtocol` — o `curl` desta máquina não fala HTTP/2 e deu
+falso negativo antes). Em HTTP/1.1 o browser permite ~6 conexões por origem, e o SSE segura
+uma delas permanentemente: **com 6 abas do Circle abertas, o app trava esperando conexão**.
+O cliente agora solta o stream em aba escondida, o que mitiga, mas a correção de fundo é
+ligar **HTTP/2 no gateway Istio** — aí o limite vira streams multiplexados. Vale para todos
+os serviços atrás do mesmo gateway, então é decisão de infraestrutura.
+
+**Lacuna conhecida que ficou:** a LISTA de reviews (`components/common/reviews/reviews.tsx`)
+busca no mount e não escuta evento nenhum — só o DETALHE do review reage
+(`REVIEW_CHANGED_EVENT`). E `syncReviews` não publica. Consertar exige publicar uma entidade
+`review` e fazer a lista escutar; é uma mudança de outro subsistema e ficou fora deste lote
+de propósito, para o diff seguir revisável.
+
+**Conferido e sem problema:** toast de sucesso só depois da confirmação da API (com rollback
+no catch) em todos os stores; o log estruturado não carrega corpo nem query string; as rotas
+sem Zod são as sem corpo (`read-all`, `dismiss`, `redeliver`, `sync`).
+
 ## Decisões suas (não é falta de código)
 
 Nenhuma pendente em 02/09/2026: datas de initiatives, snapshot de cycles e editor de blocos

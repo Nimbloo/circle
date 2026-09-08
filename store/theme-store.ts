@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 
 export type ThemeMode = 'system' | 'light' | 'dark' | 'custom';
 export type LightVariant = 'light' | 'pure-light';
-export type DarkVariant = 'dark' | 'magic-blue' | 'classic-dark';
+export type DarkVariant = 'dark' | 'magic-blue' | 'classic-dark' | 'dracula';
 
 export interface CustomTheme {
    accent: string;

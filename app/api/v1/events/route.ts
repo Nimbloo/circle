@@ -3,12 +3,24 @@ import { emailFromRequest } from '@/lib/api/auth';
 import { subscribe, type CircleEvent } from '@/lib/api/events';
 import { problem } from '@/lib/api/response';
 import { scopeForEmail } from '@/lib/api/scope';
+import { assertActiveEmail } from '@/lib/api/users';
+import { ApiError } from '@/lib/api/errors';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /** Heartbeat: comentário SSE a cada 25s mantém a conexão viva pelo LB/gateway. */
 const HEARTBEAT_MS = 25_000;
+
+/**
+ * De quanto em quanto tempo o stream ABERTO reconfere se a conta ainda está ativa.
+ *
+ * Diferente de uma rota comum, este handler roda o gate UMA vez e depois entrega eventos
+ * por horas. Sem reconferir, desativar alguém não silenciava a aba já aberta — e desativar
+ * é justamente o corte IMEDIATO (a sessão de 8h é o teto do resto). ~5 min de janela, ao
+ * custo de uma query por stream nesse intervalo.
+ */
+const REVALIDATE_MS = 5 * 60_000;
 
 /**
  * Stream SSE do barramento em tempo real. Mesmo gate de auth do resto da API
@@ -20,6 +32,16 @@ const HEARTBEAT_MS = 25_000;
 export async function GET(req: Request): Promise<Response> {
    const email = await emailFromRequest(req);
    if (!email) return problem(401, 'Unauthorized', 'Não autenticado');
+   // `emailFromRequest` NÃO checa conta desativada (isso vive no `requireEmail`), e este
+   // handler não passa pelo `handle`. Sem esta checagem, o stream era a única porta da API
+   // que um desativado ainda conseguia abrir.
+   try {
+      await assertActiveEmail(db, email);
+   } catch (e) {
+      const status = e instanceof ApiError ? e.status : 403;
+      const detalhe = e instanceof ApiError ? e.message : 'Conta desativada';
+      return problem(status, 'Forbidden', detalhe);
+   }
 
    // O barramento é global e o evento não carrega o time, então filtrar por entidade
    // custaria uma query POR EVENTO. Para quem tem escopo restrito (#100), o corte é
@@ -69,7 +91,22 @@ export async function GET(req: Request): Promise<Response> {
             send(`data: ${JSON.stringify(payload)}\n\n`);
          });
 
-         heartbeat = setInterval(() => send(': ping\n\n'), HEARTBEAT_MS);
+         let desdeRevalidacao = 0;
+         heartbeat = setInterval(() => {
+            send(': ping\n\n');
+            desdeRevalidacao += HEARTBEAT_MS;
+            if (desdeRevalidacao < REVALIDATE_MS) return;
+            desdeRevalidacao = 0;
+            // Desativou no meio do caminho? Fecha o stream em vez de seguir empurrando.
+            void assertActiveEmail(db, email).catch(() => {
+               cleanup();
+               try {
+                  controller.close();
+               } catch {
+                  // já fechado
+               }
+            });
+         }, HEARTBEAT_MS);
 
          // Abort do request (cliente fecha a aba) → libera subscriber + timer.
          onAbort = () => {
