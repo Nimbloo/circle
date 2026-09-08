@@ -608,11 +608,10 @@ O cliente agora solta o stream em aba escondida, o que mitiga, mas a correção 
 ligar **HTTP/2 no gateway Istio** — aí o limite vira streams multiplexados. Vale para todos
 os serviços atrás do mesmo gateway, então é decisão de infraestrutura.
 
-**Lacuna conhecida que ficou:** a LISTA de reviews (`components/common/reviews/reviews.tsx`)
-busca no mount e não escuta evento nenhum — só o DETALHE do review reage
-(`REVIEW_CHANGED_EVENT`). E `syncReviews` não publica. Consertar exige publicar uma entidade
-`review` e fazer a lista escutar; é uma mudança de outro subsistema e ficou fora deste lote
-de propósito, para o diff seguir revisável.
+**~~Lacuna da lista de reviews~~ — fechada na sequência (v0.37.0):** ela buscava no mount e
+não escutava evento; só o DETALHE reagia, e só a comentário. Entrou a entidade `review`,
+publicada no webhook de PR (por review) e no sync do GitHub (uma vez, e só quando o sync
+mudou algo). A lista escuta o mesmo evento de janela do detalhe, com refetch silencioso.
 
 **Conferido e sem problema:** toast de sucesso só depois da confirmação da API (com rollback
 no catch) em todos os stores; o log estruturado não carrega corpo nem query string; as rotas

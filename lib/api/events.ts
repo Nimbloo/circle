@@ -32,7 +32,12 @@ export type CircleEntity =
     * responde re-hidratando o workspace. Sem este evento, mudar o workflow de um time só
     * aparecia para os outros depois de um reload — e o board seguia com colunas velhas.
     */
-   | 'catalog';
+   | 'catalog'
+   /**
+    * O REVIEW em si (não o comentário): sync do GitHub e webhook de PR/check mudam a
+    * lista, que antes só carregava no mount. `id` é o do review; sem id, "algo mudou".
+    */
+   | 'review';
 
 import { randomUUID } from 'node:crypto';
 

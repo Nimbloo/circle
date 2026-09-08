@@ -155,8 +155,8 @@ export function useLiveSync(): void {
                      .then(ws.applyInitiative)
                      .catch(() => scheduleHydrate('workspace'));
                }
-            } else if (entity === 'review_comment') {
-               // Sem store de reviews: o detalhe aberto (review-detail) escuta e recarrega
+            } else if (entity === 'review_comment' || entity === 'review') {
+               // Sem store de reviews: quem escuta é a tela — o detalhe aberto recarrega
                // só se for o mesmo review (o `id` do evento é o do review).
                window.dispatchEvent(
                   new CustomEvent(REVIEW_CHANGED_EVENT, { detail: { id: parsed.id } })

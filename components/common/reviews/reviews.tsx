@@ -8,6 +8,7 @@ import { CheckIcon, ChevronLeft, ListFilter, RefreshCw, SlidersHorizontal } from
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ReactNode, useEffect, useRef, useState } from 'react';
+import { REVIEW_CHANGED_EVENT } from '@/lib/use-live-sync';
 import { ReviewDetail, ReviewSection } from './review-detail';
 import { toast } from 'sonner';
 import { PrIcon } from './review-shared';
@@ -181,6 +182,15 @@ export default function Reviews({
    const [error, setError] = useState(false);
    const [syncing, setSyncing] = useState(false);
    const [reloadKey, setReloadKey] = useState(0);
+
+   // Tempo real: sync do GitHub ou webhook de PR/check mudou algum review. O refetch é
+   // silencioso (o skeleton só aparece na primeira carga), então a lista se atualiza sem
+   // piscar — e sem o "aperta F5" que era o único jeito de ver PR novo.
+   useEffect(() => {
+      const onChanged = () => setReloadKey((k) => k + 1);
+      window.addEventListener(REVIEW_CHANGED_EVENT, onChanged);
+      return () => window.removeEventListener(REVIEW_CHANGED_EVENT, onChanged);
+   }, []);
    const [visibleStatuses, setVisibleStatuses] = useState<Set<ReviewStatus>>(
       () => new Set(REVIEW_STATUSES)
    );
