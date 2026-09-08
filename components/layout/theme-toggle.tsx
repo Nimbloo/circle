@@ -24,6 +24,7 @@ const DARK_VARIANTS: { id: DarkVariant; label: string }[] = [
    { id: 'dark', label: 'Dark' },
    { id: 'magic-blue', label: 'Magic Blue' },
    { id: 'classic-dark', label: 'Classic Dark' },
+   { id: 'dracula', label: 'Dracula' },
 ];
 
 /**

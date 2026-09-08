@@ -8,6 +8,7 @@ const selectors = [
    "[data-app-theme='pure-light']",
    "[data-app-theme='magic-blue']",
    "[data-app-theme='classic-dark']",
+   "[data-app-theme='dracula']",
 ];
 
 function declaration(selector: string, name: string): string | undefined {

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { asc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
+import { publish } from './events';
 import {
    status as statusT,
    issue as issueT,
@@ -62,6 +63,7 @@ export async function createStatus(db: Db, input: CreateStatusInput): Promise<St
       category: input.category,
       position,
    });
+   publish({ entity: 'catalog', action: 'created', id });
    return (await getStatus(db, id))!;
 }
 
@@ -86,8 +88,10 @@ export async function updateStatus(
          throw new ApiError(400, `Categoria inválida: use ${STATUS_CATEGORIES.join('|')}`);
       values.category = patch.category;
    }
-   if (Object.keys(values).length > 0)
+   if (Object.keys(values).length > 0) {
       await db.update(statusT).set(values).where(eq(statusT.id, id));
+      publish({ entity: 'catalog', action: 'updated', id });
+   }
    return getStatus(db, id);
 }
 
@@ -118,6 +122,7 @@ export async function deleteStatus(db: Db, id: string): Promise<boolean> {
       throw new ApiError(409, 'Status em uso — reatribua as issues/projetos antes de excluir.');
 
    await db.delete(statusT).where(eq(statusT.id, id));
+   publish({ entity: 'catalog', action: 'deleted', id });
    return true;
 }
 

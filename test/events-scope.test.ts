@@ -66,3 +66,32 @@ describe('stream de eventos e escopo', () => {
       expect(event.actorEmail).toBe(ADMIN);
    });
 });
+
+/**
+ * O stream é a única rota da API que não passa pelo `handle`/`requireEmail` — ele roda o
+ * gate uma vez e depois entrega evento por horas. Desativar alguém precisa fechar essa
+ * porta também, senão o corte imediato não é imediato.
+ */
+describe('stream x conta desativada', () => {
+   it('desativado não abre o stream', async () => {
+      const { setMemberDeactivated } = await import('@/lib/api/members');
+      const { getOrCreateUser } = await import('@/lib/api/users');
+      const guest = await getOrCreateUser(db, GUEST);
+      await setMemberDeactivated(db, guest.id, true);
+
+      const res = await eventsRoute(
+         new Request('http://x/api/v1/events', { headers: { 'x-forwarded-email': GUEST } })
+      );
+      expect(res.status).toBe(403);
+      expect(res.headers.get('content-type')).toContain('problem+json');
+   });
+
+   it('ativo continua abrindo normalmente', async () => {
+      const res = await eventsRoute(
+         new Request('http://x/api/v1/events', { headers: { 'x-forwarded-email': ADMIN } })
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toContain('text/event-stream');
+      await res.body!.cancel();
+   });
+});
