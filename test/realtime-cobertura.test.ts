@@ -67,6 +67,30 @@ describe('escritas que precisam chegar em tempo real', () => {
       expect(membro[0].actorEmail).toBe(EMAIL);
    });
 
+   it('webhook de PR publica review (a LISTA de reviews só carregava no mount)', async () => {
+      const { handlePullRequestEvent } = await import('@/lib/api/reviews');
+      await handlePullRequestEvent(db, {
+         action: 'opened',
+         repository: { full_name: 'Nimbloo/circle' },
+         pull_request: {
+            number: 7,
+            title: 'feat: algo',
+            state: 'open',
+            draft: false,
+            html_url: 'https://github.com/Nimbloo/circle/pull/7',
+            user: { login: 'alguem' },
+            head: { ref: 'branch', sha: 'abc' },
+            base: { ref: 'develop' },
+            created_at: '2026-09-08T10:00:00Z',
+            updated_at: '2026-09-08T10:00:00Z',
+         },
+      } as never);
+
+      const review = eventos.filter((e) => e.entity === 'review');
+      expect(review.map((e) => e.action)).toEqual(['updated']);
+      expect(review[0].id).toBe('Nimbloo/circle#7');
+   });
+
    it('patch sem mudança de fato não gera evento (não acorda cliente à toa)', async () => {
       await updateProfile(db, EMAIL, {});
       expect(doTipo('member')).toEqual([]);
