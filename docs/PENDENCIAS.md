@@ -626,6 +626,24 @@ ruído.
 no catch) em todos os stores; o log estruturado não carrega corpo nem query string; as rotas
 sem Zod são as sem corpo (`read-all`, `dismiss`, `redeliver`, `sync`).
 
+### O log estruturado chegava VAZIO no Loki (08/09/2026)
+
+Achado numa revisão do que eu mesmo tinha subido — e é o tipo de defeito que passa por
+todos os testes: **o `kubectl logs` mostrava a linha certa e o destino recebia `{}`**.
+
+Medido no Loki: 128 linhas do `circle-prd` em 24h, das quais **72 eram objetos vazios** e
+**zero** eram linhas de requisição. Causa: o Lua do Fluent Bit corta tudo até o primeiro
+espaço da linha (`^[^ ]+%s+(.*)`), porque assume timestamp na frente — o formato dos
+serviços Java. A linha JSON pura era cortada no primeiro espaço DE DENTRO do JSON
+(`"msg":"<< GET ..."`), virando fragmento inválido.
+
+Corrigido no app (v0.40.0): a linha passa a ser `<timestamp> <json>`. O pipeline tira o
+prefixo e entrega JSON válido. `test/api-log.test.ts` reproduz o corte do Lua.
+
+**A correção de fundo é outra** e fica para quando a infra voltar à pauta: o Lua deveria
+detectar linha que começa com `{` e não cortar. Como está, qualquer serviço que passe a
+logar JSON puro sofre o mesmo — silenciosamente.
+
 ## Decisões suas (não é falta de código)
 
 **Alerting e observabilidade de infra ficam por último (decidido em 08/09/2026).** O Circle é
