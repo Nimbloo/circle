@@ -33,6 +33,7 @@ export const metadata: Metadata = {
 };
 
 import { ThemeProvider } from '@/components/layout/theme-provider';
+import { applyStoredTheme } from '@/lib/theme-bootstrap';
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
 
 export default function RootLayout({
@@ -44,13 +45,24 @@ export default function RootLayout({
       <html lang="en" suppressHydrationWarning>
          <head>
             <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+            {/* Script BLOQUEANTE, antes do primeiro paint: aplica a variante de tema
+                (`data-app-theme`) e as variáveis do tema custom lidas do localStorage.
+                O next-themes já faz isso para a classe claro/escuro; a camada de
+                variante do Circle não tinha equivalente e entrava só no `useEffect`,
+                depois da hidratação — daí o flash com o tema anterior. */}
+            <script dangerouslySetInnerHTML={{ __html: `(${applyStoredTheme.toString()})();` }} />
          </head>
          <body
             className={`${inter.variable} ${geistMono.variable} font-sans antialiased bg-background`}
             suppressHydrationWarning
          >
             <NuqsAdapter>
-               <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+               {/* `defaultTheme` espelha o padrão do `useThemeStore` (`mode: 'system'`).
+                   Com "dark" aqui, quem nunca escolheu tema e usa SO claro pintava
+                   escuro e só depois da hidratação o ThemeApplier chamava
+                   `setTheme('system')` e corrigia — um segundo flash, agora de
+                   claro/escuro. O estado final é o mesmo; o que sai é o flash. */}
+               <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
                   {/* Sem SessionProvider: NADA no app consome `useSession` — quem
                       identifica o usuário é o `me` do bootstrap. O provider fazia um
                       GET /api/auth/session a cada carga de página (e outro a cada foco
