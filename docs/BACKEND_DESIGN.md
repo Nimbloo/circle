@@ -139,6 +139,13 @@ Rotas de listagem por domínio (`/projects`, `/initiatives`, `/views`, `/members
 como API canônica, mas **a UI não as usa**: o bootstrap `GET /workspace` traz tudo num só
 GET e hidrata os stores.
 
+**Views salvas — o filtro é resolvido nos DOIS lados.** `resolveView` (SQL) e
+`filterIssuesForView` (memória, no cliente) precisam devolver o mesmo conjunto para a mesma
+view; esse par já divergiu aqui (filtro aplicado só de um lado). `ViewFilter` cobre status,
+categoria, label, prioridade, texto, e — desde 08/09 — **responsável e projeto específicos**.
+`unassigned` + `assigneeIds` somam como OU (padrão do Linear), não como interseção.
+`test/view-filters.test.ts` roda a mesma view pelos dois caminhos e compara.
+
 **Compressão:** `handle()` comprime a resposta JSON com gzip quando o cliente aceita e o
 corpo passa de 1 KB. Não é redundante com o Next: ele comprime HTML e assets, mas **não** o
 que sai de um route handler — medido no build de produção, `/login` volta com

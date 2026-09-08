@@ -20,6 +20,8 @@ import { api, type SearchEntityType, type SearchGroup } from '@/lib/client';
 import { SearchSnippet } from '@/components/common/search/search-snippet';
 import { useShallow } from 'zustand/react/shallow';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { useThemeStore } from '@/store/theme-store';
+import { useTheme } from 'next-themes';
 import {
    Box,
    CalendarPlus,
@@ -36,6 +38,9 @@ import {
    Layers,
    Link2,
    SquarePen,
+   Moon,
+   Sun,
+   Palette,
    Tags,
    Type,
    UserRound,
@@ -105,12 +110,24 @@ export function CommandPalette() {
       }))
    );
    const { openModal } = useCreateIssueStore();
+   // Ações globais do ⌘K: no Linear a paleta faz mais que criar issue — troca tema e
+   // recolhe o sidebar. Aqui o grupo tinha UM item.
+   const setMode = useThemeStore((s) => s.setMode);
+   const { setTheme } = useTheme();
    const allStatus = useStatuses();
    const priorities = usePriorities();
    const allLabels = useLabels();
    const cycles = useWorkspaceStore((s) => s.cycles);
    const allProjects = useWorkspaceStore((s) => s.projects);
    const users = useWorkspaceStore((s) => s.users);
+
+   // Times e views salvas entram no "Go to": no Linear o ⌘K alcança QUALQUER destino,
+
+   // não só a lista fixa. Sem isto, abrir uma view salva exigia navegar pelo sidebar.
+
+   const teams = useWorkspaceStore((s) => s.teams);
+
+   const savedViews = useWorkspaceStore((s) => s.views);
 
    const orgId = pathname.split('/')[1] || 'nimbloo';
 
@@ -656,6 +673,32 @@ export function CommandPalette() {
                               Create new issue
                               <Keys keys={['C']} />
                            </CommandItem>
+                           <CommandItem
+                              value="theme dark tema escuro"
+                              onSelect={() => {
+                                 setMode('dark');
+                                 setTheme('dark');
+                                 close();
+                              }}
+                           >
+                              <Moon className="text-muted-foreground" /> Switch to dark theme
+                           </CommandItem>
+                           <CommandItem
+                              value="theme light tema claro"
+                              onSelect={() => {
+                                 setMode('light');
+                                 setTheme('light');
+                                 close();
+                              }}
+                           >
+                              <Sun className="text-muted-foreground" /> Switch to light theme
+                           </CommandItem>
+                           <CommandItem
+                              value="preferences theme settings preferencias tema"
+                              onSelect={() => go('/settings/preferences')}
+                           >
+                              <Palette className="text-muted-foreground" /> Theme & preferences
+                           </CommandItem>
                         </CommandGroup>
                         <CommandGroup heading="Go to">
                            <CommandItem onSelect={() => go('/inbox')}>
@@ -690,6 +733,36 @@ export function CommandPalette() {
                               <Keys keys={['G', 'S']} />
                            </CommandItem>
                         </CommandGroup>
+                        {teams.length > 0 && (
+                           <CommandGroup heading="Teams">
+                              {teams.slice(0, 8).map((team) => (
+                                 <CommandItem
+                                    key={team.id}
+                                    value={`team ${team.name} ${team.id}`}
+                                    onSelect={() => go(`/team/${team.id}/all`)}
+                                 >
+                                    <ContactRound className="text-muted-foreground" />
+                                    <span className="truncate">{team.name}</span>
+                                 </CommandItem>
+                              ))}
+                           </CommandGroup>
+                        )}
+                        {savedViews.length > 0 && (
+                           <CommandGroup heading="Saved views">
+                              {savedViews.slice(0, 8).map((view) => (
+                                 <CommandItem
+                                    key={view.id}
+                                    value={`view ${view.name}`}
+                                    onSelect={() => go(`/view/${view.id}`)}
+                                 >
+                                    <span className="w-4 text-center text-muted-foreground">
+                                       {view.icon || '#'}
+                                    </span>
+                                    <span className="truncate">{view.name}</span>
+                                 </CommandItem>
+                              ))}
+                           </CommandGroup>
+                        )}
                      </>
                   )}
 
