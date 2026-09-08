@@ -11,6 +11,7 @@ import {
    status as statusT,
 } from '@/db/schema';
 import { ApiError } from './errors';
+import { publish } from './events';
 import { runAutomations } from './automations';
 import { notifySlackEvent } from './integrations/slack';
 import {
@@ -379,6 +380,8 @@ export async function syncFromGitHub(db: Db, opts: SyncOptions = {}): Promise<nu
       const counts = await Promise.all(batch.map((repo) => syncRepo(db, repo, token, doFetch)));
       count += counts.reduce((a, b) => a + b, 0);
    }
+   // Só avisa quando algo mudou de fato: sync sem novidade não precisa acordar cliente.
+   if (count > 0) publish({ entity: 'review', action: 'updated' });
    return count;
 }
 
@@ -847,6 +850,7 @@ export async function handlePullRequestEvent(
       set.deletions = row.deletions;
    }
    await db.insert(review).values(row).onConflictDoUpdate({ target: review.id, set });
+   publish({ entity: 'review', action: 'updated', id: row.id });
    if (resolvesId) {
       await linkPrsToIssues(db, repo, new Map([[resolvesId, { title, status }]]));
    }
