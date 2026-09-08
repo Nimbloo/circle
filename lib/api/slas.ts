@@ -1,5 +1,6 @@
 import { and, asc, eq } from 'drizzle-orm';
 import type { Db } from '@/db';
+import { publish } from './events';
 import { teamSla, team as teamT, priority as priorityT } from '@/db/schema';
 import { ApiError } from './errors';
 import { slaDueAt, slaDueDate } from '@/lib/sla';
@@ -60,6 +61,8 @@ export async function setTeamSla(
          .values({ teamId, priorityId, hours })
          .onConflictDoUpdate({ target: [teamSla.teamId, teamSla.priorityId], set: { hours } });
    }
+   // SLA muda o prazo mostrado na issue de todo o time, não só de quem editou.
+   publish({ entity: 'catalog', action: 'updated', id: `${teamId}:${priorityId}` });
    return listTeamSlas(db, teamId);
 }
 

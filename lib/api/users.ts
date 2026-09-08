@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { appUser, teamMember, issueSubscription } from '@/db/schema';
 import { isAdmin, isBreakGlassAdmin } from './auth';
+import { publish } from './events';
 import { ApiError } from './errors';
 
 export type UserRow = typeof appUser.$inferSelect;
@@ -221,6 +222,9 @@ export async function updateProfile(
          .update(appUser)
          .set({ ...set, updatedAt: new Date() })
          .where(eq(appUser.id, user.id));
+      // Nome e avatar aparecem em autoria, atribuição e lista de membros — é dado de
+      // TODO mundo, não só do dono. Sem isto, os outros viam o nome velho até recarregar.
+      publish({ entity: 'member', action: 'updated', id: user.id, actorEmail: user.email });
    }
    return getMe(db, user.email);
 }

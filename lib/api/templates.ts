@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { asc, eq } from 'drizzle-orm';
 import type { Db } from '@/db';
+import { publish } from './events';
 import { issueTemplate as tmplT, team as teamT } from '@/db/schema';
 import { ApiError } from './errors';
 
@@ -65,6 +66,7 @@ export async function createTemplate(db: Db, input: CreateTemplateInput): Promis
       priorityId: input.priorityId ?? null,
    });
    const [row] = await db.select().from(tmplT).where(eq(tmplT.id, id)).limit(1);
+   publish({ entity: 'catalog', action: 'created', id });
    return toDto(row);
 }
 
@@ -84,6 +86,7 @@ export async function updateTemplate(
    if (patch.priorityId !== undefined) values.priorityId = patch.priorityId;
    if (Object.keys(values).length > 0) {
       await db.update(tmplT).set(values).where(eq(tmplT.id, id));
+      publish({ entity: 'catalog', action: 'updated', id });
    }
    const [row] = await db.select().from(tmplT).where(eq(tmplT.id, id)).limit(1);
    return toDto(row);
@@ -93,5 +96,6 @@ export async function deleteTemplate(db: Db, id: string): Promise<boolean> {
    const existing = await db.select({ id: tmplT.id }).from(tmplT).where(eq(tmplT.id, id)).limit(1);
    if (existing.length === 0) return false;
    await db.delete(tmplT).where(eq(tmplT.id, id));
+   publish({ entity: 'catalog', action: 'deleted', id });
    return true;
 }

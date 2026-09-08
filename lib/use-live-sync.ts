@@ -31,10 +31,28 @@ const TARGET_BY_ENTITY: Partial<Record<CircleEntity, SyncTarget>> = {
    team: 'workspace',
    member: 'workspace',
    document: 'workspace',
+   // Dado de referência sem store próprio (status, template, SLA, emoji): chega pelo
+   // bootstrap, então re-hidratar o workspace é o que atualiza. STATUS é o caso que
+   // dói: são as colunas do board.
+   catalog: 'workspace',
    notification: 'notifications',
 };
 
 const DEBOUNCE_MS = 400;
+
+/**
+ * Quanto tempo a aba pode ficar escondida antes de soltarmos o SSE.
+ *
+ * O stream segura UMA conexão por aba, para sempre. Em HTTP/1.1 — que é o que
+ * `circle.nimbloo.ai` serve hoje, medido no navegador (`nextHopProtocol`) — o browser
+ * permite ~6 conexões por origem: com 6 abas do Circle abertas, TODAS as vagas viram
+ * stream e o app trava esperando conexão. Aba escondida não precisa de tempo real;
+ * ao voltar, reconecta e re-hidrata para pegar o que perdeu.
+ */
+const HIDDEN_DISCONNECT_MS = 60_000;
+
+/** Teto do backoff de reconexão. Sem ele, um deploy faz todo cliente voltar junto, de segundo em segundo. */
+const MAX_BACKOFF_MS = 30_000;
 
 function hydrateTarget(target: SyncTarget): void {
    if (target === 'issues') void useIssuesStore.getState().hydrate();
@@ -85,10 +103,15 @@ export function useLiveSync(): void {
 
       let source: EventSource | null = null;
       let closed = false;
+      let tentativas = 0;
+      let ocioso: ReturnType<typeof setTimeout> | null = null;
 
       const connect = () => {
-         if (closed) return;
+         if (closed || source) return;
          source = new EventSource('/api/v1/events');
+         source.onopen = () => {
+            tentativas = 0;
+         };
 
          source.onmessage = (ev: MessageEvent<string>) => {
             let parsed: CircleEventLike;
@@ -167,15 +190,47 @@ export function useLiveSync(): void {
             if (source && source.readyState === EventSource.CLOSED && !closed) {
                source.close();
                source = null;
-               setTimeout(connect, 1000);
+               // Backoff com jitter: no deploy, todos os clientes caem juntos — voltar
+               // de 1 em 1 segundo, em uníssono, é uma enxurrada no pod que subiu.
+               const espera = Math.min(1000 * 2 ** tentativas, MAX_BACKOFF_MS);
+               tentativas += 1;
+               setTimeout(connect, espera * (0.5 + Math.random() / 2));
             }
          };
       };
 
       connect();
 
+      /**
+       * Aba escondida solta o stream; ao voltar, reconecta E re-hidrata. A re-hidratação
+       * não é detalhe: sem ela a aba volta com o estado de quando saiu, que é justamente
+       * o "refresh na mão" que o tempo real existe para eliminar.
+       */
+      const onVisibilidade = () => {
+         if (document.visibilityState === 'hidden') {
+            ocioso = setTimeout(() => {
+               source?.close();
+               source = null;
+            }, HIDDEN_DISCONNECT_MS);
+            return;
+         }
+         if (ocioso) {
+            clearTimeout(ocioso);
+            ocioso = null;
+         }
+         if (!source) {
+            tentativas = 0;
+            connect();
+            for (const alvo of ['issues', 'workspace', 'notifications'] as SyncTarget[])
+               scheduleHydrate(alvo);
+         }
+      };
+      document.addEventListener('visibilitychange', onVisibilidade);
+
       return () => {
          closed = true;
+         document.removeEventListener('visibilitychange', onVisibilidade);
+         if (ocioso) clearTimeout(ocioso);
          for (const t of timers.values()) clearTimeout(t);
          timers.clear();
          source?.close();

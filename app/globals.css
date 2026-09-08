@@ -294,6 +294,64 @@ input[type='search'] {
    --initiative-editor-border: #2c2e35;
 }
 
+/* Dracula — paleta oficial (draculatheme.com). Cobre também os tokens que os outros
+   variants deixam herdados de `.dark` (filter-bar, popover-border, segmented control,
+   header de tabela): aqueles valores são quase pretos e destoariam do #282a36. */
+[data-app-theme='dracula'] {
+   --background: #282a36;
+   --foreground: #f8f8f2;
+   --container: #2c2e3b;
+   --card: #343746;
+   --card-foreground: #f8f8f2;
+   --popover: #343746;
+   --popover-foreground: #f8f8f2;
+   --popover-border: #44475a;
+   --secondary: #383a4a;
+   --secondary-foreground: #f8f8f2;
+   --accent: #44475a;
+   --accent-foreground: #f8f8f2;
+   --muted: #343746;
+   /* Texto secundário: o `comment` oficial (#6272a4) dá 3,0:1 sobre o fundo e 2,5:1
+      sobre o card — abaixo do mínimo de 4,5:1 para texto, e aqui este token carrega
+      metadado de issue no app inteiro. Clareado o mínimo necessário na direção do
+      foreground (35%) para chegar a 5,5:1 / 4,6:1 sem sair da família da paleta. */
+   --muted-foreground: #96a1bf;
+   --border: #3c3f51;
+   --input: #44475a;
+   --ring: #bd93f9;
+   /* Roxo é a identidade do tema; o texto em cima dele volta a ser o fundo. */
+   --primary: #bd93f9;
+   --primary-foreground: #282a36;
+   --destructive: #ff5555;
+   --destructive-foreground: #282a36;
+   --filter-bar: #2c2e3b;
+   --segmented-control-active: #44475a;
+   --table-header-foreground: #96a1bf;
+   --online-indicator: #50fa7b;
+   --warning: #ffb86c;
+   --cycle-started: #f1fa8c;
+   --review-open: #50fa7b;
+   --review-merged: #bd93f9;
+   --review-closed: #ff5555;
+   /* Sidebar no `bg darker` oficial, para separar do conteúdo sem borda dura. */
+   --sidebar: #21222c;
+   --sidebar-foreground: #f8f8f2;
+   --sidebar-border: #343746;
+   --sidebar-hover: #2f313f;
+   --sidebar-accent: #44475a;
+   --sidebar-accent-foreground: #f8f8f2;
+   --sidebar-primary: #bd93f9;
+   --sidebar-primary-foreground: #282a36;
+   --sidebar-ring: #bd93f9;
+   --initiative-editor-border: #44475a;
+   /* Gráficos (painel de insights) na sequência da paleta, em vez do oklch do base. */
+   --chart-1: #bd93f9;
+   --chart-2: #50fa7b;
+   --chart-3: #ffb86c;
+   --chart-4: #ff79c6;
+   --chart-5: #8be9fd;
+}
+
 /* ── user preferences (Preferences → Interface) ────────────────────────────
    Honram, no app inteiro, as prefs visuais escritas em <html> pelo
    PreferencesApplier. Ver components/layout/preferences-applier.tsx. */

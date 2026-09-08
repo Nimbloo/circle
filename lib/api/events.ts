@@ -25,7 +25,14 @@ export type CircleEntity =
    | 'notification'
    | 'document'
    /** Comentário/veredito de review; `id` do evento é o do REVIEW (o cliente recarrega o aberto). */
-   | 'review_comment';
+   | 'review_comment'
+   /**
+    * Dado de REFERÊNCIA do workspace que não tem store próprio: status (as colunas do
+    * board!), templates, SLA, emoji. Tudo isso chega pelo bootstrap, então o cliente
+    * responde re-hidratando o workspace. Sem este evento, mudar o workflow de um time só
+    * aparecia para os outros depois de um reload — e o board seguia com colunas velhas.
+    */
+   | 'catalog';
 
 import { randomUUID } from 'node:crypto';
 
