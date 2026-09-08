@@ -18,6 +18,13 @@ export interface ViewFilter {
    /** Only issues assigned to nobody. */
    unassigned?: boolean;
    /**
+    * Responsáveis e projetos ESPECÍFICOS (espelha `ViewFilter` de `lib/api/views.ts`).
+    * Somam com os booleanos acima: `unassigned` + `assigneeIds` = "sem responsável OU
+    * com um destes", que é como o Linear resolve a mesma combinação.
+    */
+   assigneeIds?: string[];
+   projectIds?: string[];
+   /**
     * Saved search (#99): full-text term. Resolved SERVER-side (`/api/v1/search`),
     * so the saved view lists exactly what the search screen showed.
     */
@@ -79,12 +86,16 @@ export function viewFilterToFilters(filter: ViewFilter): FiltersState {
       ...optionFilter('status', filter.statusIds),
       ...optionFilter('statusType', filter.statusCategories),
    ];
-   if (filter.unassigned) {
+   // `unassigned` e `assigneeIds` entram no MESMO filtro de coluna: a combinação
+   // significa "sem responsável OU com um destes", igual ao que `resolveView` faz no
+   // servidor. Duas entradas separadas virariam interseção e devolveriam vazio.
+   const assignees = [...(filter.unassigned ? ['unassigned'] : []), ...(filter.assigneeIds ?? [])];
+   if (assignees.length) {
       filters.push({
          columnId: 'assignee',
          type: 'option',
-         operator: 'is',
-         values: ['unassigned'],
+         operator: assignees.length > 1 ? 'is any of' : 'is',
+         values: assignees,
       });
    }
    filters.push(...optionFilter('priority', filter.priorityIds));
@@ -96,7 +107,16 @@ export function viewFilterToFilters(filter: ViewFilter): FiltersState {
          values: [...filter.labelIds],
       });
    }
-   if (filter.hasProject) {
+   if (filter.projectIds?.length) {
+      filters.push({
+         columnId: 'project',
+         type: 'option',
+         operator: filter.projectIds.length > 1 ? 'is any of' : 'is',
+         values: [...filter.projectIds],
+      });
+   } else if (filter.hasProject) {
+      // Projetos específicos já implicam "tem projeto"; manter os dois viraria filtro
+      // redundante no chip.
       filters.push({
          columnId: 'project',
          type: 'option',

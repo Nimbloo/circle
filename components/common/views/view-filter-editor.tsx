@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import type { ViewFilter } from '@/lib/api/views';
 import { useLabels, usePriorities, useStatuses } from '@/store/catalog-store';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { CheckIcon, ListFilter, UserRound } from 'lucide-react';
 import type { ComponentType, CSSProperties } from 'react';
 
@@ -48,8 +49,14 @@ export function ViewFilterEditor({
    const statuses = useStatuses();
    const priorities = usePriorities();
    const labels = useLabels();
+   // Pessoas e projetos vivem no workspace (bootstrap), não no catálogo.
+   const users = useWorkspaceStore((s) => s.users);
+   const projects = useWorkspaceStore((s) => s.projects);
 
-   const toggleId = (key: 'statusIds' | 'priorityIds' | 'labelIds', id: string) => {
+   const toggleId = (
+      key: 'statusIds' | 'priorityIds' | 'labelIds' | 'assigneeIds' | 'projectIds',
+      id: string
+   ) => {
       const cur = filter[key] ?? [];
       const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
       onChange({ ...filter, [key]: next.length ? next : undefined });
@@ -67,6 +74,8 @@ export function ViewFilterEditor({
    const categoryCount = filter.statusCategories?.length ?? 0;
    const priorityCount = filter.priorityIds?.length ?? 0;
    const labelCount = filter.labelIds?.length ?? 0;
+   const assigneeCount = filter.assigneeIds?.length ?? 0;
+   const projectCount = filter.projectIds?.length ?? 0;
 
    return (
       <div className="flex items-center gap-1.5 flex-wrap">
@@ -199,6 +208,67 @@ export function ViewFilterEditor({
                   </PopoverContent>
                </Popover>
 
+               {/* Responsável — a pergunta mais comum do dia a dia ("o que está com a Ana").
+                   Convive com o toggle Unassigned abaixo: os dois somam como OU. */}
+               <Popover>
+                  <PopoverTrigger asChild>
+                     <Chip active={assigneeCount > 0}>
+                        {assigneeCount > 0 ? `${assigneeCount} assignees` : 'Assignee'}
+                     </Chip>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-56 p-0">
+                     <Command>
+                        <CommandInput placeholder="Person…" />
+                        <CommandList>
+                           <CommandEmpty>No results.</CommandEmpty>
+                           <CommandGroup>
+                              {users.map((u) => (
+                                 <CommandItem
+                                    key={u.id}
+                                    onSelect={() => toggleId('assigneeIds', u.id)}
+                                 >
+                                    <span className="truncate">{u.name}</span>
+                                    {filter.assigneeIds?.includes(u.id) && (
+                                       <CheckIcon className="ml-auto size-3.5" />
+                                    )}
+                                 </CommandItem>
+                              ))}
+                           </CommandGroup>
+                        </CommandList>
+                     </Command>
+                  </PopoverContent>
+               </Popover>
+
+               {/* Projeto específico. O toggle "Has project" abaixo continua para o caso
+                   genérico; escolher projetos aqui já implica ter projeto. */}
+               <Popover>
+                  <PopoverTrigger asChild>
+                     <Chip active={projectCount > 0}>
+                        {projectCount > 0 ? `${projectCount} projects` : 'Project'}
+                     </Chip>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-56 p-0">
+                     <Command>
+                        <CommandInput placeholder="Project…" />
+                        <CommandList>
+                           <CommandEmpty>No results.</CommandEmpty>
+                           <CommandGroup>
+                              {projects.map((p) => (
+                                 <CommandItem
+                                    key={p.id}
+                                    onSelect={() => toggleId('projectIds', p.id)}
+                                 >
+                                    <span className="truncate">{p.name}</span>
+                                    {filter.projectIds?.includes(p.id) && (
+                                       <CheckIcon className="ml-auto size-3.5" />
+                                    )}
+                                 </CommandItem>
+                              ))}
+                           </CommandGroup>
+                        </CommandList>
+                     </Command>
+                  </PopoverContent>
+               </Popover>
                <button
                   type="button"
                   onClick={() =>
