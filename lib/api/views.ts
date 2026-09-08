@@ -19,6 +19,16 @@ export interface ViewFilter {
    hasProject?: boolean;
    unassigned?: boolean;
    /**
+    * Responsáveis e projetos ESPECÍFICOS. Antes a view só tinha os booleanos acima
+    * (`unassigned`/`hasProject`), então não dava para salvar as duas perguntas mais
+    * comuns do dia a dia: "o que está com a Ana" e "o que é do Projeto X".
+    *
+    * Convivem com os booleanos: `unassigned` + `assigneeIds` significa "sem responsável
+    * OU com um destes", que é como o Linear trata a mesma combinação.
+    */
+   assigneeIds?: string[];
+   projectIds?: string[];
+   /**
     * Saved search (#99): termo full-text. A view resolve pelo MESMO motor da busca
     * (`lib/api/search.ts`), então o resultado salvo é idêntico ao que a tela mostrou.
     */
@@ -234,7 +244,14 @@ export async function resolveView(
          status: f.statusIds,
          labels: f.labelIds,
          priority: f.priorityIds,
-         assignee: f.unassigned ? ['unassigned'] : undefined,
+         // `unassigned` e `assigneeIds` somam no MESMO filtro (o serviço trata
+         // 'unassigned' como um valor), então a combinação vira "sem responsável OU
+         // com um destes" — igual ao Linear.
+         assignee:
+            f.unassigned || f.assigneeIds?.length
+               ? [...(f.unassigned ? ['unassigned'] : []), ...(f.assigneeIds ?? [])]
+               : undefined,
+         project: f.projectIds?.length ? f.projectIds : undefined,
          teamIds: teamScope,
       });
       if (f.hasProject) issues = issues.filter((i) => i.project !== null);
