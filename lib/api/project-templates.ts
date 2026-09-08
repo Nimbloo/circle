@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { asc, eq } from 'drizzle-orm';
 import type { Db } from '@/db';
+import { publish } from './events';
 import { projectTemplate as tmplT, team as teamT } from '@/db/schema';
 import { ApiError } from './errors';
 
@@ -74,6 +75,7 @@ export async function createProjectTemplate(
       healthId: input.healthId ?? null,
    });
    const [row] = await db.select().from(tmplT).where(eq(tmplT.id, id)).limit(1);
+   publish({ entity: 'catalog', action: 'created', id });
    return toDto(row);
 }
 
@@ -94,6 +96,7 @@ export async function updateProjectTemplate(
    if (patch.healthId !== undefined) values.healthId = patch.healthId;
    if (Object.keys(values).length > 0) {
       await db.update(tmplT).set(values).where(eq(tmplT.id, id));
+      publish({ entity: 'catalog', action: 'updated', id });
    }
    const [row] = await db.select().from(tmplT).where(eq(tmplT.id, id)).limit(1);
    return toDto(row);
@@ -103,5 +106,6 @@ export async function deleteProjectTemplate(db: Db, id: string): Promise<boolean
    const existing = await db.select({ id: tmplT.id }).from(tmplT).where(eq(tmplT.id, id)).limit(1);
    if (existing.length === 0) return false;
    await db.delete(tmplT).where(eq(tmplT.id, id));
+   publish({ entity: 'catalog', action: 'deleted', id });
    return true;
 }
