@@ -71,6 +71,19 @@ export default function MyIssues() {
    // store muda (SSE/otimista) para acompanhar entradas e saídas; enquanto não chegou,
    // `scopeMyIssues` aproxima pelos responsáveis já carregados.
    const [assignedIds, setAssignedIds] = useState<ReadonlySet<string> | undefined>(undefined);
+   // Assinatura do que muda a resposta de `assignee=me`: quais issues existem e quem
+   // responde por elas. Depender do array `issues` era a mesma armadilha do roadmap —
+   // a identidade dele muda a cada update otimista e a cada evento SSE, então esta
+   // busca COMPLETA disparava a cada mutação de qualquer pessoa, sem nada de
+   // responsável ter mudado.
+   const assigneesSignature = useMemo(
+      () =>
+         issues
+            .map((i) => `${i.id}:${i.assignees.map((a) => a.id).join(',')}`)
+            .sort()
+            .join('|'),
+      [issues]
+   );
    useEffect(() => {
       if (tab !== 'assigned' || loading) return;
       let alive = true;
@@ -81,7 +94,7 @@ export default function MyIssues() {
       return () => {
          alive = false;
       };
-   }, [tab, issues, loading]);
+   }, [tab, assigneesSignature, loading]);
 
    const scopedIssues = useMemo(
       () =>
