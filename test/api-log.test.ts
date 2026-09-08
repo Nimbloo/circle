@@ -20,13 +20,20 @@ function capturar() {
 
 const req = (init: RequestInit = {}) => new Request('http://x/api/v1/issues/CORE-7', init);
 
+/**
+ * Tira o prefixo de timestamp e devolve o JSON. O prefixo existe porque o Fluent Bit do
+ * cluster corta tudo até o primeiro espaço da linha — sem ele, a linha JSON chegava ao
+ * Loki como `{}` (medido em produção: 72 linhas vazias em 24h).
+ */
+const semPrefixo = (linha: string) => JSON.parse(linha.slice(linha.indexOf(' ') + 1));
+
 beforeEach(capturar);
 afterEach(() => vi.restoreAllMocks());
 
 describe('log estruturado das rotas', () => {
    it('emite uma linha JSON com rota normalizada, status e duração', async () => {
       const res = await handle(async () => ok({ ok: true }), req());
-      const linha = linhas.map((l) => JSON.parse(l)).find((l) => l.msg?.startsWith('<<'));
+      const linha = linhas.map(semPrefixo).find((l) => l.msg?.startsWith('<<'));
 
       expect(linha).toMatchObject({
          level: 'info',
@@ -61,7 +68,7 @@ describe('log estruturado das rotas', () => {
          throw new Error('estourou');
       }, req());
 
-      const eventos = linhas.map((l) => JSON.parse(l));
+      const eventos = linhas.map(semPrefixo);
       const erro = eventos.find((l) => l.msg === 'erro não tratado');
       const requisicao = eventos.find((l) => l.msg?.startsWith('<<'));
 
@@ -74,5 +81,20 @@ describe('log estruturado das rotas', () => {
    it('a resposta continua íntegra depois de passar pelo logger', async () => {
       const res = await handle(async () => ok({ nome: 'circle' }), req());
       expect(await res.json()).toEqual({ data: { nome: 'circle' } });
+   });
+});
+
+describe('formato que sobrevive ao pipeline de log', () => {
+   it('a linha começa com timestamp + espaço, e o resto é JSON válido', async () => {
+      await handle(async () => ok({ ok: true }), req());
+      const linha = linhas.find((l) => l.includes('"msg"'))!;
+
+      // É EXATAMENTE o que o Lua do Fluent Bit faz: corta até o primeiro espaço.
+      const [prefixo, ...resto] = linha.split(' ');
+      expect(new Date(prefixo).toISOString()).toBe(prefixo); // timestamp ISO de verdade
+
+      const json = JSON.parse(resto.join(' ')); // o que chega ao Loki
+      expect(json.msg).toContain('<<');
+      expect(json.requestId).toEqual(expect.any(String));
    });
 });
