@@ -91,6 +91,30 @@ describe('escritas que precisam chegar em tempo real', () => {
       expect(review[0].id).toBe('Nimbloo/circle#7');
    });
 
+   it('trocar e apagar a foto avisa os outros (avatar aparece na autoria alheia)', async () => {
+      const { setAvatar, deleteAvatar } = await import('@/lib/api/avatar');
+      const { getOrCreateUser } = await import('@/lib/api/users');
+      const eu = await getOrCreateUser(db, EMAIL);
+      // 1x1 PNG transparente.
+      const png =
+         'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      await setAvatar(db, eu.id, png, 'image/png');
+      await deleteAvatar(db, eu.id);
+
+      expect(doTipo('member')).toEqual(['updated', 'updated']);
+   });
+
+   it('template de PROJETO publica igual ao de issue (a varredura por rota não pegou)', async () => {
+      const { createProjectTemplate, updateProjectTemplate, deleteProjectTemplate } = await import(
+         '@/lib/api/project-templates'
+      );
+      const criado = await createProjectTemplate(db, { teamId: 'CORE', name: 'Discovery' });
+      await updateProjectTemplate(db, criado.id, { name: 'Discovery v2' });
+      await deleteProjectTemplate(db, criado.id);
+
+      expect(doTipo('catalog')).toEqual(['created', 'updated', 'deleted']);
+   });
+
    it('patch sem mudança de fato não gera evento (não acorda cliente à toa)', async () => {
       await updateProfile(db, EMAIL, {});
       expect(doTipo('member')).toEqual([]);
