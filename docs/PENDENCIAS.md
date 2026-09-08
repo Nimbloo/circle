@@ -628,8 +628,15 @@ sem Zod são as sem corpo (`read-all`, `dismiss`, `redeliver`, `sync`).
 
 ## Decisões suas (não é falta de código)
 
-Nenhuma pendente em 02/09/2026: datas de initiatives, snapshot de cycles e editor de blocos
-foram decididos e entregues (seção acima).
+**Alerting e observabilidade de infra ficam por último (decidido em 08/09/2026).** O Circle é
+ferramenta INTERNA — a indisponibilidade custa incômodo, não receita. Vale para: as três chaves
+de webhook do Slack no Secrets Manager (que destravariam o `nimbloo-k8s#523` e fariam o
+Alertmanager entregar alerta em algum lugar), o DSN do Sentry, o tracing para o Tempo (issue
+#28) e a imagem ARM (issue #27). Não reabrir como "débito urgente" — é prioridade consciente,
+não esquecimento.
+
+Fora isso, nenhuma decisão pendente em 02/09/2026: datas de initiatives, snapshot de cycles e
+editor de blocos foram decididos e entregues (seção acima).
 
 ## Construção de produto
 
