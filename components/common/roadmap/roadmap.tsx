@@ -35,12 +35,29 @@ export default function Roadmap() {
       }
    }, [showCompleted, ordering]);
 
-   // Refaz o fetch quando as opções mudam e quando o workspace-store é re-hidratado
-   // (é o `useLiveSync` global que o atualiza no SSE) — assim um projeto criado ou
-   // movido em outra aba aparece aqui sem canal próprio.
+   // Refaz o fetch quando as opções mudam e quando o workspace-store traz projeto
+   // criado, movido de initiative, reagendado ou com status alterado — assim uma
+   // mudança em outra aba aparece aqui (via `useLiveSync`) sem canal próprio.
+   //
+   // A dependência é uma ASSINATURA do conteúdo, não o array. A IDENTIDADE do array
+   // do store muda a cada re-hidratação mesmo sem nada mudar, e como dependência ela
+   // refazia a busca em cascata: medido em produção, quatro `GET /api/v1/roadmap` em
+   // 4 s numa única carga de página, enquanto toda outra rota era chamada uma vez.
+   const projectsSignature = useMemo(
+      () =>
+         storeProjects
+            .map(
+               (p) =>
+                  `${p.id}:${p.initiative ?? ''}:${p.startDate}:${p.targetDate ?? ''}:${p.status.id}`
+            )
+            .sort()
+            .join('|'),
+      [storeProjects]
+   );
+
    useEffect(() => {
       void load();
-   }, [load, storeProjects]);
+   }, [load, projectsSignature]);
 
    const groups = useMemo<RoadmapRenderGroup[]>(() => {
       if (!data) return [];

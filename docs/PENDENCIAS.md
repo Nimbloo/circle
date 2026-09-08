@@ -1,6 +1,7 @@
 # Pendências do Circle
 
-Estado em **2026-09-07**, com `main` e `develop` sincronizadas na v0.32.0.
+Estado em **2026-09-08**, com a v0.40.0 em produção (`main` e `develop` sincronizadas;
+há uma correção em revisão, descrita na última seção de Operacional).
 
 > **As [issues](https://github.com/Nimbloo/circle/issues) são a fonte da verdade** sobre
 > escopo. Este documento registra o que elas **não** capturam: bloqueios que vivem em
@@ -640,9 +641,94 @@ serviços Java. A linha JSON pura era cortada no primeiro espaço DE DENTRO do J
 Corrigido no app (v0.40.0): a linha passa a ser `<timestamp> <json>`. O pipeline tira o
 prefixo e entrega JSON válido. `test/api-log.test.ts` reproduz o corte do Lua.
 
-**A correção de fundo é outra** e fica para quando a infra voltar à pauta: o Lua deveria
-detectar linha que começa com `{` e não cortar. Como está, qualquer serviço que passe a
-logar JSON puro sofre o mesmo — silenciosamente.
+**A correção de fundo saiu depois**, no
+[`nimbloo-k8s#671`](https://github.com/Nimbloo/nimbloo-k8s/pull/671): o Lua passa a
+detectar linha que começa com `{` e não cortar. Sem ela, qualquer serviço que passe a
+logar JSON puro sofre o mesmo — silenciosamente. **Aberto, à espera de merge** (o merge
+mexe no pipeline de log do cluster inteiro).
+
+Validado antes de propor, porque o script roda em toda linha de log do cluster: sintaxe
+por `luac -p` num contêiner (o pod do Fluent Bit é distroless, sem shell) e a função
+exercitada com as quatro formas de linha que existem hoje — texto Java com timestamp
+(segue cortada, sem regressão), JSON puro (passa intacta), timestamp + JSON (prefixo
+cortado, JSON intacto) e linha sem espaço (inalterada).
+
+**Confirmado em produção (08/09, ~4,5 h depois da v0.40.0):** 26 linhas do `circle-prd`
+no Loki, **zero vazias**, 15 com `level` e `route` consultáveis. Antes eram 72 vazias em
+128, sem nenhuma linha de requisição.
+
+### Filtros salvos, paleta de comandos e Dracula (08/09/2026, v0.36.0 e v0.39.0)
+
+As views salvas só sabiam perguntar por booleano (`unassigned`, `hasProject`), então as
+duas perguntas mais comuns do dia — "o que está com a Ana" e "o que é do Projeto X" —
+não podiam ser salvas. `ViewFilter` ganhou `assigneeIds` e `projectIds`, com
+multi-select no editor. `unassigned` somado a `assigneeIds` vale como **OU** (padrão do
+Linear); cruzar responsável com projeto é **E**. A paridade servidor/cliente
+(`resolveView` em SQL, `viewFilterToFilters` em memória) está coberta por teste — esse
+par já divergiu neste código antes.
+
+A paleta de comandos ganhou os grupos **Teams** e **Saved views** no "Go to", mais troca
+de tema e preferências. O item de alternar sidebar foi retirado: ele quebrava os testes
+da paleta e não valia o acoplamento.
+
+Entrou também a variante de tema **Dracula**. O `--muted-foreground` **não** é o
+`#6272a4` canônico da paleta: ele dá 3,0:1 de contraste, abaixo do mínimo legível.
+Ficou `#96a1bf` (35% mais claro), com teste de contraste que trava a regressão.
+
+### Busca refeita por identidade de array (08/09/2026)
+
+Achado no log estruturado, logo que ele começou a chegar íntegro no Loki — é o primeiro
+retorno prático da correção acima, e não teria aparecido de outro jeito.
+
+Um `useEffect` que chama a API dependia do **array** de um store. A identidade do array
+muda a cada re-hidratação e a cada update otimista, mesmo com o conteúdo igual, então a
+busca disparava em cascata sem nada ter mudado. Dois casos independentes:
+
+- **Roadmap:** quatro `GET /api/v1/roadmap` em 4 s numa única carga de página, enquanto
+  toda outra rota foi chamada uma vez (medido em 48 h de produção).
+- **My issues, aba "Assigned":** a busca **completa** de `assignee=me` refazia a cada
+  mutação de qualquer pessoa, porque o array de issues troca de identidade a cada evento
+  SSE e a cada update otimista.
+
+A dependência passou a ser uma **assinatura** do que muda a resposta — no roadmap,
+id/initiative/datas/status de cada projeto; em my issues, quais issues existem e quem
+responde por elas. A intenção original (refazer quando o workspace muda em outra aba)
+continua valendo.
+
+Entrou o **sétimo guarda estrutural**: o CI falha se um `useEffect` que chama a API
+voltar a depender do array de um store. Verificado que ele acusa os dois casos no código
+anterior e passa no atual.
+
+### Flash de tema na carga (08/09/2026)
+
+Relatado por você: piscadas com o tema anterior ao carregar. Eram **dois** flashes, com
+a mesma raiz — a preferência só era aplicada depois da hidratação.
+
+O `next-themes` já resolve claro/escuro sem flash, porque injeta um script bloqueante
+que põe a classe no `<html>` antes do primeiro paint. A camada de **variante** do Circle
+(`data-app-theme`: pure-light, magic-blue, classic-dark, dracula) e o tema custom **não
+tinham equivalente**: vinham de um `useEffect` sobre um store `persist` do zustand. O
+primeiro paint saía com o tema padrão e a variante entrava por cima — quanto mais longe
+do padrão o tema escolhido, mais visível.
+
+O segundo era de claro/escuro: `defaultTheme` do ThemeProvider era `dark` enquanto o
+padrão do store é `mode: 'system'`. Quem nunca escolheu tema e usa SO claro pintava
+escuro e só depois o `ThemeApplier` corrigia com `setTheme('system')`.
+
+`lib/theme-bootstrap.ts` passou a concentrar a aplicação numa função **autossuficiente**,
+serializada com `toString()` e injetada como script bloqueante no `<head>` — mesma
+técnica do next-themes. O ponto de desenho é o `ThemeApplier` chamar **essa mesma
+função** em runtime: uma implementação só, então o que pinta antes do paint é exatamente
+o que pinta depois. Ela lê o `localStorage` direto, o que a torna imune à ordem de
+re-hidratação do store.
+
+**O modo de falha aqui é silencioso** e vale registrar: se a função passar a referenciar
+um import ou uma constante de módulo, o `ReferenceError` é engolido pelo `catch` interno
+— nenhum erro aparece, só o flash volta. Por isso os testes rodam o **script
+serializado** dentro de um `new Function`, e não a função importada; é a única forma de
+provar que ela se basta. Verificado que quebrar a auto-suficiência derruba 6 dos 8
+testes, e que no build de produção o script sai minificado no `<head>`, antes do
+`<body>`, sem referência externa.
 
 ## Decisões suas (não é falta de código)
 
@@ -682,7 +768,7 @@ Um bypass de autenticação, perda silenciosa de vínculo de projeto, membro fan
 acesso, 87% da métrica HTTP cega, Sentry que reportaria pela metade, variação de escopo
 de ciclo que nunca renderiza — todos pareciam prontos.
 
-Daí os **seis guardas estruturais** no CI, que falham a build quando a classe do bug
+Daí os **sete guardas estruturais** no CI, que falham a build quando a classe do bug
 volta:
 
 | Guarda                          | O que impede                                                                |
@@ -692,6 +778,7 @@ volta:
 | `handle-req-guard`              | Chamada a `handle()` sem `req` (log sem rota, métrica `UNKNOWN`)            |
 | `view-filter-parity`            | Filtro de view divergir entre servidor e cliente                            |
 | `insights-matrix-parity`        | Matriz status × prioridade divergir entre servidor e cliente                |
+| `fetch-effect-deps-guard`       | Efeito que chama a API depender do array de um store (busca em cascata)     |
 | `no-use-before-define` (ESLint) | Usar variável antes da declaração em seletor síncrono — o crash de Cycles   |
 
 **A régua daqui pra frente:** ao pegar uma issue, verifique no código antes de construir.
