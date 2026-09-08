@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { appUser, userAvatar } from '@/db/schema';
 import { ApiError } from './errors';
+import { publish } from './events';
 
 /**
  * Foto de perfil (avatar) self-contained: a imagem vive no banco (`user_avatar`,
@@ -120,6 +121,8 @@ export async function setAvatar(
 
    const avatarUrl = avatarEndpoint(userId);
    await db.update(appUser).set({ avatarUrl, updatedAt: now }).where(eq(appUser.id, userId));
+   // A foto aparece na autoria e na atribuição da tela de todo mundo, não só na sua.
+   publish({ entity: 'member', action: 'updated', id: userId });
    return avatarUrl;
 }
 
@@ -150,4 +153,5 @@ export async function deleteAvatar(db: Db, userId: string): Promise<void> {
       .update(appUser)
       .set({ avatarUrl: null, updatedAt: new Date() })
       .where(eq(appUser.id, userId));
+   publish({ entity: 'member', action: 'updated', id: userId });
 }
