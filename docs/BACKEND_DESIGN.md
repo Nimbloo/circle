@@ -150,8 +150,8 @@ tranca o comportamento.
 **Log estruturado:** `handle()` emite uma linha JSON por requisição —
 `{msg: "<< GET /api/v1/issues/:id", requestId, route, status, durationMs, traceId?}` — com
 chaves em camelCase, a mesma convenção MDC dos serviços Java. A rota é o PADRÃO (ids viram
-`:id`), o `requestId` respeita o `x-request-id` do chamador e VOLTA na resposta (quem
-relatar um erro aponta a linha exata no Loki), e o `traceId` liga a linha ao evento do
+`:id`), o `requestId` vem do `x-request-id` (em produção quem o define é o Istio, verificado em
+prd — então o id casa com o access log da malha) e VOLTA na resposta, e o `traceId` liga a linha ao evento do
 Sentry. Requisição ≥ 1 s sobe para `warn`; 5xx sai em `error` com stack (cortado em 2 KB —
 linha gigante é linha que o Loki descarta). `test/api-log.test.ts` trava o formato.
 

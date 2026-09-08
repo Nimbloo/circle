@@ -8,9 +8,14 @@
  * Cada linha é um JSON de uma linha só, com chaves em camelCase — a convenção da casa
  * (traceId/requestId/route), a mesma que os serviços Java emitem via MDC.
  *
- * `requestId` vem do header `x-request-id` quando o chamador manda (o gateway pode
- * propagar), senão nasce aqui, e volta na resposta: quando alguém relatar lentidão ou
- * erro, o id do cabeçalho leva direto à linha do log.
+ * `requestId` vem do header `x-request-id` quando ele chega, senão nasce aqui, e volta
+ * na resposta: quando alguém relatar lentidão ou erro, o id do cabeçalho leva direto à
+ * linha do log.
+ *
+ * Em produção quem manda esse header é o **Istio**, não o browser — verificado em prd:
+ * um `x-request-id` enviado de fora é substituído pelo do Envoy antes de chegar aqui.
+ * É o comportamento bom: o id do log da aplicação passa a ser o MESMO do access log da
+ * malha, então as duas pontas se cruzam.
  */
 import { randomUUID } from 'node:crypto';
 import * as Sentry from '@sentry/nextjs';
