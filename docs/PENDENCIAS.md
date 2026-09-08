@@ -699,6 +699,37 @@ Entrou o **sétimo guarda estrutural**: o CI falha se um `useEffect` que chama a
 voltar a depender do array de um store. Verificado que ele acusa os dois casos no código
 anterior e passa no atual.
 
+### Flash de tema na carga (08/09/2026)
+
+Relatado por você: piscadas com o tema anterior ao carregar. Eram **dois** flashes, com
+a mesma raiz — a preferência só era aplicada depois da hidratação.
+
+O `next-themes` já resolve claro/escuro sem flash, porque injeta um script bloqueante
+que põe a classe no `<html>` antes do primeiro paint. A camada de **variante** do Circle
+(`data-app-theme`: pure-light, magic-blue, classic-dark, dracula) e o tema custom **não
+tinham equivalente**: vinham de um `useEffect` sobre um store `persist` do zustand. O
+primeiro paint saía com o tema padrão e a variante entrava por cima — quanto mais longe
+do padrão o tema escolhido, mais visível.
+
+O segundo era de claro/escuro: `defaultTheme` do ThemeProvider era `dark` enquanto o
+padrão do store é `mode: 'system'`. Quem nunca escolheu tema e usa SO claro pintava
+escuro e só depois o `ThemeApplier` corrigia com `setTheme('system')`.
+
+`lib/theme-bootstrap.ts` passou a concentrar a aplicação numa função **autossuficiente**,
+serializada com `toString()` e injetada como script bloqueante no `<head>` — mesma
+técnica do next-themes. O ponto de desenho é o `ThemeApplier` chamar **essa mesma
+função** em runtime: uma implementação só, então o que pinta antes do paint é exatamente
+o que pinta depois. Ela lê o `localStorage` direto, o que a torna imune à ordem de
+re-hidratação do store.
+
+**O modo de falha aqui é silencioso** e vale registrar: se a função passar a referenciar
+um import ou uma constante de módulo, o `ReferenceError` é engolido pelo `catch` interno
+— nenhum erro aparece, só o flash volta. Por isso os testes rodam o **script
+serializado** dentro de um `new Function`, e não a função importada; é a única forma de
+provar que ela se basta. Verificado que quebrar a auto-suficiência derruba 6 dos 8
+testes, e que no build de produção o script sai minificado no `<head>`, antes do
+`<body>`, sem referência externa.
+
 ## Decisões suas (não é falta de código)
 
 **Alerting e observabilidade de infra ficam por último (decidido em 08/09/2026).** O Circle é
