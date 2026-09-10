@@ -730,6 +730,49 @@ provar que ela se basta. Verificado que quebrar a auto-suficiência derruba 6 do
 testes, e que no build de produção o script sai minificado no `<head>`, antes do
 `<body>`, sem referência externa.
 
+### Peso do bundle e HTTP/2 (10/09/2026)
+
+Rodada de desempenho pedida com foco em "fluida e leve". O resultado mais útil foi
+descobrir o que **não** tinha ganho: o bundle já estava bem cuidado
+(`optimizePackageImports` configurado, command palette e modal de criação já sob
+demanda, recharts fora do first load, `lucide-react` com imports nomeados em 175
+arquivos, ninguém importando `lodash` direto).
+
+**O que tinha:** `instrumentation-client.ts` roda em toda página e importava
+`@sentry/nextjs` de forma **estática**. O `Sentry.init` já era eliminado num build sem
+DSN, mas o pacote continuava no bundle só para satisfazer o export
+`onRouterTransitionStart` — todo usuário baixava o SDK em toda visita para um Sentry
+que não captura nada. Com o import dinâmico dentro do `if (SENTRY_DSN)`:
+
+|                                           | antes   | depois            |
+| ----------------------------------------- | ------- | ----------------- |
+| chunks iniciais comuns a todas as páginas | 598 kB  | **360 kB** (−40%) |
+| shell (`/[orgId]/layout`)                 | 1510 kB | **1277 kB**       |
+| `/[orgId]/inbox`                          | 1666 kB | **1433 kB**       |
+
+**Contrapartida medida, que importa para a tarefa do DSN:** com `import()` dinâmico o
+webpack não elimina mais o que não é usado dentro do SDK, e o chunk assíncrono ficou em
+~928 kB (o `@sentry/replay` volta com ~226 kB sem a integração ser registrada). Hoje é
+inofensivo — sem DSN o chunk nunca é baixado. **Ao configurar o DSN, medir de novo:** o
+import estático pode voltar a ser o certo. Os flags `treeshake.excludeReplay*` foram
+testados e devolveram ~10 kB; não entraram. Guarda em `test/sentry-lazy-guard.test.ts`,
+com os números, para a decisão ser deliberada.
+
+**HTTP/2 — a causa não era onde este documento dizia.** A suspeita anterior era o
+`protocol:` do Gateway do Istio. O TLS termina no **NLB** (`nimbloo-interno`), então a
+negociação h2 é por **ALPN no load balancer**, que estava em `None` — confirmado no
+`describe-listeners`. Corrigido em
+[`nimbloo-k8s#681`](https://github.com/Nimbloo/nimbloo-k8s/pull/681) com a anotação
+`aws-load-balancer-alpn-policy: HTTP2Preferred`. Os dois caminhos foram testados contra
+o gateway antes: h2c → 200 e HTTP/1.1 → 200 (o Envoy usa codec AUTO e faz o sniff).
+**Aberto** — o gateway é compartilhado (Circle, Grafana, Chatwoot, ArgoCD), então o
+merge pede janela combinada.
+
+**Item corrigido deste documento:** "o cliente ainda baixa TODAS as issues" descrevia
+mal o estado. O `hydrate` do `issues-store` **já faz carga progressiva** — a 1ª página
+aparece rápido e o resto chega em background. O que sobra é volume total, que só pesa em
+escala bem maior. Não é dívida a pagar agora.
+
 ## Decisões suas (não é falta de código)
 
 **Alerting e observabilidade de infra ficam por último (decidido em 08/09/2026).** O Circle é
