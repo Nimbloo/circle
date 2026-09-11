@@ -1,11 +1,17 @@
 /**
- * Event bus in-memory (pub/sub) para a sincronização em tempo real (estilo Linear).
+ * Event bus (pub/sub) da sincronização em tempo real (estilo Linear).
  *
- * Deploy = 1 réplica (autoscaling off) → um barramento em processo é suficiente,
- * sem Redis. Cada subscriber é tipicamente o `enqueue` de um stream SSE
- * (ver `app/api/v1/events/route.ts`). As mutações dos serviços publicam eventos
- * grossos ({entity, action}); o cliente faz um refetch coarse debounced do store
- * afetado (ver `lib/use-live-sync.ts`).
+ * Cada subscriber é tipicamente o `enqueue` de um stream SSE (ver
+ * `app/api/v1/events/route.ts`). As mutações publicam eventos {entity, action, id}.
+ *
+ * Entrega em dois níveis: fan-out LOCAL síncrono (latência zero para os clientes do
+ * próprio pod) e `pg_notify` para os demais pods — detalhado na nota do `CHANNEL`,
+ * abaixo. Não depende de Redis nem de serviço externo: usa o Postgres que já existe.
+ *
+ * O que o cliente faz com o evento NÃO é uniforme (`lib/use-live-sync.ts`): os
+ * caminhos quentes — issue, project, initiative — são TARGETED (re-busca só aquela
+ * entidade e faz splice). O refetch coarse debounced ficou para o que muda raramente
+ * e não tem id útil: catalog, team, member, view, document, cycle, notification.
  *
  * O Set de subscribers vive num global (como `db/index.ts`) para sobreviver ao HMR
  * do Next em dev — senão cada recompilação criaria um Set novo e vazaria o antigo.
