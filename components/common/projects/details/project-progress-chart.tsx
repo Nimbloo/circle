@@ -8,7 +8,15 @@ interface ProjectProgressChartProps {
    completed: number;
 }
 
-const COLORS = { scope: '#8f9299', started: '#facc15', completed: '#6771c5' };
+/**
+ * Paleta de Scope / Started / Completed. Exportada porque a LEGENDA vive noutro
+ * componente (`project-peek-panel`): os mesmos três valores estavam escritos à mão
+ * nos dois arquivos, então mudar a cor aqui deixava a legenda apontando para a cor
+ * antiga — sem nada quebrar, só passando a mentir.
+ */
+export const PROGRESS_COLORS = { scope: '#8f9299', started: '#facc15', completed: '#6771c5' };
+
+const COLORS = PROGRESS_COLORS;
 
 /**
  * Honest snapshot of the current Scope / Started / Completed totals.
