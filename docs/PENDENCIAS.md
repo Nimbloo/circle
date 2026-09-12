@@ -765,8 +765,38 @@ negociação h2 é por **ALPN no load balancer**, que estava em `None` — confi
 [`nimbloo-k8s#681`](https://github.com/Nimbloo/nimbloo-k8s/pull/681) com a anotação
 `aws-load-balancer-alpn-policy: HTTP2Preferred`. Os dois caminhos foram testados contra
 o gateway antes: h2c → 200 e HTTP/1.1 → 200 (o Envoy usa codec AUTO e faz o sniff).
-**Aberto** — o gateway é compartilhado (Circle, Grafana, Chatwoot, ArgoCD), então o
-merge pede janela combinada.
+**Mergeado e verificado em 11/09/2026.** ALPN `HTTP2Preferred` no listener 443 do NLB,
+**h2 negociado** em circle, grafana, chatwoot, argo e keycloak, e uma requisição real
+(`GET /api/healthz`) sobre h2 respondendo 200. Efeito prático: acabou o teto de ~6
+conexões por origem, então o SSE não consome mais uma vaga permanente por aba.
+
+Sem regressão — os oito serviços do gateway compartilhado foram medidos ANTES e depois:
+todos iguais ou melhores (o `kiali` saiu de 503 para 200 sozinho; o `n8n` segue 503, como
+já estava antes da mudança). O `docs.nimbloo.ai` não negocia h2 porque está no gateway
+**público**, deixado de fora de propósito: serve tráfego de cliente (dcr/orbis/api) e
+merece decisão à parte.
+
+**Na mesma janela, dois PRs de log entraram** (`nimbloo-k8s#672` e `#671`):
+
+- **O flood de 403 do DCR contra o Loki acabou** — de ~29 req/s para **0**. Eram ~2
+  milhões de requisições negadas por semana, e é o que tirava o Loki dos 100% de erro no
+  Kiali. Confirmado que os logs do DCR seguem chegando pelo Fluent Bit, que era a
+  premissa da mudança.
+- **O Fluent Bit não corta mais linha que já é JSON.** Rollout dos 30 pods concluído,
+  zero erro de Lua, 31 namespaces preservados e volume de volta à linha de base
+  (~67k linhas/10min contra 71k antes; a queda medida durante o rollout era a própria
+  janela de reinício). As linhas estruturadas do Circle continuam íntegras: zero vazias,
+  todas com `level` e `route`.
+
+**Fica registrado, sem correção:** o filtro Lua tem um defeito **pré-existente** — quando
+o campo `log` não é string, `:match` falha e o registro é descartado (visto no log dos
+pods em horários anteriores à mudança). Não foi introduzido nem agravado pelo `#671`;
+tratar exige um guard de tipo, em PR próprio.
+
+**Ainda em aberto, e vale checar:** os 5 lambdas que usam o endpoint público do Loki
+podem estar com o token antigo, pelo que o comentário da própria policy indica. Estão
+fora do cluster, então o push público faz sentido para eles — mas se o token nunca foi
+rotacionado lá, estão perdendo log em silêncio, do mesmo jeito que o DCR estava.
 
 **Item corrigido deste documento:** "o cliente ainda baixa TODAS as issues" descrevia
 mal o estado. O `hydrate` do `issues-store` **já faz carga progressiva** — a 1ª página

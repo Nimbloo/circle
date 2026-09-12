@@ -20,7 +20,7 @@ import {
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
-import { ProjectProgressChart } from './details/project-progress-chart';
+import { ProjectProgressChart, PROGRESS_COLORS } from './details/project-progress-chart';
 
 interface ProjectPeekPanelProps {
    projectId: string;
@@ -289,21 +289,30 @@ export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) 
             <div className="grid grid-cols-3 gap-2 mb-2">
                <div className="flex flex-col gap-0.5">
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                     <span className="size-2 rounded-[2px] bg-[#8f9299]" />
+                     <span
+                        className="size-2 rounded-[2px]"
+                        style={{ backgroundColor: PROGRESS_COLORS.scope }}
+                     />
                      Scope
                   </div>
                   <span className="text-sm font-medium">{issues.length}</span>
                </div>
                <div className="flex flex-col gap-0.5">
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                     <span className="size-2 rounded-[2px] bg-[#facc15]" />
+                     <span
+                        className="size-2 rounded-[2px]"
+                        style={{ backgroundColor: PROGRESS_COLORS.started }}
+                     />
                      Started
                   </div>
                   <span className="text-sm font-medium">{started}</span>
                </div>
                <div className="flex flex-col gap-0.5">
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                     <span className="size-2 rounded-[2px] bg-[#6771c5]" />
+                     <span
+                        className="size-2 rounded-[2px]"
+                        style={{ backgroundColor: PROGRESS_COLORS.completed }}
+                     />
                      Completed
                   </div>
                   <span className="text-sm font-medium">{completed}</span>

@@ -8,12 +8,21 @@ import { api } from '@/lib/client';
 import type { CircleEntity } from '@/lib/api/events';
 
 /**
- * Sincronização em tempo real (estilo Linear). Abre um `EventSource` no endpoint
- * SSE; a cada `CircleEvent`, dispara um refetch COARSE DEBOUNCED do store afetado.
+ * Sincronização em tempo real (estilo Linear). Abre um `EventSource` no endpoint SSE
+ * e reage a cada `CircleEvent`. Monte UMA vez, num client component do layout (ver
+ * `DataHydrator`).
  *
- * Grosso de propósito: o barramento só diz "algo do tipo X mudou" e o cliente
- * re-hidrata o store inteiro (idempotente). Simples e robusto para 1 réplica.
- * Monte UMA vez, num client component do layout (ver `DataHydrator`).
+ * A reação é de DOIS tipos, e a diferença importa:
+ *
+ * - TARGETED, para os caminhos quentes (issue, project, initiative com `id`):
+ *   re-busca só aquela entidade e faz splice no store. É o que evita o "reload
+ *   idiota" — re-hidratar centenas de issues porque UMA mudou.
+ * - COARSE DEBOUNCED, para o que muda raramente e não traz id útil (catalog, team,
+ *   member, view, document, cycle, label, notification): re-hidrata o store afetado,
+ *   que é idempotente.
+ *
+ * `comment` não mexe na lista do board — só no detalhe aberto, via evento de janela.
+ * `review`/`review_comment` não têm store: quem escuta é a tela aberta.
  */
 
 /** Alvo de refetch por entidade. */
