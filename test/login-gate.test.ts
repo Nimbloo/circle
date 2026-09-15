@@ -45,6 +45,40 @@ describe('gate de login (grupo OU convite)', () => {
       expect(d).toEqual({ allowed: false, reason: 'unauthorized' });
    });
 
+   // ---- Grupo decide SE entra; a client role decide COM QUE papel (#160) ----
+
+   it('client role SEM o grupo app-circle nao entra', async () => {
+      const db = await setup();
+      const d = await decideKeycloakLogin(
+         db,
+         profile({ resource_access: { circle: { roles: ['admin'] } } }),
+         'novo@nimbloo.ai'
+      );
+      expect(d).toEqual({ allowed: false, reason: 'unauthorized' });
+   });
+
+   it('grupo + client role: entra com o papel da role', async () => {
+      const db = await setup();
+      const d = await decideKeycloakLogin(
+         db,
+         profile({ groups: ['app-circle'], resource_access: { circle: { roles: ['guest'] } } }),
+         'novo@nimbloo.ai'
+      );
+      expect(d).toEqual({ allowed: true, via: 'group', role: 'Guest' });
+   });
+
+   it('client role sem grupo, mas COM convite: entra pelo convite, com o papel do convite', async () => {
+      const db = await setup();
+      await createInvite(db, 'novo@nimbloo.ai', ADMIN);
+
+      const d = await decideKeycloakLogin(
+         db,
+         profile({ resource_access: { circle: { roles: ['admin'] } } }),
+         'novo@nimbloo.ai'
+      );
+      expect(d).toEqual({ allowed: true, via: 'invite', role: 'Member' });
+   });
+
    it('sem grupo mas COM convite valido: entra e consome (single-use)', async () => {
       const db = await setup();
       await createInvite(db, 'novo@nimbloo.ai', ADMIN);
