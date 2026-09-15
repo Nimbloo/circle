@@ -1,5 +1,5 @@
 import type { Db } from '@/db';
-import { hasNimblooIdentity, roleFromProfile } from '@/auth.config';
+import { hasCircleGroup, hasNimblooIdentity, roleFromProfile } from '@/auth.config';
 import { consumeInvite } from './invites';
 import { isDeactivatedEmail } from './members';
 
@@ -10,7 +10,7 @@ export type LoginDecision =
    | { allowed: false; reason: 'unauthorized' }
    /** Conta desativada por um admin (#100): nem grupo nem convite reabrem. */
    | { allowed: false; reason: 'deactivated' }
-   /** Caminho normal: papel vindo do Keycloak (client role, ou grupo como piso). */
+   /** Caminho normal: grupo `app-circle` + papel do Keycloak (client role; sem ela, o piso Member). */
    | { allowed: true; via: 'group'; role: string }
    /** Exceção: convite pendente e válido, consumido agora (single-use). */
    | { allowed: true; via: 'invite'; role: string };
@@ -38,9 +38,11 @@ export async function decideKeycloakLogin(
 ): Promise<LoginDecision> {
    if (!hasNimblooIdentity(profile)) return { allowed: false, reason: 'identity' };
    if (await isDeactivatedEmail(db, email)) return { allowed: false, reason: 'deactivated' };
-   // Papel PELO KEYCLOAK, no padrão do Grafana aqui: client role manda, grupo é o piso,
-   // e a ausência dos dois nega o login (o Orbis concede e revoga pela Admin API).
-   const role = roleFromProfile(profile);
+   // O GRUPO `app-circle` decide SE entra; a client role decide COM QUE papel (sem role,
+   // o piso Member). O papel sozinho não abre a porta (#160): uma role posta à mão fora do
+   // Orbis daria um acesso que a tela de Acesso a Apps, que lista pelo grupo, não mostra.
+   // Máquina não passa por aqui — service account não tem grupo e a API autoriza só pela role.
+   const role = hasCircleGroup(profile) ? roleFromProfile(profile) : null;
    if (role) return { allowed: true, via: 'group', role };
    const invited = await consumeInvite(db, email);
    // O papel do convite (Member|Guest, #100) provisiona o usuário no 1º login.
