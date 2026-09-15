@@ -74,20 +74,21 @@ export function hasCircleGroup(profile: unknown): boolean {
 const CLIENT_ID = process.env.AUTH_KEYCLOAK_ID ?? 'circle';
 
 /**
- * Papéis do produto, na grafia do `app_user.role`. O realm declara hoje só `member`
- * (minúsculo, ver `nimbloo-k8s/nimbloo-eks/keycloak-prd/templates/configmap-realm.yaml`);
- * `admin` e `guest` ainda não existem lá. O casamento é case-insensitive de propósito:
- * não inventa nome novo, aceita a grafia que o realm já usa e passa a valer para as
- * outras assim que o PR do realm as declarar, sem exigir deploy do Circle.
+ * Papéis do produto, na grafia do `app_user.role`. O realm declara os três em minúsculo
+ * (`member`, `admin`, `guest` — ver
+ * `nimbloo-k8s/nimbloo-eks/keycloak-prd/templates/configmap-realm.yaml`). O casamento é
+ * case-insensitive de propósito: aceita a grafia do realm sem inventar nome novo.
  */
 const CIRCLE_ROLES = ['Admin', 'Member', 'Guest'] as const;
 export type CircleRole = (typeof CIRCLE_ROLES)[number];
 
 /**
- * Papel do usuário a partir do token, no MESMO padrão do Grafana aqui
- * (`role_attribute_path` + `role_attribute_strict`): a client role manda; quem só tem o
- * grupo `app-circle` cai no piso `Member` (preserva o comportamento de hoje e evita
- * lockout de quem já usa); sem grupo e sem role, `null` — e aí o gate de login nega.
+ * Papel do usuário a partir do token: a client role manda; quem só tem o grupo
+ * `app-circle` cai no piso `Member`; sem grupo e sem role, `null`.
+ *
+ * Diz COM QUE papel, não SE entra: o login humano exige também o grupo
+ * (`decideKeycloakLogin`, #160). Máquina (service account, sem grupo) é autorizada só
+ * por aqui — `public-auth.ts` e o Bearer de `lib/api/auth.ts`.
  *
  * Quem atribui e revoga a role é o Orbis, pela Admin API do Keycloak, exatamente como
  * já faz para o Grafana. O Circle nunca escreve no IdP.
