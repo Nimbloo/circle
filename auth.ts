@@ -23,11 +23,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async signIn({ account, profile }) {
          if (account?.provider !== 'keycloak') return true;
 
+         const email = normalizeEmail((profile as { email?: unknown } | null | undefined)?.email);
+
          // PISO — identidade Nimbloo verificada (domínio + email_verified). Nem convite
          // dispensa isto: o convite libera a AUTORIZAÇÃO, nunca a autenticação.
-         if (!hasNimblooIdentity(profile)) return false;
-         const email = normalizeEmail((profile as { email?: unknown } | null | undefined)?.email);
-         if (!email) return false;
+         if (!hasNimblooIdentity(profile) || !email) {
+            const { logLoginDenied } = await import('@/lib/api/log');
+            logLoginDenied({ email: email ?? '(token sem e-mail)', reason: 'identity' });
+            return '/login?error=identity';
+         }
 
          const { getDb } = await import('@/db');
          const db = getDb();
@@ -37,10 +41,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
          // através do NextAuth. Uma cópia da regra aqui divergiria em silêncio.
          const { decideKeycloakLogin } = await import('@/lib/api/login-gate');
          const decision = await decideKeycloakLogin(db, profile, email);
-         // Conta desativada (#100): redireciona pro login com a mensagem explícita —
-         // `false` daria só o "AccessDenied" genérico do NextAuth.
+         // O MOTIVO NÃO SE PERDE — nem no log, nem na tela.
+         //
+         // Antes só `deactivated` virava mensagem; `identity` e `unauthorized` caíam num
+         // `false`, e o NextAuth transformava os dois no MESMO "AccessDenied" genérico. Duas
+         // causas muito diferentes — "seu e-mail não está verificado" e "você não tem acesso a
+         // este app" — chegavam idênticas a quem tentou E a quem foi investigar.
+         //
+         // Incidente de 16/09/2026: a investigação disso foi parar no Keycloak, em `emailVerified`,
+         // no `syncMode` do IdP e num deploy — e o motivo era `unauthorized`, ou seja, o acesso
+         // nunca tinha sido concedido no Orbis. O dado existia aqui o tempo todo.
          if (!decision.allowed) {
-            return decision.reason === 'deactivated' ? '/login?error=deactivated' : false;
+            const { logLoginDenied } = await import('@/lib/api/log');
+            logLoginDenied({ email, reason: decision.reason });
+            return `/login?error=${decision.reason}`;
          }
 
          const { getOrCreateUser } = await import('@/lib/api/users');
