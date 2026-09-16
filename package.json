@@ -1,6 +1,6 @@
 {
    "name": "circle",
-   "version": "0.40.4",
+   "version": "0.40.5",
    "private": true,
    "packageManager": "pnpm@9.15.9",
    "scripts": {
