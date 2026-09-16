@@ -84,6 +84,27 @@ export function logRequest(fields: RequestLogFields): void {
    emit(level, { msg: `<< ${fields.method} ${fields.route}`, ...fields });
 }
 
+/**
+ * Login recusado, COM O MOTIVO.
+ *
+ * O `signIn` sabe exatamente por que negou — o `LoginDecision` distingue identidade,
+ * desativação e falta de autorização — e isso ia inteiro para o lixo: o NextAuth
+ * transforma um `false` no mesmo `AccessDenied` genérico para todos os casos, e o log
+ * ficava com uma linha de stack trace que não diz nem quem tentou.
+ *
+ * Incidente de 16/09/2026: uma pessoa levou `AccessDenied` e a investigação foi parar no
+ * Keycloak, em hipótese de `emailVerified`, em `syncMode` do IdP e num deploy — quando o
+ * motivo era `unauthorized`, ou seja, o acesso ao Circle simplesmente nunca tinha sido
+ * concedido no Orbis. Uma linha dizendo `reason=unauthorized` teria encerrado o assunto
+ * no primeiro minuto.
+ *
+ * Sai em `warn`: não é erro do sistema (o gate funcionou), mas é o que alguém vai
+ * procurar quando disser "não consigo entrar".
+ */
+export function logLoginDenied(fields: { email: string; reason: string }): void {
+   emit('warn', { msg: `<< login negado (${fields.reason})`, ...fields });
+}
+
 /** Erro de rota, com o mesmo `requestId` da linha de requisição para casar as duas. */
 export function logError(
    msg: string,
