@@ -7,7 +7,7 @@ import { ListSkeleton } from '@/components/common/list-skeleton';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
-import { useIssuesStore } from '@/store/issues-store';
+import { selectIssuesLoading, useIssuesStore } from '@/store/issues-store';
 import { applyIssueFilters } from './issue-filter-columns';
 import { IssueFilterBar } from './issue-filter-bar';
 import { useRightPanelStore } from '@/store/right-panel-store';
@@ -43,7 +43,7 @@ export default function CycleIssues({ cycleView }: CycleIssuesProps) {
    const { viewType } = useViewStore();
    const { filters } = useFilterStore();
    const issues = useIssuesStore((s) => s.issues);
-   const loading = useIssuesStore((s) => s.loading);
+   const loading = useIssuesStore(selectIssuesLoading);
    const error = useIssuesStore((s) => s.error);
    const hydrate = useIssuesStore((s) => s.hydrate);
    const workspaceLoaded = useWorkspaceStore((s) => s.loaded);

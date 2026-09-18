@@ -22,7 +22,7 @@ import { Issue } from '@/data/issues';
 import { statusUserColors, User } from '@/data/users';
 import { useDisplayOrderedStatuses, useLabels, usePriorities } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
-import { useIssuesStore } from '@/store/issues-store';
+import { selectIssuesLoading, useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useSearchStore } from '@/store/search-store';
 import { useViewStore } from '@/store/view-store';
@@ -112,7 +112,7 @@ function useClientTimes(member: User) {
  */
 export default function MemberProfile({ member }: { member: User }) {
    const issues = useIssuesStore((s) => s.issues);
-   const issuesLoading = useIssuesStore((s) => s.loading);
+   const issuesLoading = useIssuesStore(selectIssuesLoading);
    const issuesError = useIssuesStore((s) => s.error);
    const hydrateIssues = useIssuesStore((s) => s.hydrate);
    const [activeTab] = useQueryState('tab', parseAsString.withDefault('assigned'));
