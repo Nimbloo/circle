@@ -23,7 +23,8 @@ import { adaptFolders } from '@/lib/adapters-documents';
 import { api } from '@/lib/client';
 import type { DocumentFolder } from '@/data/documents';
 import { formatDistanceToNowStrict, parseISO } from 'date-fns';
-import { ChevronRight, MoreHorizontal, Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
+import { ChevronRight, FileText, MoreHorizontal, Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
+import { EmptyState } from '@/components/common/empty-state';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -127,9 +128,12 @@ export default function TeamDocuments() {
                </div>
             )}
             {!loading && !error && folders.length === 0 && (
-               <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-                  No documents yet. Use “New document” to create your first one.
-               </div>
+               <EmptyState
+                  icon={FileText}
+                  title="No documents yet"
+                  description="Use “New document” to create your first one."
+                  className="py-10"
+               />
             )}
 
             {!loading &&

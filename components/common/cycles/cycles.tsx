@@ -4,6 +4,7 @@ import { cooldownUntil, todayIso } from '@/data/cycles';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
 import { Hourglass } from 'lucide-react';
+import { EmptyState } from '@/components/common/empty-state';
 import { useParams } from 'next/navigation';
 import { useMemo } from 'react';
 import CycleLine, { CyclePlayIcon } from './cycle-line';
@@ -42,18 +43,11 @@ export default function Cycles() {
 
    if (cycles.length === 0) {
       return (
-         <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
-            <div className="flex size-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
-               <CyclePlayIcon className="size-6" />
-            </div>
-            <div className="flex flex-col gap-1">
-               <p className="text-sm font-medium">No cycles yet</p>
-               <p className="max-w-xs text-sm text-muted-foreground">
-                  Cycles focus your team over short, time-boxed windows. They show up here once a
-                  team turns them on.
-               </p>
-            </div>
-         </div>
+         <EmptyState
+            icon={CyclePlayIcon}
+            title="No cycles yet"
+            description="Cycles focus your team over short, time-boxed windows. They show up here once a team turns them on."
+         />
       );
    }
 

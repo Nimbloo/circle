@@ -2,6 +2,7 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/common/empty-state';
 import { ListSkeleton } from '@/components/common/list-skeleton';
 import {
    Command,
@@ -586,28 +587,24 @@ export default function Initiatives() {
                   <ListSkeleton rows={5} />
                </div>
             ) : displayed.length === 0 && !creating ? (
-               <div className="flex flex-col items-center justify-center gap-4 py-24 text-center">
-                  <div className="flex size-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
-                     <Goal className="size-6" />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                     <p className="text-sm font-medium">
-                        {allInitiatives.length === 0
-                           ? 'No initiatives yet'
-                           : 'No initiatives match this view'}
-                     </p>
-                     <p className="max-w-xs text-sm text-muted-foreground">
-                        {allInitiatives.length === 0
-                           ? 'Initiatives group related projects toward a bigger goal.'
-                           : 'Try switching tabs or clearing the filters.'}
-                     </p>
-                  </div>
-                  {allInitiatives.length === 0 && (
-                     <Button size="sm" onClick={startCreate}>
-                        New initiative
-                     </Button>
-                  )}
-               </div>
+               allInitiatives.length === 0 ? (
+                  <EmptyState
+                     icon={Goal}
+                     title="No initiatives yet"
+                     description="Initiatives group related projects toward a bigger goal."
+                     action={
+                        <Button size="sm" onClick={startCreate}>
+                           New initiative
+                        </Button>
+                     }
+                  />
+               ) : (
+                  <EmptyState
+                     variant="filtered"
+                     title="No initiatives match this view"
+                     description="Try switching tabs or clearing the filters."
+                  />
+               )
             ) : groups ? (
                groups.map((group) => (
                   <div key={group.statusId}>
