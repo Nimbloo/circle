@@ -203,6 +203,7 @@ export async function createAutomation(
       createdAt: new Date(),
    };
    await db.insert(teamAutomation).values(row);
+   publish({ entity: 'automation', action: 'created', id: row.id, teamId });
    return toDto(row);
 }
 
@@ -223,6 +224,7 @@ export async function updateAutomation(
    if (patch.enabled !== undefined) set.enabled = patch.enabled;
    if (patch.position !== undefined) set.position = patch.position;
    await db.update(teamAutomation).set(set).where(eq(teamAutomation.id, id));
+   publish({ entity: 'automation', action: 'updated', id, teamId: prev.teamId });
    return toDto({ ...prev, ...set });
 }
 
@@ -230,7 +232,9 @@ export async function deleteAutomation(db: Db, id: string): Promise<boolean> {
    const deleted = await db
       .delete(teamAutomation)
       .where(eq(teamAutomation.id, id))
-      .returning({ id: teamAutomation.id });
+      .returning({ id: teamAutomation.id, teamId: teamAutomation.teamId });
+   if (deleted.length > 0)
+      publish({ entity: 'automation', action: 'deleted', id, teamId: deleted[0].teamId });
    return deleted.length > 0;
 }
 

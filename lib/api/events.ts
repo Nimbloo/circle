@@ -44,6 +44,8 @@ export type CircleEntity =
     * lista, que antes só carregava no mount. `id` é o do review; sem id, "algo mudou".
     */
    | 'review'
+   /** Regra de automação de um time (CRUD); `teamId` diz de qual time é a tela a recarregar. */
+   | 'automation'
    /**
     * Sinal LOCAL do pod (não vem de mutação): a conexão LISTEN caiu e voltou, então
     * eventos de outros pods podem ter se perdido no intervalo. O cliente deve tratar
