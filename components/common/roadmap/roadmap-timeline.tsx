@@ -29,7 +29,8 @@ import {
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
-import { AlertTriangle, Compass } from 'lucide-react';
+import { AlertTriangle, Compass, Route } from 'lucide-react';
+import { EmptyState } from '@/components/common/empty-state';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 /** Grupo já resolvido para a tela: a initiative (ou "No initiative") e seus projetos. */
@@ -450,8 +451,12 @@ export default function RoadmapTimeline({
 
    if (groups.length === 0) {
       return (
-         <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
-            No projects to plot on the roadmap yet.
+         <div className="flex h-full w-full items-center justify-center">
+            <EmptyState
+               icon={Route}
+               title="No projects to plot yet"
+               description="Projects show up on the roadmap once they exist in this scope."
+            />
          </div>
       );
    }
