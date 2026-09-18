@@ -100,7 +100,7 @@ function projectDto(id: string, teamId: string, initiativeId: string | null = nu
    } as unknown as ProjectDto;
 }
 
-function team(id: string, members: User[], projects: Project[] = []): Team {
+function team(id: string, members: User[]): Team {
    return {
       id,
       name: `Team ${id}`,
@@ -113,7 +113,6 @@ function team(id: string, members: User[], projects: Project[] = []): Team {
       autoCloseChildren: false,
       parentId: null,
       members,
-      projects,
    };
 }
 
@@ -209,7 +208,7 @@ function seed() {
    const uBob = user('bob', []);
    const p1 = project('p1', 'ENG', 'i1');
    const p2 = project('p2', 'ENG');
-   const eng: Team = { ...team('ENG', [uMe, uAna], [p1, p2]), joined: true };
+   const eng: Team = { ...team('ENG', [uMe, uAna]), joined: true };
    const ops = team('OPS', []);
    const initiative = {
       id: 'i1',
@@ -266,13 +265,13 @@ describe('workspace-store — splice por entidade', () => {
          expect(created.name).toBe('Team NEW');
          expect(created.joined).toBe(true);
          expect(created.members.map((m) => m.id)).toEqual(['me']);
-         expect(created.projects).toEqual([]);
+         expect('projects' in created).toBe(false);
          expect(st().getUserById('me')?.teamIds).toEqual(['ENG', 'NEW']);
          expect(st().me?.teamIds).toEqual(['ENG', 'NEW']);
          expectUntouched(before, ['teams', 'users', 'me']);
       });
 
-      it('applyTeam de um time EXISTENTE preserva members/projects e não mexe em users', () => {
+      it('applyTeam de um time EXISTENTE preserva members e não mexe em users', () => {
          const before = refs();
          st().applyTeam(
             teamDto('ENG', { name: 'Engineering', icon: '🚀', estimateScale: 'tshirt' })
@@ -282,7 +281,6 @@ describe('workspace-store — splice por entidade', () => {
          expect(eng.icon).toBe('🚀');
          expect(eng.estimateScale).toBe('tshirt');
          expect(eng.members).toBe(before.teams[0].members);
-         expect(eng.projects).toBe(before.teams[0].projects);
          expect(st().getTeamById('OPS')).toBe(before.teams[1]);
          expectUntouched(before, ['teams']);
       });
@@ -415,17 +413,16 @@ describe('workspace-store — splice por entidade', () => {
    });
 
    describe('project / initiative — cópias derivadas', () => {
-      it('applyProject novo entra em teams[].projects e no projectIds da initiative', () => {
+      it('applyProject novo entra em projects e no projectIds da initiative (teams intacto)', () => {
          const before = refs();
          st().applyProject(projectDto('p3', 'ENG', 'i1'));
          expect(
             st()
-               .getTeamById('ENG')
-               ?.projects.map((p) => p.id)
+               .getProjectsByTeam('ENG')
+               .map((p) => p.id)
          ).toEqual(['p1', 'p2', 'p3']);
          expect(st().getInitiativeById('i1')?.projectIds).toEqual(['p1', 'p3']);
-         expect(st().getTeamById('OPS')).toBe(before.teams[1]);
-         expectUntouched(before, ['projects', 'teams', 'initiatives']);
+         expectUntouched(before, ['projects', 'initiatives']);
       });
 
       it('applyProject que desvincula a initiative tira o id do projectIds', () => {
@@ -449,8 +446,8 @@ describe('workspace-store — splice por entidade', () => {
          st().removeProjectLocal('p1');
          expect(
             st()
-               .getTeamById('ENG')
-               ?.projects.map((p) => p.id)
+               .getProjectsByTeam('ENG')
+               .map((p) => p.id)
          ).toEqual(['p2']);
          expect(st().getInitiativeById('i1')?.projectIds).toEqual([]);
          st().applyInitiative(initiativeDto('i1', null, ['p2']));

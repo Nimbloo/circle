@@ -4,6 +4,7 @@ import { makeTestDb } from './helpers/db';
 import { seedWorkspaceFixture, seedTeam, seedUser } from './helpers/fixtures';
 import { bootstrapWorkspace } from '@/lib/api/workspace';
 import { cycle } from '@/db/schema';
+import { getCycle } from '@/lib/api/cycles';
 
 const isoDay = (n: number) => {
    const d = new Date();
@@ -55,11 +56,44 @@ describe('workspace bootstrap', () => {
       // o usuário corrente é resolvido pelo email
       expect(ws.me.email).toBe(fx.ownerEmail);
 
-      // times vêm costurados com members e projects
+      // times vêm costurados com members; projects NÃO (bootstrap enxuto: o cliente
+      // deriva de `ws.projects` pelo teamId, sem a cópia duplicada)
       const core = ws.teams.find((t) => t.id === 'CORE');
       expect(core).toBeTruthy();
       expect(core!.members.length).toBeGreaterThan(0);
-      expect(core!.projects.every((p) => p.teamId === 'CORE')).toBe(true);
+      expect('projects' in core!).toBe(false);
+   });
+
+   it('burnup só do ciclo current; os demais vêm sob demanda (getCycle)', async () => {
+      const db = await makeTestDb();
+      await seedTeam(db, 'CORE');
+      await seedUser(db, { name: 'Ana', email: 'ana@nimbloo.ai', teamIds: ['CORE'] });
+      await db.insert(cycle).values([
+         {
+            id: 'past',
+            number: 1,
+            name: 'C1',
+            teamId: 'CORE',
+            status: 'completed',
+            startDate: isoDay(-20),
+            endDate: isoDay(-8),
+            capacity: 0,
+         },
+         {
+            id: 'now',
+            number: 2,
+            name: 'C2',
+            teamId: 'CORE',
+            status: 'current',
+            startDate: isoDay(-3),
+            endDate: isoDay(10),
+            capacity: 0,
+         },
+      ]);
+      const ws = await bootstrapWorkspace(db, 'ana@nimbloo.ai', { rollover: false });
+      expect(ws.cycles.find((c) => c.id === 'now')?.burnup).not.toBeNull();
+      expect(ws.cycles.find((c) => c.id === 'past')?.burnup).toBeNull();
+      expect((await getCycle(db, 'past'))?.burnup).not.toBeNull();
    });
 
    it('rollover:false skips the cycle auto-rollover (no write on SSE refetch)', async () => {

@@ -111,8 +111,8 @@ describe('ProjectsBoard — drag and drop entre colunas', () => {
    });
 });
 
-/** Times mínimos do store; `projects` é a cópia derivada que precisa seguir o projeto. */
-function makeTeam(id: string, name: string, projects: Project[] = []): Team {
+/** Times mínimos do store (projetos por time vêm de `projects`, pelo teamId). */
+function makeTeam(id: string, name: string): Team {
    return {
       id,
       name,
@@ -125,7 +125,6 @@ function makeTeam(id: string, name: string, projects: Project[] = []): Team {
       autoCloseChildren: false,
       parentId: null,
       members: [],
-      projects,
    };
 }
 
@@ -149,11 +148,11 @@ describe('ProjectsBoard — agrupado por time', () => {
       const alpha = makeProject({ id: 'p1', name: 'Alpha', teamId: 'CORE' });
       useWorkspaceStore.setState({
          projects: [alpha],
-         teams: [makeTeam('CORE', 'Core', [alpha]), makeTeam('DESIGN', 'Design')],
+         teams: [makeTeam('CORE', 'Core'), makeTeam('DESIGN', 'Design')],
       });
    });
 
-   it('soltar o card na coluna de outro time faz PATCH do teamId e mantém teams[].projects coerente', async () => {
+   it('soltar o card na coluna de outro time faz PATCH do teamId', async () => {
       apiMocks.update.mockImplementation(async (_id: string, body: { teamId: string }) =>
          toProjectDto(makeProject({ id: 'p1', name: 'Alpha', teamId: body.teamId }))
       );
@@ -169,9 +168,6 @@ describe('ProjectsBoard — agrupado por time', () => {
       expect(apiMocks.update).toHaveBeenCalledWith('p1', { teamId: 'DESIGN' });
 
       await waitFor(() => expect(useWorkspaceStore.getState().projects[0].teamId).toBe('DESIGN'));
-      const teams = useWorkspaceStore.getState().teams;
-      expect(teams.find((t) => t.id === 'CORE')?.projects).toHaveLength(0);
-      expect(teams.find((t) => t.id === 'DESIGN')?.projects.map((p) => p.id)).toEqual(['p1']);
       expect(toast.error).not.toHaveBeenCalled();
    });
 
@@ -185,9 +181,6 @@ describe('ProjectsBoard — agrupado por time', () => {
       await waitFor(() => expect(within(column('Core')).getByText('Alpha')).toBeTruthy());
       expect(within(column('Design')).queryByText('Alpha')).toBeNull();
       expect(useWorkspaceStore.getState().projects[0].teamId).toBe('CORE');
-      expect(
-         useWorkspaceStore.getState().teams.find((t) => t.id === 'CORE')?.projects
-      ).toHaveLength(1);
       expect(toast.error).toHaveBeenCalledTimes(1);
    });
 

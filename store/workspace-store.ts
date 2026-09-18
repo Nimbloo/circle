@@ -27,8 +27,8 @@ import { useIssuesStore } from '@/store/issues-store';
 import { api } from '@/lib/client';
 import { toast } from 'sonner';
 
-/** Team das rotas de escrita (TeamDto, sem members/projects) ou do bootstrap (TeamFull). */
-export type TeamLike = TeamDto & Partial<Pick<TeamFull, 'members' | 'projects'>>;
+/** Team das rotas de escrita (TeamDto, sem members) ou do bootstrap (TeamFull). */
+export type TeamLike = TeamDto & Partial<Pick<TeamFull, 'members'>>;
 
 interface WorkspaceState {
    loaded: boolean;
@@ -45,8 +45,7 @@ interface WorkspaceState {
 
    /** Splice de UMA entidade a partir do DTO do servidor (após uma mutação), em vez de
     * re-hidratar o workspace inteiro — mesmo padrão do issues-store. Cada apply/remove
-    * também mantém as CÓPIAS derivadas coerentes (`teams[].projects`,
-    * `initiatives[].projectIds`, `projects[].initiative`, membership em `teams[].members`,
+    * também mantém as CÓPIAS derivadas coerentes (`initiatives[].projectIds`, `projects[].initiative`, membership em `teams[].members`,
     * `owner` de initiatives/views), sem tocar nas demais coleções. */
    applyProject: (dto: ProjectDto) => void;
    /** PATCH otimista de um projeto (DnD do board, reschedule da timeline): aplica `local`
@@ -206,15 +205,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const adapted = adaptProject(dto);
       set((s) => ({
          projects: upsert(s.projects, adapted),
-         // `teams[].projects` só alimenta contagens: mantém a PERTINÊNCIA (entra no time
-         // do DTO, sai dos outros) sem trocar o objeto a cada edição, o que re-renderizaria
-         // todo assinante de `teams` à toa.
-         teams: mapIfChanged(s.teams, (t) => {
-            const has = t.projects.some((p) => p.id === adapted.id);
-            if (t.id === adapted.teamId)
-               return has ? t : { ...t, projects: [...t.projects, adapted] };
-            return has ? { ...t, projects: t.projects.filter((p) => p.id !== adapted.id) } : t;
-         }),
          // Vínculo relacional: o projeto entra no `projectIds` da initiative nova e sai da antiga.
          initiatives: mapIfChanged(s.initiatives, (i) => {
             const linked = i.projectIds.includes(adapted.id);
@@ -256,11 +246,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       useIssuesStore.getState().detachProject(id);
       set((s) => ({
          projects: s.projects.filter((p) => p.id !== id),
-         teams: mapIfChanged(s.teams, (t) =>
-            t.projects.some((p) => p.id === id)
-               ? { ...t, projects: t.projects.filter((p) => p.id !== id) }
-               : t
-         ),
          initiatives: mapIfChanged(s.initiatives, (i) =>
             i.projectIds.includes(id) ? { ...i, projectIds: dropId(i.projectIds, id) } : i
          ),
@@ -277,15 +262,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
    applyTeam: (dto) =>
       set((s) => {
          const prev = s.teams.find((t) => t.id === dto.id);
-         const adapted = adaptTeam({
-            ...dto,
-            members: dto.members ?? [],
-            projects: dto.projects ?? [],
-         });
-         // Rotas de escrita devolvem TeamDto sem members/projects: preserva as cópias do store.
+         const adapted = adaptTeam({ ...dto, members: dto.members ?? [] });
+         // Rotas de escrita devolvem TeamDto sem members: preserva a cópia do store.
          if (!dto.members) adapted.members = prev?.members ?? [];
-         if (!dto.projects)
-            adapted.projects = prev?.projects ?? s.projects.filter((p) => p.teamId === dto.id);
          const base: UserSlices = { ...s, teams: upsert(s.teams, adapted) };
          // Time recém-criado: `createTeam` já insere quem criou como membro e o DTO só
          // sinaliza `joined` — refletimos a membership sem esperar o bootstrap.

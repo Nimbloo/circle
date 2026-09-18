@@ -18,9 +18,10 @@ import { getMe, type MeDto } from './users';
 import { visibleTeamIds } from './scope';
 import { snapshotProjects } from './project-snapshots';
 
+/** Time do bootstrap: TeamDto + membros. Projetos NÃO vêm aqui (bootstrap enxuto): o
+ * cliente deriva de `projects` pelo `teamId`, sem a cópia duplicada. */
 export interface TeamFull extends TeamDto {
    members: MemberDto[];
-   projects: ProjectDto[];
 }
 
 export interface WorkspaceBootstrap {
@@ -98,16 +99,9 @@ export async function bootstrapWorkspace(
       arr.push(m);
       membersByTeam.set(l.teamId, arr);
    }
-   const projectsByTeam = new Map<string, ProjectDto[]>();
-   for (const p of projects) {
-      const arr = projectsByTeam.get(p.teamId) ?? [];
-      arr.push(p);
-      projectsByTeam.set(p.teamId, arr);
-   }
    const teamsFull: TeamFull[] = teams.map((t) => ({
       ...t,
       members: membersByTeam.get(t.id) ?? [],
-      projects: projectsByTeam.get(t.id) ?? [],
    }));
 
    // Auto-rollover lazy (#24): o app não tem scheduler, então o bootstrap fecha os
@@ -127,8 +121,9 @@ export async function bootstrapWorkspace(
    }
 
    // cycles de todos os times — 2 queries no total (era N+1: 1 chamada por time,
-   // cada uma re-escaneando a tabela status).
-   const cycles: CycleDto[] = await listCyclesForTeams(db, teamIds);
+   // cada uma re-escaneando a tabela status). Burnup só do current (bootstrap enxuto);
+   // o dos demais vem sob demanda em `GET /cycles/:id`.
+   const cycles: CycleDto[] = await listCyclesForTeams(db, teamIds, { burnup: 'current' });
 
    return {
       me,
