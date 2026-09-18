@@ -93,6 +93,8 @@ function adaptNotification(
    };
 }
 
+let hydrateSeq = 0;
+
 /** Marca `read` nas notificações `ids` (lista + seleção) — base dos rollbacks direcionados. */
 function setReadIn(
    state: Pick<NotificationsState, 'notifications' | 'selectedNotification'>,
@@ -118,11 +120,14 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
    loadError: false,
 
    hydrate: async () => {
+      // Token de sequência: uma hidratação que termina DEPOIS de outra mais nova é descartada.
+      const seq = ++hydrateSeq;
       try {
          const [dtos, countRes] = await Promise.all([
             api.inbox.list(),
             api.inbox.unreadCount().catch(() => ({ count: 0 })),
          ]);
+         if (seq !== hydrateSeq) return;
          const issueById = new Map(useIssuesStore.getState().issues.map((i) => [i.id, i]));
          const items = dtos
             .map((dto) => adaptNotification(dto, issueById))
@@ -141,6 +146,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
                : undefined,
          }));
       } catch {
+         if (seq !== hydrateSeq) return;
          // Mantém a lista atual e sinaliza a falha (a tela vazia vira erro + retry).
          set({ loaded: true, loadError: true });
       }

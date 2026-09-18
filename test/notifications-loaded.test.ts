@@ -42,6 +42,23 @@ describe('notifications-store loaded', () => {
       expect(useNotificationsStore.getState().loadError).toBe(false);
    });
 
+   it('hidratação mais antiga que termina depois é descartada (#16)', async () => {
+      let resolveOld!: (value: unknown[]) => void;
+      let resolveNew!: (value: unknown[]) => void;
+      list
+         .mockReturnValueOnce(new Promise((r) => (resolveOld = r)))
+         .mockReturnValueOnce(new Promise((r) => (resolveNew = r)));
+      const old = useNotificationsStore.getState().hydrate();
+      const recent = useNotificationsStore.getState().hydrate();
+      useNotificationsStore.setState({ notifications: [n('novo')] });
+      resolveNew([]);
+      await recent;
+      useNotificationsStore.setState({ notifications: [n('novo')] });
+      resolveOld([]);
+      await old;
+      expect(useNotificationsStore.getState().notifications.map((x) => x.id)).toEqual(['novo']);
+   });
+
    it('falha encerra a primeira carga e sinaliza loadError; retry com sucesso limpa', async () => {
       list.mockRejectedValueOnce(new Error('boom'));
       await useNotificationsStore.getState().hydrate();
