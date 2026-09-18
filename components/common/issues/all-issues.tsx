@@ -4,7 +4,7 @@ import { Issue } from '@/data/issues';
 import { StatusCategory } from '@/data/status';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
-import { useIssuesStore } from '@/store/issues-store';
+import { selectIssuesLoading, useIssuesStore } from '@/store/issues-store';
 import { applyIssueFilters } from './issue-filter-columns';
 import { IssueFilterBar } from './issue-filter-bar';
 import { useRightPanelStore } from '@/store/right-panel-store';
@@ -37,7 +37,7 @@ export default function AllIssues({ categories }: AllIssuesProps) {
    const { filters } = useFilterStore();
    // Selectors granulares: só re-renderiza quando o campo lido muda (não o store inteiro).
    const issues = useIssuesStore((s) => s.issues);
-   const loading = useIssuesStore((s) => s.loading);
+   const loading = useIssuesStore(selectIssuesLoading);
    const error = useIssuesStore((s) => s.error);
    const hydrate = useIssuesStore((s) => s.hydrate);
    const { openPanel } = useRightPanelStore();

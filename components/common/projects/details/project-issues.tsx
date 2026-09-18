@@ -9,7 +9,7 @@ import { api } from '@/lib/client';
 import type { ProjectDetail } from '@/data/project-details';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
-import { useIssuesStore } from '@/store/issues-store';
+import { selectIssuesLoading, useIssuesStore } from '@/store/issues-store';
 import { useViewStore } from '@/store/view-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useEffect, useMemo, useState } from 'react';
@@ -29,7 +29,7 @@ export default function ProjectIssues({ projectId }: ProjectIssuesProps) {
    const displayOrderedStatus = useDisplayOrderedStatuses();
    // Layout list/board da view (o "Display" do header) — antes a lista era fixa.
    const { viewType } = useViewStore();
-   const loading = useIssuesStore((s) => s.loading);
+   const loading = useIssuesStore(selectIssuesLoading);
    const error = useIssuesStore((s) => s.error);
    const hydrate = useIssuesStore((s) => s.hydrate);
 

@@ -22,6 +22,8 @@ import type { MemberDto } from '@/lib/api/members';
 import type { CycleDto } from '@/lib/api/cycles';
 import type { ViewDto } from '@/lib/api/views';
 import { useCatalogStore } from '@/store/catalog-store';
+// Import circular (issues-store também lê este store), seguro: os dois só se usam dentro de ações.
+import { useIssuesStore } from '@/store/issues-store';
 import { api } from '@/lib/client';
 import { toast } from 'sonner';
 
@@ -249,7 +251,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
          }),
       }));
    },
-   removeProjectLocal: (id) =>
+   removeProjectLocal: (id) => {
+      // Issues que apontavam pro projeto removido perdem a referência (#13).
+      useIssuesStore.getState().detachProject(id);
       set((s) => ({
          projects: s.projects.filter((p) => p.id !== id),
          teams: mapIfChanged(s.teams, (t) =>
@@ -260,7 +264,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
          initiatives: mapIfChanged(s.initiatives, (i) =>
             i.projectIds.includes(id) ? { ...i, projectIds: dropId(i.projectIds, id) } : i
          ),
-      })),
+      }));
+   },
    removeInitiativeLocal: (id) =>
       set((s) => ({
          initiatives: s.initiatives.filter((i) => i.id !== id),
@@ -331,7 +336,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       }),
 
    applyCycle: (dto) => set((s) => ({ cycles: upsert(s.cycles, adaptCycle(dto)) })),
-   removeCycleLocal: (id) => set((s) => ({ cycles: s.cycles.filter((c) => c.id !== id) })),
+   removeCycleLocal: (id) => {
+      useIssuesStore.getState().detachCycle(id); // issues do ciclo removido voltam ao backlog
+      set((s) => ({ cycles: s.cycles.filter((c) => c.id !== id) }));
+   },
 
    applyView: (dto) =>
       set((s) => {

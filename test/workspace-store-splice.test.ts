@@ -16,6 +16,8 @@ import type { InitiativeDto } from '@/lib/api/initiatives';
 vi.mock('@/lib/client', () => ({ api: {} }));
 
 const { useWorkspaceStore } = await import('@/store/workspace-store');
+const { useIssuesStore } = await import('@/store/issues-store');
+type Issue = import('@/data/issues').Issue;
 
 /* ------------------------------- Fixtures ------------------------------- */
 
@@ -455,6 +457,24 @@ describe('workspace-store — splice por entidade', () => {
          st().removeInitiativeLocal('i1');
          expect(st().initiatives).toEqual([]);
          expect(st().getProjectById('p2')?.initiative).toBeUndefined();
+      });
+   });
+
+   describe('referências nas issues (#13)', () => {
+      it('removeProjectLocal / removeCycleLocal limpam project/cycleId das issues', () => {
+         useIssuesStore.setState({
+            issues: [
+               { id: 'a', project: { id: 'p1' }, cycleId: 'c1' },
+               { id: 'b', project: { id: 'p2' }, cycleId: 'c9' },
+            ] as unknown as Issue[],
+         });
+         st().removeProjectLocal('p1');
+         st().removeCycleLocal('c1');
+         const [a, b] = useIssuesStore.getState().issues;
+         expect(a.project).toBeUndefined();
+         expect(a.cycleId).toBe('');
+         expect(b.project?.id).toBe('p2');
+         expect(b.cycleId).toBe('c9');
       });
    });
 });

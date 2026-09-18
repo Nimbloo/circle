@@ -18,7 +18,7 @@ import { ProjectGroup } from '@/components/common/projects/projects';
 import { filterIssuesForView, filterProjectsForView, View } from '@/data/views';
 import { ViewFilterChips } from './view-filter-chips';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
-import { useIssuesStore } from '@/store/issues-store';
+import { selectIssuesLoading, useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useViewStore } from '@/store/view-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -32,7 +32,7 @@ function IssueViewBody({ view }: { view: View }) {
    const { viewType } = useViewStore();
    // Filtra contra o store vivo (hidratado da API), não o mock vazio.
    const liveIssues = useIssuesStore((s) => s.issues);
-   const loading = useIssuesStore((s) => s.loading);
+   const loading = useIssuesStore(selectIssuesLoading);
    const error = useIssuesStore((s) => s.error);
    const hydrate = useIssuesStore((s) => s.hydrate);
    const filtered = useMemo(() => filterIssuesForView(view, liveIssues), [view, liveIssues]);

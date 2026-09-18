@@ -1,4 +1,4 @@
-import { groupIssuesByStatus, Issue } from '@/data/issues';
+import { Issue } from '@/data/issues';
 import { LabelInterface } from '@/data/labels';
 import { Priority } from '@/data/priorities';
 import { Project } from '@/data/projects';
@@ -24,8 +24,9 @@ interface FilterOptions {
 
 interface IssuesState {
    issues: Issue[];
-   issuesByStatus: Record<string, Issue[]>;
    loading: boolean;
+   /** false até a 1ª hidratação terminar com sucesso — antes disso a UI mostra carregando, não vazio. */
+   loaded: boolean;
    /** true quando o último hydrate() falhou — o board mostra o estado de falha. */
    error: boolean;
 
@@ -41,6 +42,9 @@ interface IssuesState {
    applyRemote: (id: string) => Promise<void>;
    /** Remove UMA issue do store (evento remoto de delete) — sem refetch. */
    removeRemote: (id: string) => void;
+   /** Projeto/ciclo removido: limpa a referência nas issues (sem refetch). */
+   detachProject: (projectId: string) => void;
+   detachCycle: (cycleId: string) => void;
 
    filterByStatus: (statusId: string) => Issue[];
    filterByPriority: (priorityId: string) => Issue[];
@@ -68,7 +72,32 @@ interface IssuesState {
 
 // asc(rank) — mesmo critério do servidor (listIssues faz orderBy asc(rank)); mantém
 // a exibição alinhada com o drag-to-reorder (que grava um rank ENTRE dois vizinhos).
-const sortByRank = (issues: Issue[]) => [...issues].sort((a, b) => a.rank.localeCompare(b.rank));
+// Comparação binária (rank é ASCII): `localeCompare` custava caro a cada evento.
+const byRank = (a: Issue, b: Issue) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0);
+const sortByRank = (issues: Issue[]) => [...issues].sort(byRank);
+
+/** true quando `a` é estritamente mais velha que `b` (pelo `updatedAt` do servidor). */
+const isOlder = (a: Issue, b: Issue) => !!a.updatedAt && !!b.updatedAt && a.updatedAt < b.updatedAt;
+
+/** Token da hidratação corrente: uma hidratação que termina depois de outra mais nova é descartada. */
+let hydrateSeq = 0;
+
+/** Rollback de UMA issue: devolve só os campos `keys` ao valor de `prev`. */
+function revertFields(state: IssuesState, id: string, prev: Issue, keys: (keyof Issue)[]) {
+   return {
+      issues: state.issues.map((i) => {
+         if (i.id !== id) return i;
+         const back: Record<string, unknown> = { ...i };
+         for (const k of keys) back[k] = prev[k];
+         return back as unknown as Issue;
+      }),
+   };
+}
+
+/** Carregando para a UI: hidratação em voo OU 1ª carga ainda não terminou (sem erro).
+ *  Evita o flash de "Nenhuma issue" no deep-link frio, antes do hydrate começar. */
+export const selectIssuesLoading = (s: IssuesState): boolean =>
+   s.loading || (!s.loaded && !s.error);
 
 /** Mapeia um Partial<Issue> (objetos ricos) para o patch da API (ids). */
 function toUpdateInput(updated: Partial<Issue>): UpdateIssueInput {
@@ -90,19 +119,21 @@ function toUpdateInput(updated: Partial<Issue>): UpdateIssueInput {
 }
 
 export const useIssuesStore = create<IssuesState>((set, get) => ({
-   // Estado inicial vazio; hydrate() carrega da API (o board mostra "Carregando…"
-   // enquanto isso, e o estado de erro/retry cobre a falha).
+   // Estado inicial vazio; hydrate() carrega da API. `loaded:false` faz a tela mostrar
+   // carregando (não "Nenhuma issue") até a 1ª carga terminar.
    issues: [],
-   issuesByStatus: {},
    loading: false,
+   loaded: false,
    error: false,
 
    hydrate: async (opts?: IssueListOptions) => {
+      const seq = ++hydrateSeq;
+      const stale = () => seq !== hydrateSeq;
       // Preenchimento PROGRESSIVO só na primeira carga (store vazio): a 1ª página
-      // aparece rápido e as demais chegam em background. Num RE-hydrate (SSE de
-      // label, fallback do applyRemote) o store já tem dados — substituir página a
-      // página faria o board ENCOLHER pra 200 linhas e re-crescer (mini-refresh);
-      // nesse caso acumula tudo em silêncio e faz um set único no final.
+      // aparece rápido e as demais chegam em background. Num RE-hydrate (reconexão,
+      // fallback do applyRemote) o store já tem dados — substituir página a página
+      // faria o board ENCOLHER e re-crescer (mini-refresh); nesse caso acumula tudo
+      // em silêncio e faz um set único no final.
       const progressive = get().issues.length === 0;
       set(progressive ? { loading: true, error: false } : { error: false });
       try {
@@ -115,35 +146,44 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          // comprimida (ver `compressJson`), então uma página de 1.000 pesa ~53 KB.
          const PAGE = 1000;
          const canPaginate = !opts?.orderBy || opts.orderBy === 'rank';
-         const acc: Awaited<ReturnType<typeof api.issues.list>> = [];
+         // Cada página é adaptada UMA vez, ao chegar (não o acumulado a cada página).
+         const acc: Issue[] = [];
          let cursor: string | undefined;
          for (let guard = 0; guard < 200; guard++) {
             const page = await api.issues.list({ ...opts, limit: PAGE, cursor });
-            acc.push(...page);
+            if (stale()) return; // outra hidratação começou depois: esta é descartada
+            acc.push(...adaptIssues(page));
             const done = !canPaginate || page.length < PAGE;
             if (progressive || done) {
-               const issues = sortByRank(adaptIssues(acc));
-               set({
-                  issues,
-                  issuesByStatus: groupIssuesByStatus(issues),
-                  loading: !done && progressive,
-                  error: false,
+               const sorted = sortByRank(acc);
+               set((state) => {
+                  // Não sobrescreve item mais novo que já está no store (applyRemote que
+                  // chegou durante a paginação).
+                  const current = new Map(state.issues.map((i) => [i.id, i]));
+                  const issues = sorted.map((fresh) => {
+                     const cur = current.get(fresh.id);
+                     return cur && isOlder(fresh, cur) ? cur : fresh;
+                  });
+                  return {
+                     issues,
+                     loading: !done && progressive,
+                     loaded: state.loaded || done,
+                     error: false,
+                  };
                });
             }
             if (done) break;
             cursor = page[page.length - 1].rank; // keyset: próximo `rank > cursor`
          }
       } catch {
-         // mantém o estado atual (mock ou anterior) e sinaliza a falha p/ o board.
+         if (stale()) return;
+         // mantém o estado atual e sinaliza a falha p/ o board.
          set({ loading: false, error: true });
       }
    },
 
    addIssue: (issue: Issue) => {
-      set((state) => {
-         const newIssues = [...state.issues, issue];
-         return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
-      });
+      set((state) => ({ issues: [...state.issues, issue] }));
       const input: CreateIssueInput = {
          // Time: o do próprio issue (rota) → o do projeto → 1º time do workspace.
          // (Antes hardcodava 'CORE' — quebrava FK em workspace sem o time CORE.)
@@ -177,17 +217,18 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          .create(input)
          .then((dto) => {
             const fresh = adaptIssues([dto])[0];
-            set((state) => {
-               const next = sortByRank([...state.issues.filter((i) => i.id !== issue.id), fresh]);
-               return { issues: next, issuesByStatus: groupIssuesByStatus(next) };
-            });
+            // Remove a otimista E uma eventual cópia que o evento `created` do SSE já
+            // tenha inserido antes desta resposta (senão a issue aparecia duplicada).
+            set((state) => ({
+               issues: sortByRank([
+                  ...state.issues.filter((i) => i.id !== issue.id && i.id !== fresh.id),
+                  fresh,
+               ]),
+            }));
          })
          .catch((err) => {
             // Rollback DIRECIONADO: remove só a issue otimista (não clobra criações concorrentes).
-            set((state) => {
-               const next = state.issues.filter((i) => i.id !== issue.id);
-               return { issues: next, issuesByStatus: groupIssuesByStatus(next) };
-            });
+            set((state) => ({ issues: state.issues.filter((i) => i.id !== issue.id) }));
             throw err;
          });
    },
@@ -197,12 +238,13 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          const dto = await api.issues.get(id);
          const fresh = adaptIssues([dto])[0];
          set((state) => {
-            const exists = state.issues.some((i) => i.id === id);
-            const next = exists
+            const cur = state.issues.find((i) => i.id === id);
+            // Resposta mais velha que o que já está no store (GETs fora de ordem): ignora.
+            if (cur && isOlder(fresh, cur)) return {};
+            const next = cur
                ? state.issues.map((i) => (i.id === id ? fresh : i))
                : [...state.issues, fresh];
-            const sorted = sortByRank(next);
-            return { issues: sorted, issuesByStatus: groupIssuesByStatus(sorted) };
+            return { issues: sortByRank(next) };
          });
       } catch {
          // GET falhou (issue deletada / erro) → reconcilia com um hydrate completo (raro).
@@ -213,30 +255,52 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
    removeRemote: (id: string) => {
       set((state) => {
          if (!state.issues.some((i) => i.id === id)) return {};
-         const next = state.issues.filter((i) => i.id !== id);
-         return { issues: next, issuesByStatus: groupIssuesByStatus(next) };
+         return { issues: state.issues.filter((i) => i.id !== id) };
       });
    },
+
+   detachProject: (projectId) =>
+      set((state) =>
+         state.issues.some((i) => i.project?.id === projectId)
+            ? {
+                 issues: state.issues.map((i) =>
+                    i.project?.id === projectId ? { ...i, project: undefined } : i
+                 ),
+              }
+            : {}
+      ),
+   detachCycle: (cycleId) =>
+      set((state) =>
+         state.issues.some((i) => i.cycleId === cycleId)
+            ? {
+                 issues: state.issues.map((i) =>
+                    i.cycleId === cycleId ? { ...i, cycleId: '' } : i
+                 ),
+              }
+            : {}
+      ),
 
    // Retorna a promise e RE-LANÇA no erro (após rollback + toast.error): assim os
    // chamadores (⌘K, bulk) podem toastar sucesso SÓ quando a API confirma, sem o
    // duplo-toast contraditório. O toast de erro segue fonte única aqui.
    updateIssue: (id: string, updatedIssue: Partial<Issue>) => {
-      const snapshot = { issues: get().issues, issuesByStatus: get().issuesByStatus };
+      // Rollback DIRECIONADO: só os campos alterados desta issue (não o store inteiro,
+      // que apagaria mudanças remotas que chegaram no intervalo).
+      const prev = get().getIssueById(id);
+      const keys = Object.keys(updatedIssue) as (keyof Issue)[];
       // Issue FORA do store (deep-link frio, ⌘K/context menu antes do hydrate): não há
       // otimista possível, mas a API é chamada e o resultado entra por `applyRemote`
       // (upsert) — a tela passa a ler do store e reflete a mudança.
-      const inStore = get().getIssueById(id) !== undefined;
-      set((state) => {
-         const newIssues = state.issues.map((issue) =>
+      const inStore = prev !== undefined;
+      set((state) => ({
+         issues: state.issues.map((issue) =>
             issue.id === id ? { ...issue, ...updatedIssue } : issue
-         );
-         return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
-      });
+         ),
+      }));
       return api.issues
          .update(id, toUpdateInput(updatedIssue))
          .catch((e) => {
-            set(snapshot);
+            if (prev) set((state) => revertFields(state, id, prev, keys));
             toast.error('Falha ao atualizar a issue');
             throw e;
          })
@@ -246,15 +310,18 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
    },
 
    deleteIssue: (id: string) => {
-      const snapshot = { issues: get().issues, issuesByStatus: get().issuesByStatus };
-      set((state) => {
-         const newIssues = state.issues.filter((issue) => issue.id !== id);
-         return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
-      });
+      const removed = get().getIssueById(id);
+      set((state) => ({ issues: state.issues.filter((issue) => issue.id !== id) }));
       return api.issues
          .remove(id)
          .catch((e) => {
-            set(snapshot);
+            // Rollback direcionado: devolve só a issue apagada (na posição do rank).
+            if (removed)
+               set((state) =>
+                  state.issues.some((i) => i.id === id)
+                     ? {}
+                     : { issues: sortByRank([...state.issues, removed]) }
+               );
             toast.error('Falha ao excluir a issue');
             throw e;
          })
@@ -326,17 +393,20 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
    addIssueLabel: (issueId, label) => {
       // Fora do store: ainda persiste e entra por `applyRemote` (mesma regra do updateIssue).
       const inStore = get().getIssueById(issueId) !== undefined;
-      const snapshot = { issues: get().issues, issuesByStatus: get().issuesByStatus };
-      set((state) => {
-         const newIssues = state.issues.map((i) =>
+      set((state) => ({
+         issues: state.issues.map((i) =>
             i.id === issueId ? { ...i, labels: [...i.labels, label] } : i
-         );
-         return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
-      });
+         ),
+      }));
       return api.issues
          .addLabel(issueId, label.id)
          .catch((e) => {
-            set(snapshot);
+            // Rollback direcionado: tira só esta label desta issue.
+            set((state) => ({
+               issues: state.issues.map((i) =>
+                  i.id === issueId ? { ...i, labels: i.labels.filter((l) => l.id !== label.id) } : i
+               ),
+            }));
             toast.error('Falha ao adicionar a label');
             throw e;
          })
@@ -347,17 +417,26 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
 
    removeIssueLabel: (issueId, labelId) => {
       const inStore = get().getIssueById(issueId) !== undefined;
-      const snapshot = { issues: get().issues, issuesByStatus: get().issuesByStatus };
-      set((state) => {
-         const newIssues = state.issues.map((i) =>
+      const removedLabel = get()
+         .getIssueById(issueId)
+         ?.labels.find((l) => l.id === labelId);
+      set((state) => ({
+         issues: state.issues.map((i) =>
             i.id === issueId ? { ...i, labels: i.labels.filter((l) => l.id !== labelId) } : i
-         );
-         return { issues: newIssues, issuesByStatus: groupIssuesByStatus(newIssues) };
-      });
+         ),
+      }));
       return api.issues
          .removeLabel(issueId, labelId)
          .catch((e) => {
-            set(snapshot);
+            // Rollback direcionado: devolve só esta label a esta issue.
+            if (removedLabel)
+               set((state) => ({
+                  issues: state.issues.map((i) =>
+                     i.id === issueId && !i.labels.some((l) => l.id === labelId)
+                        ? { ...i, labels: [...i.labels, removedLabel] }
+                        : i
+                  ),
+               }));
             toast.error('Falha ao remover a label');
             throw e;
          })
@@ -382,10 +461,9 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          nid ? (current.find((i) => i.id === nid)?.rank ?? null) : null;
       const optimisticRank = rankBetween(rankOf(beforeId), rankOf(afterId));
 
-      const applyRank = (rank: string) => (state: IssuesState) => {
-         const next = sortByRank(state.issues.map((i) => (i.id === id ? { ...i, rank } : i)));
-         return { issues: next, issuesByStatus: groupIssuesByStatus(next) };
-      };
+      const applyRank = (rank: string) => (state: IssuesState) => ({
+         issues: sortByRank(state.issues.map((i) => (i.id === id ? { ...i, rank } : i))),
+      });
       set(applyRank(optimisticRank));
 
       api.issues
@@ -393,10 +471,9 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          .then((dto) => {
             // Reconcilia com o rank REAL do servidor (splice de 1 item).
             const fresh = adaptIssues([dto])[0];
-            set((state) => {
-               const next = sortByRank(state.issues.map((i) => (i.id === id ? fresh : i)));
-               return { issues: next, issuesByStatus: groupIssuesByStatus(next) };
-            });
+            set((state) => ({
+               issues: sortByRank(state.issues.map((i) => (i.id === id ? fresh : i))),
+            }));
          })
          .catch(() => {
             set(applyRank(prevRank)); // rollback só desta issue

@@ -55,7 +55,7 @@ const dto = (over: Record<string, unknown> = {}) => ({
 describe('issues-store — mutação em issue fora do store', () => {
    beforeEach(() => {
       vi.clearAllMocks();
-      useIssuesStore.setState({ issues: [], issuesByStatus: {} });
+      useIssuesStore.setState({ issues: [] });
    });
 
    it('updateIssue chama a API e faz upsert via applyRemote', async () => {
@@ -68,7 +68,9 @@ describe('issues-store — mutação em issue fora do store', () => {
       expect(apiMocks.get).toHaveBeenCalledWith('cold-1');
       const issue = useIssuesStore.getState().getIssueById('cold-1');
       expect(issue?.title).toBe('Renomeada');
-      expect(useIssuesStore.getState().issuesByStatus[status[0].id]).toHaveLength(1);
+      expect(
+         useIssuesStore.getState().issues.filter((i) => i.status.id === status[0].id)
+      ).toHaveLength(1);
    });
 
    it('addIssueLabel não retorna cedo: persiste e insere a issue no store', async () => {
