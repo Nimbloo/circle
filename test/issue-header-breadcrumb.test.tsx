@@ -48,7 +48,6 @@ const team: Team = {
    autoCloseChildren: false,
    parentId: null,
    members: [],
-   projects: [],
 };
 
 const child: Issue = {

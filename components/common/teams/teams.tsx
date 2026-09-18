@@ -15,6 +15,7 @@ import { ViewBar } from '@/components/layout/header-primitives';
 
 export default function Teams() {
    const allTeams = useWorkspaceStore((s) => s.teams);
+   const projects = useWorkspaceStore((s) => s.projects);
    const loaded = useWorkspaceStore((s) => s.loaded);
    const { filters } = useTeamsFilterStore();
    const { ordering, displayProperties } = useTeamsDisplayStore();
@@ -33,19 +34,22 @@ export default function Teams() {
          list = list.filter((team) => selectedIdentifiers.has(team.id));
       }
 
+      // Projetos por time derivados de `projects` (o bootstrap não traz `teams[].projects`).
+      const projectCount = new Map<string, number>();
+      for (const p of projects) projectCount.set(p.teamId, (projectCount.get(p.teamId) ?? 0) + 1);
       const compare = (a: (typeof list)[number], b: (typeof list)[number]) => {
          switch (ordering) {
             case 'members':
                return b.members.length - a.members.length;
             case 'projects':
-               return b.projects.length - a.projects.length;
+               return (projectCount.get(b.id) ?? 0) - (projectCount.get(a.id) ?? 0);
             case 'name':
             default:
                return a.name.localeCompare(b.name);
          }
       };
       return list.sort(compare);
-   }, [allTeams, filters, ordering]);
+   }, [allTeams, projects, filters, ordering]);
 
    return (
       <div className="w-full">

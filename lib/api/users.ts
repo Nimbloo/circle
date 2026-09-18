@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { and, eq, notInArray } from 'drizzle-orm';
 import type { Db } from '@/db';
-import { appUser, teamMember, issueSubscription } from '@/db/schema';
+import { appUser, teamMember, issueSubscription, issue, status } from '@/db/schema';
 import { isAdmin, isBreakGlassAdmin } from './auth';
 import { publish } from './events';
 import { ApiError } from './errors';
@@ -46,6 +46,7 @@ export interface MeDto {
    role: string;
    admin: boolean;
    teamIds: string[];
+   /** Issues ABERTAS que o usuário segue (bootstrap enxuto: sem completed/canceled). */
    subscribedIssueIds: string[];
    /** Handle do GitHub — liga o PR (que guarda o login) a este usuário. */
    githubLogin: string | null;
@@ -58,10 +59,19 @@ export async function getMe(db: Db, email: string): Promise<MeDto> {
       .select({ teamId: teamMember.teamId })
       .from(teamMember)
       .where(eq(teamMember.userId, user.id));
+   // Só issues abertas: com milhares de issues fechadas seguidas, a lista inteira era o
+   // grosso do bootstrap (120 KB) e é re-baixada a cada refetch do workspace.
    const subscriptions = await db
       .select({ issueId: issueSubscription.issueId })
       .from(issueSubscription)
-      .where(eq(issueSubscription.userId, user.id));
+      .innerJoin(issue, eq(issue.id, issueSubscription.issueId))
+      .innerJoin(status, eq(status.id, issue.statusId))
+      .where(
+         and(
+            eq(issueSubscription.userId, user.id),
+            notInArray(status.category, ['completed', 'canceled'])
+         )
+      );
    return {
       id: user.id,
       slug: user.slug,

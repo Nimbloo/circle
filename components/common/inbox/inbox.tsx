@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { getNotificationIcon } from '@/lib/notification-utils';
 import { EmptyState } from '@/components/common/empty-state';
+import { ErrorState } from '@/components/common/error-state';
 import { ListSkeleton } from '@/components/common/list-skeleton';
 import type { NotificationType } from '@/data/inbox';
 import NotificationPreview from './issue-preview';
@@ -80,6 +81,7 @@ export default function Inbox() {
       loaded,
    } = useNotificationsStore();
 
+   const loadError = useNotificationsStore((s) => s.loadError);
    const isMobile = useIsMobile();
    const desktopContainerRef = useRef<HTMLDivElement>(null);
    const listPanelRef = useRef<ImperativePanelHandle>(null);
@@ -370,6 +372,21 @@ export default function Inbox() {
                   <div className="w-full">
                      <ListSkeleton rows={6} />
                   </div>
+               ) : loadError && notifications.length === 0 ? (
+                  <ErrorState
+                     title="Couldn't load notifications"
+                     description="Check your connection and try again."
+                     className="my-auto min-h-0"
+                     action={
+                        <Button
+                           variant="outline"
+                           size="sm"
+                           onClick={() => void useNotificationsStore.getState().hydrate()}
+                        >
+                           Try again
+                        </Button>
+                     }
+                  />
                ) : notifications.length > 0 || snoozed.length > 0 ? (
                   <EmptyState
                      variant="filtered"

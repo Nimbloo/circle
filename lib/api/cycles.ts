@@ -396,10 +396,18 @@ export async function listCyclesByTeam(db: Db, teamId: string): Promise<CycleDto
  * + snapshots pra todos os ids), em vez de N chamadas de listCyclesByTeam (cada uma
  * re-escaneando a tabela status). Usado no bootstrap do workspace — fim do N+1.
  */
-export async function listCyclesForTeams(db: Db, teamIds: string[]): Promise<CycleDto[]> {
+export async function listCyclesForTeams(
+   db: Db,
+   teamIds: string[],
+   opts: { burnup?: 'all' | 'current' } = {}
+): Promise<CycleDto[]> {
    if (teamIds.length === 0) return [];
    const rows = await db.select().from(cycleT).where(inArray(cycleT.teamId, teamIds));
-   return (await toDtos(db, rows, new Date())).sort((a, b) => b.number - a.number);
+   const dtos = await toDtos(db, rows, new Date());
+   // `burnup: 'current'` (bootstrap): a série diária dos ciclos passados é o grosso do
+   // payload e só o detalhe do ciclo a desenha — fica para `getCycle`.
+   if (opts.burnup === 'current') for (const d of dtos) if (d.status !== 'current') d.burnup = null;
+   return dtos.sort((a, b) => b.number - a.number);
 }
 
 /**

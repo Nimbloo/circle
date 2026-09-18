@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { adaptProjectDetail, emptyProjectDetail } from '@/lib/adapters-project-detail';
 import { api } from '@/lib/client';
+import { PROJECT_CHANGED_EVENT, useLiveReload } from '@/lib/use-live-sync';
 import {
    ProjectDetail,
    ProjectUpdate,
@@ -112,6 +113,14 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
          active = false;
       };
    }, [projectId]);
+
+   // Update/mudança de OUTRO usuário: recarrega o feed em silêncio (falha mantém o atual).
+   useLiveReload(PROJECT_CHANGED_EVENT, { id: projectId }, () =>
+      api.projects
+         .detail(projectId)
+         .then((dto) => setDetail(adaptProjectDetail(dto)))
+         .catch(() => {})
+   );
 
    const updates = useMemo<ProjectUpdate[]>(
       () => [...(postedUpdates[projectId] ?? []), ...detail.updates],

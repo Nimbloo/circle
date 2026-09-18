@@ -20,7 +20,7 @@ import { BreakdownPanel } from './breakdown-panel';
 import { api } from '@/lib/client';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
-import { useIssuesStore } from '@/store/issues-store';
+import { selectIssuesLoading, useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useSearchStore } from '@/store/search-store';
 import { useViewStore } from '@/store/view-store';
@@ -39,7 +39,7 @@ export default function MyIssues() {
    const { viewType } = useViewStore();
    const { filters } = useFilterStore();
    const issues = useIssuesStore((s) => s.issues);
-   const loading = useIssuesStore((s) => s.loading);
+   const loading = useIssuesStore(selectIssuesLoading);
    const error = useIssuesStore((s) => s.error);
    const hydrate = useIssuesStore((s) => s.hydrate);
    const { openPanel } = useRightPanelStore();
