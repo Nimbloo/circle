@@ -11,6 +11,7 @@ import { Project } from '@/data/projects';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { initiativeWithDescendants } from '@/lib/initiative-tree';
 import { api } from '@/lib/client';
+import { INITIATIVE_CHANGED_EVENT, useLiveReload } from '@/lib/use-live-sync';
 import {
    Command,
    CommandEmpty,
@@ -761,6 +762,13 @@ function ActivityFeed({ initiativeId }: { initiativeId: string }) {
          active = false;
       };
    }, [initiativeId]);
+   // Mudança de OUTRO usuário: recarrega em silêncio (falha mantém o feed atual).
+   useLiveReload(INITIATIVE_CHANGED_EVENT, { id: initiativeId }, () =>
+      api.initiatives
+         .activity(initiativeId)
+         .then(setEntries)
+         .catch(() => {})
+   );
 
    return (
       <div className="flex flex-col gap-3">
@@ -835,6 +843,15 @@ function Activity({ initiativeId }: { initiativeId: string }) {
          active = false;
       };
    }, [initiativeId]);
+   useLiveReload(INITIATIVE_CHANGED_EVENT, { id: initiativeId }, () =>
+      api.initiatives
+         .updates(initiativeId)
+         .then((u) => {
+            setUpdates(u);
+            setFeed('ready');
+         })
+         .catch(() => {})
+   );
 
    const post = async () => {
       if (busy) return;

@@ -234,3 +234,20 @@ describe('useLiveSync — eventos de janela com id (#19, #28)', () => {
       expect(hydrateNotifications).toHaveBeenCalledTimes(1);
    });
 });
+
+describe('useLiveReload (#28)', () => {
+   it('recarrega só para o id/time da tela; evento sem o campo recarrega por segurança', async () => {
+      const { useLiveReload } = await import('@/lib/use-live-sync');
+      const reload = vi.fn();
+      renderHook(() => useLiveReload(PROJECT_CHANGED_EVENT, { id: 'p1', teamId: 'ENG' }, reload));
+      const fire = (detail: unknown) =>
+         window.dispatchEvent(new CustomEvent(PROJECT_CHANGED_EVENT, { detail }));
+      fire({ id: 'p2' });
+      fire({ id: 'p1', teamId: 'OPS' });
+      expect(reload).not.toHaveBeenCalled();
+      fire({ id: 'p1' });
+      fire({});
+      fire({ id: 'p1', teamId: 'ENG' });
+      expect(reload).toHaveBeenCalledTimes(3);
+   });
+});

@@ -5,6 +5,7 @@ import { BlockEditor } from '@/components/common/editor/block-editor';
 import { Button } from '@/components/ui/button';
 import { adaptProjectDetail, emptyProjectDetail } from '@/lib/adapters-project-detail';
 import { api } from '@/lib/client';
+import { PROJECT_CHANGED_EVENT, useLiveReload } from '@/lib/use-live-sync';
 import { blocksToDoc, docHeadings, type EditorDoc } from '@/lib/editor-doc';
 import type { ProjectDetail } from '@/data/project-details';
 import { useIssuesStore } from '@/store/issues-store';
@@ -45,6 +46,9 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
          // catch no useEffect abaixo.
       }
    }, [projectId]);
+   // Mudança de OUTRO usuário no projeto: recarrega em silêncio (o editor só aceita o
+   // doc externo sem foco, então não pisa no que está sendo digitado).
+   useLiveReload(PROJECT_CHANGED_EVENT, { id: projectId }, reload);
    useEffect(() => {
       let active = true;
       api.projects
