@@ -43,7 +43,13 @@ export type CircleEntity =
     * O REVIEW em si (não o comentário): sync do GitHub e webhook de PR/check mudam a
     * lista, que antes só carregava no mount. `id` é o do review; sem id, "algo mudou".
     */
-   | 'review';
+   | 'review'
+   /**
+    * Sinal LOCAL do pod (não vem de mutação): a conexão LISTEN caiu e voltou, então
+    * eventos de outros pods podem ter se perdido no intervalo. O cliente deve tratar
+    * como uma reconexão — re-hidratar issues, workspace e notificações.
+    */
+   | 'resync';
 
 import { randomUUID } from 'node:crypto';
 
@@ -57,6 +63,18 @@ export interface CircleEvent {
    /** e-mail do ator que causou a mutação, quando disponível (opcional). */
    actorEmail?: string;
    /**
+    * Time dono do recurso, quando houver (opcional). É o que permite ao stream entregar
+    * COM id ao convidado o que é do escopo dele e descartar o resto, sem query por evento.
+    */
+   teamId?: string;
+   /**
+    * Issue a que o recurso pertence (opcional) — em `comment` o `id` é o do comentário,
+    * então o cliente usa este campo para recarregar só o detalhe certo.
+    */
+   issueId?: string;
+   /** Destinatário único do evento (opcional). Presente → só esse usuário o recebe. */
+   recipientId?: string;
+   /**
     * Selo monotônico só para ordenação/deduplicação no cliente. É um contador
     * incremental (NÃO `Date.now()`): o valor absoluto é irrelevante e evita
     * depender de `Date.now()` — proibido em alguns ambientes de build/AOT.
@@ -65,6 +83,31 @@ export interface CircleEvent {
 }
 
 export type Subscriber = (event: CircleEvent) => void;
+
+/** Quem está do outro lado do stream: resolvido UMA vez na abertura. */
+export interface EventViewer {
+   userId: string;
+   /** Times visíveis; `null` = sem restrição (Member/Admin). */
+   teamIds: string[] | null;
+}
+
+/**
+ * O que um viewer recebe de um evento: o evento inteiro, a versão redigida (só
+ * `entity`/`action`/`ts`) ou nada (`null`). Decide só com o que já está em memória.
+ *
+ * - `recipientId` presente: só o destinatário recebe (para qualquer papel).
+ * - Sem restrição de escopo: evento completo.
+ * - Escopo restrito com `teamId`: completo se o time está no escopo; senão, nada.
+ * - Escopo restrito sem `teamId`: redigido — o suficiente para refazer as listas que
+ *   ele vê, sem revelar ids nem autoria de atividade alheia.
+ */
+export function eventForViewer(event: CircleEvent, viewer: EventViewer): CircleEvent | null {
+   if (event.entity === 'resync') return event;
+   if (event.recipientId) return event.recipientId === viewer.userId ? event : null;
+   if (viewer.teamIds === null) return event;
+   if (event.teamId) return viewer.teamIds.includes(event.teamId) ? event : null;
+   return { entity: event.entity, action: event.action, ts: event.ts };
+}
 
 /**
  * Fan-out entre pods via Postgres LISTEN/NOTIFY (sem Redis/SaaS — usa o Postgres
