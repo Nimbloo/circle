@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { and, asc, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, getTableColumns, inArray, isNull, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import type { GuideSection } from '@/data/reviews';
 import {
@@ -46,7 +46,14 @@ export interface ReviewDto {
    createdAt: string;
 }
 
-function toDto(r: ReviewRow): ReviewDto {
+/**
+ * Colunas da LISTA (#39): tudo menos o `guide` (JSON do guia de review, grande e só
+ * usado no detalhe). `select()` sem projeção trazia o guia de cada PR da página.
+ */
+const { guide: _guide, ...listColumns } = getTableColumns(review);
+void _guide;
+
+function toDto(r: Omit<ReviewRow, 'guide'>): ReviewDto {
    return {
       id: r.id,
       title: r.title,
@@ -123,13 +130,18 @@ export async function listReviews(db: Db, opts: ListReviewsOptions = {}): Promis
 
    const rows = where
       ? await db
-           .select()
+           .select(listColumns)
            .from(review)
            .where(where)
            .orderBy(desc(review.createdAt))
            .limit(limit)
            .offset(offset)
-      : await db.select().from(review).orderBy(desc(review.createdAt)).limit(limit).offset(offset);
+      : await db
+           .select(listColumns)
+           .from(review)
+           .orderBy(desc(review.createdAt))
+           .limit(limit)
+           .offset(offset);
 
    const countRows = where
       ? await db.select({ c: count() }).from(review).where(where)
@@ -725,6 +737,7 @@ async function linkPrsToIssues(
             identifier: issueT.identifier,
             title: issueT.title,
             statusId: issueT.statusId,
+            teamId: issueT.teamId,
          })
          .from(issueT)
          .where(inArray(issueT.identifier, identifiers)),
@@ -771,6 +784,8 @@ async function linkPrsToIssues(
             .update(review)
             .set({ resolvesTitle: iss.title })
             .where(and(eq(review.repo, repo), eq(review.resolvesIdentifier, iss.identifier)));
+         // O painel "PR links" do detalhe da issue mudou (#34).
+         publish({ entity: 'issue', action: 'updated', id: iss.id, teamId: iss.teamId });
       } catch (e) {
          console.warn(`[circle] pr-link upsert falhou (${iss.identifier}):`, (e as Error).message);
       }
@@ -850,7 +865,6 @@ export async function handlePullRequestEvent(
       set.deletions = row.deletions;
    }
    await db.insert(review).values(row).onConflictDoUpdate({ target: review.id, set });
-   publish({ entity: 'review', action: 'updated', id: row.id });
    if (resolvesId) {
       await linkPrsToIssues(db, repo, new Map([[resolvesId, { title, status }]]));
    }
@@ -871,6 +885,9 @@ export async function handlePullRequestEvent(
          console.warn(`[circle] profundidade do PR falhou (${row.id}):`, (e as Error).message);
       }
    }
+   // Só depois de gravar checks/arquivos (#34): antes o cliente recarregava no meio e
+   // via o PR sem eles.
+   publish({ entity: 'review', action: 'updated', id: row.id });
    return { linked: resolvesId };
 }
 
@@ -909,5 +926,7 @@ export async function handleCheckRunEvent(
       .update(review)
       .set({ checksPassed: checks.passed, checksTotal: checks.total, syncedAt: new Date() })
       .where(inArray(review.id, updated));
+   // Checks mudaram: a lista e o detalhe abertos atualizam (#34).
+   for (const id of updated) publish({ entity: 'review', action: 'updated', id });
    return { updated };
 }

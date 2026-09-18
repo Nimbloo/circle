@@ -11,6 +11,9 @@ import {
    cardUrl,
 } from '@/lib/api/integrations/sentry';
 import { getIssueByIdentifier } from '@/lib/api/issues';
+import { subscribe, type CircleEvent } from '@/lib/api/events';
+import { label as labelT } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 
 const SECRET = 'test-sentry-client-secret';
 
@@ -78,6 +81,22 @@ describe('sentry integration', () => {
       expect(issue!.status.id).toBe('triage');
       expect(issue!.priority.id).toBe('high');
       expect(issue!.labels.map((l) => l.id)).toContain('sentry');
+   });
+
+   it('createCardFromSentry: criar a label sentry publica label (#12), só na 1ª vez', async () => {
+      const db = await makeTestDb();
+      await seedTeam(db, 'CORE', 'Core');
+      await db.delete(labelT).where(eq(labelT.id, 'sentry'));
+      const eventos: CircleEvent[] = [];
+      const parar = subscribe((e) => eventos.push(e));
+      try {
+         await createCardFromSentry(db, { title: 'Erro A', teamId: 'CORE' });
+         await createCardFromSentry(db, { title: 'Erro B', teamId: 'CORE' });
+      } finally {
+         parar();
+      }
+      const labels = eventos.filter((e) => e.entity === 'label');
+      expect(labels.map((e) => [e.action, e.id])).toEqual([['created', 'sentry']]);
    });
 
    it('createCardFromSentry: cai no time default quando o teamId não existe', async () => {

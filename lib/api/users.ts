@@ -144,7 +144,12 @@ async function provisionUser(db: Db, normalizedEmail: string, role: string): Pro
          })
          .onConflictDoNothing()
          .returning();
-      if (inserted.length > 0) return inserted[0];
+      if (inserted.length > 0) {
+         // Primeiro acesso: a lista de membros e os seletores de responsável dos outros
+         // clientes precisam do novo usuário sem esperar um reload.
+         publish({ entity: 'member', action: 'created', id: inserted[0].id });
+         return inserted[0];
+      }
 
       const byEmail = await db
          .select()

@@ -72,22 +72,22 @@ Arquivos: `store/**`, `lib/use-live-sync.ts`, `lib/adapters*.ts`, `lib/api/works
 
 Arquivos: `lib/api/events.ts`, `app/api/v1/events/route.ts`, `lib/api/issues.ts`, `lib/api/import.ts`, `lib/api/notifications.ts`, `lib/api/reviews.ts`, `lib/api/cycles.ts` (publish/rollover), `lib/api/comments*`/reações, `lib/api/integrations/sentry.ts`, `lib/api/webhooks.ts`, `lib/api/users.ts` (provision), `lib/api/issue-detail.ts` (só descrição/#36), cliente do editor para #36. **Sem migrations** (pedir à C2 se precisar de índice — já listados lá).
 
-- [ ] #7 Import em modo silencioso: `createIssue`/`updateIssue` aceitam opção para não publicar; ao fim, um único `publish({ entity: 'issue' })` sem id (coarse). Teste: import de N linhas publica 1 evento.
-- [ ] #8 Mudanças de issue que afetam rollup publicam `project/updated` (antigo e novo) e `cycle/updated`; `deleteIssue` publica `issue/updated` do pai.
-- [ ] #10 `updateIssue`: histórico (`activityEvent`) na mesma transação; automações/efeitos depois do commit, falha deles não devolve erro de mutação já commitada; publish após commit.
-- [ ] #18 Evento de notificação leva `recipientId`; SSE entrega só ao destinatário.
-- [ ] Fan-out por time (Be#3, Cx#8): `publish` leva `teamId` quando houver; o stream de usuário restrito/convidado entrega **com id** os eventos do escopo e descarta os de fora (sem query por evento).
-- [ ] #19 (servidor) eventos de comentário/reação incluem `issueId` (campo aditivo).
-- [ ] #20 Rollover de ciclo publica `cycle/updated` + sinal de issues **após** o commit; `createNextCycle` não publica dentro da transação.
-- [ ] #6 (servidor) conexão LISTEN com keepalive/ping periódico; após reconectar, emite evento local de resync para os subscribers do pod.
-- [ ] #22 Sweep de webhooks: `pg_try_advisory_xact_lock` dentro de transação (ou client dedicado); não roda a cada publish (throttle); entregas sem `await` serial.
-- [ ] #25 Lexorank: create detecta colisão; reorder trata vizinhos empatados/invertidos (sem lançar 500); paginação keyset por `(rank, id)` retrocompatível (cursor antigo continua aceito).
-- [ ] #32 Label exclusiva em transação com `FOR UPDATE` na issue.
-- [ ] #34 Reviews: publish depois de gravar checks/arquivos; `check_run` publica; link de PR publica `issue`.
-- [ ] #35 subscribe/unsubscribe publicam para o próprio usuário; `provisionUser` publica `member`.
-- [ ] #12 (servidor) labels criadas pelo import e pelo Sentry publicam `label`.
-- [ ] #36 Descrição: concorrência otimista opcional (`expectedUpdatedAt`/If-Match → 409 quando divergir; sem o campo, comportamento atual); o editor trata 409 recarregando e avisando.
-- [ ] #39 `listReviews` com projeção explícita (sem `guide`).
+- [x] #7 Import em modo silencioso: `createIssue`/`updateIssue` aceitam opção para não publicar; ao fim, um único `publish({ entity: 'issue' })` sem id (coarse). Teste: import de N linhas publica 1 evento.
+- [x] #8 Mudanças de issue que afetam rollup publicam `project/updated` (antigo e novo) e `cycle/updated`; `deleteIssue` publica `issue/updated` do pai.
+- [x] #10 `updateIssue`: histórico (`activityEvent`) na mesma transação; automações/efeitos depois do commit, falha deles não devolve erro de mutação já commitada; publish após commit.
+- [x] #18 Evento de notificação leva `recipientId`; SSE entrega só ao destinatário.
+- [x] Fan-out por time (Be#3, Cx#8): `publish` leva `teamId` quando houver; o stream de usuário restrito/convidado entrega **com id** os eventos do escopo e descarta os de fora (sem query por evento).
+- [x] #19 (servidor) eventos de comentário/reação incluem `issueId` (campo aditivo).
+- [x] #20 Rollover de ciclo publica `cycle/updated` + sinal de issues **após** o commit; `createNextCycle` não publica dentro da transação.
+- [x] #6 (servidor) conexão LISTEN com keepalive/ping periódico; após reconectar, emite evento local de resync para os subscribers do pod.
+- [x] #22 Sweep de webhooks: `pg_try_advisory_xact_lock` dentro de transação (ou client dedicado); não roda a cada publish (throttle); entregas sem `await` serial.
+- [x] #25 Lexorank: create detecta colisão; reorder trata vizinhos empatados/invertidos (sem lançar 500); paginação keyset por `(rank, id)` retrocompatível (cursor antigo continua aceito).
+- [x] #32 Label exclusiva em transação com `FOR UPDATE` na issue.
+- [x] #34 Reviews: publish depois de gravar checks/arquivos; `check_run` publica; link de PR publica `issue`.
+- [x] #35 subscribe/unsubscribe publicam para o próprio usuário; `provisionUser` publica `member`.
+- [x] #12 (servidor) labels criadas pelo import e pelo Sentry publicam `label`.
+- [x] #36 Descrição: concorrência otimista opcional (`expectedUpdatedAt`/If-Match → 409 quando divergir; sem o campo, comportamento atual); o editor trata 409 recarregando e avisando.
+- [x] #39 `listReviews` com projeção explícita (sem `guide`).
 
 ### Frente C2 — servidor: dados, integridade e banco (Codex)
 

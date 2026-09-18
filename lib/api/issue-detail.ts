@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, inArray, or } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
@@ -112,6 +112,26 @@ export interface IssueDetailDto {
    prLinks: { id: string; title: string; status: string }[];
    /** Anexos da issue (os de comentário vêm em cada CommentDto). */
    attachments: AttachmentDto[];
+   /**
+    * Versão opaca da descrição (#36). O cliente a devolve em `expectedDescriptionVersion`
+    * no PATCH; se outra pessoa gravou no meio, o servidor responde 409.
+    */
+   descriptionVersion: string;
+}
+
+/**
+ * Versão da descrição = hash do que está gravado (texto + doc). `issue_content` não tem
+ * coluna de data, e o `updatedAt` da issue muda com qualquer campo — daria conflito falso
+ * quando alguém muda o status enquanto outra pessoa escreve.
+ */
+function descriptionVersionOf(
+   description: string | null | undefined,
+   descriptionDoc: unknown
+): string {
+   return createHash('sha1')
+      .update(JSON.stringify([description ?? null, descriptionDoc ?? null]))
+      .digest('hex')
+      .slice(0, 16);
 }
 
 type CommentRow = typeof commentT.$inferSelect;
@@ -243,6 +263,7 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
       duplicateIds: relations.filter((r) => r.kind === 'duplicate').map((r) => r.relatedId),
       prLinks: prs.map((p) => ({ id: p.id, title: p.title, status: p.status })),
       attachments,
+      descriptionVersion: descriptionVersionOf(content[0]?.description, content[0]?.descriptionDoc),
    };
 }
 
@@ -252,6 +273,11 @@ export interface UpdateIssueContentInput {
    /** Doc do editor: grava o doc e DERIVA a projeção em texto. Tem precedência. */
    descriptionDoc?: EditorDoc | null;
    milestone?: string | null;
+   /**
+    * Concorrência otimista (#36), opcional: a `descriptionVersion` que o cliente viu.
+    * Divergiu do que está gravado → 409 (nada é gravado). Ausente → last-write-wins.
+    */
+   expectedDescriptionVersion?: string | null;
 }
 
 /** Upsert da descrição (doc do editor + projeção em texto) da issue em `issue_content`.
@@ -263,7 +289,7 @@ export async function updateIssueContent(
    actorEmail?: string
 ): Promise<IssueDetailDto | null> {
    const exists = await db
-      .select({ id: issueT.id })
+      .select({ id: issueT.id, teamId: issueT.teamId })
       .from(issueT)
       .where(eq(issueT.id, issueId))
       .limit(1);
@@ -280,16 +306,35 @@ export async function updateIssueContent(
       set.descriptionDoc = null;
    }
    if (patch.milestone !== undefined) set.milestone = patch.milestone;
-   await db
-      .insert(issueContent)
-      .values({
-         issueId,
-         description: set.description ?? null,
-         descriptionDoc: set.descriptionDoc ?? null,
-         milestone: patch.milestone ?? null,
-      })
-      .onConflictDoUpdate({ target: issueContent.issueId, set });
-   publish({ entity: 'issue', action: 'updated', id: issueId });
+   const touchesDescription = set.description !== undefined;
+   await db.transaction(async (tx) => {
+      if (touchesDescription && patch.expectedDescriptionVersion) {
+         // Serializa escritas concorrentes da mesma issue: a checagem e a gravação são
+         // atômicas (sem isto, os dois PATCHes podiam passar pela checagem juntos).
+         await tx
+            .select({ id: issueT.id })
+            .from(issueT)
+            .where(eq(issueT.id, issueId))
+            .for('update');
+         const [cur] = await tx
+            .select({ d: issueContent.description, doc: issueContent.descriptionDoc })
+            .from(issueContent)
+            .where(eq(issueContent.issueId, issueId))
+            .limit(1);
+         if (descriptionVersionOf(cur?.d, cur?.doc) !== patch.expectedDescriptionVersion)
+            throw new ApiError(409, 'A descrição foi alterada por outra pessoa');
+      }
+      await tx
+         .insert(issueContent)
+         .values({
+            issueId,
+            description: set.description ?? null,
+            descriptionDoc: set.descriptionDoc ?? null,
+            milestone: patch.milestone ?? null,
+         })
+         .onConflictDoUpdate({ target: issueContent.issueId, set });
+   });
+   publish({ entity: 'issue', action: 'updated', id: issueId, teamId: exists[0].teamId });
    return getIssueDetail(db, issueId);
 }
 
@@ -391,7 +436,12 @@ export async function addRelation(
       // trilha no feed só quando o vínculo é novo (re-add idempotente não gera evento)
       await recordRelationEvent(db, issueId, kind, true, actorEmail);
    }
-   publish({ entity: 'issue', action: 'updated', id: issueId });
+   publish({
+      entity: 'issue',
+      action: 'updated',
+      id: issueId,
+      teamId: await issueTeamId(db, issueId),
+   });
    return getIssueDetail(db, issueId);
 }
 
@@ -430,8 +480,40 @@ export async function removeRelation(
       )
       .returning({ id: issueRelation.id });
    if (deleted.length > 0) await recordRelationEvent(db, issueId, kind, false, actorEmail);
-   publish({ entity: 'issue', action: 'updated', id: issueId });
+   publish({
+      entity: 'issue',
+      action: 'updated',
+      id: issueId,
+      teamId: await issueTeamId(db, issueId),
+   });
    return getIssueDetail(db, issueId);
+}
+
+/**
+ * Issue e time de um comentário, para os eventos de comment/reação (#19): o `id` do
+ * evento é o do comentário, e o cliente precisa do `issueId` para recarregar só o
+ * detalhe certo (e o stream, do `teamId` para o fan-out por escopo).
+ */
+async function commentScope(
+   db: Db,
+   commentId: string
+): Promise<{ issueId?: string; teamId?: string }> {
+   const [row] = await db
+      .select({ issueId: commentT.issueId, teamId: issueT.teamId })
+      .from(commentT)
+      .innerJoin(issueT, eq(issueT.id, commentT.issueId))
+      .where(eq(commentT.id, commentId))
+      .limit(1);
+   return row ? { issueId: row.issueId, teamId: row.teamId } : {};
+}
+
+async function issueTeamId(db: Db, issueId: string): Promise<string | undefined> {
+   const [row] = await db
+      .select({ teamId: issueT.teamId })
+      .from(issueT)
+      .where(eq(issueT.id, issueId))
+      .limit(1);
+   return row?.teamId;
 }
 
 export async function listComments(
@@ -478,7 +560,7 @@ export async function addComment(
    parentId?: string | null
 ): Promise<CommentDto> {
    const [iss] = await db
-      .select({ assigneeId: issueT.assigneeId })
+      .select({ assigneeId: issueT.assigneeId, teamId: issueT.teamId })
       .from(issueT)
       .where(eq(issueT.id, issueId))
       .limit(1);
@@ -588,7 +670,7 @@ export async function addComment(
       console.error('[circle] notificações de comentário falharam:', e)
    );
 
-   publish({ entity: 'comment', action: 'created', id, actorEmail });
+   publish({ entity: 'comment', action: 'created', id, actorEmail, issueId, teamId: iss.teamId });
    return {
       id,
       author: userRef(author),
@@ -620,7 +702,14 @@ export async function updateComment(
    if (c.authorId !== actor.id) throw new ApiError(403, 'Só o autor pode editar o comentário');
    const updatedAt = new Date();
    await db.update(commentT).set({ body, updatedAt }).where(eq(commentT.id, commentId));
-   publish({ entity: 'comment', action: 'updated', id: commentId, actorEmail });
+   publish({
+      entity: 'comment',
+      action: 'updated',
+      id: commentId,
+      actorEmail,
+      issueId: c.issueId,
+      teamId: await issueTeamId(db, c.issueId),
+   });
    return loadCommentDto(db, { ...c, body, updatedAt }, actor.id);
 }
 
@@ -666,7 +755,14 @@ export async function resolveComment(
       ? { resolvedAt: new Date(), resolvedById: actor.id }
       : { resolvedAt: null, resolvedById: null };
    await db.update(commentT).set(patch).where(eq(commentT.id, commentId));
-   publish({ entity: 'comment', action: 'updated', id: commentId, actorEmail });
+   publish({
+      entity: 'comment',
+      action: 'updated',
+      id: commentId,
+      actorEmail,
+      issueId: c.issueId,
+      teamId: await issueTeamId(db, c.issueId),
+   });
    return loadCommentDto(db, { ...c, ...patch }, actor.id);
 }
 
@@ -694,7 +790,14 @@ export async function deleteComment(
    await db.delete(commentReaction).where(inArray(commentReaction.commentId, ids));
    await deleteAttachmentsOfComments(db, ids);
    await db.delete(commentT).where(inArray(commentT.id, ids));
-   publish({ entity: 'comment', action: 'deleted', id: commentId, actorEmail });
+   publish({
+      entity: 'comment',
+      action: 'deleted',
+      id: commentId,
+      actorEmail,
+      issueId: c.issueId,
+      teamId: await issueTeamId(db, c.issueId),
+   });
    return true;
 }
 
@@ -838,7 +941,13 @@ export async function addReaction(
       .insert(commentReaction)
       .values({ commentId, emoji, userId: user.id })
       .onConflictDoNothing();
-   publish({ entity: 'comment', action: 'updated', id: commentId, actorEmail });
+   publish({
+      entity: 'comment',
+      action: 'updated',
+      id: commentId,
+      actorEmail,
+      ...(await commentScope(db, commentId)),
+   });
 }
 
 export async function removeReaction(
@@ -857,5 +966,11 @@ export async function removeReaction(
             eq(commentReaction.userId, user.id)
          )
       );
-   publish({ entity: 'comment', action: 'updated', id: commentId, actorEmail });
+   publish({
+      entity: 'comment',
+      action: 'updated',
+      id: commentId,
+      actorEmail,
+      ...(await commentScope(db, commentId)),
+   });
 }

@@ -4,7 +4,7 @@ import type { Issue } from '@/data/issues';
 import type { IssueDetail } from '@/data/issue-details';
 import { adaptIssueDetail, textToBlocks } from '@/lib/adapters-issue-detail';
 import { adaptIssues } from '@/lib/adapters';
-import { api } from '@/lib/client';
+import { api, ApiError } from '@/lib/client';
 import { blocksToDoc, type EditorDoc } from '@/lib/editor-doc';
 import { ISSUE_CHANGED_EVENT } from '@/lib/use-live-sync';
 import { useIssuesStore } from '@/store/issues-store';
@@ -12,7 +12,7 @@ import { useCurrentIssueStore } from '@/store/current-issue-store';
 import { useStatuses } from '@/store/catalog-store';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ReactNode, useCallback, useEffect, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Plus } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -109,6 +109,14 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
    // Override local do título para issue FORA do store (deep-link frio): o objeto vem
    // do pai e não flui de volta — o override exibe o valor salvo até o store assumir.
    const [localTitle, setLocalTitle] = useState<string | null>(null);
+   // Concorrência otimista da descrição (#36): a versão que este editor viu, os saves em
+   // fila (um de cada vez, sempre com a versão mais recente) e a época do editor — trocá-la
+   // remonta o editor com a versão do servidor depois de um conflito.
+   const descriptionVersion = useRef<string | null>(null);
+   const saveQueue = useRef<Promise<void>>(Promise.resolve());
+   const conflict = useRef(false);
+   const [editorEpoch, setEditorEpoch] = useState(0);
+   const descriptionBox = useRef<HTMLDivElement>(null);
 
    // Ao trocar DE issue, volta ao skeleton. Depende do id (não do objeto): o splice do
    // SSE (applyRemote) troca a referência da issue no store e antes disparava um
@@ -133,6 +141,11 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
                const adapted = adaptIssueDetail(detailDto, activity);
                setDetail(adapted);
                onDetailLoaded?.(adapted);
+               // O editor com foco NÃO adota o doc recarregado (preserva a digitação): aí a
+               // versão também não avança, e o próximo save acusa o conflito (409).
+               const typing = descriptionBox.current?.contains(document.activeElement) ?? false;
+               if (!typing || descriptionVersion.current === null)
+                  descriptionVersion.current = detailDto.descriptionVersion ?? null;
                setDescriptionDoc(
                   detailDto.descriptionDoc ?? blocksToDoc(textToBlocks(detailDto.description))
                );
@@ -160,6 +173,12 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
       window.addEventListener(ISSUE_CHANGED_EVENT, onChanged);
       return () => window.removeEventListener(ISSUE_CHANGED_EVENT, onChanged);
    }, [detailIssueId]);
+
+   // Depois do remount pós-conflito, o editor novo volta a salvar (o flush do editor
+   // antigo, no unmount, já foi descartado).
+   useEffect(() => {
+      conflict.current = false;
+   }, [editorEpoch]);
 
    const displayTitle = inStore ? issue.title : (localTitle ?? issue.title);
 
@@ -212,12 +231,37 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
 
    // O editor já mostra o que o usuário digitou; só o erro precisa de feedback (sem
    // toast de sucesso — o save é contínuo, com debounce).
-   const saveDescription = async (doc: EditorDoc) => {
-      try {
-         await api.issues.updateDetail(issue.id, { descriptionDoc: doc });
-      } catch {
-         toast.error('Falha ao salvar a descrição');
-      }
+   const saveDescription = (doc: EditorDoc) => {
+      if (conflict.current) return;
+      saveQueue.current = saveQueue.current.then(async () => {
+         if (conflict.current) return;
+         try {
+            const dto = await api.issues.updateDetail(issue.id, {
+               descriptionDoc: doc,
+               expectedDescriptionVersion: descriptionVersion.current,
+            });
+            descriptionVersion.current = dto.descriptionVersion ?? null;
+         } catch (e) {
+            if (!(e instanceof ApiError && e.status === 409)) {
+               toast.error('Falha ao salvar a descrição');
+               return;
+            }
+            // Outra pessoa gravou no meio: carrega a versão dela em vez de sobrescrever.
+            conflict.current = true;
+            toast.warning(
+               'A descrição foi alterada por outra pessoa. Carregamos a versão mais recente.'
+            );
+            try {
+               const fresh = await api.issues.detail(issue.id);
+               descriptionVersion.current = fresh.descriptionVersion ?? null;
+               setDescriptionDoc(
+                  fresh.descriptionDoc ?? blocksToDoc(textToBlocks(fresh.description))
+               );
+            } finally {
+               setEditorEpoch((n) => n + 1);
+            }
+         }
+      });
    };
 
    return (
@@ -269,6 +313,7 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
                {/* Colar/soltar arquivo que NÃO é imagem na descrição vira anexo da issue; o
                    editor só trata imagens (o evento sobe até aqui sem ser consumido). */}
                <div
+                  ref={descriptionBox}
                   className="mt-6 min-h-8"
                   onPaste={(e) => {
                      const files = nonImageFiles(e.clipboardData?.files);
@@ -286,7 +331,7 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
                   }}
                >
                   <BlockEditor
-                     key={issue.id}
+                     key={`${issue.id}:${editorEpoch}`}
                      doc={descriptionDoc}
                      placeholder="Add a description…"
                      onSave={saveDescription}
