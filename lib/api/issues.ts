@@ -6,6 +6,7 @@ import {
    gt,
    inArray,
    isNull,
+   ne,
    notInArray,
    or,
    sql,
@@ -47,6 +48,7 @@ import { assertAssignableUsers } from './members';
 import { dispatchNotification } from './notify';
 import { getCachedCatalogs } from './catalogs';
 import { publish } from './events';
+import { parseIssueCursor } from '@/lib/issue-cursor';
 import { notifySlackEvent } from './integrations/slack';
 import { projectDescriptionDoc } from './description-doc';
 import type { EditorDoc } from '@/lib/editor-doc';
@@ -62,6 +64,39 @@ import {
 
 /** Teto default de linhas nas listagens (proteção; paginação por cursor fica p/ depois). */
 const DEFAULT_LIST_LIMIT = 500;
+
+/**
+ * Chave do advisory lock que serializa o cálculo do rank de append (#25): sem ele, duas
+ * criações concorrentes liam o MESMO maior rank e gravavam o mesmo rank.
+ */
+const ISSUE_RANK_LOCK_KEY = 4210773;
+
+/** Opções de mutação de issue. */
+export interface IssueMutationOptions {
+   /**
+    * Não publica eventos de tempo real (#7). Para lotes (import): o chamador publica UM
+    * evento coarse no fim, em vez de um por linha (cada evento custa um GET por cliente).
+    */
+   silent?: boolean;
+}
+
+/**
+ * Rollups que dependem da issue (#8): `percentComplete`/`issueCount` do projeto e o
+ * escopo do ciclo são calculados no servidor — sem este aviso ficavam velhos no cliente.
+ * Publica para os ids antigos E novos (sem repetir). Projeto e ciclo são do mesmo time
+ * da issue (validado na escrita), então o `teamId` é o dela.
+ */
+function publishRollups(
+   teamId: string,
+   projectIds: (string | null | undefined)[],
+   cycleIds: (string | null | undefined)[],
+   actorEmail?: string
+): void {
+   for (const id of new Set(projectIds.filter((v): v is string => Boolean(v))))
+      publish({ entity: 'project', action: 'updated', id, teamId, actorEmail });
+   for (const id of new Set(cycleIds.filter((v): v is string => Boolean(v))))
+      publish({ entity: 'cycle', action: 'updated', id, teamId, actorEmail });
+}
 
 // ── Tipos de DTO (espelham o tipo Issue do frontend) ────────────────
 type StatusRow = typeof statusT.$inferSelect;
@@ -144,7 +179,11 @@ export interface IssueListOptions extends IssueFilter {
    orderBy?: 'rank' | 'priority' | 'created' | 'title';
    /** Tamanho da página. Default = DEFAULT_LIST_LIMIT (compat com chamadas sem paginação). */
    limit?: number;
-   /** Cursor keyset = o `rank` do último item da página anterior (só na ordem default asc(rank)). */
+   /**
+    * Cursor keyset (só na ordem default asc(rank)). Formato atual `rank~id` (ver
+    * `lib/issue-cursor.ts`) → `(rank, id) > cursor`, que não pula empates de rank. O
+    * formato antigo (só o `rank`) continua aceito, com a semântica antiga `rank > cursor`.
+    */
    cursor?: string;
 }
 
@@ -448,7 +487,17 @@ function listOrder(orderBy: IssueListOptions['orderBy'], cat: CatalogMaps): SQL[
          ? [sql`(case ${sql.join(whens, sql` `)} else 999 end) asc`, asc(issue.rank)]
          : [asc(issue.rank)];
    }
-   return [asc(issue.rank)];
+   return [asc(issue.rank), asc(issue.id)];
+}
+
+/** Condição keyset do cursor (#25): `(rank, id) > cursor`; cursor legado = só rank. */
+function keysetAfter(cursor: string): SQL {
+   const parsed = parseIssueCursor(cursor);
+   if (!parsed.id) return gt(issue.rank, parsed.rank);
+   return or(
+      gt(issue.rank, parsed.rank),
+      and(eq(issue.rank, parsed.rank), gt(issue.id, parsed.id))
+   ) as SQL;
 }
 
 // ── Operações ───────────────────────────────────────────────────────
@@ -478,10 +527,10 @@ export async function listIssues(
       opts = { ...opts, team: undefined, teamIds: intersectScopes(opts.teamIds, expanded) };
    }
    const where = buildWhere(db, opts, cat.statuses, meId);
-   // Keyset por rank: só na ordem default asc(rank) (o board). Cursor = último rank
-   // da página anterior → `rank > cursor`. Em outras ordens, sem cursor (cai no limit).
+   // Keyset por (rank, id): só na ordem default asc(rank) (o board). Em outras ordens,
+   // sem cursor (cai no limit).
    const rankOrder = !opts.orderBy || opts.orderBy === 'rank';
-   const keyset = opts.cursor && rankOrder ? gt(issue.rank, opts.cursor) : undefined;
+   const keyset = opts.cursor && rankOrder ? keysetAfter(opts.cursor) : undefined;
    const finalWhere = keyset ? (where ? and(where, keyset) : keyset) : where;
    const rows = await db
       .select()
@@ -572,7 +621,8 @@ function assertParentOfTeam(parent: typeof issue.$inferSelect, teamId: string): 
 export async function createIssue(
    db: Db,
    input: CreateIssueInput,
-   actorEmail: string
+   actorEmail: string,
+   opts: IssueMutationOptions = {}
 ): Promise<IssueDto> {
    const actor = await getOrCreateUser(db, actorEmail);
    const catalogs = await loadCatalogs(db);
@@ -661,7 +711,9 @@ export async function createIssue(
          .returning({ seq: teamT.issueSeq });
       const identifier = `${teamId}-${seqRes[0].seq}`;
 
-      // rank: após o maior rank existente
+      // rank: após o maior rank existente — sob lock (liberado no commit), senão duas
+      // criações concorrentes leem o mesmo máximo e repetem o rank (#25).
+      await tx.execute(sql`select pg_advisory_xact_lock(${ISSUE_RANK_LOCK_KEY})`);
       const maxRankRows = await tx
          .select({ r: issue.rank })
          .from(issue)
@@ -747,9 +799,19 @@ export async function createIssue(
       void import('./triage').then((m) => m.scheduleTriageSuggestion(db, id));
    }
 
-   publish({ entity: 'issue', action: 'created', id, actorEmail });
-   // O rollup do pai mudou (nova filha) → o board atualiza a linha dele.
-   if (parent) publish({ entity: 'issue', action: 'updated', id: parent.id, actorEmail });
+   if (!opts.silent) {
+      publish({ entity: 'issue', action: 'created', id, actorEmail, teamId });
+      // O rollup do pai mudou (nova filha) → o board atualiza a linha dele.
+      if (parent)
+         publish({
+            entity: 'issue',
+            action: 'updated',
+            id: parent.id,
+            actorEmail,
+            teamId: parent.teamId,
+         });
+      publishRollups(teamId, [projectId], [cycleId], actorEmail);
+   }
    const created = (await getIssue(db, id))!;
    // Notificação Slack (best-effort, fire-and-forget — não acopla latência à request).
    void notifySlackEvent(db, {
@@ -785,7 +847,8 @@ export async function updateIssue(
    db: Db,
    id: string,
    patch: UpdateIssueInput,
-   actorEmail: string
+   actorEmail: string,
+   opts: IssueMutationOptions = {}
 ): Promise<IssueDto | null> {
    const existing = await db.select().from(issue).where(eq(issue.id, id)).limit(1);
    if (existing.length === 0) return null;
@@ -941,31 +1004,6 @@ export async function updateIssue(
    const autoAddedCycleId =
       set.cycleId !== undefined && patch.cycleId === undefined ? (set.cycleId as string) : null;
 
-   // Atômico com a junção de responsáveis: o principal em `issue` e o conjunto em
-   // `issue_assignee` nunca ficam inconsistentes entre si.
-   await db.transaction(async (tx) => {
-      await tx.update(issue).set(set).where(eq(issue.id, id));
-      if (removedAssigneeIds.length) {
-         await tx
-            .delete(issueAssignee)
-            .where(
-               and(eq(issueAssignee.issueId, id), inArray(issueAssignee.userId, removedAssigneeIds))
-            );
-      }
-      if (addedAssigneeIds.length) {
-         await tx
-            .insert(issueAssignee)
-            .values(
-               addedAssigneeIds.map((userId) => ({
-                  issueId: id,
-                  userId,
-                  createdAt: set.updatedAt as Date,
-               }))
-            )
-            .onConflictDoNothing();
-      }
-   });
-
    // Nomes p/ o histórico "added/removed assignee X" (um SELECT só quando houve mudança).
    const changedAssigneeIds = [...addedAssigneeIds, ...removedAssigneeIds];
    const assigneeNames = new Map<string, string>(
@@ -980,9 +1018,9 @@ export async function updateIssue(
    );
 
    // eventos de atividade para transições relevantes
+   const statusChanged = patch.statusId !== undefined && patch.statusId !== prev.statusId;
    const events: { event: string; text: string }[] = [];
-   if (patch.statusId !== undefined && patch.statusId !== prev.statusId)
-      events.push({ event: 'status', text: `changed status` });
+   if (statusChanged) events.push({ event: 'status', text: `changed status` });
    if (patch.priorityId !== undefined && patch.priorityId !== prev.priorityId)
       events.push({ event: 'priority', text: `changed priority` });
    // De/para no texto: sem isso o histórico não permite reconstruir o escopo de um
@@ -1009,7 +1047,9 @@ export async function updateIssue(
       events.push({ event: 'title', text: `renamed the issue` });
    if (patch.projectId !== undefined && (patch.projectId || null) !== prev.projectId)
       events.push({ event: 'project', text: `changed project` });
-   if (patch.estimate !== undefined && (patch.estimate ?? null) !== prev.estimate)
+   const estimateChanged =
+      patch.estimate !== undefined && (patch.estimate ?? null) !== prev.estimate;
+   if (estimateChanged)
       events.push({
          event: 'estimate',
          text: `changed estimate from ${prev.estimate ?? 'none'} to ${patch.estimate ?? 'none'}`,
@@ -1026,24 +1066,94 @@ export async function updateIssue(
          event: 'parent',
          text: newParent ? `set parent to ${newParent.identifier}` : 'removed parent',
       });
-   if (events.length) {
-      const now = new Date();
-      await db.insert(activityEvent).values(
-         events.map((e) => ({
-            id: randomUUID(),
-            issueId: id,
-            actorId: actor.id,
-            event: e.event,
-            text: e.text,
-            createdAt: now,
-         }))
+
+   // Atômico (#10): a issue, a junção de responsáveis, o histórico e o auto-subscribe
+   // dos novos responsáveis entram juntos — antes o histórico era gravado DEPOIS do
+   // commit, e uma falha ali devolvia erro de uma mutação já aplicada (e sem evento).
+   await db.transaction(async (tx) => {
+      await tx.update(issue).set(set).where(eq(issue.id, id));
+      if (removedAssigneeIds.length) {
+         await tx
+            .delete(issueAssignee)
+            .where(
+               and(eq(issueAssignee.issueId, id), inArray(issueAssignee.userId, removedAssigneeIds))
+            );
+      }
+      if (addedAssigneeIds.length) {
+         await tx
+            .insert(issueAssignee)
+            .values(
+               addedAssigneeIds.map((userId) => ({
+                  issueId: id,
+                  userId,
+                  createdAt: set.updatedAt as Date,
+               }))
+            )
+            .onConflictDoNothing();
+         // Auto-subscribe (Linear-style; inclui auto-atribuição) de CADA novo responsável.
+         await tx
+            .insert(issueSubscription)
+            .values(addedAssigneeIds.map((userId) => ({ issueId: id, userId })))
+            .onConflictDoNothing();
+      }
+      if (events.length) {
+         const now = new Date();
+         await tx.insert(activityEvent).values(
+            events.map((e) => ({
+               id: randomUUID(),
+               issueId: id,
+               actorId: actor.id,
+               event: e.event,
+               text: e.text,
+               createdAt: now,
+            }))
+         );
+      }
+   });
+
+   // ── Depois do commit: primeiro o evento, depois os efeitos colaterais. ──
+   if (!opts.silent) {
+      publish({ entity: 'issue', action: 'updated', id, actorEmail, teamId: prev.teamId });
+      // Rollup dos pais (antigo e novo) mudou quando a issue trocou de pai ou de status.
+      const parentsToRefresh = new Set<string>();
+      if (set.parentId !== undefined) {
+         if (prev.parentId) parentsToRefresh.add(prev.parentId);
+         if (newParent) parentsToRefresh.add(newParent.id);
+      } else if (prev.parentId && statusChanged) {
+         parentsToRefresh.add(prev.parentId);
+      }
+      for (const pid of parentsToRefresh)
+         publish({ entity: 'issue', action: 'updated', id: pid, teamId: prev.teamId });
+      // Rollups de projeto/ciclo (#8), antigos e novos.
+      const nextProjectId =
+         set.projectId !== undefined ? (set.projectId as string | null) : prev.projectId;
+      const nextCycleId = set.cycleId !== undefined ? (set.cycleId as string | null) : prev.cycleId;
+      const milestoneChanged =
+         set.milestoneId !== undefined && set.milestoneId !== prev.milestoneId;
+      publishRollups(
+         prev.teamId,
+         statusChanged || estimateChanged || milestoneChanged || nextProjectId !== prev.projectId
+            ? [prev.projectId, nextProjectId]
+            : [],
+         statusChanged || estimateChanged || nextCycleId !== prev.cycleId
+            ? [prev.cycleId, nextCycleId]
+            : [],
+         actorEmail
       );
    }
 
-   // CADA novo responsável: auto-subscribe (Linear-style; inclui auto-atribuição) e
-   // notificação (in-app + Slack/Email best-effort) — exceto o próprio ator.
+   // Efeitos colaterais (#10): a mutação JÁ está gravada e publicada — uma falha aqui é
+   // registrada, nunca devolvida como erro do PATCH.
+   const effect = async (name: string, fn: () => Promise<unknown>): Promise<void> => {
+      try {
+         await fn();
+      } catch (e) {
+         console.warn(`[circle] efeito '${name}' da issue ${id} falhou:`, (e as Error).message);
+      }
+   };
+
+   // Notificação de CADA novo responsável (in-app + Slack/Email) — exceto o próprio ator.
    for (const uid of addedAssigneeIds) {
-      await subscribeToIssue(db, id, uid);
       if (uid === actor.id) continue;
       // Fire-and-forget: notificação (Slack/SES) não bloqueia a resposta do PATCH.
       // `dispatchNotification` captura os próprios erros (loga, não lança).
@@ -1058,42 +1168,39 @@ export async function updateIssue(
 
    // Automações de sub-issues (#95): só quando o status trocou de CATEGORIA.
    if (prevCategory !== nextCategory && patch.statusId !== undefined) {
-      await applyAutoClose(
-         db,
-         {
-            id,
-            teamId: prev.teamId,
-            statusId: patch.statusId,
-            parentId: set.parentId !== undefined ? (set.parentId as string | null) : prev.parentId,
-         },
-         actor.id,
-         actorEmail
+      const statusId = patch.statusId;
+      await effect('auto-close', () =>
+         applyAutoClose(
+            db,
+            {
+               id,
+               teamId: prev.teamId,
+               statusId,
+               parentId:
+                  set.parentId !== undefined ? (set.parentId as string | null) : prev.parentId,
+            },
+            actor.id,
+            actorEmail,
+            opts
+         )
       );
    }
 
    // Automações do time (#97): status trocado (a categoria de destino filtra as regras).
-   if (patch.statusId !== undefined && patch.statusId !== prev.statusId)
-      await runAutomations(db, 'issue.status_changed', id, {
-         actorId: actor.id,
-         actorEmail,
-         toCategory: nextCategory,
-      });
+   if (statusChanged)
+      await effect('automations', () =>
+         runAutomations(db, 'issue.status_changed', id, {
+            actorId: actor.id,
+            actorEmail,
+            toCategory: nextCategory,
+         })
+      );
 
    // Sugestão de triagem (#94): a issue ENTROU na fila agora. Assíncrona (import
    // dinâmico: `triage.ts` alcança `agent.ts`, que importa ESTE módulo).
    if (nextCategory === 'triage' && prevCategory !== 'triage')
-      void import('./triage').then((m) => m.scheduleTriageSuggestion(db, id));
+      void import('./triage').then((m) => m.scheduleTriageSuggestion(db, id)).catch(() => {});
 
-   publish({ entity: 'issue', action: 'updated', id, actorEmail });
-   // Rollup dos pais (antigo e novo) mudou quando a issue trocou de pai ou de status.
-   const parentsToRefresh = new Set<string>();
-   if (set.parentId !== undefined) {
-      if (prev.parentId) parentsToRefresh.add(prev.parentId);
-      if (newParent) parentsToRefresh.add(newParent.id);
-   } else if (prev.parentId && patch.statusId !== undefined && patch.statusId !== prev.statusId) {
-      parentsToRefresh.add(prev.parentId);
-   }
-   for (const pid of parentsToRefresh) publish({ entity: 'issue', action: 'updated', id: pid });
    const dto = await getIssue(db, id);
    // Feed do canal Slack (best-effort, fire-and-forget). Gated pelo slack_config admin.
    if (dto) {
@@ -1126,7 +1233,8 @@ async function applyAutoClose(
    db: Db,
    changed: { id: string; teamId: string; statusId: string; parentId: string | null },
    actorId: string,
-   actorEmail: string
+   actorEmail: string,
+   opts: IssueMutationOptions = {}
 ): Promise<void> {
    const [flags] = await db
       .select({ parent: teamT.autoCloseParent, children: teamT.autoCloseChildren })
@@ -1148,10 +1256,7 @@ async function applyAutoClose(
               .sort((a, b) => a.position - b.position)[0]?.id;
    if (!completedStatusId) return;
 
-   const close = async (
-      target: { id: string; statusId: string; startedAt: Date | null },
-      text: string
-   ) => {
+   const close = async (target: typeof issue.$inferSelect, text: string) => {
       const now = new Date();
       await db
          .update(issue)
@@ -1170,7 +1275,15 @@ async function applyAutoClose(
          text,
          createdAt: now,
       });
-      publish({ entity: 'issue', action: 'updated', id: target.id, actorEmail });
+      if (opts.silent) return;
+      publish({
+         entity: 'issue',
+         action: 'updated',
+         id: target.id,
+         actorEmail,
+         teamId: target.teamId,
+      });
+      publishRollups(target.teamId, [target.projectId], [target.cycleId], actorEmail);
    };
 
    // Sobe: a issue ficou done → se TODAS as irmãs também, conclui o pai; repete acima.
@@ -1208,8 +1321,19 @@ async function applyAutoClose(
 }
 
 export async function deleteIssue(db: Db, id: string, actorEmail?: string): Promise<boolean> {
-   const existing = await db.select({ id: issue.id }).from(issue).where(eq(issue.id, id)).limit(1);
+   const existing = await db
+      .select({
+         id: issue.id,
+         teamId: issue.teamId,
+         parentId: issue.parentId,
+         projectId: issue.projectId,
+         cycleId: issue.cycleId,
+      })
+      .from(issue)
+      .where(eq(issue.id, id))
+      .limit(1);
    if (existing.length === 0) return false;
+   const prev = existing[0];
    if (actorEmail) await assertCanWriteIssue(db, actorEmail, id);
    const children = await db.select({ id: issue.id }).from(issue).where(eq(issue.parentId, id));
    // Os anexos (da issue e dos comentários dela) somem por cascade, mas os OBJETOS no
@@ -1251,8 +1375,13 @@ export async function deleteIssue(db: Db, id: string, actorEmail?: string): Prom
       await tx.delete(issue).where(eq(issue.id, id));
    });
    void removeAttachmentObjects(attachmentUrls);
-   publish({ entity: 'issue', action: 'deleted', id });
-   for (const c of children) publish({ entity: 'issue', action: 'updated', id: c.id });
+   publish({ entity: 'issue', action: 'deleted', id, actorEmail, teamId: prev.teamId });
+   for (const c of children)
+      publish({ entity: 'issue', action: 'updated', id: c.id, teamId: prev.teamId });
+   // O pai perdeu uma filha e o projeto/ciclo, uma issue (#8).
+   if (prev.parentId)
+      publish({ entity: 'issue', action: 'updated', id: prev.parentId, teamId: prev.teamId });
+   publishRollups(prev.teamId, [prev.projectId], [prev.cycleId], actorEmail);
    return true;
 }
 
@@ -1269,6 +1398,22 @@ export async function subscribeToIssue(
 ): Promise<void> {
    if (actorEmail) await assertCanWriteIssue(db, actorEmail, id);
    await db.insert(issueSubscription).values({ issueId: id, userId }).onConflictDoNothing();
+   publishSubscriptionChanged(id, userId, actorEmail);
+}
+
+/**
+ * A assinatura vive em `me.subscribedIssueIds` (#35): avisa SÓ o próprio usuário (as
+ * outras abas/dispositivos dele), com a issue em `issueId`.
+ */
+function publishSubscriptionChanged(issueId: string, userId: string, actorEmail?: string): void {
+   publish({
+      entity: 'member',
+      action: 'updated',
+      id: userId,
+      recipientId: userId,
+      issueId,
+      actorEmail,
+   });
 }
 
 /** Cancela a assinatura de uma issue. */
@@ -1282,6 +1427,7 @@ export async function unsubscribeFromIssue(
    await db
       .delete(issueSubscription)
       .where(and(eq(issueSubscription.issueId, id), eq(issueSubscription.userId, userId)));
+   publishSubscriptionChanged(id, userId, actorEmail);
 }
 
 /** Ids das issues assinadas pelo usuário (alimenta a aba Subscribed do My issues). */
@@ -1309,14 +1455,28 @@ export async function reorderIssue(
    };
    const before = await getRank(beforeId);
    const after = await getRank(afterId);
-   const newRank = rankBetween(before, after);
+   let newRank: string;
+   if (before && after && before >= after) {
+      // Vizinhos empatados ou invertidos (#25) — dois drags concorrentes ou lista velha no
+      // cliente. `LexoRank.between` lançava (500); ancora logo depois de `before`, entre
+      // ele e o próximo rank ESTRITAMENTE maior (sem contar a própria issue).
+      const [next] = await db
+         .select({ r: issue.rank })
+         .from(issue)
+         .where(and(gt(issue.rank, before), ne(issue.id, id)))
+         .orderBy(asc(issue.rank))
+         .limit(1);
+      newRank = rankBetween(before, next?.r ?? null);
+   } else {
+      newRank = rankBetween(before, after);
+   }
    const res = await db
       .update(issue)
       .set({ rank: newRank, updatedAt: new Date() })
       .where(eq(issue.id, id))
-      .returning({ id: issue.id });
+      .returning({ id: issue.id, teamId: issue.teamId });
    if (res.length === 0) return null;
-   publish({ entity: 'issue', action: 'updated', id });
+   publish({ entity: 'issue', action: 'updated', id, actorEmail, teamId: res[0].teamId });
    return getIssue(db, id);
 }
 
@@ -1327,7 +1487,11 @@ export async function addLabel(
    actorEmail: string
 ): Promise<IssueDto | null> {
    // valida issue e label antes do insert (senão a FK estoura como 500)
-   const issueRows = await db.select({ id: issue.id }).from(issue).where(eq(issue.id, id)).limit(1);
+   const issueRows = await db
+      .select({ id: issue.id, teamId: issue.teamId })
+      .from(issue)
+      .where(eq(issue.id, id))
+      .limit(1);
    if (issueRows.length === 0) throw new ApiError(404, `Issue '${id}' não encontrada`);
    await assertCanWriteIssue(db, actorEmail, id);
    const labelRows = await db
@@ -1336,43 +1500,51 @@ export async function addLabel(
       .where(eq(labelT.id, labelId))
       .limit(1);
    if (labelRows.length === 0) throw new ApiError(400, `Label '${labelId}' não existe`);
+   const actor = await getOrCreateUser(db, actorEmail);
 
    // Grupo mutuamente exclusivo (paridade Linear): ao adicionar uma label de um grupo,
    // remove as outras labels do MESMO grupo já na issue (uma por grupo).
    const groupId = labelRows[0].groupId;
-   if (groupId) {
-      const siblings = await db
-         .select({ id: labelT.id })
-         .from(labelT)
-         .where(and(eq(labelT.groupId, groupId), notInArray(labelT.id, [labelId])));
-      const siblingIds = siblings.map((s) => s.id);
+   const siblingIds = groupId
+      ? (
+           await db
+              .select({ id: labelT.id })
+              .from(labelT)
+              .where(and(eq(labelT.groupId, groupId), notInArray(labelT.id, [labelId])))
+        ).map((s) => s.id)
+      : [];
+
+   // Atômico e serializado por issue (#32): o `FOR UPDATE` na linha da issue impede que
+   // dois cliques concorrentes em labels do mesmo grupo deixem as duas gravadas.
+   const inserted = await db.transaction(async (tx) => {
+      await tx.select({ id: issue.id }).from(issue).where(eq(issue.id, id)).for('update');
       if (siblingIds.length) {
-         await db
+         await tx
             .delete(issueLabel)
             .where(and(eq(issueLabel.issueId, id), inArray(issueLabel.labelId, siblingIds)));
       }
-   }
-
-   const inserted = await db
-      .insert(issueLabel)
-      .values({ issueId: id, labelId })
-      .onConflictDoNothing()
-      .returning({ labelId: issueLabel.labelId });
-   // grava no histórico só quando o vínculo é novo (re-add idempotente não gera evento)
-   if (inserted.length > 0) {
-      const actor = await getOrCreateUser(db, actorEmail);
-      await db.insert(activityEvent).values({
-         id: randomUUID(),
-         issueId: id,
-         actorId: actor.id,
-         event: 'label',
-         text: `added label ${labelRows[0].name}`,
-         createdAt: new Date(),
-      });
-      // Automações do time (#97): label adicionada.
+      const rows = await tx
+         .insert(issueLabel)
+         .values({ issueId: id, labelId })
+         .onConflictDoNothing()
+         .returning({ labelId: issueLabel.labelId });
+      // grava no histórico só quando o vínculo é novo (re-add idempotente não gera evento)
+      if (rows.length > 0) {
+         await tx.insert(activityEvent).values({
+            id: randomUUID(),
+            issueId: id,
+            actorId: actor.id,
+            event: 'label',
+            text: `added label ${labelRows[0].name}`,
+            createdAt: new Date(),
+         });
+      }
+      return rows;
+   });
+   publish({ entity: 'issue', action: 'updated', id, actorEmail, teamId: issueRows[0].teamId });
+   // Automações do time (#97): label adicionada — depois do commit (efeito colateral).
+   if (inserted.length > 0)
       await runAutomations(db, 'issue.label_added', id, { actorId: actor.id, actorEmail, labelId });
-   }
-   publish({ entity: 'issue', action: 'updated', id });
    return getIssue(db, id);
 }
 
@@ -1404,6 +1576,11 @@ export async function removeLabel(
          createdAt: new Date(),
       });
    }
-   publish({ entity: 'issue', action: 'updated', id });
+   const [row] = await db
+      .select({ teamId: issue.teamId })
+      .from(issue)
+      .where(eq(issue.id, id))
+      .limit(1);
+   publish({ entity: 'issue', action: 'updated', id, actorEmail, teamId: row?.teamId });
    return getIssue(db, id);
 }
