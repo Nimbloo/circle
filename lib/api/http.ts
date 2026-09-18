@@ -2,8 +2,8 @@ import { gzip } from 'node:zlib';
 import { promisify } from 'node:util';
 import { z } from 'zod';
 import { db } from '@/db';
-import { identityFromRequest } from './auth';
-import { assertActiveEmail, getOrCreateUser } from './users';
+import { identityFromRequest, withRequestCache } from './auth';
+import { getOrCreateUser } from './users';
 import { problem } from './response';
 import { ApiError } from './errors';
 import { captureServerError } from './observe-error';
@@ -24,8 +24,9 @@ export async function requireEmail(req?: Request): Promise<string> {
    // Máquina (Bearer do Keycloak): o papel do token manda no `app_user`, igual ao login
    // humano. Sem isto, um service account com role `guest` agiria como o `Member` que
    // ficou gravado no provisionamento da primeira chamada.
-   if (id.machineRole) await getOrCreateUser(db, id.email, id.machineRole, { syncRole: true });
-   await assertActiveEmail(db, id.email);
+   await getOrCreateUser(db, id.email, id.machineRole ?? 'Member', {
+      syncRole: Boolean(id.machineRole),
+   });
    return id.email;
 }
 
@@ -180,7 +181,7 @@ export async function handle(fn: () => Promise<Response>, req?: Request): Promis
    const method = req?.method ?? 'UNKNOWN';
    let res: Response;
    try {
-      res = await fn();
+      res = await withRequestCache(fn);
    } catch (e) {
       if (e instanceof ApiError) {
          res = problem(e.status, titleFor(e.status), e.message);
