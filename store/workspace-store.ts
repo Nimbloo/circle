@@ -70,6 +70,11 @@ interface WorkspaceState {
 
    /** Segue/deixa de seguir uma issue (otimista + rollback). Reflete em me.subscribedIssueIds. */
    toggleSubscription: (issueId: string) => void;
+   /**
+    * Issue fechada fica fora do `me.subscribedIssueIds` (bootstrap enxuto): consulta a
+    * assinatura dela e, se seguida, inclui na lista local (o toggle segue funcionando).
+    */
+   ensureSubscriptionKnown: (issueId: string) => Promise<void>;
    isSubscribed: (issueId: string) => boolean;
 
    // Helpers (mesmos nomes dos mocks)
@@ -353,6 +358,18 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       }),
 
    isSubscribed: (issueId) => get().me?.subscribedIssueIds.includes(issueId) ?? false,
+
+   ensureSubscriptionKnown: async (issueId) => {
+      if (get().me?.subscribedIssueIds.includes(issueId)) return;
+      try {
+         const { subscribed } = await api.issues.subscription(issueId);
+         const cur = get().me;
+         if (subscribed && cur && !cur.subscribedIssueIds.includes(issueId))
+            set({ me: { ...cur, subscribedIssueIds: [...cur.subscribedIssueIds, issueId] } });
+      } catch {
+         // Best-effort: sem a consulta o botão só mostra "não seguindo" como antes.
+      }
+   },
 
    toggleSubscription: (issueId) => {
       const me = get().me;

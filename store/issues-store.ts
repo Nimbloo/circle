@@ -7,6 +7,7 @@ import { User } from '@/data/users';
 import { create } from 'zustand';
 import { toast } from 'sonner';
 import { api } from '@/lib/client';
+import { issueCursor } from '@/lib/issue-cursor';
 import { adaptIssues } from '@/lib/adapters';
 import { rankBetween } from '@/lib/api/rank';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -177,7 +178,8 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
                });
             }
             if (done) break;
-            cursor = page[page.length - 1].rank; // keyset: próximo `rank > cursor`
+            // keyset por (rank, id): empates de rank não pulam issues entre páginas (#25).
+            cursor = issueCursor(page[page.length - 1]);
          }
       } catch {
          if (stale()) return;

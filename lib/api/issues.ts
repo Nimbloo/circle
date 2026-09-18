@@ -1441,6 +1441,20 @@ export async function unsubscribeFromIssue(
 }
 
 /** Ids das issues assinadas pelo usuário (alimenta a aba Subscribed do My issues). */
+/** O usuário segue esta issue? (issue fechada fica fora do `me.subscribedIssueIds`.) */
+export async function isSubscribedToIssue(
+   db: Db,
+   issueId: string,
+   userId: string
+): Promise<boolean> {
+   const rows = await db
+      .select({ issueId: issueSubscription.issueId })
+      .from(issueSubscription)
+      .where(and(eq(issueSubscription.issueId, issueId), eq(issueSubscription.userId, userId)))
+      .limit(1);
+   return rows.length > 0;
+}
+
 export async function listSubscribedIssueIds(db: Db, userId: string): Promise<string[]> {
    const rows = await db
       .select({ issueId: issueSubscription.issueId })
