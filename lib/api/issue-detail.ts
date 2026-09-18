@@ -436,7 +436,12 @@ export async function addRelation(
       // trilha no feed só quando o vínculo é novo (re-add idempotente não gera evento)
       await recordRelationEvent(db, issueId, kind, true, actorEmail);
    }
-   publish({ entity: 'issue', action: 'updated', id: issueId });
+   publish({
+      entity: 'issue',
+      action: 'updated',
+      id: issueId,
+      teamId: await issueTeamId(db, issueId),
+   });
    return getIssueDetail(db, issueId);
 }
 
@@ -475,7 +480,12 @@ export async function removeRelation(
       )
       .returning({ id: issueRelation.id });
    if (deleted.length > 0) await recordRelationEvent(db, issueId, kind, false, actorEmail);
-   publish({ entity: 'issue', action: 'updated', id: issueId });
+   publish({
+      entity: 'issue',
+      action: 'updated',
+      id: issueId,
+      teamId: await issueTeamId(db, issueId),
+   });
    return getIssueDetail(db, issueId);
 }
 
