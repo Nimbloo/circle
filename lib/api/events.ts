@@ -169,39 +169,80 @@ function notifyEnabled(): boolean {
    return process.env.NODE_ENV !== 'test' && !!process.env.DATABASE_URL;
 }
 
+/** O mínimo do `pg.Client` que o listener usa (permite testar com um cliente falso). */
+export interface ListenClient {
+   on(event: 'error' | 'end', fn: (err?: unknown) => void): unknown;
+   on(event: 'notification', fn: (msg: { payload?: string }) => void): unknown;
+   connect(): Promise<unknown>;
+   query(sql: string): Promise<unknown>;
+   end(): Promise<unknown>;
+   removeAllListeners(): unknown;
+}
+
+export interface ListenerOptions {
+   makeClient: () => ListenClient;
+   /** Evento recebido de OUTRO pod (já sem o próprio). */
+   onEvent: (event: CircleEvent) => void;
+   /** A conexão caiu e voltou: NOTIFYs do intervalo podem ter se perdido. */
+   onResync: () => void;
+   /** Intervalo do ping de keepalive (e timeout de cada ping). */
+   pingMs?: number;
+   /** Espera antes de reconectar. */
+   reconnectMs?: number;
+}
+
+/** Keepalive da conexão LISTEN: menor que o idle timeout típico de LB/NAT (~350s). */
+const LISTEN_PING_MS = 30_000;
+const LISTEN_RECONNECT_MS = 2_000;
+
 /**
- * Conexão dedicada `LISTEN circle_events` (uma por pod). Recebe as notificações
- * dos OUTROS pods e faz fan-out local. Reconecta em erro/fim (best-effort). Lazy:
- * inicia no 1º `subscribe` em runtime real. `pg`/`Client` são importados de forma
- * preguiçosa pra não pesar no bundle e não rodar em teste.
+ * Loop da conexão `LISTEN circle_events` (#6, servidor). Três cuidados:
+ *
+ * - Ponto ÚNICO de reconexão (guardado): error/end/falha no connect/ping travado
+ *   convergem aqui e agendam UMA reconexão, fechando o client morto.
+ * - Keepalive: `select 1` periódico com timeout. Sem ele, uma conexão meio-aberta (LB
+ *   ou NAT que derrubou o fluxo sem RST) nunca emitia erro — o pod ficava surdo aos
+ *   outros pods para sempre, sem sinal nenhum.
+ * - Resync: a partir da 2ª conexão, `onResync` avisa que eventos podem ter se perdido.
+ *
+ * Retorna `stop` (teste/HMR).
  */
-async function startListener(): Promise<void> {
-   if (g.__circleListenStarted || !notifyEnabled()) return;
-   g.__circleListenStarted = true;
-   const { Client } = await import('pg');
+export function runListener(opts: ListenerOptions): () => void {
+   const pingMs = opts.pingMs ?? LISTEN_PING_MS;
+   const reconnectMs = opts.reconnectMs ?? LISTEN_RECONNECT_MS;
+   let stopped = false;
+   let everConnected = false;
+   let current: { dispose: () => void } | null = null;
+
    const connect = async (): Promise<void> => {
-      const client = new Client({ connectionString: process.env.DATABASE_URL });
-      // Ponto ÚNICO de reconexão (guardado): error/end/falha no connect convergem
-      // aqui e agendam UMA reconexão, fechando o client morto — sem loops duplos
-      // nem acúmulo de conexões dedicadas.
-      let reconnectScheduled = false;
-      const scheduleReconnect = (): void => {
-         if (reconnectScheduled) return;
-         reconnectScheduled = true;
+      if (stopped) return;
+      const client = opts.makeClient();
+      let pingTimer: ReturnType<typeof setInterval> | null = null;
+      let disposed = false;
+      const dispose = (): void => {
+         if (disposed) return;
+         disposed = true;
+         if (pingTimer) clearInterval(pingTimer);
          client.removeAllListeners();
+         // Um 'error' tardio do client descartado sem ouvinte derrubaria o processo.
+         client.on('error', () => {});
          client.end().catch(() => {});
+      };
+      const scheduleReconnect = (): void => {
+         if (disposed) return;
+         dispose();
+         if (stopped) return;
          setTimeout(() => {
             void connect();
-         }, 2000);
+         }, reconnectMs);
       };
+      current = { dispose };
       client.on('error', scheduleReconnect);
       client.on('end', scheduleReconnect);
       client.on('notification', (msg) => {
          if (!msg.payload) return;
          try {
-            const ev = JSON.parse(msg.payload) as CircleEvent & { __inst?: string };
-            if (ev.__inst === instanceId()) return; // já entregue localmente
-            fanOutLocal(ev);
+            opts.onEvent(JSON.parse(msg.payload) as CircleEvent);
          } catch {
             /* payload malformado — ignora */
          }
@@ -211,9 +252,51 @@ async function startListener(): Promise<void> {
          await client.query(`LISTEN ${CHANNEL}`);
       } catch {
          scheduleReconnect();
+         return;
       }
+      if (disposed) return;
+      if (everConnected) opts.onResync();
+      everConnected = true;
+      pingTimer = setInterval(() => {
+         let timeout: ReturnType<typeof setTimeout> | null = null;
+         const expired = new Promise<never>((_, reject) => {
+            timeout = setTimeout(() => reject(new Error('ping timeout')), pingMs);
+         });
+         Promise.race([client.query('select 1'), expired])
+            .catch(scheduleReconnect)
+            .finally(() => {
+               if (timeout) clearTimeout(timeout);
+            });
+      }, pingMs);
    };
    void connect();
+   return () => {
+      stopped = true;
+      current?.dispose();
+   };
+}
+
+/**
+ * Conexão dedicada `LISTEN circle_events` (uma por pod). Recebe as notificações
+ * dos OUTROS pods e faz fan-out local. Lazy: inicia no 1º `subscribe` em runtime real.
+ * `pg`/`Client` são importados de forma preguiçosa pra não pesar no bundle e não rodar
+ * em teste.
+ */
+async function startListener(): Promise<void> {
+   if (g.__circleListenStarted || !notifyEnabled()) return;
+   g.__circleListenStarted = true;
+   const { Client } = await import('pg');
+   runListener({
+      makeClient: () => new Client({ connectionString: process.env.DATABASE_URL, keepAlive: true }),
+      onEvent: (ev) => {
+         const tagged = ev as CircleEvent & { __inst?: string };
+         if (tagged.__inst === instanceId()) return; // já entregue localmente
+         delete tagged.__inst;
+         fanOutLocal(tagged);
+      },
+      // Só LOCAL: é este pod que ficou surdo; os clientes dele re-hidratam.
+      onResync: () => fanOutLocal({ entity: 'resync', action: 'updated', ts: nextTs() }),
+   });
 }
 
 /** Registra um subscriber. Retorna a função de unsubscribe (idempotente). */
