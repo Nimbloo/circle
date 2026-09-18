@@ -1,5 +1,6 @@
 'use client';
 
+import { EmptyState } from '@/components/common/empty-state';
 import { DetailSidePanel, DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 import { BlockEditor } from '@/components/common/editor/block-editor';
 import { Button } from '@/components/ui/button';
@@ -145,9 +146,11 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
          );
       }
       return (
-         <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-            Project not found.
-         </div>
+         <EmptyState
+            variant="search"
+            title="Project not found"
+            description="It may have been deleted or you don't have access to it."
+         />
       );
    }
 

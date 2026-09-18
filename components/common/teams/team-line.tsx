@@ -39,7 +39,7 @@ export default function TeamLine({ team }: TeamLineProps) {
                </span>
                <span className="flex min-w-0 items-center gap-3">
                   <span className="truncate font-medium leading-4">{team.name}</span>
-                  <span className="shrink-0 font-medium leading-4 text-muted-foreground/50">
+                  <span className="shrink-0 font-medium leading-4 text-muted-foreground">
                      {team.id}
                   </span>
                </span>

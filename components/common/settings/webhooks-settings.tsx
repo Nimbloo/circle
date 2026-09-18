@@ -23,6 +23,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { EmptyState } from '@/components/common/empty-state';
 import { ListSkeleton } from '@/components/common/list-skeleton';
 import { api } from '@/lib/client';
 import { WEBHOOK_EVENTS, type WebhookEvent } from '@/lib/api/webhook-events';
@@ -158,11 +159,15 @@ function Deliveries({ webhookId }: { webhookId: string }) {
       }
    };
 
-   if (!items)
-      return <div className="px-4 py-3 text-[13px] text-muted-foreground">Carregando…</div>;
+   if (!items) return <ListSkeleton rows={2} />;
    if (items.length === 0)
       return (
-         <div className="px-4 py-3 text-[13px] text-muted-foreground">Nenhuma entrega ainda.</div>
+         <EmptyState
+            variant="activity"
+            title="Nenhuma entrega ainda"
+            description="As entregas deste webhook aparecem aqui."
+            className="py-6"
+         />
       );
 
    return (

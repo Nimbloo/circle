@@ -158,9 +158,11 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
    if (!project) {
       if (!loaded) return <ListSkeleton rows={6} />;
       return (
-         <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-            Project not found.
-         </div>
+         <EmptyState
+            variant="search"
+            title="Project not found"
+            description="It may have been deleted or you don't have access to it."
+         />
       );
    }
 

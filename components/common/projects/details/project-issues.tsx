@@ -1,5 +1,6 @@
 'use client';
 
+import { EmptyState } from '@/components/common/empty-state';
 import { GroupedIssuesView } from '@/components/common/issues/grouped-issues-view';
 import { ListSkeleton } from '@/components/common/list-skeleton';
 import { applyIssueFilters } from '@/components/common/issues/issue-filter-columns';
@@ -63,9 +64,11 @@ export default function ProjectIssues({ projectId }: ProjectIssuesProps) {
    if (!project) {
       if (!loaded) return <ListSkeleton rows={8} />;
       return (
-         <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-            Project not found.
-         </div>
+         <EmptyState
+            variant="search"
+            title="Project not found"
+            description="It may have been deleted or you don't have access to it."
+         />
       );
    }
 

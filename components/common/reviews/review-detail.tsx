@@ -1,6 +1,7 @@
 'use client';
 
 import { addReviewComment, fetchReview, latestVerdict } from '@/lib/adapters-reviews';
+import { EmptyState } from '@/components/common/empty-state';
 import { ListSkeleton } from '@/components/common/list-skeleton';
 import { Button } from '@/components/ui/button';
 import type { Review, ReviewComment, ReviewVerdictKind } from '@/data/reviews';
@@ -110,9 +111,11 @@ export function ReviewDetail({
 
    if (!review) {
       return (
-         <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
-            Review not found
-         </div>
+         <EmptyState
+            variant="search"
+            title="Review not found"
+            description="It may have been removed or you don't have access to it."
+         />
       );
    }
 

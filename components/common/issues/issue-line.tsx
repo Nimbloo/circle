@@ -146,7 +146,7 @@ function IssueRow({
                </Link>
                <div className="flex items-center justify-end gap-2 ml-auto sm:w-fit">
                   <div className="w-3 shrink-0"></div>
-                  <div className="-space-x-5 hover:space-x-1 lg:space-x-1 items-center justify-end hidden sm:flex duration-200 transition-all">
+                  <div className="-space-x-5 hover:space-x-1 lg:space-x-1 items-center justify-end hidden sm:flex">
                      {displayProperties.labels && issue.labels.length > 0 && (
                         <LabelSelector selectedLabels={issue.labels} onChange={changeLabels}>
                            <button

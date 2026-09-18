@@ -55,6 +55,7 @@ import { InlineNewInitiative } from './inline-new-initiative';
 import { InitiativeContextMenu } from './initiative-context-menu';
 import { InitiativeGlyph } from './initiative-glyph';
 import { useInlineInitiativeStore } from '@/store/inline-initiative-store';
+import { HEALTH_COLORS } from '@/components/common/palette';
 
 export const INITIATIVE_TABS = ['active', 'planned', 'all'] as const;
 
@@ -324,13 +325,6 @@ export function InitiativesDisplayOptions() {
 
 /* ---------------------------------- rows ---------------------------------- */
 
-const ACTIVE_DOT_COLORS: Record<string, string> = {
-   'no-update': '#95a2b3',
-   'on-track': '#4cb782',
-   'at-risk': '#f2c94c',
-   'off-track': '#eb5757',
-};
-
 function ActiveProjectDots({ initiative }: { initiative: Initiative }) {
    // Deriva da fatia assinada: o getter devolve array NOVO a cada leitura, entao nao
    // pode ir dentro do seletor (referencia nova = re-render infinito).
@@ -349,7 +343,7 @@ function ActiveProjectDots({ initiative }: { initiative: Initiative }) {
             <span key={healthId} className="inline-flex items-center gap-1 text-xs">
                <span
                   className="size-2 rounded-full"
-                  style={{ backgroundColor: ACTIVE_DOT_COLORS[healthId] ?? '#95a2b3' }}
+                  style={{ backgroundColor: HEALTH_COLORS[healthId] ?? HEALTH_COLORS['no-update'] }}
                />
                {count}
             </span>

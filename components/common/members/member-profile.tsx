@@ -112,6 +112,9 @@ function useClientTimes(member: User) {
  */
 export default function MemberProfile({ member }: { member: User }) {
    const issues = useIssuesStore((s) => s.issues);
+   const issuesLoading = useIssuesStore((s) => s.loading);
+   const issuesError = useIssuesStore((s) => s.error);
+   const hydrateIssues = useIssuesStore((s) => s.hydrate);
    const [activeTab] = useQueryState('tab', parseAsString.withDefault('assigned'));
    const { localTime, joinedAgo } = useClientTimes(member);
    const { isSearchOpen, searchQuery } = useSearchStore();
@@ -234,6 +237,9 @@ export default function MemberProfile({ member }: { member: User }) {
                   totalIssues={scopedIssues}
                   statuses={displayOrderedStatus}
                   isViewTypeGrid={isViewTypeGrid}
+                  loading={issuesLoading}
+                  error={issuesError}
+                  onRetry={() => hydrateIssues()}
                />
             </div>
 

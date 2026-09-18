@@ -225,7 +225,7 @@ export default function EmojisSettings() {
             {loading ? (
                <ListSkeleton rows={4} />
             ) : visibleEmojis.length === 0 ? (
-               <div className="flex h-[calc(100vh-262px)] min-h-[360px] items-center justify-center">
+               <div className="flex min-h-[360px] items-center justify-center">
                   {query ? (
                      <EmptyState variant="search" title="Nenhum emoji encontrado" />
                   ) : (

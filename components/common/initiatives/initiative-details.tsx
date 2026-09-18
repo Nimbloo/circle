@@ -774,7 +774,7 @@ function ActivityFeed({ initiativeId }: { initiativeId: string }) {
       <div className="flex flex-col gap-3">
          <span className="text-[13px] font-medium leading-4">Activity</span>
          {entries === null ? (
-            <p className="text-xs text-muted-foreground">Carregando…</p>
+            <ListSkeleton rows={3} />
          ) : entries.length === 0 ? (
             <p className="text-xs text-muted-foreground">No activity recorded yet.</p>
          ) : (
@@ -997,9 +997,11 @@ export default function InitiativeDetails({ initiativeId }: { initiativeId: stri
          );
       }
       return (
-         <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">
-            Initiative not found
-         </div>
+         <EmptyState
+            variant="search"
+            title="Initiative not found"
+            description="It may have been deleted or you don't have access to it."
+         />
       );
    }
 
