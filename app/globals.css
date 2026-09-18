@@ -26,6 +26,23 @@
    --review-merged: #8250df;
    --review-closed: #d1242f;
    --cycle-started: #ca8a04;
+   /* Paletas de prioridade, health e status de initiative (#43): antes eram hex
+      duplicados (e divergentes) nos componentes. `--priority-none` unificado no tom do
+      painel de insights (#64748b), o mais usado; o breakdown de My issues usava #94a3b8. */
+   --priority-none: #64748b;
+   --priority-urgent: #eb5757;
+   --priority-high: #f2994a;
+   --priority-medium: #facc15;
+   --priority-low: #4cb782;
+   --health-no-update: #95a2b3;
+   --health-on-track: #4cb782;
+   --health-at-risk: #f2c94c;
+   --health-off-track: #eb5757;
+   --initiative-proposed: #a1a1aa;
+   --initiative-planned: #95a2b3;
+   --initiative-active: #f2c94c;
+   --initiative-canceled: #6b7280;
+   --success: #00a05a;
    /* SLA em risco (#97): âmbar de alerta — o vencido usa --destructive. */
    --warning: #b45309;
    --media-overlay-background: #090a0b;
@@ -87,6 +104,20 @@
    --review-closed: #f85149;
    --cycle-started: #facc15;
    --warning: #f5a524;
+   --priority-none: #64748b;
+   --priority-urgent: #eb5757;
+   --priority-high: #f2994a;
+   --priority-medium: #facc15;
+   --priority-low: #4cb782;
+   --health-no-update: #95a2b3;
+   --health-on-track: #4cb782;
+   --health-at-risk: #f2c94c;
+   --health-off-track: #eb5757;
+   --initiative-proposed: #a1a1aa;
+   --initiative-planned: #95a2b3;
+   --initiative-active: #f2c94c;
+   --initiative-canceled: #6b7280;
+   --success: #00a05a;
    --media-overlay-background: #090a0b;
    --media-overlay-foreground: #ffffff;
    --primary: #5e6ad2;
@@ -140,6 +171,20 @@
    --color-destructive: var(--destructive);
    --color-destructive-foreground: var(--destructive-foreground);
    --color-warning: var(--warning);
+   --color-priority-none: var(--priority-none);
+   --color-priority-urgent: var(--priority-urgent);
+   --color-priority-high: var(--priority-high);
+   --color-priority-medium: var(--priority-medium);
+   --color-priority-low: var(--priority-low);
+   --color-health-no-update: var(--health-no-update);
+   --color-health-on-track: var(--health-on-track);
+   --color-health-at-risk: var(--health-at-risk);
+   --color-health-off-track: var(--health-off-track);
+   --color-initiative-proposed: var(--initiative-proposed);
+   --color-initiative-planned: var(--initiative-planned);
+   --color-initiative-active: var(--initiative-active);
+   --color-initiative-canceled: var(--initiative-canceled);
+   --color-success: var(--success);
    --color-media-overlay-background: var(--media-overlay-background);
    --color-media-overlay-foreground: var(--media-overlay-foreground);
    --color-border: var(--border);

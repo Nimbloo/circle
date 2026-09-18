@@ -30,7 +30,7 @@ export default function AgentPersonalization() {
                className="w-full min-h-36 rounded-lg border bg-container p-4 text-sm outline-none resize-y placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
             />
             <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-               <Check className="size-3.5 text-[#00a05a]" />
+               <Check className="size-3.5 text-success" />
                Saved automatically to your account
             </p>
          </SettingsSection>
