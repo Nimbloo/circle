@@ -7,7 +7,7 @@
 - **Onde:** branch `danilo/sanity-audit-2` (de `origin/develop` `5592983`), checkout principal `C:/Projetos/circle`. Frentes A/B/C1/D (Claude) e C2 (Codex) integradas; worktrees removidos.
 - **Feito:** todas as frentes + amarrações da integração: `selectIssuesLoading` em ciclo/perfil; import mantém webhook por issue (`dispatchWebhooksOnly`); live-sync trata `resync` e aviso de assinatura; hidratação com cursor `(rank, id)`; issue fechada seguida consultável (`GET /issues/:id/subscription`, `GET /me/subscriptions`); CRUD de automações publica `automation`; cache de usuário por request invalidado nas escritas em `app_user` (o PATCH /me respondia com o nome antigo).
 - **Última verificação:** 2026-09-18, Claude — `pnpm test` 202 arquivos/1.235 testes ok, `pnpm typecheck` ok, `pnpm lint` ok, `pnpm build` ok. Remedição no build de produção (banco `circle_perf`, 3k issues): ver "Resultado" em `docs/superpowers/specs/2026-09-18-sanity-audit-2-findings.md`.
-- **Próximo passo:** review e merge do PR para `develop`.
+- **Próximo passo:** review e merge do PR #170 para `develop`.
 - **Pendências conhecidas:** (1) colisão de rank em criações concorrentes só é provável em Postgres real (advisory lock implementado; PGlite é single-connection); (2) publishes de `triage`/`attachments`/`projects`/`teams` ainda sem `teamId` — convidado recebe esses eventos redigidos (comportamento anterior, sem regressão); (3) editor (~450 KB) segue baixado em segundo plano após a hidratação em toda rota — adiar para o primeiro uso é opcional (troca por latência na 1ª abertura do modal); (4) navegação sem `loading.tsx` espera o RSC (180–420 ms com RTT de 120 ms), como antes do PR #169.
 
 **Goal:** resolver os 47 achados do teste de sanidade 2 sem regressão e com ganho medido.
