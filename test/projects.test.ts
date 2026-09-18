@@ -70,6 +70,23 @@ describe('projects', () => {
       expect(await listProjects(db, { priority: ['low'] })).toHaveLength(1);
    });
 
+   it('aplica teamIds antes de montar os DTOs', async () => {
+      const { db } = await setup();
+      await seedTeam(db, 'OPS');
+      await createProject(db, { name: 'Core', statusId: 'proj-in-progress', ...base });
+      await createProject(db, {
+         name: 'Ops',
+         statusId: 'proj-in-progress',
+         priorityId: 'high',
+         healthId: 'on-track',
+         teamId: 'OPS',
+      });
+
+      expect(
+         (await listProjects(db, { teamIds: ['CORE'] })).map((project) => project.name)
+      ).toEqual(['Core']);
+   });
+
    it('updating health stamps healthUpdatedAt', async () => {
       const { db } = await setup();
       const p = await createProject(db, { name: 'A', statusId: 'proj-in-progress', ...base });

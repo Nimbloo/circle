@@ -42,9 +42,9 @@ export default function RootLayout({
    children: React.ReactNode;
 }>) {
    return (
-      <html lang="en" suppressHydrationWarning>
+      <html lang="pt-BR" suppressHydrationWarning>
          <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
             {/* Script BLOQUEANTE, antes do primeiro paint: aplica a variante de tema
                 (`data-app-theme`) e as variáveis do tema custom lidas do localStorage.
                 O next-themes já faz isso para a classe claro/escuro; a camada de

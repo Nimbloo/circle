@@ -108,6 +108,20 @@ const gzipAsync = promisify(gzip);
  */
 const MIN_COMPRESS_BYTES = 1024;
 
+function acceptsGzip(value: string): boolean {
+   return value.split(',').some((part) => {
+      const [encoding, ...parameters] = part.trim().toLowerCase().split(';');
+      if (encoding !== 'gzip') return false;
+      const quality = parameters
+         .map((parameter) => parameter.trim())
+         .find((parameter) => parameter.startsWith('q='))
+         ?.slice(2);
+      if (quality == null) return true;
+      const numericQuality = Number(quality);
+      return Number.isFinite(numericQuality) && numericQuality > 0;
+   });
+}
+
 /**
  * COMPRIME a resposta JSON quando o cliente aceita gzip.
  *
@@ -122,18 +136,24 @@ const MIN_COMPRESS_BYTES = 1024;
  * ficam intactos.
  */
 async function compressJson(res: Response, req?: Request): Promise<Response> {
+   let fallback: Response | undefined;
    try {
       const accepts = req?.headers.get('accept-encoding') ?? '';
-      if (!/\bgzip\b/i.test(accepts)) return res;
+      if (!acceptsGzip(accepts)) return res;
       if (res.headers.get('content-encoding')) return res; // já comprimido
       const type = res.headers.get('content-type') ?? '';
       if (!/^application\/(problem\+)?json/.test(type)) return res;
       if (!res.body) return res;
 
+      // Mantém uma cópia antes de consumir o body para que uma falha no gzip nunca
+      // devolva uma Response já lida.
+      fallback = res.clone();
       const raw = Buffer.from(await res.arrayBuffer());
+      const original = () => new Response(raw, { status: res.status, headers: res.headers });
+      fallback = original();
       if (raw.byteLength < MIN_COMPRESS_BYTES) {
          // Recria: o corpo original já foi consumido pelo arrayBuffer acima.
-         return new Response(raw, { status: res.status, headers: res.headers });
+         return original();
       }
 
       const body = await gzipAsync(raw, { level: 6 });
@@ -148,7 +168,8 @@ async function compressJson(res: Response, req?: Request): Promise<Response> {
       );
       return new Response(body, { status: res.status, headers });
    } catch {
-      return res; // compressão é otimização: nunca pode derrubar a resposta
+      // `res` já teve o body consumido pelo arrayBuffer; devolve uma cópia íntegra.
+      return fallback ?? res;
    }
 }
 

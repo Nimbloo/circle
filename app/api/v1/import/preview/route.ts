@@ -2,7 +2,14 @@ import { db } from '@/db';
 import { handle, requireEmail } from '@/lib/api/http';
 import { ok } from '@/lib/api/response';
 import { ApiError } from '@/lib/api/errors';
-import { previewImport, type ImportMapping, type ImportSource } from '@/lib/api/import';
+import {
+   IMPORT_LIMITS,
+   previewImport,
+   validateImportCsv,
+   validateImportRequestSize,
+   type ImportMapping,
+   type ImportSource,
+} from '@/lib/api/import';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,6 +23,8 @@ async function readCsv(
       const form = await req.formData();
       const file = form.get('file');
       if (!(file instanceof File)) throw new ApiError(400, 'Arquivo CSV ausente (campo `file`)');
+      if (file.size > IMPORT_LIMITS.maxBytes)
+         throw new ApiError(413, 'CSV excede o limite de tamanho permitido');
       const rawMapping = form.get('mapping');
       return {
          csv: await file.text(),
@@ -42,7 +51,9 @@ async function readCsv(
 export async function POST(req: Request) {
    return handle(async () => {
       await requireEmail(req);
+      validateImportRequestSize(req);
       const { csv, source, mapping } = await readCsv(req);
+      validateImportCsv(csv);
       return ok(await previewImport(db, { csv, source, mapping }));
    }, req);
 }

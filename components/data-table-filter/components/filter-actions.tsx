@@ -15,7 +15,7 @@ export const FilterActions = memo(__FilterActions)
 function __FilterActions({
   hasFilters,
   actions,
-  locale = 'en',
+  locale = 'pt-BR',
 }: FilterActionsProps) {
   return (
     <Button

@@ -56,6 +56,16 @@ describe('issue detail / comments / activity', () => {
       expect(comments[0].author?.email).toBe('bob@nimbloo.ai');
    });
 
+   it('limita comentários aos mais recentes e preserva a ordem cronológica', async () => {
+      const { db, issue } = await anIssue();
+      await addComment(db, issue.id, 'primeiro', 'bob@nimbloo.ai');
+      await addComment(db, issue.id, 'segundo', 'bob@nimbloo.ai');
+      await addComment(db, issue.id, 'terceiro', 'bob@nimbloo.ai');
+
+      const comments = await listComments(db, issue.id, undefined, 2);
+      expect(comments.map((comment) => comment.body)).toEqual(['segundo', 'terceiro']);
+   });
+
    it('activity feed merges the created event and comments in order', async () => {
       const { db, issue } = await anIssue();
       await addComment(db, issue.id, 'c', 'bob@nimbloo.ai');

@@ -83,7 +83,7 @@ function useClientTimes(member: User) {
       const update = () => {
          try {
             setLocalTime(
-               new Intl.DateTimeFormat('en-US', {
+               new Intl.DateTimeFormat('pt-BR', {
                   hour: '2-digit',
                   minute: '2-digit',
                   hour12: false,

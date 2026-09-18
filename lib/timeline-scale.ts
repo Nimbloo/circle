@@ -42,8 +42,8 @@ for (let index = 0; ; index++) {
       days: (Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1) - date.getTime()) / DAY_MS,
       label:
          date.getUTCMonth() === 0
-            ? `${date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })} ${date.getUTCFullYear()}`
-            : date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }),
+            ? `${date.toLocaleString('pt-BR', { month: 'short', timeZone: 'UTC' })} ${date.getUTCFullYear()}`
+            : date.toLocaleString('pt-BR', { month: 'short', timeZone: 'UTC' }),
    });
 }
 

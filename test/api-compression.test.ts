@@ -38,6 +38,12 @@ describe('compressão das respostas de API', () => {
       expect(JSON.parse(await res.text())).toEqual({ data: big.data });
    });
 
+   it('não comprime quando gzip está explicitamente recusado por q=0', async () => {
+      const res = await handle(async () => ok(big.data), req('gzip;q=0, identity'));
+      expect(res.headers.get('content-encoding')).toBeNull();
+      expect(JSON.parse(await res.text())).toEqual({ data: big.data });
+   });
+
    it('não comprime corpo pequeno (o cabeçalho custaria mais que a economia)', async () => {
       const res = await handle(async () => ok({ ok: true }), req('gzip'));
       expect(res.headers.get('content-encoding')).toBeNull();

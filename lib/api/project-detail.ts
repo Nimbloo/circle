@@ -191,12 +191,19 @@ export async function listResources(db: Db, projectId: string): Promise<ProjectR
    return rows.map((r) => ({ id: r.id, label: r.label, url: r.url }));
 }
 
-export async function listUpdates(db: Db, projectId: string): Promise<ProjectUpdateDto[]> {
+export const DEFAULT_PROJECT_FEED_LIMIT = 100;
+
+export async function listUpdates(
+   db: Db,
+   projectId: string,
+   limit = DEFAULT_PROJECT_FEED_LIMIT
+): Promise<ProjectUpdateDto[]> {
    const rows = await db
       .select()
       .from(projectUpdate)
       .where(eq(projectUpdate.projectId, projectId))
-      .orderBy(desc(projectUpdate.createdAt));
+      .orderBy(desc(projectUpdate.createdAt))
+      .limit(limit);
    const users = await loadUsers(
       db,
       rows.map((r) => r.authorId)
@@ -210,12 +217,17 @@ export async function listUpdates(db: Db, projectId: string): Promise<ProjectUpd
    }));
 }
 
-async function listActivity(db: Db, projectId: string): Promise<ProjectActivityDto[]> {
+async function listActivity(
+   db: Db,
+   projectId: string,
+   limit = DEFAULT_PROJECT_FEED_LIMIT
+): Promise<ProjectActivityDto[]> {
    const rows = await db
       .select()
       .from(projectActivity)
       .where(eq(projectActivity.projectId, projectId))
-      .orderBy(desc(projectActivity.createdAt));
+      .orderBy(desc(projectActivity.createdAt))
+      .limit(limit);
    const users = await loadUsers(
       db,
       rows.map((r) => r.userId)

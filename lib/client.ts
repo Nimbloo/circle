@@ -310,7 +310,8 @@ export const api = {
          post<{ id: string; subscribed: boolean }>(`/issues/${id}/subscription`, {}),
       unsubscribe: (id: string) =>
          del<{ id: string; subscribed: boolean }>(`/issues/${id}/subscription`),
-      activity: (id: string) => get<ActivityItem[]>(`/issues/${id}/activity`),
+      activity: (id: string, limit?: number) =>
+         get<ActivityItem[]>(`/issues/${id}/activity${limit != null ? `?limit=${limit}` : ''}`),
       addComment: (id: string, body: string, parentId?: string | null) =>
          post<CommentDto>(`/issues/${id}/comments`, { body, parentId: parentId ?? null }),
       aggregate: (team?: string) =>
@@ -435,7 +436,10 @@ export const api = {
          patch<ProjectMilestoneDto>(`/projects/${id}/milestones/${mid}`, body),
       removeMilestone: (id: string, mid: string) =>
          del<{ deleted: boolean }>(`/projects/${id}/milestones/${mid}`),
-      updates: (id: string) => get<ProjectUpdateDto[]>(`/projects/${id}/updates`),
+      updates: (id: string, limit?: number) =>
+         get<ProjectUpdateDto[]>(
+            `/projects/${id}/updates${limit != null ? `?limit=${limit}` : ''}`
+         ),
       postUpdate: (id: string, body: PostUpdateInput) =>
          post<ProjectUpdateDto>(`/projects/${id}/updates`, body),
       resources: (id: string) => get<ProjectResourceDto[]>(`/projects/${id}/resources`),

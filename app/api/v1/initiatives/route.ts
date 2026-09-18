@@ -3,7 +3,7 @@ import { db } from '@/db';
 import { ok } from '@/lib/api/response';
 import { handle, requireEmail, multi } from '@/lib/api/http';
 import { listInitiatives, createInitiative } from '@/lib/api/initiatives';
-import { assertCanWriteProject, scopeForEmail } from '@/lib/api/scope';
+import { assertCanWriteProject, assertInitiativeInScope, scopeForEmail } from '@/lib/api/scope';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -52,6 +52,7 @@ export async function POST(req: Request) {
       const scope = await scopeForEmail(db, email);
       for (const projectId of input.projectIds ?? [])
          await assertCanWriteProject(db, scope, projectId);
+      if (input.parentId) await assertInitiativeInScope(db, scope.teamIds, input.parentId);
       return ok(await createInitiative(db, input));
    }, req);
 }

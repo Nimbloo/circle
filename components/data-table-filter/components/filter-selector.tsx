@@ -53,7 +53,7 @@ function __FilterSelector<TData>({
   columns,
   actions,
   strategy,
-  locale = 'en',
+  locale = 'pt-BR',
 }: FilterSelectorProps<TData>) {
   const [open, setOpen] = useState(false)
   const navigation = useCommandPages<string>('root', () => setOpen(false))
@@ -239,7 +239,7 @@ function __QuickSearchFilters<TData>({
   columns,
   actions,
   strategy,
-  locale = 'en',
+  locale = 'pt-BR',
 }: QuickSearchFiltersProps<TData>) {
   if (!search || search.trim().length < 2) return null
 

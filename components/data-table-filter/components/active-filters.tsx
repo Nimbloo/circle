@@ -35,7 +35,7 @@ export function ActiveFilters<TData>({
   filters,
   actions,
   strategy,
-  locale = 'en',
+  locale = 'pt-BR',
   readOnly = false,
 }: ActiveFiltersProps<TData>) {
   return (
@@ -82,7 +82,7 @@ export function ActiveFilter<TData, TType extends ColumnDataType>({
   column,
   actions,
   strategy,
-  locale = 'en',
+  locale = 'pt-BR',
   readOnly = false,
 }: ActiveFilterProps<TData, TType>) {
   if (readOnly || !actions) {
