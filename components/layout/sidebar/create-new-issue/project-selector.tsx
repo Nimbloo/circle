@@ -10,11 +10,14 @@ import {
    CommandList,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Project } from '@/data/projects';
 import { Box, CheckIcon, FolderIcon } from 'lucide-react';
 import { useEffect, useId, useState, type ReactNode } from 'react';
+import type { Issue } from '@/data/issues';
+import { IssueCounts } from '@/components/common/issues/issue-counts';
+
+const byProject = (issue: Issue) => issue.project?.id;
 
 interface ProjectSelectorProps {
    project: Project | undefined;
@@ -28,9 +31,6 @@ export function ProjectSelector({ project, onChange, children }: ProjectSelector
    const [open, setOpen] = useState<boolean>(false);
    const [value, setValue] = useState<string | undefined>(project?.id);
 
-   // Conta derivada da fatia assinada: assinar `filterByProject` (funcao, referencia
-   // estavel) deixaria o contador do dropdown parado quando as issues mudam.
-   const allIssues = useIssuesStore((s) => s.issues);
    const projects = useWorkspaceStore((s) => s.projects);
 
    useEffect(() => {
@@ -86,42 +86,50 @@ export function ProjectSelector({ project, onChange, children }: ProjectSelector
                className="border-input w-full min-w-[var(--radix-popper-anchor-width)] p-0"
                align="start"
             >
-               <Command>
-                  <CommandInput placeholder="Set project..." />
-                  <CommandList>
-                     <CommandEmpty>No projects found.</CommandEmpty>
-                     <CommandGroup>
-                        <CommandItem
-                           value="no-project"
-                           onSelect={() => handleProjectChange('no-project')}
-                           className="flex items-center justify-between"
-                        >
-                           <div className="flex items-center gap-2">
-                              <FolderIcon className="size-4" />
-                              No Project
-                           </div>
-                           {value === undefined && <CheckIcon size={16} className="ml-auto" />}
-                        </CommandItem>
-                        {projects.map((project) => (
-                           <CommandItem
-                              key={project.id}
-                              value={project.id}
-                              onSelect={() => handleProjectChange(project.id)}
-                              className="flex items-center justify-between"
-                           >
-                              <div className="flex items-center gap-2">
-                                 <project.icon className="size-4" />
-                                 {project.name}
-                              </div>
-                              {value === project.id && <CheckIcon size={16} className="ml-auto" />}
-                              <span className="text-muted-foreground text-xs">
-                                 {allIssues.filter((i) => i.project?.id === project.id).length}
-                              </span>
-                           </CommandItem>
-                        ))}
-                     </CommandGroup>
-                  </CommandList>
-               </Command>
+               <IssueCounts by={byProject}>
+                  {(counts) => (
+                     <Command>
+                        <CommandInput placeholder="Set project..." />
+                        <CommandList>
+                           <CommandEmpty>No projects found.</CommandEmpty>
+                           <CommandGroup>
+                              <CommandItem
+                                 value="no-project"
+                                 onSelect={() => handleProjectChange('no-project')}
+                                 className="flex items-center justify-between"
+                              >
+                                 <div className="flex items-center gap-2">
+                                    <FolderIcon className="size-4" />
+                                    No Project
+                                 </div>
+                                 {value === undefined && (
+                                    <CheckIcon size={16} className="ml-auto" />
+                                 )}
+                              </CommandItem>
+                              {projects.map((project) => (
+                                 <CommandItem
+                                    key={project.id}
+                                    value={project.id}
+                                    onSelect={() => handleProjectChange(project.id)}
+                                    className="flex items-center justify-between"
+                                 >
+                                    <div className="flex items-center gap-2">
+                                       <project.icon className="size-4" />
+                                       {project.name}
+                                    </div>
+                                    {value === project.id && (
+                                       <CheckIcon size={16} className="ml-auto" />
+                                    )}
+                                    <span className="text-muted-foreground text-xs">
+                                       {counts.get(project.id) ?? 0}
+                                    </span>
+                                 </CommandItem>
+                              ))}
+                           </CommandGroup>
+                        </CommandList>
+                     </Command>
+                  )}
+               </IssueCounts>
             </PopoverContent>
          </Popover>
       </div>

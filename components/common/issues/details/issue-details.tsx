@@ -12,7 +12,7 @@ import { useCurrentIssueStore } from '@/store/current-issue-store';
 import { useStatuses } from '@/store/catalog-store';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Plus } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -390,14 +390,13 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
  */
 export default function IssueDetails() {
    const { orgId, issueId } = useParams<{ orgId: string; issueId: string }>();
-   const issues = useIssuesStore((s) => s.issues);
    const setCurrent = useCurrentIssueStore((s) => s.setCurrent);
    const clearCurrent = useCurrentIssueStore((s) => s.clear);
 
-   // Issue do store (se já hidratado) — reusa sem request.
-   const storeIssue = useMemo(
-      () => issues.find((candidate) => candidate.identifier === issueId),
-      [issues, issueId]
+   // Issue do store (se já hidratado) — reusa sem request. `find` DENTRO do seletor
+   // (referência estável): evento de outra issue não re-renderiza a página.
+   const storeIssue = useIssuesStore((s) =>
+      s.issues.find((candidate) => candidate.identifier === issueId)
    );
    // Fallback: se o deep-link foi aberto direto (store ainda vazio), busca a issue por
    // identifier na API — sem esperar o board inteiro hidratar (fim do waterfall de ~500).
