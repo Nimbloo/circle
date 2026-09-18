@@ -12,9 +12,53 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useIssuesStore } from '@/store/issues-store';
 import { Priority } from '@/data/priorities';
+import type { Issue } from '@/data/issues';
 import { usePriorities } from '@/store/catalog-store';
 import { CheckIcon } from 'lucide-react';
 import { useId, useState } from 'react';
+import { useIssueCounts } from './issue-counts';
+
+const byPriority = (issue: Issue) => issue.priority.id;
+
+/** Opções do popover — montadas só com ele aberto, então só aí assinam as issues. */
+function PriorityOptions({
+   value,
+   onSelect,
+}: {
+   value: string;
+   onSelect: (priorityId: string) => void;
+}) {
+   const priorities = usePriorities();
+   const counts = useIssueCounts(byPriority);
+
+   return (
+      <Command>
+         <CommandInput placeholder="Set priority..." />
+         <CommandList>
+            <CommandEmpty>No priority found.</CommandEmpty>
+            <CommandGroup>
+               {priorities.map((item) => (
+                  <CommandItem
+                     key={item.id}
+                     value={item.id}
+                     onSelect={onSelect}
+                     className="flex items-center justify-between"
+                  >
+                     <div className="flex items-center gap-2">
+                        <item.icon className="text-muted-foreground size-4" />
+                        {item.name}
+                     </div>
+                     {value === item.id && <CheckIcon size={16} className="ml-auto" />}
+                     <span className="text-muted-foreground text-xs">
+                        {counts.get(item.id) ?? 0}
+                     </span>
+                  </CommandItem>
+               ))}
+            </CommandGroup>
+         </CommandList>
+      </Command>
+   );
+}
 
 interface PrioritySelectorProps {
    priority: Priority;
@@ -37,9 +81,6 @@ export function PrioritySelector({
    const value = priority.id;
 
    const priorities = usePriorities();
-   // Conta derivada da fatia assinada: assinar `filterByPriority` (funcao, referencia
-   // estavel) deixaria o contador do dropdown parado quando as issues mudam.
-   const allIssues = useIssuesStore((s) => s.issues);
    const updateIssuePriority = useIssuesStore((s) => s.updateIssuePriority);
 
    const handlePriorityChange = (priorityId: string) => {
@@ -88,31 +129,7 @@ export function PrioritySelector({
                className="border-input w-full min-w-[var(--radix-popper-anchor-width)] p-0"
                align="start"
             >
-               <Command>
-                  <CommandInput placeholder="Set priority..." />
-                  <CommandList>
-                     <CommandEmpty>No priority found.</CommandEmpty>
-                     <CommandGroup>
-                        {priorities.map((item) => (
-                           <CommandItem
-                              key={item.id}
-                              value={item.id}
-                              onSelect={handlePriorityChange}
-                              className="flex items-center justify-between"
-                           >
-                              <div className="flex items-center gap-2">
-                                 <item.icon className="text-muted-foreground size-4" />
-                                 {item.name}
-                              </div>
-                              {value === item.id && <CheckIcon size={16} className="ml-auto" />}
-                              <span className="text-muted-foreground text-xs">
-                                 {allIssues.filter((i) => i.priority.id === item.id).length}
-                              </span>
-                           </CommandItem>
-                        ))}
-                     </CommandGroup>
-                  </CommandList>
-               </Command>
+               <PriorityOptions value={value} onSelect={handlePriorityChange} />
             </PopoverContent>
          </Popover>
       </div>
