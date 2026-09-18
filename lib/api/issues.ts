@@ -47,7 +47,7 @@ import { ApiError } from './errors';
 import { assertAssignableUsers } from './members';
 import { dispatchNotification } from './notify';
 import { getCachedCatalogs } from './catalogs';
-import { publish } from './events';
+import { dispatchWebhooksOnly, publish } from './events';
 import { parseIssueCursor } from '@/lib/issue-cursor';
 import { notifySlackEvent } from './integrations/slack';
 import { projectDescriptionDoc } from './description-doc';
@@ -811,6 +811,8 @@ export async function createIssue(
             teamId: parent.teamId,
          });
       publishRollups(teamId, [projectId], [cycleId], actorEmail);
+   } else {
+      dispatchWebhooksOnly({ entity: 'issue', action: 'created', id, actorEmail, teamId });
    }
    const created = (await getIssue(db, id))!;
    // Notificação Slack (best-effort, fire-and-forget — não acopla latência à request).
@@ -1140,6 +1142,14 @@ export async function updateIssue(
             : [],
          actorEmail
       );
+   } else {
+      dispatchWebhooksOnly({
+         entity: 'issue',
+         action: 'updated',
+         id,
+         actorEmail,
+         teamId: prev.teamId,
+      });
    }
 
    // Efeitos colaterais (#10): a mutação JÁ está gravada e publicada — uma falha aqui é

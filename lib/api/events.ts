@@ -333,6 +333,15 @@ export function publish(event: Omit<CircleEvent, 'ts'>): void {
 }
 
 /**
+ * Só a saída de webhooks, sem SSE. Para mutações em lote silenciosas no realtime (import,
+ * #7): o cliente recebe um evento coarse no fim, mas webhook é contrato externo e quem
+ * assina `issue.created` continua recebendo uma entrega por issue.
+ */
+export function dispatchWebhooksOnly(event: Omit<CircleEvent, 'ts'>): void {
+   dispatchWebhooks({ ...event, ts: nextTs() });
+}
+
+/**
  * Webhooks de saída (#101): o barramento é o ponto único por onde toda mutação passa,
  * então é daqui que as entregas são enfileiradas. Fire-and-forget com import preguiçoso
  * (mantém `lib/api/webhooks.ts` e o `db` fora do grafo estático do Edge) e o mesmo gate
