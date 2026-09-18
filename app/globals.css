@@ -448,13 +448,12 @@ html[data-underline-links='true'] a[href]:not([role='button']):not(.no-underline
    animation: circle-loading-pulse 900ms ease-in-out infinite alternate;
 }
 
-/* Entrada de rota do workspace ([orgId]/template.tsx). `backwards` (não `both`): terminada
-   a animação não sobra `transform` no wrapper — senão ele viraria containing block de todo
-   `position: fixed` da página (barra de bulk actions, popovers não portados). */
+/* Entrada de rota do workspace ([orgId]/template.tsx). Só `opacity`: `transform` no wrapper,
+   mesmo durante os 180 ms, vira containing block de todo `position: fixed` da página (barra
+   de bulk actions, popovers não portados) e os desloca. */
 @keyframes route-enter {
    from {
       opacity: 0;
-      transform: translateY(4px);
    }
 }
 .route-enter {
