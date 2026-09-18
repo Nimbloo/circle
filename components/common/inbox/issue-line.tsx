@@ -3,7 +3,6 @@
 import { InboxItem } from '@/data/inbox';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
-import { motion } from 'motion/react';
 import { renderStatusIcon } from '@/lib/status-utils';
 import { getNotificationIcon } from '@/lib/notification-utils';
 import { Clock, RotateCcw } from 'lucide-react';
@@ -19,7 +18,6 @@ interface IssueLineProps<T extends InboxItem> {
    notification: T;
    /** Status VIVO da issue (mapa do pai); ausente = snapshot da notificação. */
    statusId?: string;
-   layoutId?: boolean;
    isSelected?: boolean;
    /** Handlers ESTÁVEIS que recebem a própria notificação — mantêm o `memo` da linha. */
    onOpen?: (notification: T) => void;
@@ -46,7 +44,6 @@ const SNOOZE_OPTIONS: { label: string; hours: number }[] = [
 function IssueLine<T extends InboxItem>({
    notification,
    statusId: liveStatusId,
-   layoutId = false,
    isSelected = false,
    onOpen,
    onSnooze,
@@ -58,11 +55,7 @@ function IssueLine<T extends InboxItem>({
    // acompanha mudanças de status em tempo real (padrão Linear).
    const statusId = liveStatusId ?? notification.status.id;
    return (
-      <motion.div
-         {...(layoutId && { layoutId: `notification-line-${notification.id}` })}
-         onClick={onOpen ? () => onOpen(notification) : undefined}
-         className="w-full pl-2.5"
-      >
+      <div onClick={onOpen ? () => onOpen(notification) : undefined} className="w-full pl-2.5">
          <div className="group/inbox-line relative flex h-[55px] w-full cursor-pointer items-center gap-3 rounded-lg px-2">
             {/* Realce que DISSIPA nas pontas (Linear): camada de fundo com máscara de
                 gradiente horizontal — o fill some suavemente nas bordas laterais. */}
@@ -169,7 +162,7 @@ function IssueLine<T extends InboxItem>({
                </div>
             </div>
          </div>
-      </motion.div>
+      </div>
    );
 }
 

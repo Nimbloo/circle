@@ -151,13 +151,16 @@ export function IssueGrid({ issue, getOrderedIssues, layout = true }: IssueGridP
    // Connect drag and drop to the element.
    drag(drop(ref));
 
+   // Sem animação de layout (coluna virtualizada): div simples, sem o runtime do motion.
+   const Card = layout ? motion.div : 'div';
+
    return (
       <ContextMenu>
          <ContextMenuTrigger asChild>
-            <motion.div
+            <Card
                ref={ref}
                className="w-full cursor-default rounded-lg bg-card p-2 shadow-[var(--card-shadow)]"
-               layoutId={layout ? `issue-grid-${issue.identifier}` : undefined}
+               {...(layout && { layoutId: `issue-grid-${issue.identifier}` })}
                style={{
                   opacity: isDragging ? 0.5 : 1,
                   cursor: isDragging ? 'grabbing' : 'default',
@@ -218,7 +221,7 @@ export function IssueGrid({ issue, getOrderedIssues, layout = true }: IssueGridP
                   )}
                   <SubIssueProgress count={issue.subIssueCount} done={issue.subIssueDoneCount} />
                </div>
-            </motion.div>
+            </Card>
          </ContextMenuTrigger>
          <IssueContextMenu issueId={issue.id} />
       </ContextMenu>

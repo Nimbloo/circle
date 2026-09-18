@@ -92,10 +92,13 @@ function IssueRow({
          .forEach((l) => void removeIssueLabel(issue.id, l.id).catch(() => undefined));
    };
 
+   // Sem layoutId não há animação: div simples, sem o runtime do motion por linha.
+   const Row = layoutId ? motion.div : 'div';
+
    return (
       <ContextMenu>
          <ContextMenuTrigger asChild>
-            <motion.div
+            <Row
                ref={ref}
                {...(layoutId && { layoutId: `issue-line-${issue.identifier}` })}
                className={cn(
@@ -232,7 +235,7 @@ function IssueRow({
                      </span>
                   )}
                </div>
-            </motion.div>
+            </Row>
          </ContextMenuTrigger>
          <IssueContextMenu issueId={issue.id} />
       </ContextMenu>
