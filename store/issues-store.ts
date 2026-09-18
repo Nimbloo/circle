@@ -45,6 +45,10 @@ interface IssuesState {
    /** Projeto/ciclo removido: limpa a referência nas issues (sem refetch). */
    detachProject: (projectId: string) => void;
    detachCycle: (cycleId: string) => void;
+   /** Label renomeada/recolorida (evento remoto): reflete nas issues em memória, sem refetch. */
+   patchLabel: (label: { id: string; name: string; color: string }) => void;
+   /** Label apagada (evento remoto): sai das issues em memória. */
+   dropLabel: (labelId: string) => void;
 
    filterByStatus: (statusId: string) => Issue[];
    filterByPriority: (priorityId: string) => Issue[];
@@ -275,6 +279,38 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
             ? {
                  issues: state.issues.map((i) =>
                     i.cycleId === cycleId ? { ...i, cycleId: '' } : i
+                 ),
+              }
+            : {}
+      ),
+
+   patchLabel: (label) =>
+      set((state) =>
+         state.issues.some((i) => i.labels.some((l) => l.id === label.id))
+            ? {
+                 issues: state.issues.map((i) =>
+                    i.labels.some((l) => l.id === label.id)
+                       ? {
+                            ...i,
+                            labels: i.labels.map((l) =>
+                               l.id === label.id
+                                  ? { ...l, name: label.name, color: label.color }
+                                  : l
+                            ),
+                         }
+                       : i
+                 ),
+              }
+            : {}
+      ),
+   dropLabel: (labelId) =>
+      set((state) =>
+         state.issues.some((i) => i.labels.some((l) => l.id === labelId))
+            ? {
+                 issues: state.issues.map((i) =>
+                    i.labels.some((l) => l.id === labelId)
+                       ? { ...i, labels: i.labels.filter((l) => l.id !== labelId) }
+                       : i
                  ),
               }
             : {}
