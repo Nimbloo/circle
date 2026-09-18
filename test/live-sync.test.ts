@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
    views: { get: vi.fn() },
    teams: { get: vi.fn() },
    labels: { list: vi.fn() },
+   me: vi.fn(),
 }));
 vi.mock('@/lib/client', () => ({ api }));
 
@@ -249,5 +250,37 @@ describe('useLiveReload (#28)', () => {
       fire({});
       fire({ id: 'p1', teamId: 'ENG' });
       expect(reload).toHaveBeenCalledTimes(3);
+   });
+});
+
+describe('useLiveSync — resync e assinatura (integração C1)', () => {
+   it('evento resync do servidor (LISTEN reconectado) re-hidrata tudo', async () => {
+      const es = setup();
+      es.emit({ entity: 'resync', action: 'updated' });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(hydrateIssues).toHaveBeenCalledTimes(1);
+      expect(hydrateWorkspace).toHaveBeenCalledTimes(1);
+      expect(hydrateNotifications).toHaveBeenCalledTimes(1);
+   });
+
+   it('aviso de assinatura do próprio usuário recarrega o me (outras abas)', async () => {
+      const me = { id: 'me', subscribedIssueIds: ['i9'] };
+      api.me.mockResolvedValue(me);
+      const applyMe = vi.fn();
+      useWorkspaceStore.setState({ applyMe });
+      const es = setup();
+      es.emit({ entity: 'member', action: 'updated', id: 'me', recipientId: 'me', issueId: 'i9' });
+      await flush();
+      expect(api.me).toHaveBeenCalledTimes(1);
+      expect(applyMe).toHaveBeenCalledWith(me);
+      expect(hydrateWorkspace).not.toHaveBeenCalled();
+   });
+
+   it('aviso de assinatura de OUTRO usuário é ignorado', async () => {
+      const es = setup();
+      es.emit({ entity: 'member', action: 'updated', id: 'u2', recipientId: 'u2', issueId: 'i9' });
+      await flush();
+      expect(api.me).not.toHaveBeenCalled();
+      expect(api.members.get).not.toHaveBeenCalled();
    });
 });

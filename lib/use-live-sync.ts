@@ -182,6 +182,12 @@ export function useLiveSync(): void {
          const deleted = action === 'deleted';
          const ws = useWorkspaceStore.getState();
 
+         // O LISTEN deste pod reconectou: o que passou durante a queda não vai chegar.
+         if ((entity as string) === 'resync') {
+            resyncAll();
+            return;
+         }
+
          // NÃO pulamos por "ator sou eu": outras abas/dispositivos do mesmo usuário
          // não receberam o update otimista → precisam reconciliar com o servidor.
          switch (entity) {
@@ -227,6 +233,18 @@ export function useLiveSync(): void {
                else targeted(() => api.cycles.get(id), ws.applyCycle);
                return;
             case 'member':
+               // Evento endereçado (assinatura de issue, #35): só o destinatário relê o `me`.
+               if (parsed.recipientId) {
+                  if (parsed.recipientId !== useWorkspaceStore.getState().me?.id) return;
+                  if (parsed.issueId) {
+                     targeted(
+                        () => api.me(),
+                        ws.applyMe,
+                        () => {}
+                     );
+                     return;
+                  }
+               }
                if (!id || deleted) scheduleHydrate('workspace');
                else targeted(() => api.members.get(id), ws.applyUser);
                return;
