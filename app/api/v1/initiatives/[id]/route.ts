@@ -51,6 +51,7 @@ export async function PATCH(req: Request, { params }: Params) {
       await assertInitiativeInScope(db, scope.teamIds, id);
       for (const projectId of patch.projectIds ?? [])
          await assertCanWriteProject(db, scope, projectId);
+      if (patch.parentId) await assertInitiativeInScope(db, scope.teamIds, patch.parentId);
       const dto = await updateInitiative(db, id, patch, actor);
       return dto ? ok(dto) : notFound(`Initiative '${id}' não encontrada`);
    }, req);

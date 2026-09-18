@@ -323,7 +323,7 @@ export function CommandPalette() {
       <div className="relative">
          <CommandInput
             autoFocus
-            placeholder="Type a command or search…"
+            placeholder="Digite um comando ou pesquise…"
             value={query}
             onValueChange={setQuery}
             onKeyDown={(event) => {
@@ -344,7 +344,7 @@ export function CommandPalette() {
          />
          {route === 'root' && (
             <span className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-xs text-muted-foreground pointer-events-none">
-               Ask Agent
+               Perguntar ao Agent
                <kbd className="h-5 px-1.5 inline-flex items-center rounded border bg-muted/50 text-[11px] font-sans">
                   Tab
                </kbd>
@@ -365,8 +365,8 @@ export function CommandPalette() {
             showCloseButton={false}
             className="top-[22%] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-[640px]"
          >
-            <DialogTitle className="sr-only">Command menu</DialogTitle>
-            <DialogDescription className="sr-only">Type a command or search</DialogDescription>
+            <DialogTitle className="sr-only">Menu de comandos</DialogTitle>
+            <DialogDescription className="sr-only">Digite um comando ou pesquise</DialogDescription>
             <Command className="[&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group]]:px-2 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-2.5">
                {issue && (
                   <div className="flex items-center gap-1.5 px-3 pt-3 pb-1">
@@ -377,7 +377,7 @@ export function CommandPalette() {
                            tabIndex={-1}
                            onClick={() => setContextCleared(true)}
                            className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                           aria-label="Clear issue context"
+                           aria-label="Limpar contexto da issue"
                         >
                            ⌫
                         </button>

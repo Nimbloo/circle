@@ -27,6 +27,26 @@ export type ImportSource = 'csv' | 'linear' | 'jira';
 
 export const IMPORT_SOURCES: readonly ImportSource[] = ['csv', 'linear', 'jira'];
 
+export const IMPORT_LIMITS = {
+   maxBytes: 10_000_000,
+   maxRows: 10_000,
+   maxColumns: 64,
+   maxCellChars: 10_000,
+} as const;
+
+/** Margem para JSON/multipart e metadados; o CSV em si continua limitado por `maxBytes`. */
+export const IMPORT_REQUEST_OVERHEAD_BYTES = 256_000;
+
+export function validateImportRequestSize(req: Request): void {
+   const contentLength = Number(req.headers.get('content-length'));
+   if (
+      Number.isFinite(contentLength) &&
+      contentLength > IMPORT_LIMITS.maxBytes + IMPORT_REQUEST_OVERHEAD_BYTES
+   ) {
+      throw new ApiError(413, 'Requisição de importação excede o limite de tamanho permitido');
+   }
+}
+
 /** Campos do Circle que uma coluna do CSV pode alimentar. */
 export type ImportField =
    | 'externalId'
@@ -114,6 +134,39 @@ export function csvToObjects(text: string): { columns: string[]; rows: Record<st
       return o;
    });
    return { columns, rows };
+}
+
+export function validateImportCsv(text: string, mapping?: ImportMapping): void {
+   if (Buffer.byteLength(text, 'utf8') > IMPORT_LIMITS.maxBytes)
+      throw new ApiError(413, 'CSV excede o limite de tamanho permitido');
+
+   const raw = parseCsv(text);
+   if (raw.length === 0) return;
+   const columns = raw[0].map((column) => column.trim());
+   if (columns.length > IMPORT_LIMITS.maxColumns)
+      throw new ApiError(413, `CSV excede o limite de ${IMPORT_LIMITS.maxColumns} colunas`);
+   if (raw.length - 1 > IMPORT_LIMITS.maxRows)
+      throw new ApiError(413, `CSV excede o limite de ${IMPORT_LIMITS.maxRows} linhas`);
+
+   for (const row of raw) {
+      if (row.length > IMPORT_LIMITS.maxColumns)
+         throw new ApiError(413, `CSV excede o limite de ${IMPORT_LIMITS.maxColumns} colunas`);
+      if (row.some((cell) => cell.length > IMPORT_LIMITS.maxCellChars))
+         throw new ApiError(413, 'CSV contém uma célula acima do limite permitido');
+   }
+
+   const externalColumn = mapping?.externalId;
+   if (!externalColumn) return;
+   const externalIndex = columns.indexOf(externalColumn.trim());
+   if (externalIndex < 0) return;
+   const seen = new Set<string>();
+   for (const row of raw.slice(1)) {
+      const externalId = row[externalIndex]?.trim();
+      if (!externalId) continue;
+      if (seen.has(externalId))
+         throw new ApiError(400, `externalId duplicado no CSV: '${externalId}'`);
+      seen.add(externalId);
+   }
 }
 
 /* ------------------------------- Presets --------------------------------- */
@@ -402,10 +455,12 @@ export interface PreviewImportInput {
 /** Analisa o CSV sem escrever nada: colunas, mapeamento proposto, amostra e avisos. */
 export async function previewImport(db: Db, input: PreviewImportInput): Promise<ImportPreviewDto> {
    if (!IMPORT_SOURCES.includes(input.source)) throw new ApiError(400, 'source inválido');
+   validateImportCsv(input.csv);
    const { columns, rows } = csvToObjects(input.csv);
    if (columns.length === 0) throw new ApiError(400, 'CSV vazio ou sem cabeçalho');
 
    const mapping = { ...suggestMapping(input.source, columns), ...(input.mapping ?? {}) };
+   validateImportCsv(input.csv, mapping);
    const warnings: string[] = [];
    if (!mapping.title) warnings.push('Nenhuma coluna mapeada para o título — obrigatório');
    if (!mapping.externalId)
@@ -473,6 +528,7 @@ export async function commitImport(
    if (!IMPORT_SOURCES.includes(input.source)) throw new ApiError(400, 'source inválido');
    const mapping = input.mapping ?? {};
    if (!mapping.title) throw new ApiError(400, 'mapping.title é obrigatório');
+   validateImportCsv(input.csv, mapping);
 
    const teamRows = await db.select().from(teamT).where(eq(teamT.id, input.teamId)).limit(1);
    if (teamRows.length === 0) throw new ApiError(400, `Team '${input.teamId}' não existe`);

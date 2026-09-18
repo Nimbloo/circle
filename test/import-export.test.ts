@@ -8,6 +8,8 @@ import {
    parseCsv,
    previewImport,
    suggestMapping,
+   validateImportCsv,
+   validateImportRequestSize,
 } from '@/lib/api/import';
 import { exportIssuesJson } from '@/lib/api/export';
 import { listIssues } from '@/lib/api/issues';
@@ -155,6 +157,31 @@ describe('import/export de issues (#101)', () => {
       const result = await commitImport(db, { source: 'csv', csv, mapping, teamId: 'CORE' }, ACTOR);
       expect(result.created).toBe(2);
       expect(result.skipped).toBe(1);
+   });
+
+   it('recusa requests de importação acima do limite antes de parsear o body', () => {
+      expect(() =>
+         validateImportRequestSize(
+            new Request('http://localhost/api/v1/import/commit', {
+               headers: { 'content-length': '11000000' },
+            })
+         )
+      ).toThrow(/tamanho permitido/);
+   });
+
+   it('rejeita externalId duplicado no mesmo CSV antes de criar issues', async () => {
+      const csv = 'ID,Title\nDUP-1,Primeira\nDUP-1,Segunda';
+      const mapping = suggestMapping('csv', ['ID', 'Title']);
+
+      await expect(
+         commitImport(db, { source: 'csv', csv, mapping, teamId: 'CORE' }, ACTOR)
+      ).rejects.toMatchObject({ status: 400 });
+      expect(await listIssues(db, { team: 'CORE' })).toHaveLength(0);
+   });
+
+   it('rejeita CSV acima dos limites antes do parse de negócio', () => {
+      const oversized = `title\n${'x'.repeat(10_000_001)}`;
+      expect(() => validateImportCsv(oversized)).toThrowError(/grande|limite/i);
    });
 
    it('export JSON traz labels, responsáveis, pai e comentários', async () => {

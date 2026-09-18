@@ -4,6 +4,7 @@ import { seedTeam, seedUser } from './helpers/fixtures';
 import type { Db } from '@/db';
 import { createIssue, updateIssue } from '@/lib/api/issues';
 import { createCycle } from '@/lib/api/cycles';
+import { createProject } from '@/lib/api/projects';
 import { setMemberDeactivated } from '@/lib/api/members';
 
 /**
@@ -46,6 +47,40 @@ describe('integridade entre times na issue', () => {
       await expect(
          updateIssue(db, issue.id, { cycleId: cicloDoOutroTime }, ADMIN)
       ).rejects.toMatchObject({ status: 400 });
+   });
+
+   it('recusa pai de outro time na criação e na edição', async () => {
+      const parent = await createIssue(db, { ...base, teamId: 'OPS', title: 'Pai OPS' }, ADMIN);
+      await expect(
+         createIssue(db, { ...base, teamId: 'CORE', parentId: parent.id }, ADMIN)
+      ).rejects.toMatchObject({ status: 400 });
+
+      const child = await createIssue(db, { ...base, teamId: 'CORE' }, ADMIN);
+      await expect(updateIssue(db, child.id, { parentId: parent.id }, ADMIN)).rejects.toMatchObject(
+         {
+            status: 400,
+         }
+      );
+   });
+
+   it('recusa projeto de outro time na criação e na edição', async () => {
+      const project = await createProject(db, {
+         name: 'Projeto OPS',
+         statusId: 'proj-in-progress',
+         priorityId: 'high',
+         healthId: 'on-track',
+         teamId: 'OPS',
+      });
+      await expect(
+         createIssue(db, { ...base, teamId: 'CORE', projectId: project.id }, ADMIN)
+      ).rejects.toMatchObject({ status: 400 });
+
+      const issue = await createIssue(db, { ...base, teamId: 'CORE' }, ADMIN);
+      await expect(
+         updateIssue(db, issue.id, { projectId: project.id }, ADMIN)
+      ).rejects.toMatchObject({
+         status: 400,
+      });
    });
 
    it('cycle do próprio time continua aceito, e limpar o cycle segue funcionando', async () => {

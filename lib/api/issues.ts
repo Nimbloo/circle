@@ -552,6 +552,22 @@ async function assertCycleOfTeam(db: Db, cycleId: string, teamId: string): Promi
       throw new ApiError(400, `Cycle '${cycleId}' é de outro time (${row.teamId})`);
 }
 
+async function assertProjectOfTeam(db: Db, projectId: string, teamId: string): Promise<void> {
+   const [row] = await db
+      .select({ teamId: projectT.teamId })
+      .from(projectT)
+      .where(eq(projectT.id, projectId))
+      .limit(1);
+   if (!row) throw new ApiError(404, `Project '${projectId}' não existe`);
+   if (row.teamId !== teamId)
+      throw new ApiError(400, `Project '${projectId}' é de outro time (${row.teamId})`);
+}
+
+function assertParentOfTeam(parent: typeof issue.$inferSelect, teamId: string): void {
+   if (parent.teamId !== teamId)
+      throw new ApiError(400, `Issue-pai '${parent.id}' é de outro time (${parent.teamId})`);
+}
+
 /** Gera identifier (<TEAM_KEY>-<seq> atômico) e rank (append), cria a issue + labels + evento. */
 export async function createIssue(
    db: Db,
@@ -576,6 +592,8 @@ export async function createIssue(
    if (!statusId) throw new ApiError(400, 'statusId é obrigatório');
    const projectId =
       input.projectId !== undefined ? (input.projectId ?? null) : (parent?.projectId ?? null);
+   if (parent) assertParentOfTeam(parent, teamId);
+   if (projectId) await assertProjectOfTeam(db, projectId, teamId);
    let cycleId: string | null = input.cycleId || null;
    if (cycleId) await assertCycleOfTeam(db, cycleId, teamId);
    if (input.cycleId === undefined && parent?.cycleId) {
@@ -778,7 +796,10 @@ export async function updateIssue(
    // que estar no escopo — mover para dentro/fora do próprio time é a escalação clássica.
    const scope: ActorScope = { user: actor, teamIds: await visibleTeamIds(db, actor) };
    assertTeamInScope(scope.teamIds, prev.teamId);
-   if (patch.projectId) await assertCanWriteProject(db, scope, patch.projectId);
+   if (patch.projectId) {
+      await assertCanWriteProject(db, scope, patch.projectId);
+      await assertProjectOfTeam(db, patch.projectId, prev.teamId);
+   }
    if (patch.parentId) await assertCanWriteIssue(db, scope, patch.parentId);
 
    // Responsáveis (#96): `assigneeIds` substitui o conjunto; `assigneeId` sozinho troca só
@@ -859,6 +880,7 @@ export async function updateIssue(
    let newParent: typeof issue.$inferSelect | null = null;
    if (nextParentId !== undefined && nextParentId !== prev.parentId) {
       if (nextParentId) newParent = await resolveParent(db, id, nextParentId);
+      if (newParent) assertParentOfTeam(newParent, prev.teamId);
       set.parentId = nextParentId;
    }
 

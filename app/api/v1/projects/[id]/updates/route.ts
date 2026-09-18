@@ -19,7 +19,12 @@ export async function GET(req: Request, { params }: Params) {
       const { id } = await params;
       const { teamIds } = await scopeForEmail(db, email);
       await assertProjectInScope(db, teamIds, id);
-      return ok(await listUpdates(db, id));
+      const rawLimit = Number(new URL(req.url).searchParams.get('limit'));
+      const limit =
+         Number.isFinite(rawLimit) && rawLimit > 0
+            ? Math.min(Math.floor(rawLimit), 200)
+            : undefined;
+      return ok(await listUpdates(db, id, limit));
    }, req);
 }
 

@@ -50,9 +50,9 @@ describe('ViewFilterChips', () => {
       expect(screen.getByText('Bug')).toBeTruthy();
       expect(screen.getByText('Assignee')).toBeTruthy();
       expect(screen.getByText('Unassigned')).toBeTruthy();
-      expect(screen.getAllByText('is').length).toBe(2);
-      expect(screen.getByText('is any of')).toBeTruthy();
-      expect(screen.getByText('includes')).toBeTruthy();
+      expect(screen.getAllByText('é').length).toBe(2);
+      expect(screen.getByText('é qualquer um de')).toBeTruthy();
+      expect(screen.getByText('inclui')).toBeTruthy();
 
       // Somente leitura: nada clicável (sem X de remover, sem popover de operador/valor).
       expect(screen.queryAllByRole('button')).toHaveLength(0);

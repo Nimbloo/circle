@@ -74,12 +74,12 @@ export function IssuePicker({ excludeIds, onSelect, placeholder, teamId }: Issue
    return (
       <Command>
          <CommandInput
-            placeholder={placeholder ?? 'Search issues...'}
+            placeholder={placeholder ?? 'Buscar issues...'}
             value={query}
             onValueChange={setQuery}
          />
          <CommandList>
-            <CommandEmpty>No issues found.</CommandEmpty>
+            <CommandEmpty>Nenhuma issue encontrada.</CommandEmpty>
             <CommandGroup>
                {candidates.map((issue) => (
                   <CommandItem

@@ -883,6 +883,33 @@ describe('escopo de Guest nas rotas de ESCRITA', () => {
       ).toBe(403);
    });
 
+   it('initiatives: não permite parentId fora do escopo', async () => {
+      const openUrl = `http://x/api/v1/initiatives/${ids.openInitiative}`;
+      expect(
+         status(
+            await patchInitiativeRoute(
+               wreq(openUrl, GUEST, 'PATCH', { parentId: ids.secretInitiative }),
+               params({ id: ids.openInitiative })
+            )
+         )
+      ).toBe(403);
+
+      expect(
+         status(
+            await createInitiativeRoute(
+               wreq('http://x/api/v1/initiatives', GUEST, 'POST', {
+                  slug: 'initiative-parent-fora-do-escopo',
+                  name: 'Initiative parent fora do escopo',
+                  priorityId: 'high',
+                  healthId: 'on-track',
+                  projectIds: [ids.openProject],
+                  parentId: ids.secretInitiative,
+               })
+            )
+         )
+      ).toBe(403);
+   });
+
    it('GET /issues/export e /issues/aggregate não devolvem o workspace inteiro', async () => {
       const csv = await (
          await exportIssuesRoute(req('http://x/api/v1/issues/export', GUEST))

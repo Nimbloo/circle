@@ -25,7 +25,7 @@ export function DataTableFilter<TData>({
   filters,
   actions,
   strategy,
-  locale = 'en',
+  locale = 'pt-BR',
 }: DataTableFilterProps<TData>) {
   const isMobile = useIsMobile()
   if (isMobile) {
