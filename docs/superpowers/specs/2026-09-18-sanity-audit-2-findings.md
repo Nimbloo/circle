@@ -69,3 +69,21 @@ Lista e board virtualizados; SSE com cleanup, heartbeat, backoff e desconexão e
 único por pod; identifier atômico; `deleteIssue` transacional; assemble sem N+1; timeouts de
 pool/statement; caches em memória limitados; CLS 0 na carga fria; imagens com tamanho fixo;
 `prefers-reduced-motion` coberto; detalhe de issue não sofre com eventos de outras issues (medido).
+
+## Resultado após as correções (remedição, mesmo ambiente e scripts)
+
+| Medida                                      | Antes                                                          | Depois                                                              |
+| ------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------- |
+| 20 edições remotas (SSE) com a lista aberta | 13 long tasks, 3,36 s bloqueados, máx 342 ms, frame p95 297 ms | **0 long tasks**, frame p95 8,4 ms                                  |
+| Scroll da lista virtualizada                | 11 frames > 50 ms, p95 55 ms                                   | **0**, p95 8,5 ms                                                   |
+| Carga fria `/team/ENG/all` (5 rodadas)      | 1ª linha 1,07 s, LCP 652 ms, heap 32 MB                        | **1ª linha 340–470 ms, LCP ~350 ms, heap 20 MB**                    |
+| Flash de vazio no deep-link                 | sim                                                            | **não**                                                             |
+| Fallback com header sumindo (RTT 120 ms)    | 5/5 navegações                                                 | **0/5**                                                             |
+| Modal de criar issue                        | 2 dialogs / 2 editores                                         | **1 / 1**                                                           |
+| Título digitado + evento de outro usuário   | perdido                                                        | **preservado**                                                      |
+| `/workspace`                                | 173 KB, 23 queries                                             | **123 KB, 14 queries** (`teams` 26,8 → 1,2 KB; housekeeping 1×/dia) |
+| `/me` · `/inbox/unread-count`               | 4 · 3 queries                                                  | **3 · 2 queries**                                                   |
+| Busca `/search?q=login`                     | ~22 ms                                                         | **~12 ms**                                                          |
+
+Correção de diagnóstico: o editor (~450 KB) **não** estava no caminho crítico — já era baixado depois
+da hidratação pelo provider adiado (antes e depois); o defeito real do #5 era a instância duplicada.

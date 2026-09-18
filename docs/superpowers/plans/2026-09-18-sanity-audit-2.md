@@ -1,14 +1,14 @@
 # Sanidade 2 — correção de todos os achados — Implementation Plan
 
-> **For agentic workers:** execute a SUA frente (A, B, C1, C2 ou D) task a task. Steps usam checkbox (`- [ ]`).
+> **For agentic workers:** execute a SUA frente (A, B, C1, C2 ou D) task a task. Steps usam checkbox (`- [x]`).
 
 ## Estado (handoff entre agentes)
 
-- **Onde:** worktree `C:/Projetos/.codex-worktrees/circle-sanity-c2`, branch `danilo/sanity-audit-2-c2`. Cada frente roda em worktree próprio e é integrada na branch principal do plano.
-- **Feito:** achados consolidados, decisões do usuário registradas e Frente C2 (#11, #13, #14, #21, #23, #24, #31, #37, #40, Cx#7) implementada sem commit.
-- **Última verificação:** 2026-09-18 — Vitest direcionado: 5 arquivos, 30 testes passados; `tsc --noEmit`: exit code 0.
-- **Próximo passo:** frentes A, B, C1, D (Claude) e C2 (Codex) em paralelo → integração → suíte completa → remedição.
-- **Bloqueios:** nenhum.
+- **Onde:** branch `danilo/sanity-audit-2` (de `origin/develop` `5592983`), checkout principal `C:/Projetos/circle`. Frentes A/B/C1/D (Claude) e C2 (Codex) integradas; worktrees removidos.
+- **Feito:** todas as frentes + amarrações da integração: `selectIssuesLoading` em ciclo/perfil; import mantém webhook por issue (`dispatchWebhooksOnly`); live-sync trata `resync` e aviso de assinatura; hidratação com cursor `(rank, id)`; issue fechada seguida consultável (`GET /issues/:id/subscription`, `GET /me/subscriptions`); CRUD de automações publica `automation`; cache de usuário por request invalidado nas escritas em `app_user` (o PATCH /me respondia com o nome antigo).
+- **Última verificação:** 2026-09-18, Claude — `pnpm test` 202 arquivos/1.235 testes ok, `pnpm typecheck` ok, `pnpm lint` ok, `pnpm build` ok. Remedição no build de produção (banco `circle_perf`, 3k issues): ver "Resultado" em `docs/superpowers/specs/2026-09-18-sanity-audit-2-findings.md`.
+- **Próximo passo:** review e merge do PR para `develop`.
+- **Pendências conhecidas:** (1) colisão de rank em criações concorrentes só é provável em Postgres real (advisory lock implementado; PGlite é single-connection); (2) publishes de `triage`/`attachments`/`projects`/`teams` ainda sem `teamId` — convidado recebe esses eventos redigidos (comportamento anterior, sem regressão); (3) editor (~450 KB) segue baixado em segundo plano após a hidratação em toda rota — adiar para o primeiro uso é opcional (troca por latência na 1ª abertura do modal); (4) navegação sem `loading.tsx` espera o RSC (180–420 ms com RTT de 120 ms), como antes do PR #169.
 
 **Goal:** resolver os 47 achados do teste de sanidade 2 sem regressão e com ganho medido.
 
@@ -39,34 +39,34 @@ Cada frente mexe só nos seus arquivos; se precisar tocar outro, faça a menor m
 
 Arquivos: `components/common/issues/**` (inclui `grouped-issues-view.tsx`, `virtual-issue-list.tsx`, `issue-line.tsx`, seletores), `components/layout/sidebar/create-new-issue/**`, `components/layout/sidebar/org-switcher.tsx`, `components/common/projects/projects-timeline.tsx`, `components/common/inbox/**` (exceto estados vazios já feitos), `components/layout/sidebar/nav-inbox.tsx`, `components/common/issues/details/content-blocks.tsx`, `components/common/agent/**`, `components/layout/headers/agent/**`.
 
-- [ ] #1 Contagens dos seletores (priority/status/label/project) só calculadas com o popover **aberto** (subcomponente montado dentro do `PopoverContent`); `orderedIssues` estável por linha (sem array novo a cada render); `useDrop` não re-registra à toa. Teste: render de N linhas + mudança no store não chama o cálculo de contagem com popover fechado.
-- [ ] #2 Form de criar issue: reset só quando o modal **abre** (false→true) ou após criar; nunca por troca de referência do catálogo. Teste reproduzindo: digitar, trocar `statuses` no catalog-store, título preservado.
-- [ ] #5 `org-switcher` vira botão que chama `useCreateIssueStore.getState().openModal()`; uma única instância do `CreateNewIssue` (a do provider adiado). Teste: abrir modal → 1 dialog.
-- [ ] #9 Board: loading/erro/vazio aparecem quando não há issues (condição por `issues.length`/grupos todos vazios), com retry no erro.
-- [ ] #30 (parte) Loading da lista de issues usa `ListSkeleton` alinhado ao topo (não o retângulo 64×16).
-- [ ] Fr#2 `LinkedIdentifiers` (`content-blocks.tsx`): chaves de time vindas de `useWorkspaceStore(s => s.teams)` memoizadas, sem varrer issues no seletor. Agent: seletores estreitos, mensagens `memo`, streaming em lote (rAF), scroll só quando necessário.
-- [ ] Fr#6 `issue-details.tsx`/`issue-preview.tsx`: seletor `s.issues.find(...)` estreito.
-- [ ] #26 Timeline: escala e linhas em componentes `memo` independentes do `viewport`; só o indicador depende dele.
-- [ ] #27 Inbox: `Map` identifier→status montado uma vez no pai, linha `memo`, seletores estreitos; `nav-inbox` lê só `unreadCount`.
-- [ ] #41 `motion.div` → `div` quando não há `layoutId`.
+- [x] #1 Contagens dos seletores (priority/status/label/project) só calculadas com o popover **aberto** (subcomponente montado dentro do `PopoverContent`); `orderedIssues` estável por linha (sem array novo a cada render); `useDrop` não re-registra à toa. Teste: render de N linhas + mudança no store não chama o cálculo de contagem com popover fechado.
+- [x] #2 Form de criar issue: reset só quando o modal **abre** (false→true) ou após criar; nunca por troca de referência do catálogo. Teste reproduzindo: digitar, trocar `statuses` no catalog-store, título preservado.
+- [x] #5 `org-switcher` vira botão que chama `useCreateIssueStore.getState().openModal()`; uma única instância do `CreateNewIssue` (a do provider adiado). Teste: abrir modal → 1 dialog.
+- [x] #9 Board: loading/erro/vazio aparecem quando não há issues (condição por `issues.length`/grupos todos vazios), com retry no erro.
+- [x] #30 (parte) Loading da lista de issues usa `ListSkeleton` alinhado ao topo (não o retângulo 64×16).
+- [x] Fr#2 `LinkedIdentifiers` (`content-blocks.tsx`): chaves de time vindas de `useWorkspaceStore(s => s.teams)` memoizadas, sem varrer issues no seletor. Agent: seletores estreitos, mensagens `memo`, streaming em lote (rAF), scroll só quando necessário.
+- [x] Fr#6 `issue-details.tsx`/`issue-preview.tsx`: seletor `s.issues.find(...)` estreito.
+- [x] #26 Timeline: escala e linhas em componentes `memo` independentes do `viewport`; só o indicador depende dele.
+- [x] #27 Inbox: `Map` identifier→status montado uma vez no pai, linha `memo`, seletores estreitos; `nav-inbox` lê só `unreadCount`.
+- [x] #41 `motion.div` → `div` quando não há `layoutId`.
 
 ### Frente B — sincronização e consistência no cliente + bootstrap (Claude)
 
 Arquivos: `store/**`, `lib/use-live-sync.ts`, `lib/adapters*.ts`, `lib/api/workspace.ts` (formato do bootstrap), `lib/api/cycles.ts` (só burnup no DTO), `lib/api/users.ts`/`me` (só `subscribedIssueIds`), telas com cache local: `components/common/projects/details/**`, `components/common/initiatives/initiative-details.tsx`, `components/common/teams/team-documents.tsx`, `components/common/settings/team-workflows-settings.tsx`, consumidores de `loaded` das issues (`all-issues.tsx` etc.).
 
-- [ ] #4 `issues-store` ganha `loaded` (false até a 1ª hidratação terminar); consumidores tratam `!loaded` como carregando. Teste: store inicial + render sem flash de vazio.
-- [ ] #1 (parte store) `sortByRank` com comparação binária (`<`), remover `issuesByStatus` sem leitor, hidratação progressiva adapta só a página nova.
-- [ ] #6 Reconexão do SSE (`onopen` que não é o primeiro) agenda re-hidratação de issues, workspace e notificações. Teste com EventSource falso.
-- [ ] #12 Evento `label` atualiza o catálogo (hidrata workspace/catalog), não baixa todas as issues à toa.
-- [ ] #13 (cliente) `removeProjectLocal`/`removeCycleLocal` limpam `project`/`cycleId`/`milestone` das issues no issues-store.
-- [ ] #15 Rollback por item/campo em `issues-store` (`updateIssue`, `deleteIssue`, labels) e `notifications-store` (`markAsRead`, `markAllAsRead`, `snooze`, `unsnooze`). Teste: mudança remota em outra issue sobrevive ao rollback.
-- [ ] #16 `applyRemote`/hidratação não sobrescrevem item mais novo (`updatedAt`) e hidratações concorrentes usam token de sequência (a mais antiga é descartada).
-- [ ] #17 (cliente) `cycle`/`member`/`view`/`team` com id → fetch direcionado (`applyCycle`/`applyUser`/`applyView`/`applyTeam`); `document` sai do mapa (vira evento de janela); jitter 0–1,5 s no hidrate coarse.
-- [ ] #17/#38 Bootstrap enxuto (decisão do usuário): remover `teams[].projects` (contagens derivadas no cliente), `subscribedIssueIds` só de issues abertas no bootstrap e no `/me`, `burnup` só do ciclo current (demais via `getCycle` quando a tela precisar). Ajustar adapters/telas/testes.
-- [ ] #19 (cliente) evento de comentário/reação usa o `issueId` do payload (a frente C1 adiciona o campo) para recarregar só o detalhe certo; sem `issueId` mantém o comportamento atual.
-- [ ] #28 Eventos de janela com id (`PROJECT_CHANGED`, `INITIATIVE_CHANGED`, `DOCUMENT_CHANGED`, `AUTOMATION_CHANGED`) disparados pelo live-sync; telas de detalhe de projeto, feed da initiative, documentos e automações recarregam em silêncio.
-- [ ] #29 `notifications-store` com `loadError`; inbox mostra `ErrorState` com retry quando a 1ª carga falha (ajustar `test/notifications-loaded.test.ts`).
-- [ ] #33 `addIssue` não duplica se o evento `created` chegou antes da resposta.
+- [x] #4 `issues-store` ganha `loaded` (false até a 1ª hidratação terminar); consumidores tratam `!loaded` como carregando. Teste: store inicial + render sem flash de vazio.
+- [x] #1 (parte store) `sortByRank` com comparação binária (`<`), remover `issuesByStatus` sem leitor, hidratação progressiva adapta só a página nova.
+- [x] #6 Reconexão do SSE (`onopen` que não é o primeiro) agenda re-hidratação de issues, workspace e notificações. Teste com EventSource falso.
+- [x] #12 Evento `label` atualiza o catálogo (hidrata workspace/catalog), não baixa todas as issues à toa.
+- [x] #13 (cliente) `removeProjectLocal`/`removeCycleLocal` limpam `project`/`cycleId`/`milestone` das issues no issues-store.
+- [x] #15 Rollback por item/campo em `issues-store` (`updateIssue`, `deleteIssue`, labels) e `notifications-store` (`markAsRead`, `markAllAsRead`, `snooze`, `unsnooze`). Teste: mudança remota em outra issue sobrevive ao rollback.
+- [x] #16 `applyRemote`/hidratação não sobrescrevem item mais novo (`updatedAt`) e hidratações concorrentes usam token de sequência (a mais antiga é descartada).
+- [x] #17 (cliente) `cycle`/`member`/`view`/`team` com id → fetch direcionado (`applyCycle`/`applyUser`/`applyView`/`applyTeam`); `document` sai do mapa (vira evento de janela); jitter 0–1,5 s no hidrate coarse.
+- [x] #17/#38 Bootstrap enxuto (decisão do usuário): remover `teams[].projects` (contagens derivadas no cliente), `subscribedIssueIds` só de issues abertas no bootstrap e no `/me`, `burnup` só do ciclo current (demais via `getCycle` quando a tela precisar). Ajustar adapters/telas/testes.
+- [x] #19 (cliente) evento de comentário/reação usa o `issueId` do payload (a frente C1 adiciona o campo) para recarregar só o detalhe certo; sem `issueId` mantém o comportamento atual.
+- [x] #28 Eventos de janela com id (`PROJECT_CHANGED`, `INITIATIVE_CHANGED`, `DOCUMENT_CHANGED`, `AUTOMATION_CHANGED`) disparados pelo live-sync; telas de detalhe de projeto, feed da initiative, documentos e automações recarregam em silêncio.
+- [x] #29 `notifications-store` com `loadError`; inbox mostra `ErrorState` com retry quando a 1ª carga falha (ajustar `test/notifications-loaded.test.ts`).
+- [x] #33 `addIssue` não duplica se o evento `created` chegou antes da resposta.
 
 ### Frente C1 — servidor: eventos, realtime e issues (Claude)
 
@@ -108,17 +108,17 @@ Arquivos: `db/schema.ts`, `db/migrations/**` (única frente que gera), `lib/api/
 
 Arquivos: `app/[orgId]/loading.tsx`, `app/[orgId]/error.tsx`, `app/[orgId]/profiles/**`, `app/globals.css`, `components/common/cycles/**`, `components/common/members/**`, `components/common/reviews/**`, `components/common/settings/{webhooks,emojis,agent-personalization}-settings*`, `components/common/teams/team-line.tsx`, paletas em `insights-panel.tsx`/`breakdown-panel.tsx`/`initiative-status-icon.tsx`/`initiatives.tsx`, e textos de not-found nos detalhes (hunks pequenos; B também mexe nesses arquivos por outro motivo).
 
-- [ ] #3 Remover `app/[orgId]/loading.tsx` (as telas têm skeletons próprios); ajustar `test/route-loading.test.tsx`. Manter `app/loading.tsx` (rotas públicas).
-- [ ] #46 `.route-enter` só com `opacity` (sem `transform`).
-- [ ] #30 cycles com guarda de `loaded`; `CycleIssues` e perfil de membro repassam `loading`/`error`/`onRetry`; ciclo ativo inexistente → `EmptyState` próprio; onboarding de Reviews `w-full max-w-[540px]`; perfil de membro com skeleton/EmptyState; textos crus em webhooks/reviews/initiative/not-found → `ListSkeleton`/`EmptyState`/`ErrorState`; skeleton inline de reviews → `ListSkeleton`.
-- [ ] #42 `[orgId]/error.tsx` dentro do mesmo frame do `MainLayout`.
-- [ ] #43 Tokens `--priority-*`/`--health-*` em `globals.css` (light/dark) e paletas lendo deles; `agent-personalization` usa token de sucesso.
-- [ ] #44 `team-line.tsx` sem `/50` no muted.
-- [ ] #45 `issue-line.tsx` sem `transition-all` em `space-x` (coordenar: arquivo da frente A — só essa linha) e emojis sem `h-[calc(100vh-…)]`.
+- [x] #3 Remover `app/[orgId]/loading.tsx` (as telas têm skeletons próprios); ajustar `test/route-loading.test.tsx`. Manter `app/loading.tsx` (rotas públicas).
+- [x] #46 `.route-enter` só com `opacity` (sem `transform`).
+- [x] #30 cycles com guarda de `loaded`; `CycleIssues` e perfil de membro repassam `loading`/`error`/`onRetry`; ciclo ativo inexistente → `EmptyState` próprio; onboarding de Reviews `w-full max-w-[540px]`; perfil de membro com skeleton/EmptyState; textos crus em webhooks/reviews/initiative/not-found → `ListSkeleton`/`EmptyState`/`ErrorState`; skeleton inline de reviews → `ListSkeleton`.
+- [x] #42 `[orgId]/error.tsx` dentro do mesmo frame do `MainLayout`.
+- [x] #43 Tokens `--priority-*`/`--health-*` em `globals.css` (light/dark) e paletas lendo deles; `agent-personalization` usa token de sucesso.
+- [x] #44 `team-line.tsx` sem `/50` no muted.
+- [x] #45 `issue-line.tsx` sem `transition-all` em `space-x` (coordenar: arquivo da frente A — só essa linha) e emojis sem `h-[calc(100vh-…)]`.
 
 ### Integração (Claude, checkout principal)
 
-- [ ] Merge das frentes na ordem C2 → C1 → B → A → D, resolvendo conflitos.
-- [ ] `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm build` verdes.
-- [ ] Remedir com os scripts do teste de sanidade (SSE na lista, form, loading, flash, bundle `/members`, payload `/workspace`).
-- [ ] Atualizar Estado, abrir PR para `develop`.
+- [x] Merge das frentes na ordem C2 → C1 → B → A → D, resolvendo conflitos.
+- [x] `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm build` verdes.
+- [x] Remedir com os scripts do teste de sanidade (SSE na lista, form, loading, flash, bundle `/members`, payload `/workspace`).
+- [x] Atualizar Estado, abrir PR para `develop`.
