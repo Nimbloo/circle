@@ -26,8 +26,9 @@ export const IssueDragType = 'ISSUE';
 type IssueDropResult = { handled: true };
 type IssueGridProps = {
    issue: Issue;
-   /** Issues do grupo na ordem de exibição (asc rank) — usado p/ calcular os vizinhos no reorder. */
-   orderedIssues: Issue[];
+   /** Lê as issues do grupo na ordem de exibição (asc rank) — vizinhos no reorder. Getter
+    *  estável (não o array), para o drop não re-registrar a cada mudança do grupo. */
+   getOrderedIssues: () => Issue[];
    /** Animação de layout do motion (layoutId). Desligada na coluna virtualizada
     *  (o mount/unmount da virtualização brigaria com a animação de layout). */
    layout?: boolean;
@@ -91,7 +92,7 @@ export function CustomDragLayer() {
    );
 }
 
-export function IssueGrid({ issue, orderedIssues, layout = true }: IssueGridProps) {
+export function IssueGrid({ issue, getOrderedIssues, layout = true }: IssueGridProps) {
    const ref = useRef<HTMLDivElement>(null);
    const { orgId } = useParams<{ orgId: string }>();
    const displayProperties = useDisplaySetting('displayProperties');
@@ -128,7 +129,7 @@ export function IssueGrid({ issue, orderedIssues, layout = true }: IssueGridProp
             }
 
             // Mesmo grupo: reordena por rank entre os vizinhos do alvo (exclui o arrastado).
-            const list = orderedIssues.filter((i) => i.id !== item.id);
+            const list = getOrderedIssues().filter((i) => i.id !== item.id);
             const targetIdx = list.findIndex((i) => i.id === issue.id);
             if (targetIdx === -1) return { handled: true };
 
@@ -144,7 +145,7 @@ export function IssueGrid({ issue, orderedIssues, layout = true }: IssueGridProp
             return { handled: true };
          },
       }),
-      [issue, orderedIssues, reorderIssue, updateIssueStatus]
+      [issue, getOrderedIssues, reorderIssue, updateIssueStatus]
    );
 
    // Connect drag and drop to the element.

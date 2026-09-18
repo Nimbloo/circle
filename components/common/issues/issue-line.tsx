@@ -37,11 +37,12 @@ interface IssueLineProps {
    issue: Issue;
    layoutId?: boolean;
    /**
-    * Issues do grupo na ordem de exibição — liga o drag-and-drop da linha (reordenar no
-    * grupo; soltar em outro grupo de status muda o status). Ausente (busca, listas fora
-    * de um `DndProvider`): linha estática.
+    * Lê as issues do grupo na ordem de exibição — liga o drag-and-drop da linha (reordenar
+    * no grupo; soltar em outro grupo de status muda o status). Ausente (busca, listas fora
+    * de um `DndProvider`): linha estática. É um getter ESTÁVEL (não o array): o array muda
+    * a cada evento e derrubaria o `memo` de todas as linhas do grupo.
     */
-   orderedIssues?: Issue[];
+   getOrderedIssues?: () => Issue[];
 }
 
 type IssueDropResult = { handled: true };
@@ -246,11 +247,11 @@ function IssueRow({
 function DraggableIssueRow({
    issue,
    layoutId,
-   orderedIssues,
+   getOrderedIssues,
 }: {
    issue: Issue;
    layoutId?: boolean;
-   orderedIssues: Issue[];
+   getOrderedIssues: () => Issue[];
 }) {
    const ref = useRef<HTMLDivElement>(null);
    const reorderIssue = useIssuesStore((s) => s.reorderIssue);
@@ -283,7 +284,7 @@ function DraggableIssueRow({
             }
 
             // Mesmo grupo: reordena por rank entre os vizinhos do alvo (exclui o arrastado).
-            const list = orderedIssues.filter((i) => i.id !== item.id);
+            const list = getOrderedIssues().filter((i) => i.id !== item.id);
             const targetIdx = list.findIndex((i) => i.id === issue.id);
             if (targetIdx === -1) return { handled: true };
 
@@ -298,7 +299,7 @@ function DraggableIssueRow({
             return { handled: true };
          },
       }),
-      [issue, orderedIssues, reorderIssue, updateIssueStatus]
+      [issue, getOrderedIssues, reorderIssue, updateIssueStatus]
    );
 
    drag(drop(ref));
@@ -306,9 +307,9 @@ function DraggableIssueRow({
    return <IssueRow ref={ref} issue={issue} layoutId={layoutId} dragging={isDragging} />;
 }
 
-function IssueLineComponent({ issue, layoutId = false, orderedIssues }: IssueLineProps) {
-   return orderedIssues ? (
-      <DraggableIssueRow issue={issue} layoutId={layoutId} orderedIssues={orderedIssues} />
+function IssueLineComponent({ issue, layoutId = false, getOrderedIssues }: IssueLineProps) {
+   return getOrderedIssues ? (
+      <DraggableIssueRow issue={issue} layoutId={layoutId} getOrderedIssues={getOrderedIssues} />
    ) : (
       <IssueRow issue={issue} layoutId={layoutId} />
    );

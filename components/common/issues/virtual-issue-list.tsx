@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { Issue } from '@/data/issues';
 import { IssueLine } from './issue-line';
@@ -14,7 +14,7 @@ interface Entry {
 /** Linha virtual: um header de grupo OU uma issue. */
 type Row =
    | { kind: 'header'; group: IssueGroupDescriptor; count: number }
-   | { kind: 'issue'; issue: Issue; orderedIssues: Issue[] };
+   | { kind: 'issue'; issue: Issue; getOrderedIssues: () => Issue[] };
 
 export const ISSUE_GROUP_HEADER_HEIGHT = 36;
 export const ISSUE_ROW_HEIGHT = 44;
@@ -28,15 +28,29 @@ export const ISSUE_ROW_HEIGHT = 44;
  */
 export function VirtualIssueList({ entries }: { entries: Entry[] }) {
    const parentRef = useRef<HTMLDivElement>(null);
+   // Getter ESTÁVEL por grupo (lê a ordem atual no drop): passar o array do grupo mudava
+   // a prop de todas as linhas a cada evento e derrubava o `memo` da `IssueLine`.
+   const issuesByGroup = useRef(new Map<string, Issue[]>());
+   const getters = useRef(new Map<string, () => Issue[]>());
+   const getterFor = useCallback((groupId: string) => {
+      let getter = getters.current.get(groupId);
+      if (!getter) {
+         getter = () => issuesByGroup.current.get(groupId) ?? [];
+         getters.current.set(groupId, getter);
+      }
+      return getter;
+   }, []);
 
    const rows = useMemo<Row[]>(() => {
       const out: Row[] = [];
+      issuesByGroup.current = new Map(entries.map((e) => [e.group.id, e.issues]));
       for (const e of entries) {
          out.push({ kind: 'header', group: e.group, count: e.issues.length });
-         for (const issue of e.issues) out.push({ kind: 'issue', issue, orderedIssues: e.issues });
+         const getOrderedIssues = getterFor(e.group.id);
+         for (const issue of e.issues) out.push({ kind: 'issue', issue, getOrderedIssues });
       }
       return out;
-   }, [entries]);
+   }, [entries, getterFor]);
 
    const virtualizer = useVirtualizer({
       count: rows.length,
@@ -76,7 +90,7 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
                         // com o mount/unmount da virtualização).
                         <IssueLine
                            issue={row.issue}
-                           orderedIssues={row.orderedIssues}
+                           getOrderedIssues={row.getOrderedIssues}
                            layoutId={false}
                         />
                      )}
