@@ -245,6 +245,7 @@ interface RawRow {
    status_id?: string | null;
    rank?: number | string | null;
    snippet?: string | null;
+   updated_at?: string | Date | null;
 }
 
 async function rows(db: Db, query: SQL): Promise<RawRow[]> {
@@ -271,29 +272,52 @@ async function ftsIssues(
    limit: number,
    like: string
 ): Promise<SearchItem[]> {
-   // Comentário fica FORA do índice (a spec mantém o `ilike` de hoje), mas continua
-   // casando — a tela de busca já alcançava o corpo do comentário e perder isso seria
-   // regressão. Sem vetor, esses acertos entram com rank 0 e caem para o fim da lista.
-   const conds: SQL[] = [
-      sql`(i.search_vector @@ ${tsq} OR c.search_vector @@ ${tsq}
-           OR EXISTS (SELECT 1 FROM comment cm WHERE cm.issue_id = i.id
-                       AND ${ilikeUnaccent('cm.body', like)}))`,
-   ];
+   // Cada coluna gerada tem seu próprio GIN. Separar os caminhos por UNION deixa o
+   // planner usar o índice de issue e o de issue_content sem cair num OR entre tabelas.
+   const conds: SQL[] = [];
    if (o.teamId) conds.push(sql`i.team_id = ${o.teamId}`);
    {
       const sc = scopeCond(o, 'i.team_id');
       if (sc) conds.push(sc);
    }
    if (o.statusId) conds.push(sql`i.status_id = ${o.statusId}`);
+   const filters = conds.length ? sql`${sql.join(conds, sql` AND `)} AND ` : sql``;
    const r = await rows(
       db,
-      sql`SELECT i.id, i.identifier, i.title, i.team_id, i.status_id,
-             ts_rank_cd(i.search_vector || coalesce(c.search_vector, ''::tsvector), ${tsq}) AS rank,
-             ts_headline('simple', left(coalesce(i.title, '') || ' — ' || coalesce(c.description, ''), 2000),
-                         ${tsq}, ${HEADLINE_OPTS}) AS snippet
-          FROM issue i LEFT JOIN issue_content c ON c.issue_id = i.id
-          WHERE ${sql.join(conds, sql` AND `)}
-          ORDER BY rank DESC, i.updated_at DESC
+      sql`SELECT id, identifier, title, team_id, status_id,
+             max(rank) AS rank, max(snippet) AS snippet
+          FROM (
+             (SELECT i.id, i.identifier, i.title, i.team_id, i.status_id, i.updated_at,
+                    ts_rank_cd(i.search_vector, ${tsq}) AS rank,
+                    ts_headline('simple', left(coalesce(i.title, '') || ' — ' || coalesce(i.identifier, ''), 2000),
+                                ${tsq}, ${HEADLINE_OPTS}) AS snippet
+               FROM issue i
+              WHERE ${filters}i.search_vector @@ ${tsq}
+              LIMIT ${limit})
+             UNION ALL
+             (SELECT i.id, i.identifier, i.title, i.team_id, i.status_id, i.updated_at,
+                    ts_rank_cd(c.search_vector, ${tsq}) AS rank,
+                    ts_headline('simple', left(coalesce(i.title, '') || ' — ' || coalesce(c.description, ''), 2000),
+                                ${tsq}, ${HEADLINE_OPTS}) AS snippet
+               FROM issue i
+               JOIN issue_content c ON c.issue_id = i.id
+              WHERE ${filters}c.search_vector @@ ${tsq}
+              LIMIT ${limit})
+             UNION ALL
+             (SELECT i.id, i.identifier, i.title, i.team_id, i.status_id, i.updated_at,
+                    0 AS rank,
+                    ts_headline('simple', left(coalesce(i.title, '') || ' — ' || coalesce(c.description, ''), 2000),
+                                ${tsq}, ${HEADLINE_OPTS}) AS snippet
+               FROM issue i
+               LEFT JOIN issue_content c ON c.issue_id = i.id
+              WHERE ${filters}EXISTS (
+                 SELECT 1 FROM comment cm WHERE cm.issue_id = i.id
+                   AND ${ilikeUnaccent('cm.body', like)}
+              )
+              LIMIT ${limit})
+          ) matches
+          GROUP BY id, identifier, title, team_id, status_id
+          ORDER BY rank DESC, max(updated_at) DESC
           LIMIT ${limit}`
    );
    return r.map((row) => ({

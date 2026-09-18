@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { asc, eq, inArray, sql } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { publish } from './events';
 import {
@@ -128,13 +128,19 @@ export async function deleteStatus(db: Db, id: string): Promise<boolean> {
 
 /** Reordena os status na ordem dos ids fornecidos (position = índice). */
 export async function reorderStatuses(db: Db, ids: string[]): Promise<StatusDto[]> {
-   await Promise.all(
-      ids.map((id, i) => db.update(statusT).set({ position: i }).where(eq(statusT.id, id)))
-   );
-   const rows = await db
-      .select()
-      .from(statusT)
-      .where(inArray(statusT.id, ids.length ? ids : ['']))
-      .orderBy(asc(statusT.position));
-   return rows.map(toDto);
+   const current = await db.select().from(statusT).orderBy(asc(statusT.position));
+   const known = new Set(current.map((status) => status.id));
+   const orderedIds = [
+      ...ids.filter((id, index) => known.has(id) && ids.indexOf(id) === index),
+      ...current.map((status) => status.id).filter((id) => !ids.includes(id)),
+   ];
+
+   await db.transaction(async (tx) => {
+      for (const [position, id] of orderedIds.entries()) {
+         await tx.update(statusT).set({ position }).where(eq(statusT.id, id));
+      }
+   });
+
+   publish({ entity: 'catalog', action: 'updated' });
+   return (await db.select().from(statusT).orderBy(asc(statusT.position))).map(toDto);
 }
