@@ -1,6 +1,7 @@
 'use client';
 
 import ProjectsTimeline from '@/components/common/projects/projects-timeline';
+import { EmptyState } from '@/components/common/empty-state';
 import { ListSkeleton } from '@/components/common/list-skeleton';
 import { ProjectGroup } from '@/components/common/projects/projects';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -808,6 +809,8 @@ const UPDATE_HEALTHS = [
  * último update propaga pro health da initiative (paridade Linear). */
 function Activity({ initiativeId }: { initiativeId: string }) {
    const [updates, setUpdates] = useState<InitiativeUpdateDto[]>([]);
+   // Primeira carga do feed: vazio só depois de uma resposta real, nunca na carga/falha.
+   const [feed, setFeed] = useState<'loading' | 'ready' | 'error'>('loading');
    const [health, setHealth] = useState<'on-track' | 'at-risk' | 'off-track'>('on-track');
    const [text, setText] = useState('');
    const [busy, setBusy] = useState(false);
@@ -815,10 +818,19 @@ function Activity({ initiativeId }: { initiativeId: string }) {
 
    useEffect(() => {
       let active = true;
+      setFeed('loading');
       api.initiatives
          .updates(initiativeId)
-         .then((u) => active && setUpdates(u))
-         .catch(() => active && setUpdates([]));
+         .then((u) => {
+            if (!active) return;
+            setUpdates(u);
+            setFeed('ready');
+         })
+         .catch(() => {
+            if (!active) return;
+            setUpdates([]);
+            setFeed('error');
+         });
       return () => {
          active = false;
       };
@@ -881,8 +893,17 @@ function Activity({ initiativeId }: { initiativeId: string }) {
             </div>
          </div>
 
-         {updates.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhum update ainda.</p>
+         {feed === 'loading' && updates.length === 0 ? (
+            <ListSkeleton rows={3} />
+         ) : feed === 'error' && updates.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Não foi possível carregar os updates.</p>
+         ) : updates.length === 0 ? (
+            <EmptyState
+               variant="activity"
+               title="Nenhum update ainda"
+               description="Publique o primeiro para registrar o andamento."
+               className="py-8"
+            />
          ) : (
             <div className="flex flex-col gap-3">
                {updates.map((u) => {

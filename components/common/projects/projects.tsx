@@ -9,6 +9,9 @@ import { useRightPanelStore } from '@/store/right-panel-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
 import { useMemo } from 'react';
+import { Box } from 'lucide-react';
+import { EmptyState } from '@/components/common/empty-state';
+import { ListSkeleton } from '@/components/common/list-skeleton';
 import { PROJECT_TABS } from '@/components/layout/headers/projects/projects-view-controls';
 import ProjectsBoard from './projects-board';
 import ProjectsInsightsPanel from './projects-insights-panel';
@@ -42,9 +45,15 @@ export default function Projects({ teamId }: { teamId?: string }) {
    const openPanel = useRightPanelStore((state) => state.openPanel);
    const allProjects = useWorkspaceStore((s) => s.projects);
    const teams = useWorkspaceStore((s) => s.teams);
+   const loaded = useWorkspaceStore((s) => s.loaded);
    const projectStatuses = useProjectStatuses();
    const [tab] = useQueryState('tab', parseAsStringLiteral(PROJECT_TABS).withDefault('all'));
    const viewType = viewTypes[tab];
+
+   // Distingue "nenhum projeto" de "nada passa nos filtros/aba" no estado vazio.
+   const scopeHasProjects = teamId
+      ? allProjects.some((project) => project.teamId === teamId)
+      : allProjects.length > 0;
 
    const displayed = useMemo(() => {
       let list = allProjects.slice();
@@ -112,9 +121,32 @@ export default function Projects({ teamId }: { teamId?: string }) {
       <div className="w-full h-full flex flex-col overflow-hidden">
          <div className="flex-1 min-h-0 w-full flex overflow-hidden">
             <div className="flex-1 min-w-0 h-full overflow-hidden">
-               {viewType === 'timeline' && <ProjectsTimeline groups={groups} />}
-               {viewType === 'board' && <ProjectsBoard groups={groups} />}
-               {viewType === 'list' && <ProjectsList groups={groups} />}
+               {displayed.length === 0 && !loaded ? (
+                  // Hidratando → skeleton; o vazio só depois que o workspace chegou.
+                  <div className="py-4">
+                     <ListSkeleton rows={6} />
+                  </div>
+               ) : displayed.length === 0 ? (
+                  scopeHasProjects ? (
+                     <EmptyState
+                        variant="filtered"
+                        title="No projects match your filters"
+                        description="Try switching tabs or adjusting the filters."
+                     />
+                  ) : (
+                     <EmptyState
+                        icon={Box}
+                        title="No projects yet"
+                        description="Projects group issues toward a shared outcome."
+                     />
+                  )
+               ) : (
+                  <>
+                     {viewType === 'timeline' && <ProjectsTimeline groups={groups} />}
+                     {viewType === 'board' && <ProjectsBoard groups={groups} />}
+                     {viewType === 'list' && <ProjectsList groups={groups} />}
+                  </>
+               )}
             </div>
 
             {openPanel === 'insights' && (

@@ -5,6 +5,7 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { fetchReviews, syncReviews } from '@/lib/adapters-reviews';
 import { Review, ReviewList, ReviewStatus } from '@/data/reviews';
 import { CheckIcon, ChevronLeft, ListFilter, RefreshCw, SlidersHorizontal } from 'lucide-react';
+import { EmptyState } from '@/components/common/empty-state';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ReactNode, useEffect, useRef, useState } from 'react';
@@ -396,11 +397,15 @@ export default function Reviews({
                      Could not load reviews.
                   </div>
                ) : groups.length === 0 ? (
-                  <div className="px-[18px] py-6 text-[13px] text-muted-foreground">
-                     {reviews.length > 0
-                        ? 'No reviews match the current filters.'
-                        : 'No reviews yet.'}
-                  </div>
+                  <EmptyState
+                     variant={reviews.length > 0 ? 'filtered' : 'empty'}
+                     title={
+                        reviews.length > 0
+                           ? 'No reviews match the current filters'
+                           : 'No reviews yet'
+                     }
+                     className="py-10"
+                  />
                ) : groupByStatus ? (
                   groups.map((group) => (
                      <ReviewGroup key={group.label} label={group.label} count={group.items.length}>

@@ -1,6 +1,7 @@
 'use client';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { EmptyState } from '@/components/common/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { Issue, sortIssuesByPriority } from '@/data/issues';
@@ -9,7 +10,7 @@ import { usePriorities, useLabels } from '@/store/catalog-store';
 import { useDisplaySetting } from '@/store/display-settings-store';
 import { useFilterStore } from '@/store/filter-store';
 import { useBulkSelectionStore } from '@/store/bulk-selection-store';
-import { Box, ChevronDown, Tag, User, X } from 'lucide-react';
+import { Box, ChevronDown, Layers, Tag, User, X } from 'lucide-react';
 import { FC, useEffect, useMemo, useState } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
@@ -66,7 +67,13 @@ function IssuesEmptyState({
    if (loading) {
       return <Skeleton className="h-4 w-16" />;
    }
-   return <span className="text-sm text-muted-foreground">Nenhuma issue</span>;
+   return (
+      <EmptyState
+         icon={Layers}
+         title="Nenhuma issue"
+         description="Issues criadas aqui aparecem nesta lista."
+      />
+   );
 }
 
 interface GroupEntry {

@@ -26,6 +26,8 @@ interface NotificationsState {
    // (DEFAULT_INBOX_LIMIT) e descarta itens sem issue conhecida, então contar
    // localmente subconta. Mantida em sincronia por deltas otimistas nas ações.
    unreadCount: number;
+   /** Primeira hidratação terminou (sucesso ou falha) — antes disso a UI mostra skeleton, não vazio. */
+   loaded: boolean;
 
    // Hydration
    hydrate: () => Promise<void>;
@@ -95,6 +97,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
    snoozed: [],
    selectedNotification: undefined,
    unreadCount: 0,
+   loaded: false,
 
    hydrate: async () => {
       try {
@@ -109,6 +112,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
          set((state) => ({
             notifications: items,
             unreadCount: countRes.count,
+            loaded: true,
             // Reconcilia a seleção com a versão fresca (read/content/timestamp podem
             // ter mudado no servidor); se sumiu da lista, mantém o snapshot atual
             // para o preview aberto não desaparecer no meio da leitura.
@@ -119,6 +123,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
          }));
       } catch {
          // Degradação graciosa — mantém o estado atual se a API falhar.
+         set({ loaded: true });
       }
    },
 

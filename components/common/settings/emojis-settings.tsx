@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/common/empty-state';
 import { ListSkeleton } from '@/components/common/list-skeleton';
 import {
    Dialog,
@@ -224,11 +225,12 @@ export default function EmojisSettings() {
             {loading ? (
                <ListSkeleton rows={4} />
             ) : visibleEmojis.length === 0 ? (
-               <div className="flex h-[calc(100vh-262px)] min-h-[360px] flex-col items-center justify-center gap-2 text-center">
-                  <Smile className="size-12 text-muted-foreground/40" />
-                  <p className="text-[13px] text-muted-foreground">
-                     {query ? 'Nenhum emoji encontrado' : 'Nenhum emoji customizado'}
-                  </p>
+               <div className="flex h-[calc(100vh-262px)] min-h-[360px] items-center justify-center">
+                  {query ? (
+                     <EmptyState variant="search" title="Nenhum emoji encontrado" />
+                  ) : (
+                     <EmptyState icon={Smile} title="Nenhum emoji customizado" />
+                  )}
                </div>
             ) : (
                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">

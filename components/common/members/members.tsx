@@ -1,6 +1,7 @@
 'use client';
 
 import MemberLine from './member-line';
+import { EmptyState } from '@/components/common/empty-state';
 import { ListSkeleton } from '@/components/common/list-skeleton';
 import { useMembersFilterStore } from '@/store/members-filter-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -68,23 +69,19 @@ export default function Members() {
                   <ListSkeleton rows={5} />
                </div>
             ) : displayed.length === 0 ? (
-               <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
-                  <div className="flex size-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
-                     <Users className="size-6" />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                     <p className="text-sm font-medium">
-                        {filters.role.length > 0
-                           ? 'No members match your filters'
-                           : 'No members yet'}
-                     </p>
-                     <p className="max-w-xs text-sm text-muted-foreground">
-                        {filters.role.length > 0
-                           ? 'Try clearing or adjusting the status filter.'
-                           : 'People who join this workspace will appear here.'}
-                     </p>
-                  </div>
-               </div>
+               filters.role.length > 0 ? (
+                  <EmptyState
+                     variant="filtered"
+                     title="No members match your filters"
+                     description="Try clearing or adjusting the status filter."
+                  />
+               ) : (
+                  <EmptyState
+                     icon={Users}
+                     title="No members yet"
+                     description="People who join this workspace will appear here."
+                  />
+               )
             ) : (
                displayed.map((user) => <MemberLine key={user.id} user={user} />)
             )}

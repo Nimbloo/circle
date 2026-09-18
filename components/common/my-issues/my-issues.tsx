@@ -15,6 +15,7 @@ const InsightsPanel = dynamic(
    { ssr: false }
 );
 import { IssueLine } from '@/components/common/issues/issue-line';
+import { EmptyState } from '@/components/common/empty-state';
 import { BreakdownPanel } from './breakdown-panel';
 import { api } from '@/lib/client';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
@@ -140,9 +141,11 @@ export default function MyIssues() {
                      </div>
                   </div>
                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                     No results found for &quot;{searchQuery}&quot;
-                  </div>
+                  <EmptyState
+                     variant="search"
+                     title="No results"
+                     description={`Nothing matches "${searchQuery}".`}
+                  />
                )}
             </div>
          </div>

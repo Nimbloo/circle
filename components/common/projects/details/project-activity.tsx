@@ -2,6 +2,7 @@
 
 import { DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 import { ContentBlocks } from '@/components/common/issues/details/content-blocks';
+import { EmptyState } from '@/components/common/empty-state';
 import { ListSkeleton } from '@/components/common/list-skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -82,6 +83,9 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
    const [posting, setPosting] = useState(false);
 
    const [detail, setDetail] = useState<ProjectDetail>(() => emptyProjectDetail(projectId));
+   // Estado da PRIMEIRA carga do feed: sem ele, a lista inicial vazia (e a falha)
+   // apareciam como "No updates yet". O `reload` pós-mutation segue silencioso.
+   const [feed, setFeed] = useState<'loading' | 'ready' | 'error'>('loading');
    const reload = useCallback(async () => {
       try {
          setDetail(adaptProjectDetail(await api.projects.detail(projectId)));
@@ -91,13 +95,18 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
    }, [projectId]);
    useEffect(() => {
       let active = true;
+      setFeed('loading');
       api.projects
          .detail(projectId)
          .then((dto) => {
-            if (active) setDetail(adaptProjectDetail(dto));
+            if (!active) return;
+            setDetail(adaptProjectDetail(dto));
+            setFeed('ready');
          })
          .catch(() => {
-            if (active) setDetail(emptyProjectDetail(projectId));
+            if (!active) return;
+            setDetail(emptyProjectDetail(projectId));
+            setFeed('error');
          });
       return () => {
          active = false;
@@ -200,10 +209,22 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
                </div>
 
                {/* Timeline */}
-               {updatesByMonth.length === 0 ? (
-                  <p className="mt-10 text-sm text-muted-foreground text-center">
-                     No updates yet — post the first one to keep the team in the loop.
+               {/* Updates otimistas do próprio usuário aparecem mesmo durante a carga. */}
+               {feed === 'loading' && updates.length === 0 ? (
+                  <div className="mt-8">
+                     <ListSkeleton rows={3} />
+                  </div>
+               ) : feed === 'error' && updates.length === 0 ? (
+                  <p className="mt-10 text-center text-sm text-muted-foreground">
+                     Could not load updates.
                   </p>
+               ) : updatesByMonth.length === 0 ? (
+                  <EmptyState
+                     variant="activity"
+                     title="No updates yet"
+                     description="Post the first one to keep the team in the loop."
+                     className="py-10"
+                  />
                ) : (
                   updatesByMonth.map(([month, monthUpdates]) => (
                      <div key={month} className="mt-8">

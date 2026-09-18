@@ -28,12 +28,15 @@ import {
    CheckCheck,
    CheckIcon,
    ChevronLeft,
+   Inbox as InboxIcon,
    ChevronRight,
    ListFilter,
    MoreHorizontal,
    SlidersHorizontal,
 } from 'lucide-react';
 import { getNotificationIcon } from '@/lib/notification-utils';
+import { EmptyState } from '@/components/common/empty-state';
+import { ListSkeleton } from '@/components/common/list-skeleton';
 import type { NotificationType } from '@/data/inbox';
 import NotificationPreview from './issue-preview';
 import IssueLine from './issue-line';
@@ -74,6 +77,7 @@ export default function Inbox() {
       snoozed,
       hydrateSnoozed,
       getUnreadNotifications,
+      loaded,
    } = useNotificationsStore();
 
    const isMobile = useIsMobile();
@@ -361,11 +365,27 @@ export default function Inbox() {
             </div>
          </div>
          <div className="flex h-[calc(100%-44px)] w-full flex-col items-center justify-start overflow-y-auto py-2">
-            {filteredNotifications.length === 0 && isMobile && (
-               <div className="h-full w-full">
-                  <NotificationPreview />
-               </div>
-            )}
+            {filteredNotifications.length === 0 &&
+               (!loaded ? (
+                  <div className="w-full">
+                     <ListSkeleton rows={6} />
+                  </div>
+               ) : notifications.length > 0 || snoozed.length > 0 ? (
+                  <EmptyState
+                     variant="filtered"
+                     title="No notifications match"
+                     description="Try adjusting the filter or display options."
+                     className="my-auto"
+                  />
+               ) : (
+                  <EmptyState
+                     variant="activity"
+                     icon={InboxIcon}
+                     title="No notifications"
+                     description="You're all caught up."
+                     className="my-auto"
+                  />
+               ))}
             {filteredNotifications.length > 0 &&
                filteredNotifications.map(({ item: notification, isSnoozed }) =>
                   isSnoozed ? (
