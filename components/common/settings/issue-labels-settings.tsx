@@ -24,7 +24,9 @@ import { api, ApiError } from '@/lib/client';
 import type { LabelInterface } from '@/data/labels';
 import { useCatalogStore, useLabels } from '@/store/catalog-store';
 import { useIssuesStore } from '@/store/issues-store';
-import { Pencil, Pipette, Trash2 } from 'lucide-react';
+import { Pencil, Pipette, Tag, Trash2 } from 'lucide-react';
+import { EmptyState } from '@/components/common/empty-state';
+import { ListSkeleton } from '@/components/common/list-skeleton';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -162,6 +164,7 @@ export default function IssueLabelsSettings() {
    const [query, setQuery] = useState('');
    const issues = useIssuesStore((s) => s.issues);
    const labels = useLabels();
+   const catalogLoaded = useCatalogStore((s) => s.loaded);
    const applyLabel = useCatalogStore((s) => s.applyLabel);
    const removeLabel = useCatalogStore((s) => s.removeLabel);
 
@@ -290,11 +293,23 @@ export default function IssueLabelsSettings() {
                   </div>
                </div>
             ))}
-            {rows.length === 0 && (
-               <p className="text-sm text-muted-foreground py-6">
-                  {query ? 'No labels match your filter.' : 'No labels yet. Create your first one.'}
-               </p>
-            )}
+            {rows.length === 0 &&
+               (!catalogLoaded ? (
+                  <ListSkeleton rows={4} />
+               ) : query ? (
+                  <EmptyState
+                     variant="search"
+                     title="No labels match your filter"
+                     className="py-10"
+                  />
+               ) : (
+                  <EmptyState
+                     icon={Tag}
+                     title="No labels yet"
+                     description="Create your first one."
+                     className="py-10"
+                  />
+               ))}
          </div>
 
          <LabelDialog

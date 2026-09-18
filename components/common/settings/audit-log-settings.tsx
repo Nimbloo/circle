@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { EmptyState } from '@/components/common/empty-state';
 import { ListSkeleton } from '@/components/common/list-skeleton';
 import { api } from '@/lib/client';
 import { ApiError } from '@/lib/api/errors';
@@ -76,7 +77,11 @@ export default function AuditLogSettings() {
          ) : entries === null ? (
             <ListSkeleton rows={6} />
          ) : entries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhuma ação registrada ainda.</p>
+            <EmptyState
+               variant="activity"
+               title="Nenhuma ação registrada ainda"
+               className="py-10"
+            />
          ) : (
             <div className="rounded-lg border bg-container overflow-hidden divide-y divide-border/60">
                {entries.map((e) => {

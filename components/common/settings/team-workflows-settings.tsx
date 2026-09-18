@@ -40,6 +40,7 @@ import type {
 import { useLabels, usePriorities, useStatuses } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Pencil, Plus, Timer, Trash2, Workflow } from 'lucide-react';
+import { ListSkeleton } from '@/components/common/list-skeleton';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
@@ -550,10 +551,13 @@ export default function TeamWorkflowsSettings({ teamId }: { teamId: string }) {
                }
             >
                <SettingsCard>
-                  {automations.length === 0 ? (
+                  {automations.length === 0 && loading ? (
+                     // Carga separada do vazio: "Nenhuma automação" só depois da resposta.
+                     <ListSkeleton rows={2} />
+                  ) : automations.length === 0 ? (
                      <SettingsRow
                         icon={<Workflow className="size-4" />}
-                        title={loading ? 'Carregando…' : 'Nenhuma automação'}
+                        title="Nenhuma automação"
                         description="Crie a primeira regra para o time"
                         muted
                      />

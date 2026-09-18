@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/common/empty-state';
 import { ListSkeleton } from '@/components/common/list-skeleton';
 import {
    Dialog,
@@ -264,15 +265,16 @@ export default function IssueTemplatesSettings() {
             {loading ? (
                <ListSkeleton rows={4} />
             ) : templates.length === 0 ? (
-               <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
-                  <FileText className="size-8 text-muted-foreground/40" />
-                  <p className="text-sm font-medium">Nenhum template ainda</p>
-                  <p className="text-xs text-muted-foreground">
-                     {isAdmin
+               <EmptyState
+                  icon={FileText}
+                  title="Nenhum template ainda"
+                  description={
+                     isAdmin
                         ? 'Crie um template para acelerar a criação de issues recorrentes.'
-                        : 'Peça a um administrador para criar templates para este time.'}
-                  </p>
-               </div>
+                        : 'Peça a um administrador para criar templates para este time.'
+                  }
+                  className="py-10"
+               />
             ) : (
                templates.map((tmpl) => (
                   <div
