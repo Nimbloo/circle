@@ -150,7 +150,7 @@ export function CreateNewIssue() {
             <div className="px-4 pb-0 space-y-3 w-full">
                <Input
                   className="border-none w-full shadow-none outline-none text-2xl font-medium px-0 h-auto focus-visible:ring-0 overflow-hidden text-ellipsis whitespace-normal break-words"
-                  placeholder="Issue title"
+                  placeholder="Título da issue"
                   value={addIssueForm.title}
                   onChange={(e) => setAddIssueForm({ ...addIssueForm, title: e.target.value })}
                />
@@ -159,7 +159,7 @@ export function CreateNewIssue() {
                   key={editorKey}
                   variant="compact"
                   doc={addIssueForm.descriptionDoc ?? EMPTY_DOC}
-                  placeholder="Add description…"
+                  placeholder="Adicione uma descrição…"
                   onChange={(doc) => setAddIssueForm((f) => ({ ...f, descriptionDoc: doc }))}
                />
 
@@ -226,7 +226,7 @@ export function CreateNewIssue() {
                   </div>
                </div>
                <Button size="sm" disabled={submitting || !addIssueForm.title} onClick={createIssue}>
-                  {submitting ? 'Creating…' : 'Create issue'}
+                  {submitting ? 'Criando…' : 'Criar issue'}
                </Button>
             </div>
          </DialogContent>

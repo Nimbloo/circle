@@ -10,6 +10,7 @@ import {
    issueContent,
    project,
    projectDetail,
+   initiativeProject,
    teamDocument,
 } from '@/db/schema';
 import {
@@ -185,6 +186,46 @@ describe('search — filtros', () => {
 
       const res = await search(db, { q: 'login', statusId: 'done' });
       expect(itemsOf(res.groups, 'issue').map((i) => i.id)).toEqual(['i-done']);
+   });
+
+   it('mantém iniciativa pai pesquisável quando o projeto visível está na filha', async () => {
+      await db.insert(initiative).values([
+         {
+            id: 'n-parent',
+            slug: 'parent',
+            name: 'Roadmap parent',
+            status: 'active',
+            priorityId: 'high',
+            healthId: 'on-track',
+         },
+         {
+            id: 'n-child',
+            slug: 'child',
+            name: 'Roadmap child',
+            status: 'active',
+            priorityId: 'high',
+            healthId: 'on-track',
+            parentId: 'n-parent',
+         },
+      ]);
+      await db.insert(project).values({
+         id: 'p-child',
+         name: 'Projeto da filha',
+         statusId: 'proj-in-progress',
+         percentComplete: 0,
+         priorityId: 'high',
+         healthId: 'on-track',
+         teamId: 'CORE',
+         initiativeId: 'n-child',
+      });
+      await db.insert(initiativeProject).values({ initiativeId: 'n-child', projectId: 'p-child' });
+
+      const res = await search(db, {
+         q: 'Roadmap parent',
+         types: ['initiative'],
+         teamIds: ['CORE'],
+      });
+      expect(itemsOf(res.groups, 'initiative').map((item) => item.id)).toEqual(['n-parent']);
    });
 });
 

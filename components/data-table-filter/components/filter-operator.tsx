@@ -44,7 +44,7 @@ export function FilterOperator<TData, TType extends ColumnDataType>({
   column,
   filter,
   actions,
-  locale = 'en',
+  locale = 'pt-BR',
 }: FilterOperatorProps<TData, TType>) {
   const [open, setOpen] = useState<boolean>(false)
 
@@ -95,7 +95,7 @@ interface FilterOperatorDisplayProps<TType extends ColumnDataType> {
 export function FilterOperatorDisplay<TType extends ColumnDataType>({
   filter,
   columnType,
-  locale = 'en',
+  locale = 'pt-BR',
 }: FilterOperatorDisplayProps<TType>) {
   const operator = filterTypeOperatorDetails[columnType][filter.operator]
   const label = t(operator.key, locale)
@@ -121,7 +121,7 @@ export function FilterOperatorController<TData, TType extends ColumnDataType>({
   column,
   actions,
   closeController,
-  locale = 'en',
+  locale = 'pt-BR',
 }: FilterOperatorControllerProps<TData, TType>) {
   switch (column.type) {
     case 'option':
@@ -184,7 +184,7 @@ function FilterOperatorOptionController<TData>({
   column,
   actions,
   closeController,
-  locale = 'en',
+  locale = 'pt-BR',
 }: FilterOperatorControllerProps<TData, 'option'>) {
   const filterDetails = optionFilterOperators[filter.operator]
 
@@ -215,7 +215,7 @@ function FilterOperatorMultiOptionController<TData>({
   column,
   actions,
   closeController,
-  locale = 'en',
+  locale = 'pt-BR',
 }: FilterOperatorControllerProps<TData, 'multiOption'>) {
   const filterDetails = multiOptionFilterOperators[filter.operator]
 
@@ -249,7 +249,7 @@ function FilterOperatorDateController<TData>({
   column,
   actions,
   closeController,
-  locale = 'en',
+  locale = 'pt-BR',
 }: FilterOperatorControllerProps<TData, 'date'>) {
   const filterDetails = dateFilterOperators[filter.operator]
 
@@ -280,7 +280,7 @@ export function FilterOperatorTextController<TData>({
   column,
   actions,
   closeController,
-  locale = 'en',
+  locale = 'pt-BR',
 }: FilterOperatorControllerProps<TData, 'text'>) {
   const filterDetails = textFilterOperators[filter.operator]
 
@@ -311,7 +311,7 @@ function FilterOperatorNumberController<TData>({
   column,
   actions,
   closeController,
-  locale = 'en',
+  locale = 'pt-BR',
 }: FilterOperatorControllerProps<TData, 'number'>) {
   const filterDetails = numberFilterOperators[filter.operator]
 

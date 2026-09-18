@@ -1,4 +1,5 @@
 import type { Db } from '@/db';
+import { inArray } from 'drizzle-orm';
 import { teamMember } from '@/db/schema';
 import {
    listStatuses,
@@ -84,7 +85,11 @@ export async function bootstrapWorkspace(
 
    // membros por time (bulk)
    const memberById = new Map(members.map((m) => [m.id, m]));
-   const links = await db.select().from(teamMember);
+   const links = scopedTeamIds
+      ? scopedTeamIds.length
+         ? await db.select().from(teamMember).where(inArray(teamMember.teamId, scopedTeamIds))
+         : []
+      : await db.select().from(teamMember);
    const membersByTeam = new Map<string, MemberDto[]>();
    for (const l of links) {
       const m = memberById.get(l.userId);

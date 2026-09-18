@@ -115,7 +115,7 @@ function ProjectsSection({ initiative }: { initiative: Initiative }) {
                </PopoverTrigger>
                <PopoverContent align="end" className="w-64 p-0">
                   <Command>
-                     <CommandInput placeholder="Add project…" />
+                     <CommandInput placeholder="Adicionar projeto…" />
                      <CommandList>
                         <CommandEmpty>No projects.</CommandEmpty>
                         <CommandGroup>
@@ -247,7 +247,7 @@ function SubInitiativesSection({ initiative }: { initiative: Initiative }) {
                </PopoverTrigger>
                <PopoverContent align="end" className="w-64 p-0">
                   <Command>
-                     <CommandInput placeholder="Add sub-initiative…" />
+                     <CommandInput placeholder="Adicionar subiniciativa…" />
                      <CommandList>
                         <CommandEmpty>No initiatives.</CommandEmpty>
                         <CommandGroup>
@@ -345,7 +345,7 @@ function ParentInitiativePicker({ initiative }: { initiative: Initiative }) {
          </PopoverTrigger>
          <PopoverContent align="start" className="w-64 p-0">
             <Command>
-               <CommandInput placeholder="Parent initiative…" />
+               <CommandInput placeholder="Iniciativa pai…" />
                <CommandList>
                   <CommandEmpty>No initiatives.</CommandEmpty>
                   <CommandGroup>
@@ -700,7 +700,7 @@ function Overview({ initiative }: { initiative: Initiative }) {
             <div className="mt-3 flex flex-col gap-1">
                <h1 className="text-2xl font-semibold leading-8">{initiative.name}</h1>
                <p className="text-[15px] leading-6 text-muted-foreground">
-                  {initiative.description ?? 'Add a short summary…'}
+                  {initiative.description ?? 'Adicione um resumo curto…'}
                </p>
             </div>
 
@@ -721,9 +721,9 @@ function Overview({ initiative }: { initiative: Initiative }) {
             </Link>
 
             <div className="-mx-4 mt-[27px] flex min-h-[148px] flex-col gap-2 rounded-xl px-4 pt-2.5">
-               <h2 className="py-1.5 text-[13px] font-medium leading-4">Description</h2>
+               <h2 className="py-1.5 text-[13px] font-medium leading-4">Descrição</h2>
                <p className="text-[15px] leading-6 text-muted-foreground">
-                  {initiative.description ?? 'Add description…'}
+                  {initiative.description ?? 'Adicione uma descrição…'}
                </p>
             </div>
 
@@ -984,8 +984,8 @@ export default function InitiativeDetails({ initiativeId }: { initiativeId: stri
          <div className="min-w-0 flex-1 overflow-hidden">{content}</div>
          <DetailSidePanel
             kind="initiative"
-            title="Initiative details"
-            description="View and edit the properties of this initiative."
+            title="Detalhes da iniciativa"
+            description="Veja e edite as propriedades desta iniciativa."
          >
             <InitiativeSidePanelContent initiative={initiative} />
          </DetailSidePanel>

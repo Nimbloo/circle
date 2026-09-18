@@ -123,9 +123,9 @@ export function RelationEditor({
             </PopoverTrigger>
             <PopoverContent className="border-input w-72 p-0" align="start">
                <Command>
-                  <CommandInput placeholder="Search issues..." />
+                  <CommandInput placeholder="Buscar issues..." />
                   <CommandList>
-                     <CommandEmpty>No issues found.</CommandEmpty>
+                     <CommandEmpty>Nenhuma issue encontrada.</CommandEmpty>
                      <CommandGroup>
                         {candidates.map((issue) => (
                            <CommandItem

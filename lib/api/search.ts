@@ -78,11 +78,23 @@ export interface SearchOptions {
 function initiativeScopeCond(o: SearchOptions): SQL | null {
    if (!o.teamIds) return null;
    if (o.teamIds.length === 0) return sql`false`;
-   return sql`EXISTS (SELECT 1 FROM project pr
-                       WHERE pr.initiative_id = n.id AND pr.team_id IN (${sql.join(
-                          o.teamIds.map((t) => sql`${t}`),
-                          sql`, `
-                       )}))`;
+   return sql`EXISTS (
+      WITH RECURSIVE visible_initiatives(id) AS (
+         SELECT ip.initiative_id
+           FROM initiative_project ip
+           JOIN project pr ON pr.id = ip.project_id
+          WHERE pr.team_id IN (${sql.join(
+             o.teamIds.map((t) => sql`${t}`),
+             sql`, `
+          )})
+         UNION
+         SELECT parent.parent_id
+           FROM initiative parent
+           JOIN visible_initiatives child ON child.id = parent.id
+          WHERE parent.parent_id IS NOT NULL
+      )
+      SELECT 1 FROM visible_initiatives visible WHERE visible.id = n.id
+   )`;
 }
 
 /** Recorte de escopo para uma coluna de time (`i.team_id`, `p.team_id`, `f.team_id`). */
@@ -548,19 +560,30 @@ export async function search(db: Db, opts: SearchOptions): Promise<SearchResult>
 
    if (tsq) {
       try {
-         const groups: SearchGroup[] = [];
+         const groupPromises: Promise<SearchGroup | null>[] = [];
          if (types.includes('issue'))
-            groups.push({
-               type: 'issue',
-               items: await ftsIssues(db, opts, tsq, limit, `%${unaccent(q)}%`),
-            });
+            groupPromises.push(
+               ftsIssues(db, opts, tsq, limit, `%${unaccent(q)}%`).then((items) => ({
+                  type: 'issue',
+                  items,
+               }))
+            );
          if (types.includes('project'))
-            groups.push({ type: 'project', items: await ftsProjects(db, opts, tsq, limit) });
+            groupPromises.push(
+               ftsProjects(db, opts, tsq, limit).then((items) => ({ type: 'project', items }))
+            );
          // Initiative é de workspace (não tem time) — sai de cena quando há filtro de time.
          if (types.includes('initiative') && !opts.teamId)
-            groups.push({ type: 'initiative', items: await ftsInitiatives(db, tsq, limit, opts) });
+            groupPromises.push(
+               ftsInitiatives(db, tsq, limit, opts).then((items) => ({ type: 'initiative', items }))
+            );
          if (types.includes('document'))
-            groups.push({ type: 'document', items: await ftsDocuments(db, opts, tsq, limit) });
+            groupPromises.push(
+               ftsDocuments(db, opts, tsq, limit).then((items) => ({ type: 'document', items }))
+            );
+         const groups = (await Promise.all(groupPromises)).filter(
+            (group): group is SearchGroup => group !== null
+         );
          const nonEmpty = groups.filter((g) => g.items.length > 0);
          if (nonEmpty.length > 0) return { ...base, groups: nonEmpty };
       } catch {

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, inArray, or } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, or } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    issue as issueT,
@@ -76,6 +76,8 @@ export interface ActivityItem {
    reactions?: ReactionDto[];
    attachments?: AttachmentDto[];
 }
+
+export const DEFAULT_ISSUE_FEED_LIMIT = 200;
 
 export interface SubIssueRef {
    id: string;
@@ -435,13 +437,16 @@ export async function removeRelation(
 export async function listComments(
    db: Db,
    issueId: string,
-   meEmail?: string
+   meEmail?: string,
+   limit = DEFAULT_ISSUE_FEED_LIMIT
 ): Promise<CommentDto[]> {
    const comments = await db
       .select()
       .from(commentT)
       .where(eq(commentT.issueId, issueId))
-      .orderBy(asc(commentT.createdAt));
+      .orderBy(desc(commentT.createdAt))
+      .limit(limit)
+      .then((rows) => rows.reverse());
    // Resolve o "me" por SELECT read-only — o usuário já está autenticado, não se faz
    // INSERT (getOrCreateUser) num handler de leitura. Não achou → undefined (reactedByMe=false).
    let meUserId: string | undefined;
@@ -697,11 +702,17 @@ export async function deleteComment(
 export async function listActivity(
    db: Db,
    issueId: string,
-   meEmail?: string
+   meEmail?: string,
+   limit = DEFAULT_ISSUE_FEED_LIMIT
 ): Promise<ActivityItem[]> {
    const [events, comments] = await Promise.all([
-      db.select().from(activityEvent).where(eq(activityEvent.issueId, issueId)),
-      listComments(db, issueId, meEmail),
+      db
+         .select()
+         .from(activityEvent)
+         .where(eq(activityEvent.issueId, issueId))
+         .orderBy(desc(activityEvent.createdAt))
+         .limit(limit),
+      listComments(db, issueId, meEmail, limit),
    ]);
    const users = await loadUsers(db, events.map((e) => e.actorId).filter(Boolean) as string[]);
 
@@ -726,7 +737,9 @@ export async function listActivity(
       reactions: c.reactions,
       attachments: c.attachments,
    }));
-   return [...eventItems, ...commentItems].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+   return [...eventItems, ...commentItems]
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .slice(-limit);
 }
 
 export interface MyActivityItemDto {

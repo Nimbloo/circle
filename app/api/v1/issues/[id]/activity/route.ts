@@ -17,6 +17,11 @@ export async function GET(req: Request, { params }: Params) {
       // O feed traz o CORPO dos comentários: sem escopo, uma issue alheia vazava inteira.
       const { teamIds } = await scopeForEmail(db, email);
       await assertIssueInScope(db, teamIds, id);
-      return ok(await listActivity(db, id, (await emailFromRequest(req)) ?? undefined));
+      const rawLimit = Number(new URL(req.url).searchParams.get('limit'));
+      const limit =
+         Number.isFinite(rawLimit) && rawLimit > 0
+            ? Math.min(Math.floor(rawLimit), 500)
+            : undefined;
+      return ok(await listActivity(db, id, (await emailFromRequest(req)) ?? undefined, limit));
    }, req);
 }

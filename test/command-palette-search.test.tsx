@@ -52,7 +52,7 @@ async function openAndType(text: string) {
    const user = userEvent.setup({ pointerEventsCheck: 0 });
    render(<CommandPalette />);
    fireEvent.keyDown(window, { key: 'k', metaKey: true });
-   const input = await screen.findByPlaceholderText(/Type a command or search/i);
+   const input = await screen.findByPlaceholderText(/Digite um comando ou pesquise/i);
    await user.type(input, text);
    return user;
 }

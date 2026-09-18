@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { eq, inArray, count, and } from 'drizzle-orm';
+import { eq, inArray, count, and, notInArray, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    project as projectT,
@@ -189,7 +189,29 @@ const CLOSED_CATEGORIES = new Set(['completed', 'canceled']);
 
 export async function listProjects(db: Db, opts: ListProjectsOptions = {}): Promise<ProjectDto[]> {
    const maps = await loadMaps(db);
-   const rows = await db.select().from(projectT);
+   const predicates = [];
+   if (opts.teamIds) {
+      predicates.push(opts.teamIds.length ? inArray(projectT.teamId, opts.teamIds) : sql`false`);
+   }
+   if (opts.team) {
+      const expanded = await teamDescendantIds(db, [opts.team]);
+      predicates.push(inArray(projectT.teamId, expanded));
+   }
+   if (opts.health?.length) predicates.push(inArray(projectT.healthId, opts.health));
+   if (opts.priority?.length) predicates.push(inArray(projectT.priorityId, opts.priority));
+   if (opts.initiative) predicates.push(eq(projectT.initiativeId, opts.initiative));
+   if (opts.tab === 'active' || opts.includeClosed === false) {
+      const closedStatusIds = [...maps.statuses.values()]
+         .filter((status) => CLOSED_CATEGORIES.has(status.category))
+         .map((status) => status.id);
+      if (closedStatusIds.length) predicates.push(notInArray(projectT.statusId, closedStatusIds));
+   }
+   const rows = predicates.length
+      ? await db
+           .select()
+           .from(projectT)
+           .where(and(...predicates))
+      : await db.select().from(projectT);
    let dtos = await assemble(db, rows, maps);
 
    if (opts.tab === 'active' || opts.includeClosed === false) {
