@@ -64,12 +64,12 @@ export default function IssuePreview({
    onMarkAsUnread,
 }: IssuePreviewProps) {
    const { orgId } = useParams<{ orgId: string }>();
-   const issues = useIssuesStore((s) => s.issues);
-
    // Issue viva atrás da notificação (o IssueDetailView precisa da issue do store).
-   const issue = notification
-      ? issues.find((candidate) => candidate.identifier === notification.identifier)
-      : undefined;
+   // `find` DENTRO do seletor: evento de outra issue não re-renderiza o preview.
+   const identifier = notification?.identifier;
+   const issue = useIssuesStore((s) =>
+      identifier ? s.issues.find((candidate) => candidate.identifier === identifier) : undefined
+   );
 
    if (!notification) {
       return (
