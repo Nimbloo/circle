@@ -6,9 +6,9 @@
 
 - **Onde:** checkout principal `C:/Projetos/circle`, branch `danilo/ui-transitions-empty-states` (a partir de `origin/develop` `fde188f`), publicada (PR #169).
 - **Feito:** Tasks 1–8 commitadas (`5f5ecfb`..`b85f872`). Desvios do plano: roadmap usa o título "No projects to plot yet"; inbox ganhou também o vazio "filtrado" (há notificações, mas os filtros escondem todas); issue-labels ganhou guarda de `catalog.loaded` (antes dizia "No labels yet" durante a carga).
-- **Última verificação:** 2026-09-18, Claude — `pnpm test` 175 arquivos/1093 testes ok, `pnpm typecheck` ok, `pnpm lint` ok, `pnpm build` ok.
-- **Próximo passo:** PR #169 aberto para `develop`; falta a inspeção visual + checagem do SSE no browser (Task 9).
-- **Bloqueios:** o dev seam (`CIRCLE_DEV_AUTH_EMAIL`) não existe hoje em `lib/api/auth.ts`/`middleware.ts` de nenhum checkout — sem ele o `pnpm dev` exige login Keycloak real.
+- **Última verificação:** 2026-09-18, Claude — test (1093)/typecheck/lint/build ok; Playwright headless contra `pnpm dev` local (seam temporário, revertido): light/dark/mobile ok, 0 erros de página, 1 EventSource + 1 bootstrap em 7 navegações client-side, `.route-enter` sem `transform` residual, `reduced-motion` → `animation: none`.
+- **Próximo passo:** review e merge do PR #169.
+- **Bloqueios:** nenhum. (O dev seam não existe em nenhum checkout; para `pnpm dev` local, reaplicar o guard `NODE_ENV=development && CIRCLE_DEV_AUTH_EMAIL` em `lib/api/auth.ts` + `middleware.ts` e reverter antes de commitar.)
 
 **Goal:** Padronizar loading de navegação (ícone do Circle), entrada de rota discreta e estados vazios contextuais, sem remontar o shell do workspace nem mexer no realtime.
 
@@ -581,6 +581,6 @@ Hoje os dois começam com lista vazia e mostram "No updates yet"/"Nenhum update 
 
 - [x] `pnpm test`, `pnpm typecheck`, `pnpm lint` — tudo verde.
 - [x] `pnpm build` **fora** da pasta de um `next dev` em uso (memória: build sobrescreve `.next`); se o dev estiver de pé, parar antes ou rodar em outro checkout.
-- [ ] Inspeção no browser (light/dark, desktop/mobile): inbox vazio, projects vazio/filtrado, roadmap, activity de projeto; navegação entre rotas mostra entrada suave; `prefers-reduced-motion` (emular no DevTools) desliga.
-- [ ] Realtime: na aba Network, uma única conexão `events` por workspace após navegar por 5+ rotas; `DataHydrator` não re-hidrata na navegação.
-- [ ] Atualizar o bloco **Estado** e abrir PR para `develop`.
+- [x] Inspeção no browser (light/dark, desktop/mobile): inbox vazio, projects vazio/filtrado, roadmap, activity de projeto; navegação entre rotas mostra entrada suave; `prefers-reduced-motion` (emular no DevTools) desliga.
+- [x] Realtime: na aba Network, uma única conexão `events` por workspace após navegar por 5+ rotas; `DataHydrator` não re-hidrata na navegação.
+- [x] Atualizar o bloco **Estado** e abrir PR para `develop`.
