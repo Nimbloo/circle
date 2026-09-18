@@ -5,7 +5,12 @@ import type { Db } from '@/db';
 import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
 import { webhook as webhookT, webhookDelivery } from '@/db/schema';
-import { onCircleEvent, sweepWebhookDeliveries, updateWebhook } from '@/lib/api/webhooks';
+import {
+   __resetSweepThrottle,
+   onCircleEvent,
+   sweepWebhookDeliveries,
+   updateWebhook,
+} from '@/lib/api/webhooks';
 
 /**
  * Insere o webhook DIRETO na tabela: `createWebhook` resolve o host pela allow-list
@@ -119,5 +124,58 @@ describe('sweep de webhooks', () => {
       });
       // Uma única leitura: a dos webhooks assinantes. Sem assinante, sem sweep.
       expect(queries).toBe(1);
+   });
+
+   it('entrega o lote em paralelo, não uma por vez (#22)', async () => {
+      const hook = await seedWebhook('https://exemplo.invalid/lento');
+      for (let i = 0; i < 5; i++) await queueFailed(hook.id, new Date(Date.UTC(2026, 0, 1, 0, i)));
+      let emVoo = 0;
+      let pico = 0;
+      const lento: typeof fetch = async () => {
+         emVoo++;
+         pico = Math.max(pico, emVoo);
+         await new Promise((r) => setTimeout(r, 20));
+         emVoo--;
+         return new Response(null, { status: 200 });
+      };
+      expect(await sweepWebhookDeliveries(db, lento, 50)).toBe(5);
+      expect(pico).toBeGreaterThan(1);
+   });
+
+   it('entrega reivindicada por um sweep não é pega por outro concorrente (#22)', async () => {
+      const hook = await seedWebhook('https://exemplo.invalid/unico');
+      await queueFailed(hook.id, new Date(Date.UTC(2026, 0, 1)));
+      const tentativas: string[] = [];
+      const falha: typeof fetch = async (input) => {
+         tentativas.push(String(input));
+         await new Promise((r) => setTimeout(r, 10));
+         return new Response(null, { status: 500 });
+      };
+      const [a, b] = await Promise.all([
+         sweepWebhookDeliveries(db, falha, 50),
+         sweepWebhookDeliveries(db, falha, 50),
+      ]);
+      expect(a + b).toBe(1);
+      expect(tentativas).toHaveLength(1);
+   });
+
+   it('publish com assinante não varre a cada evento (throttle) (#22)', async () => {
+      __resetSweepThrottle();
+      await seedWebhook('https://exemplo.invalid/hook');
+      let sweeps = 0;
+      const counting = new Proxy(db, {
+         get(target, prop, receiver) {
+            if (prop === 'transaction') sweeps++;
+            return Reflect.get(target, prop, receiver);
+         },
+      }) as Db;
+      const ev = { entity: 'issue' as const, action: 'updated' as const, id: 'i-1', ts: 1 };
+      vi.stubGlobal('fetch', async () => new Response(null, { status: 200 }));
+      await onCircleEvent(counting, ev);
+      await onCircleEvent(counting, ev);
+      await onCircleEvent(counting, ev);
+      vi.unstubAllGlobals();
+      // Um sweep só na janela, por mais eventos que cheguem.
+      expect(sweeps).toBe(1);
    });
 });
