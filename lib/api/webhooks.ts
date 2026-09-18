@@ -6,8 +6,9 @@
  * `webhook_delivery` por webhook assinante, disparada INLINE (best-effort, timeout 5 s).
  *
  * Falhou? A linha guarda `next_attempt_at` com backoff (1 m, 5 m, 30 m, 2 h, 24 h) e um
- * SWEEP lazy reprocessa — no boot e a cada publish, nunca por CronJob.
- * O sweep pega um advisory lock para que múltiplos pods não entreguem em duplicidade.
+ * SWEEP lazy reprocessa — no boot e (com throttle) nos publishes, nunca por CronJob.
+ * O sweep reivindica o lote sob advisory lock de transação para que múltiplos pods não
+ * entreguem em duplicidade.
  */
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { and, asc, desc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm';
@@ -451,45 +452,42 @@ export async function redeliver(
 /* ---------------------------------- Sweep --------------------------------- */
 
 /**
- * Tenta o advisory lock do sweep. Devolve `null` quando outro pod já está varrendo (ou
- * quando o banco não suporta o lock — PGlite nos testes), caso em que seguimos sem ele:
- * o pior cenário é uma entrega repetida, que o receptor deduplica pelo `X-Circle-Delivery`.
+ * Enquanto uma entrega está sendo tentada por um sweep, ela sai da fila dos outros por
+ * este tempo (lease). Se o pod morrer no meio, a entrega volta sozinha quando vencer.
  */
-async function tryLock(db: Db): Promise<boolean | null> {
-   try {
-      const res = await db.execute(sql`select pg_try_advisory_lock(${SWEEP_LOCK_KEY}) as locked`);
-      const rows = (res as unknown as { rows?: { locked: boolean }[] }).rows ?? [];
-      return rows[0]?.locked ?? null;
-   } catch {
-      return null;
-   }
-}
+const SWEEP_CLAIM_MS = 60_000;
+/** Intervalo mínimo entre sweeps disparados por `publish`, por processo. */
+const SWEEP_MIN_INTERVAL_MS = 30_000;
+/** Entregas do lote em voo ao mesmo tempo. */
+const SWEEP_CONCURRENCY = 8;
 
-async function unlock(db: Db): Promise<void> {
-   try {
-      await db.execute(sql`select pg_advisory_unlock(${SWEEP_LOCK_KEY})`);
-   } catch {
-      /* sem lock, nada a liberar */
-   }
+const sweepState = globalThis as unknown as { __circleLastWebhookSweep?: number };
+
+/** Só para testes: zera a janela do throttle do sweep. */
+export function __resetSweepThrottle(): void {
+   sweepState.__circleLastWebhookSweep = undefined;
 }
 
 /**
- * Reprocessa as entregas vencidas (lazy: chamado no boot e a cada publish). Devolve
- * quantas foram tentadas. Nunca lança.
+ * Reivindica o lote vencido (#22). Tudo numa transação curta: `pg_try_advisory_xact_lock`
+ * (liberado no commit, na MESMA conexão — antes, lock e unlock iam pelo pool e podiam
+ * cair em conexões diferentes, deixando o lock preso) + SELECT + lease em
+ * `next_attempt_at`. A entrega HTTP roda FORA da transação, sem segurar conexão.
+ * `null` = outro pod está varrendo.
  */
-export async function sweepWebhookDeliveries(
-   db: Db,
-   fetchImpl: typeof fetch = fetch,
-   limit = 50
-): Promise<number> {
-   const locked = await tryLock(db);
-   if (locked === false) return 0; // outro pod está varrendo
-   try {
+async function claimDue(db: Db, limit: number) {
+   return db.transaction(async (tx) => {
+      const res = await tx.execute(
+         sql`select pg_try_advisory_xact_lock(${SWEEP_LOCK_KEY}) as locked`
+      );
+      const rows = (res as unknown as { rows?: { locked: boolean }[] }).rows ?? [];
+      if (rows[0]?.locked === false) return null;
+      const now = new Date();
       // O lote SÓ pega entrega de webhook LIGADO. Sem este filtro, entregas presas de um
-      // webhook desabilitado entopem o lote de 50 (ordenado por createdAt asc) e o
-      // `continue` abaixo as pula sem consumi-las — o retry de TODOS os outros webhooks
-      // morre para sempre. Medido na auditoria com 60 entregas falhadas.
-      const due = await db
+      // webhook desabilitado entopem o lote de 50 (ordenado por createdAt asc) e o retry
+      // de TODOS os outros webhooks morre para sempre. Medido na auditoria com 60
+      // entregas falhadas. A de webhook desligado continua no banco e volta ao religar.
+      const due = await tx
          .select()
          .from(webhookDelivery)
          .innerJoin(webhookT, eq(webhookT.id, webhookDelivery.webhookId))
@@ -497,29 +495,50 @@ export async function sweepWebhookDeliveries(
             and(
                eq(webhookT.enabled, true),
                inArray(webhookDelivery.status, ['pending', 'failed']),
-               or(
-                  isNull(webhookDelivery.nextAttemptAt),
-                  lte(webhookDelivery.nextAttemptAt, new Date())
-               )
+               or(isNull(webhookDelivery.nextAttemptAt), lte(webhookDelivery.nextAttemptAt, now))
             )!
          )
          .orderBy(asc(webhookDelivery.createdAt))
          .limit(limit);
-      if (due.length === 0) return 0;
-
-      let tried = 0;
-      // O join já garante `enabled`; a entrega de webhook desligado continua no banco,
-      // pendente, e volta ao lote assim que religarem.
-      for (const row of due) {
-         await attemptDelivery(db, row.webhook_delivery, row.webhook, fetchImpl);
-         tried++;
+      if (due.length > 0) {
+         await tx
+            .update(webhookDelivery)
+            .set({ nextAttemptAt: new Date(now.getTime() + SWEEP_CLAIM_MS) })
+            .where(
+               inArray(
+                  webhookDelivery.id,
+                  due.map((d) => d.webhook_delivery.id)
+               )
+            );
       }
-      return tried;
+      return due;
+   });
+}
+
+/**
+ * Reprocessa as entregas vencidas (lazy: no boot da rota e, com throttle, a cada
+ * publish). Devolve quantas foram tentadas. Nunca lança.
+ */
+export async function sweepWebhookDeliveries(
+   db: Db,
+   fetchImpl: typeof fetch = fetch,
+   limit = 50
+): Promise<number> {
+   try {
+      const due = await claimDue(db, limit);
+      if (!due || due.length === 0) return 0;
+      // Em paralelo (com teto): um receptor lento (timeout de 5 s) não segura o lote.
+      for (let i = 0; i < due.length; i += SWEEP_CONCURRENCY) {
+         await Promise.all(
+            due
+               .slice(i, i + SWEEP_CONCURRENCY)
+               .map((row) => attemptDelivery(db, row.webhook_delivery, row.webhook, fetchImpl))
+         );
+      }
+      return due.length;
    } catch (e) {
       console.warn('[circle] sweep de webhooks falhou:', (e as Error).message);
       return 0;
-   } finally {
-      if (locked === true) await unlock(db);
    }
 }
 
@@ -548,5 +567,11 @@ export async function onCircleEvent(db: Db, event: CircleEvent): Promise<void> {
       occurredAt: new Date().toISOString(),
    });
    if (delivered.length === 0) return;
+   // Throttle (#22): no máximo um sweep por janela por processo — antes, cada publish
+   // com assinante disparava um.
+   const now = Date.now();
+   const last = sweepState.__circleLastWebhookSweep;
+   if (last !== undefined && now - last < SWEEP_MIN_INTERVAL_MS) return;
+   sweepState.__circleLastWebhookSweep = now;
    await sweepWebhookDeliveries(db);
 }

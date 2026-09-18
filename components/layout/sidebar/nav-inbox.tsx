@@ -30,8 +30,11 @@ const ITEM_KEYS: Record<string, SidebarItemKey> = {
 export function NavInbox() {
    const { orgId } = useParams<{ orgId: string }>();
    const pathname = usePathname();
-   const { visibility, badgeStyle, order } = useSidebarPrefsStore();
-   const { getUnreadCount } = useNotificationsStore();
+   const visibility = useSidebarPrefsStore((s) => s.visibility);
+   const badgeStyle = useSidebarPrefsStore((s) => s.badgeStyle);
+   const order = useSidebarPrefsStore((s) => s.order);
+   // Só a contagem: assinar o store inteiro re-renderizava o nav a cada notificação.
+   const unreadCount = useNotificationsStore((s) => s.unreadCount);
    const [mounted, setMounted] = useState(false);
    const [reviewCount, setReviewCount] = useState(0);
    useEffect(() => setMounted(true), []);
@@ -51,7 +54,7 @@ export function NavInbox() {
       };
    }, []);
 
-   const unread = mounted ? getUnreadCount() : 0;
+   const unread = mounted ? unreadCount : 0;
    const codeReviewsEnabled = usePreferencesStore((s) => s.codeReviewsEnabled);
 
    const orderedItems = mounted

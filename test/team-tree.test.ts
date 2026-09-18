@@ -15,7 +15,6 @@ function team(id: string, parentId: string | null = null, name = id): Team {
       autoCloseChildren: false,
       parentId,
       members: [],
-      projects: [],
    };
 }
 

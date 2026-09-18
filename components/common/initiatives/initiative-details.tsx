@@ -11,6 +11,7 @@ import { Project } from '@/data/projects';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { initiativeWithDescendants } from '@/lib/initiative-tree';
 import { api } from '@/lib/client';
+import { INITIATIVE_CHANGED_EVENT, useLiveReload } from '@/lib/use-live-sync';
 import {
    Command,
    CommandEmpty,
@@ -761,12 +762,19 @@ function ActivityFeed({ initiativeId }: { initiativeId: string }) {
          active = false;
       };
    }, [initiativeId]);
+   // Mudança de OUTRO usuário: recarrega em silêncio (falha mantém o feed atual).
+   useLiveReload(INITIATIVE_CHANGED_EVENT, { id: initiativeId }, () =>
+      api.initiatives
+         .activity(initiativeId)
+         .then(setEntries)
+         .catch(() => {})
+   );
 
    return (
       <div className="flex flex-col gap-3">
          <span className="text-[13px] font-medium leading-4">Activity</span>
          {entries === null ? (
-            <p className="text-xs text-muted-foreground">Carregando…</p>
+            <ListSkeleton rows={3} />
          ) : entries.length === 0 ? (
             <p className="text-xs text-muted-foreground">No activity recorded yet.</p>
          ) : (
@@ -835,6 +843,15 @@ function Activity({ initiativeId }: { initiativeId: string }) {
          active = false;
       };
    }, [initiativeId]);
+   useLiveReload(INITIATIVE_CHANGED_EVENT, { id: initiativeId }, () =>
+      api.initiatives
+         .updates(initiativeId)
+         .then((u) => {
+            setUpdates(u);
+            setFeed('ready');
+         })
+         .catch(() => {})
+   );
 
    const post = async () => {
       if (busy) return;
@@ -980,9 +997,11 @@ export default function InitiativeDetails({ initiativeId }: { initiativeId: stri
          );
       }
       return (
-         <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">
-            Initiative not found
-         </div>
+         <EmptyState
+            variant="search"
+            title="Initiative not found"
+            description="It may have been deleted or you don't have access to it."
+         />
       );
    }
 

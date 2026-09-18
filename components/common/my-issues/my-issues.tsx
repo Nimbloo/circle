@@ -20,7 +20,7 @@ import { BreakdownPanel } from './breakdown-panel';
 import { api } from '@/lib/client';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
-import { useIssuesStore } from '@/store/issues-store';
+import { selectIssuesLoading, useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useSearchStore } from '@/store/search-store';
 import { useViewStore } from '@/store/view-store';
@@ -39,7 +39,7 @@ export default function MyIssues() {
    const { viewType } = useViewStore();
    const { filters } = useFilterStore();
    const issues = useIssuesStore((s) => s.issues);
-   const loading = useIssuesStore((s) => s.loading);
+   const loading = useIssuesStore(selectIssuesLoading);
    const error = useIssuesStore((s) => s.error);
    const hydrate = useIssuesStore((s) => s.hydrate);
    const { openPanel } = useRightPanelStore();
@@ -50,7 +50,24 @@ export default function MyIssues() {
    const isSearching = isSearchOpen && searchQuery.trim() !== '';
    const isViewTypeGrid = viewType === 'grid';
 
-   const subscribedIds = useMemo(() => new Set(subscribedIssueIds ?? []), [subscribedIssueIds]);
+   // Aba "Subscribed": o bootstrap só traz as assinaturas de issues abertas; a lista
+   // completa (com as fechadas) vem sob demanda e é unida às vivas do store.
+   const [allSubscribed, setAllSubscribed] = useState<readonly string[]>([]);
+   useEffect(() => {
+      if (tab !== 'subscribed') return;
+      let alive = true;
+      api.me
+         .subscriptions()
+         .then(({ issueIds }) => alive && setAllSubscribed(issueIds))
+         .catch(() => {});
+      return () => {
+         alive = false;
+      };
+   }, [tab, subscribedIssueIds]);
+   const subscribedIds = useMemo(() => {
+      const live = new Set(subscribedIssueIds ?? []);
+      return new Set([...(tab === 'subscribed' ? allSubscribed : []), ...live]);
+   }, [subscribedIssueIds, allSubscribed, tab]);
 
    // Aba "Activity" (padrão Linear = board de issues em que estive ativo): busca os
    // ids das issues com atividade minha e usa como escopo do board.

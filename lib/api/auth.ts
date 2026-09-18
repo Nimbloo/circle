@@ -6,10 +6,29 @@
  * os testes de rota existentes funcionando sem stack de sessão. É o SEAM DE TESTE.
  */
 import { eq } from 'drizzle-orm';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Db } from '@/db';
 import { appUser } from '@/db/schema';
 
 const TEST_EMAIL_HEADER = 'x-forwarded-email';
+const requestCache = new AsyncLocalStorage<Map<string, unknown>>();
+
+export function withRequestCache<T>(fn: () => Promise<T>): Promise<T> {
+   return requestCache.run(new Map(), fn);
+}
+
+export function requestCacheGet<T>(key: string): T | undefined {
+   return requestCache.getStore()?.get(key) as T | undefined;
+}
+
+export function requestCacheSet(key: string, value: unknown): void {
+   requestCache.getStore()?.set(key, value);
+}
+
+/** Escrita em `app_user` invalida o cache da request (a resposta relê o usuário). */
+export function requestCacheClear(): void {
+   requestCache.getStore()?.clear();
+}
 
 /** Em teste, deriva o e-mail do header injetado pelos helpers de teste. */
 function emailFromTestHeader(req?: Request): string | null {
@@ -94,6 +113,8 @@ export function isBreakGlassAdmin(email: string): boolean {
 export async function isAdmin(email: string, db: Db): Promise<boolean> {
    const normalized = email.trim().toLowerCase();
    if (isBreakGlassAdmin(normalized)) return true;
+   const cached = requestCacheGet<{ email: string; role: string }>(`app-user:${normalized}`);
+   if (cached) return cached.role === 'Admin';
    const rows = await db
       .select({ role: appUser.role })
       .from(appUser)

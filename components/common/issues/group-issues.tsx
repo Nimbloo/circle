@@ -7,7 +7,7 @@ import { useViewStore } from '@/store/view-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
 import { cn } from '@/lib/utils';
 import { Plus } from 'lucide-react';
-import { FC, ReactNode, useRef } from 'react';
+import { FC, ReactNode, useCallback, useRef } from 'react';
 import { useDrop } from 'react-dnd';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { AnimatePresence, motion } from 'motion/react';
@@ -40,8 +40,17 @@ interface GroupIssuesProps {
  * constante. Altura medida dinamicamente (cards variam com título/labels). O
  * overscan generoso (8) preserva o drop-target do DnD nas bordas do scroll.
  */
+/** Getter estável das issues do grupo: cards/linhas leem a ordem atual no drop sem
+ *  receber um array novo (que derrubaria o `memo`) a cada mudança do grupo. */
+function useOrderedIssuesGetter(issues: Issue[]) {
+   const latest = useRef(issues);
+   latest.current = issues;
+   return useCallback(() => latest.current, []);
+}
+
 const IssueGridList: FC<{ issues: Issue[]; status?: Status }> = ({ issues, status }) => {
    const ref = useRef<HTMLDivElement>(null);
+   const getOrderedIssues = useOrderedIssuesGetter(issues);
    const updateIssueStatus = useIssuesStore((s) => s.updateIssueStatus);
 
    // Drop na área da coluna (fora de um card) → muda o status para o do grupo.
@@ -113,7 +122,7 @@ const IssueGridList: FC<{ issues: Issue[]; status?: Status }> = ({ issues, statu
                         paddingBottom: 8, // gap entre cards (medido junto com a altura)
                      }}
                   >
-                     <IssueGrid issue={issue} orderedIssues={issues} layout={false} />
+                     <IssueGrid issue={issue} getOrderedIssues={getOrderedIssues} layout={false} />
                   </div>
                );
             })}
@@ -126,6 +135,7 @@ export function GroupIssues({ group, issues, count }: GroupIssuesProps) {
    const { viewType } = useViewStore();
    const isViewTypeGrid = viewType === 'grid';
    const { openModal } = useCreateIssueStore();
+   const getOrderedIssues = useOrderedIssuesGetter(issues);
 
    return (
       <div
@@ -170,7 +180,12 @@ export function GroupIssues({ group, issues, count }: GroupIssuesProps) {
          {viewType === 'list' ? (
             <div className="space-y-0">
                {issues.map((issue) => (
-                  <IssueLine key={issue.id} issue={issue} orderedIssues={issues} layoutId={true} />
+                  <IssueLine
+                     key={issue.id}
+                     issue={issue}
+                     getOrderedIssues={getOrderedIssues}
+                     layoutId={true}
+                  />
                ))}
             </div>
          ) : (

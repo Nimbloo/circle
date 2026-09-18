@@ -1,10 +1,9 @@
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { SquarePen } from 'lucide-react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Issue } from '@/data/issues';
 import { usePriorities, useStatuses } from '@/store/catalog-store';
 import { useIssuesStore } from '@/store/issues-store';
@@ -79,11 +78,16 @@ export function CreateNewIssue() {
       };
    }, [defaultStatus, generateUniqueIdentifier, status, priorities, teamId]);
 
-   const [addIssueForm, setAddIssueForm] = useState<Issue>(createDefaultData());
+   const [addIssueForm, setAddIssueForm] = useState<Issue>(createDefaultData);
 
-   useEffect(() => {
-      setAddIssueForm(createDefaultData());
-   }, [createDefaultData]);
+   // Formulário novo SÓ quando o modal abre (false→true) — ou após criar. Resetar por
+   // troca de referência do catálogo apagava o que estava sendo digitado a cada evento
+   // remoto que re-hidrata o workspace.
+   const [wasOpen, setWasOpen] = useState(isOpen);
+   if (isOpen !== wasOpen) {
+      setWasOpen(isOpen);
+      if (isOpen) setAddIssueForm(createDefaultData());
+   }
 
    const [submitting, setSubmitting] = useState(false);
    // Remonta o editor quando o formulário é trocado por fora (template, reset pós-create).
@@ -132,16 +136,6 @@ export function CreateNewIssue() {
 
    return (
       <Dialog open={isOpen} onOpenChange={(value) => (value ? openModal() : closeModal())}>
-         <DialogTrigger asChild>
-            <Button
-               className="size-7 shrink-0"
-               variant="secondary"
-               size="icon"
-               aria-label="Create new issue"
-            >
-               <SquarePen className="size-3.5" />
-            </Button>
-         </DialogTrigger>
          <DialogContent className="top-[23.8%] w-full gap-[5.5px] rounded-[21px] bg-card p-0 shadow-xl sm:max-w-[750px]">
             <DialogHeader>
                <DialogTitle className="px-4 pt-4 text-base font-medium">New issue</DialogTitle>

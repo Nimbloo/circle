@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { adaptProjectDetail, emptyProjectDetail } from '@/lib/adapters-project-detail';
 import { api } from '@/lib/client';
+import { PROJECT_CHANGED_EVENT, useLiveReload } from '@/lib/use-live-sync';
 import {
    ProjectDetail,
    ProjectUpdate,
@@ -113,6 +114,14 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
       };
    }, [projectId]);
 
+   // Update/mudança de OUTRO usuário: recarrega o feed em silêncio (falha mantém o atual).
+   useLiveReload(PROJECT_CHANGED_EVENT, { id: projectId }, () =>
+      api.projects
+         .detail(projectId)
+         .then((dto) => setDetail(adaptProjectDetail(dto)))
+         .catch(() => {})
+   );
+
    const updates = useMemo<ProjectUpdate[]>(
       () => [...(postedUpdates[projectId] ?? []), ...detail.updates],
       [postedUpdates, projectId, detail.updates]
@@ -149,9 +158,11 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
    if (!project) {
       if (!loaded) return <ListSkeleton rows={6} />;
       return (
-         <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-            Project not found.
-         </div>
+         <EmptyState
+            variant="search"
+            title="Project not found"
+            description="It may have been deleted or you don't have access to it."
+         />
       );
    }
 

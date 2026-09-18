@@ -3,10 +3,11 @@
 import { cn } from '@/lib/utils';
 import { ContentBlock } from '@/data/issue-details';
 import { useIssuesStore } from '@/store/issues-store';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { Check, ImageIcon, Play } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Fragment } from 'react';
+import { Fragment, useMemo } from 'react';
 
 /** Identifier de issue (ENG-12) solto no texto — vira link quando o time existe no store. */
 const IDENTIFIER_RE = /\b([A-Z][A-Z0-9]{1,9}-\d+)\b/g;
@@ -26,14 +27,11 @@ function IssueRefInline({ identifier }: { identifier: string }) {
    );
 }
 
-/** Texto com identifiers de times conhecidos (no store) linkados; o resto fica como está. */
+/** Texto com identifiers de times conhecidos (no workspace) linkados; o resto fica como está.
+ *  O identifier é `<teamId>-<seq>`: as chaves vêm dos times, sem varrer as issues. */
 function LinkedIdentifiers({ text }: { text: string }) {
-   const teamKeys = useIssuesStore((s) => {
-      const keys = new Set<string>();
-      for (const i of s.issues) keys.add(i.identifier.split('-')[0]);
-      return [...keys].sort().join(',');
-   });
-   const known = new Set(teamKeys ? teamKeys.split(',') : []);
+   const teams = useWorkspaceStore((s) => s.teams);
+   const known = useMemo(() => new Set(teams.map((t) => t.id)), [teams]);
    if (known.size === 0) return <>{text}</>;
    const parts = text.split(IDENTIFIER_RE);
    return (

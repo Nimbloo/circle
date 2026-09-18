@@ -2,7 +2,7 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { EmptyState } from '@/components/common/empty-state';
-import { Skeleton } from '@/components/ui/skeleton';
+import { ListSkeleton } from '@/components/common/list-skeleton';
 import { cn } from '@/lib/utils';
 import { Issue, sortIssuesByPriority } from '@/data/issues';
 import { Status } from '@/data/status';
@@ -37,7 +37,8 @@ interface GroupedIssuesViewProps {
 
 /**
  * Estado exibido quando não há nenhum grupo/issue para mostrar. Distingue
- * carregando (hidratando) de falha (com retry) de vazio real.
+ * carregando (hidratando) de falha (com retry) de vazio real. Ocupa a área toda:
+ * o skeleton fica no topo (onde as linhas vão aparecer), erro e vazio centralizados.
  */
 function IssuesEmptyState({
    loading,
@@ -50,7 +51,7 @@ function IssuesEmptyState({
 }) {
    if (error) {
       return (
-         <div className="flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+         <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
             <span>Não foi possível carregar as issues.</span>
             {onRetry && (
                <button
@@ -65,14 +66,20 @@ function IssuesEmptyState({
       );
    }
    if (loading) {
-      return <Skeleton className="h-4 w-16" />;
+      return (
+         <div data-testid="issues-loading" className="h-full w-full pt-1">
+            <ListSkeleton rows={8} />
+         </div>
+      );
    }
    return (
-      <EmptyState
-         icon={Layers}
-         title="Nenhuma issue"
-         description="Issues criadas aqui aparecem nesta lista."
-      />
+      <div className="flex h-full items-center justify-center">
+         <EmptyState
+            icon={Layers}
+            title="Nenhuma issue"
+            description="Issues criadas aqui aparecem nesta lista."
+         />
+      </div>
    );
 }
 
@@ -382,8 +389,16 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
    const hiddenCount = Math.max(0, totalIssues.length - issues.length);
    const showFooter = hasActiveFilters && hiddenCount > 0;
 
+   // Nenhuma issue em grupo algum (e não é filtro que escondeu tudo): carregando, falha
+   // ou vazio real. No board, sem esta guarda, todas as colunas iam para "Hidden columns".
+   const nothingToShow = groups.every((entry) => entry.issues.length === 0) && !showFooter;
+
    /* ------------------------------- Board ------------------------------- */
    if (isViewTypeGrid) {
+      if (nothingToShow && (loading || error || !showEmptyGroups)) {
+         return <IssuesEmptyState loading={loading} error={error} onRetry={onRetry} />;
+      }
+
       // Padrão Linear: TODA coluna vazia (por filtro OU naturalmente sem issues)
       // colapsa em "Hidden columns" — a menos que "Show empty groups" esteja ligado.
       const boardGroups = groups.filter((entry) => showEmptyGroups || entry.issues.length > 0);
@@ -407,11 +422,6 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                         />
                      ))}
                      {hiddenGroups.length > 0 && <HiddenColumns entries={hiddenGroups} />}
-                     {boardGroups.length === 0 && hiddenGroups.length === 0 && (
-                        <div className="flex items-center justify-center w-full h-40">
-                           <IssuesEmptyState loading={loading} error={error} onRetry={onRetry} />
-                        </div>
-                     )}
                   </div>
                </div>
                {showFooter && (
@@ -432,9 +442,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
          <CustomDragLayer />
          <BulkActionsBar />
          {listGroups.length === 0 && !showFooter ? (
-            <div className="h-full flex items-center justify-center">
-               <IssuesEmptyState loading={loading} error={error} onRetry={onRetry} />
-            </div>
+            <IssuesEmptyState loading={loading} error={error} onRetry={onRetry} />
          ) : (
             <div className="h-full flex flex-col min-h-0">
                {/* Lista VIRTUALIZADA: só as linhas visíveis vão pro DOM (fluido a 1000+). */}

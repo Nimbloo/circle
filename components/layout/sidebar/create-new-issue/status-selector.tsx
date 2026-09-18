@@ -10,11 +10,14 @@ import {
    CommandList,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { useIssuesStore } from '@/store/issues-store';
 import { Status } from '@/data/status';
 import { useStatuses } from '@/store/catalog-store';
 import { CheckIcon } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
+import type { Issue } from '@/data/issues';
+import { IssueCounts } from '@/components/common/issues/issue-counts';
+
+const byStatus = (issue: Issue) => issue.status.id;
 
 interface StatusSelectorProps {
    status: Status;
@@ -27,9 +30,6 @@ export function StatusSelector({ status, onChange }: StatusSelectorProps) {
    const [value, setValue] = useState<string>(status.id);
 
    const allStatus = useStatuses();
-   // Conta derivada da fatia assinada: assinar `filterByStatus` (funcao, referencia
-   // estavel) deixaria o contador do dropdown parado quando as issues mudam.
-   const allIssues = useIssuesStore((s) => s.issues);
 
    useEffect(() => {
       setValue(status.id);
@@ -72,31 +72,37 @@ export function StatusSelector({ status, onChange }: StatusSelectorProps) {
                className="border-input w-full min-w-[var(--radix-popper-anchor-width)] p-0"
                align="start"
             >
-               <Command>
-                  <CommandInput placeholder="Set status..." />
-                  <CommandList>
-                     <CommandEmpty>No status found.</CommandEmpty>
-                     <CommandGroup>
-                        {allStatus.map((item) => (
-                           <CommandItem
-                              key={item.id}
-                              value={item.id}
-                              onSelect={() => handleStatusChange(item.id)}
-                              className="flex items-center justify-between"
-                           >
-                              <div className="flex items-center gap-2">
-                                 <item.icon />
-                                 {item.name}
-                              </div>
-                              {value === item.id && <CheckIcon size={16} className="ml-auto" />}
-                              <span className="text-muted-foreground text-xs">
-                                 {allIssues.filter((i) => i.status.id === item.id).length}
-                              </span>
-                           </CommandItem>
-                        ))}
-                     </CommandGroup>
-                  </CommandList>
-               </Command>
+               <IssueCounts by={byStatus}>
+                  {(counts) => (
+                     <Command>
+                        <CommandInput placeholder="Set status..." />
+                        <CommandList>
+                           <CommandEmpty>No status found.</CommandEmpty>
+                           <CommandGroup>
+                              {allStatus.map((item) => (
+                                 <CommandItem
+                                    key={item.id}
+                                    value={item.id}
+                                    onSelect={() => handleStatusChange(item.id)}
+                                    className="flex items-center justify-between"
+                                 >
+                                    <div className="flex items-center gap-2">
+                                       <item.icon />
+                                       {item.name}
+                                    </div>
+                                    {value === item.id && (
+                                       <CheckIcon size={16} className="ml-auto" />
+                                    )}
+                                    <span className="text-muted-foreground text-xs">
+                                       {counts.get(item.id) ?? 0}
+                                    </span>
+                                 </CommandItem>
+                              ))}
+                           </CommandGroup>
+                        </CommandList>
+                     </Command>
+                  )}
+               </IssueCounts>
             </PopoverContent>
          </Popover>
       </div>

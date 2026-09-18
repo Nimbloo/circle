@@ -6,6 +6,7 @@ import { useRightPanelStore } from '@/store/right-panel-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { X } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { PRIORITY_COLORS } from '@/components/common/palette';
 
 type BreakdownTab = 'labels' | 'priority' | 'projects' | 'teams';
 
@@ -30,14 +31,6 @@ const LABEL_COLORS: Record<string, string> = {
    cyan: '#06b6d4',
 };
 
-const PRIORITY_COLORS: Record<string, string> = {
-   'no-priority': '#94a3b8',
-   'urgent': '#eb5757',
-   'high': '#f2994a',
-   'medium': '#facc15',
-   'low': '#4cb782',
-};
-
 /**
  * Right panel of My issues: Labels / Priority / Projects / Teams counters
  * over the currently displayed issues (Linear side panel).
@@ -60,14 +53,14 @@ export function BreakdownPanel({ issues }: { issues: Issue[] }) {
                bump(label.id, {
                   key: label.id,
                   label: label.name,
-                  color: LABEL_COLORS[label.color] ?? '#6b7280',
+                  color: LABEL_COLORS[label.color] ?? LABEL_COLORS.gray,
                });
             }
          } else if (tab === 'priority') {
             bump(issue.priority.id, {
                key: issue.priority.id,
                label: issue.priority.name,
-               color: PRIORITY_COLORS[issue.priority.id] ?? '#94a3b8',
+               color: PRIORITY_COLORS[issue.priority.id] ?? PRIORITY_COLORS['no-priority'],
             });
          } else if (tab === 'projects') {
             if (issue.project) {

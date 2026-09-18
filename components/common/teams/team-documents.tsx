@@ -21,6 +21,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { adaptFolders } from '@/lib/adapters-documents';
 import { api } from '@/lib/client';
+import { DOCUMENT_CHANGED_EVENT, useLiveReload } from '@/lib/use-live-sync';
 import type { DocumentFolder } from '@/data/documents';
 import { formatDistanceToNowStrict, parseISO } from 'date-fns';
 import { ChevronRight, FileText, MoreHorizontal, Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
@@ -70,6 +71,15 @@ export default function TeamDocuments() {
       setLoading(true);
       void reload();
    }, [reload]);
+   // Documento criado/editado/apagado por OUTRO usuário: recarrega a lista em silêncio.
+   useLiveReload(DOCUMENT_CHANGED_EVENT, { teamId }, () =>
+      teamId
+         ? api.teams
+              .documents(teamId)
+              .then((dtos) => setFolders(adaptFolders(dtos)))
+              .catch(() => {})
+         : undefined
+   );
 
    const submitRename = async () => {
       if (!renaming || !renaming.name.trim() || busy) return;

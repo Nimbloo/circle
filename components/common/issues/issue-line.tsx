@@ -37,11 +37,12 @@ interface IssueLineProps {
    issue: Issue;
    layoutId?: boolean;
    /**
-    * Issues do grupo na ordem de exibição — liga o drag-and-drop da linha (reordenar no
-    * grupo; soltar em outro grupo de status muda o status). Ausente (busca, listas fora
-    * de um `DndProvider`): linha estática.
+    * Lê as issues do grupo na ordem de exibição — liga o drag-and-drop da linha (reordenar
+    * no grupo; soltar em outro grupo de status muda o status). Ausente (busca, listas fora
+    * de um `DndProvider`): linha estática. É um getter ESTÁVEL (não o array): o array muda
+    * a cada evento e derrubaria o `memo` de todas as linhas do grupo.
     */
-   orderedIssues?: Issue[];
+   getOrderedIssues?: () => Issue[];
 }
 
 type IssueDropResult = { handled: true };
@@ -91,10 +92,13 @@ function IssueRow({
          .forEach((l) => void removeIssueLabel(issue.id, l.id).catch(() => undefined));
    };
 
+   // Sem layoutId não há animação: div simples, sem o runtime do motion por linha.
+   const Row = layoutId ? motion.div : 'div';
+
    return (
       <ContextMenu>
          <ContextMenuTrigger asChild>
-            <motion.div
+            <Row
                ref={ref}
                {...(layoutId && { layoutId: `issue-line-${issue.identifier}` })}
                className={cn(
@@ -142,7 +146,7 @@ function IssueRow({
                </Link>
                <div className="flex items-center justify-end gap-2 ml-auto sm:w-fit">
                   <div className="w-3 shrink-0"></div>
-                  <div className="-space-x-5 hover:space-x-1 lg:space-x-1 items-center justify-end hidden sm:flex duration-200 transition-all">
+                  <div className="-space-x-5 hover:space-x-1 lg:space-x-1 items-center justify-end hidden sm:flex">
                      {displayProperties.labels && issue.labels.length > 0 && (
                         <LabelSelector selectedLabels={issue.labels} onChange={changeLabels}>
                            <button
@@ -231,7 +235,7 @@ function IssueRow({
                      </span>
                   )}
                </div>
-            </motion.div>
+            </Row>
          </ContextMenuTrigger>
          <IssueContextMenu issueId={issue.id} />
       </ContextMenu>
@@ -246,11 +250,11 @@ function IssueRow({
 function DraggableIssueRow({
    issue,
    layoutId,
-   orderedIssues,
+   getOrderedIssues,
 }: {
    issue: Issue;
    layoutId?: boolean;
-   orderedIssues: Issue[];
+   getOrderedIssues: () => Issue[];
 }) {
    const ref = useRef<HTMLDivElement>(null);
    const reorderIssue = useIssuesStore((s) => s.reorderIssue);
@@ -283,7 +287,7 @@ function DraggableIssueRow({
             }
 
             // Mesmo grupo: reordena por rank entre os vizinhos do alvo (exclui o arrastado).
-            const list = orderedIssues.filter((i) => i.id !== item.id);
+            const list = getOrderedIssues().filter((i) => i.id !== item.id);
             const targetIdx = list.findIndex((i) => i.id === issue.id);
             if (targetIdx === -1) return { handled: true };
 
@@ -298,7 +302,7 @@ function DraggableIssueRow({
             return { handled: true };
          },
       }),
-      [issue, orderedIssues, reorderIssue, updateIssueStatus]
+      [issue, getOrderedIssues, reorderIssue, updateIssueStatus]
    );
 
    drag(drop(ref));
@@ -306,9 +310,9 @@ function DraggableIssueRow({
    return <IssueRow ref={ref} issue={issue} layoutId={layoutId} dragging={isDragging} />;
 }
 
-function IssueLineComponent({ issue, layoutId = false, orderedIssues }: IssueLineProps) {
-   return orderedIssues ? (
-      <DraggableIssueRow issue={issue} layoutId={layoutId} orderedIssues={orderedIssues} />
+function IssueLineComponent({ issue, layoutId = false, getOrderedIssues }: IssueLineProps) {
+   return getOrderedIssues ? (
+      <DraggableIssueRow issue={issue} layoutId={layoutId} getOrderedIssues={getOrderedIssues} />
    ) : (
       <IssueRow issue={issue} layoutId={layoutId} />
    );

@@ -20,7 +20,10 @@ export default function TeamLine({ team }: TeamLineProps) {
    // entao nao pode ir dentro do seletor (referencia nova = re-render infinito).
    const allCycles = useWorkspaceStore((s) => s.cycles);
    const cycles = allCycles.filter((c) => c.teamId === team.id);
-   const uniqueProjects = new Set(team.projects.map((project) => project.id)).size;
+   // Contagem derivada de `projects` (o bootstrap não traz mais `teams[].projects`).
+   const uniqueProjects = useWorkspaceStore(
+      (s) => s.projects.filter((project) => project.teamId === team.id).length
+   );
    const owner = team.members[0];
 
    return (
@@ -36,7 +39,7 @@ export default function TeamLine({ team }: TeamLineProps) {
                </span>
                <span className="flex min-w-0 items-center gap-3">
                   <span className="truncate font-medium leading-4">{team.name}</span>
-                  <span className="shrink-0 font-medium leading-4 text-muted-foreground/50">
+                  <span className="shrink-0 font-medium leading-4 text-muted-foreground">
                      {team.id}
                   </span>
                </span>

@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/client';
+import { AUTOMATION_CHANGED_EVENT, useLiveReload } from '@/lib/use-live-sync';
 import type { TeamSlaDto } from '@/lib/api/slas';
 import type {
    AutomationAction,
@@ -453,6 +454,15 @@ export default function TeamWorkflowsSettings({ teamId }: { teamId: string }) {
          alive = false;
       };
    }, [teamId]);
+   // SLA/automação alterados por OUTRO admin: recarrega em silêncio.
+   useLiveReload(AUTOMATION_CHANGED_EVENT, { teamId }, () =>
+      Promise.all([api.teamSlas.list(teamId), api.automations.list(teamId)])
+         .then(([slaList, ruleList]) => {
+            setSlas(slaList);
+            setAutomations(ruleList);
+         })
+         .catch(() => {})
+   );
 
    const submitAutomation = useCallback(
       async (draft: AutomationDraft) => {

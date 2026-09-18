@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { ChevronsUpDown, Search } from 'lucide-react';
+import { ChevronsUpDown, Search, SquarePen } from 'lucide-react';
 import { signOut } from 'next-auth/react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -20,7 +20,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { NimblooLogo } from '@/components/brand/nimbloo-logo';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { CreateNewIssue } from './create-new-issue';
+import { useCreateIssueStore } from '@/store/create-issue-store';
 import { ThemeToggle } from '../theme-toggle';
 import { Button } from '@/components/ui/button';
 
@@ -65,7 +65,18 @@ export function OrgSwitcher() {
                      <Search className="size-3.5" />
                   </Button>
 
-                  <CreateNewIssue />
+                  {/* Só abre o modal: a instância única vive no provider adiado
+                      (deferred-chrome) — importar o form aqui duplicava o dialog e punha
+                      o editor no chunk de toda rota. */}
+                  <Button
+                     className="size-7 shrink-0"
+                     variant="secondary"
+                     size="icon"
+                     aria-label="Create new issue"
+                     onClick={() => useCreateIssueStore.getState().openModal()}
+                  >
+                     <SquarePen className="size-3.5" />
+                  </Button>
                </div>
                <DropdownMenuContent
                   className="w-[--radix-dropdown-menu-trigger-width] min-w-60 rounded-lg"

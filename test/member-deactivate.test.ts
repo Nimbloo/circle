@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
 import { __setTestDb, type Db } from '@/db';
-import { getMember, listMembers, setMemberDeactivated } from '@/lib/api/members';
+import { getMember, listMembers, setMemberDeactivated, updateMemberRole } from '@/lib/api/members';
 import { decideKeycloakLogin } from '@/lib/api/login-gate';
 import { createInvite } from '@/lib/api/invites';
 import { PATCH as patchMember } from '@/app/api/v1/members/[id]/route';
@@ -113,5 +113,25 @@ describe('desativar membro (#100)', () => {
 
       const self = await patchMember(patchReq(adminId, { deactivated: true }), params(adminId));
       expect(self.status).toBe(400);
+   });
+});
+
+describe('último administrador (#31)', () => {
+   it('não permite que duas remoções concorrentes deixem o workspace sem admin', async () => {
+      const secondAdminId = await seedUser(db, {
+         name: 'Bia',
+         email: 'bia@nimbloo.ai',
+         role: 'Admin',
+         teamIds: ['CORE'],
+      });
+
+      const results = await Promise.allSettled([
+         updateMemberRole(db, adminId, 'Member'),
+         updateMemberRole(db, secondAdminId, 'Member'),
+      ]);
+
+      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      const admins = await listMembers(db, { includeDeactivated: true, role: ['Admin'] });
+      expect(admins).toHaveLength(1);
    });
 });

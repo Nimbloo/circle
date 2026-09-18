@@ -21,6 +21,8 @@ export interface Issue {
    priority: Priority;
    labels: LabelInterface[];
    createdAt: string;
+   /** Última alteração no servidor (ISO) — o sync em tempo real não troca por versão mais velha. */
+   updatedAt?: string;
    /** Cycle the issue belongs to. Empty string = no cycle (backlog stock). */
    cycleId: string;
    project?: Project;

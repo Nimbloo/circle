@@ -34,7 +34,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 async function copyToClipboard(value: string, successMessage: string) {
@@ -70,6 +70,13 @@ export default function HeaderNav() {
       issue ? (s.me?.subscribedIssueIds.includes(issue.id) ?? false) : false
    );
    const toggleSubscription = useWorkspaceStore((s) => s.toggleSubscription);
+   const ensureSubscriptionKnown = useWorkspaceStore((s) => s.ensureSubscriptionKnown);
+   // Issue fechada não vem nas assinaturas do bootstrap: consulta a dela uma vez.
+   const closed = issue?.status.category === 'completed' || issue?.status.category === 'canceled';
+   const issueKey = issue?.id;
+   useEffect(() => {
+      if (closed && issueKey) void ensureSubscriptionKnown(issueKey);
+   }, [closed, issueKey, ensureSubscriptionKnown]);
    const isFavorite = useFavoritesStore((state) =>
       issue ? state.isFavorite('issue', issue.id) : false
    );
