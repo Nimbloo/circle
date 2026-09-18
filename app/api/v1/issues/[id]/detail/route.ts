@@ -31,6 +31,8 @@ const PatchSchema = z.object({
    description: z.string().max(20000).nullish(),
    descriptionDoc: DocSchema.nullish(),
    milestone: z.string().max(196).nullish(),
+   /** Concorrência otimista da descrição (#36), opcional; também aceito via `If-Match`. */
+   expectedDescriptionVersion: z.string().max(64).nullish(),
 });
 
 export async function PATCH(req: Request, { params }: Params) {
@@ -38,6 +40,8 @@ export async function PATCH(req: Request, { params }: Params) {
       const { id } = await params;
       const email = await requireEmail(req);
       const patch = PatchSchema.parse(await req.json());
+      const ifMatch = req.headers.get('if-match')?.replace(/^W\//, '').replace(/"/g, '').trim();
+      if (!patch.expectedDescriptionVersion && ifMatch) patch.expectedDescriptionVersion = ifMatch;
       const dto = await updateIssueContent(db, id, patch, email);
       return dto ? ok(dto) : notFound(`Issue '${id}' não encontrada`);
    }, req);

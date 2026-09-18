@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, inArray, or } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
@@ -112,6 +112,26 @@ export interface IssueDetailDto {
    prLinks: { id: string; title: string; status: string }[];
    /** Anexos da issue (os de comentário vêm em cada CommentDto). */
    attachments: AttachmentDto[];
+   /**
+    * Versão opaca da descrição (#36). O cliente a devolve em `expectedDescriptionVersion`
+    * no PATCH; se outra pessoa gravou no meio, o servidor responde 409.
+    */
+   descriptionVersion: string;
+}
+
+/**
+ * Versão da descrição = hash do que está gravado (texto + doc). `issue_content` não tem
+ * coluna de data, e o `updatedAt` da issue muda com qualquer campo — daria conflito falso
+ * quando alguém muda o status enquanto outra pessoa escreve.
+ */
+function descriptionVersionOf(
+   description: string | null | undefined,
+   descriptionDoc: unknown
+): string {
+   return createHash('sha1')
+      .update(JSON.stringify([description ?? null, descriptionDoc ?? null]))
+      .digest('hex')
+      .slice(0, 16);
 }
 
 type CommentRow = typeof commentT.$inferSelect;
@@ -243,6 +263,7 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
       duplicateIds: relations.filter((r) => r.kind === 'duplicate').map((r) => r.relatedId),
       prLinks: prs.map((p) => ({ id: p.id, title: p.title, status: p.status })),
       attachments,
+      descriptionVersion: descriptionVersionOf(content[0]?.description, content[0]?.descriptionDoc),
    };
 }
 
@@ -252,6 +273,11 @@ export interface UpdateIssueContentInput {
    /** Doc do editor: grava o doc e DERIVA a projeção em texto. Tem precedência. */
    descriptionDoc?: EditorDoc | null;
    milestone?: string | null;
+   /**
+    * Concorrência otimista (#36), opcional: a `descriptionVersion` que o cliente viu.
+    * Divergiu do que está gravado → 409 (nada é gravado). Ausente → last-write-wins.
+    */
+   expectedDescriptionVersion?: string | null;
 }
 
 /** Upsert da descrição (doc do editor + projeção em texto) da issue em `issue_content`.
@@ -263,7 +289,7 @@ export async function updateIssueContent(
    actorEmail?: string
 ): Promise<IssueDetailDto | null> {
    const exists = await db
-      .select({ id: issueT.id })
+      .select({ id: issueT.id, teamId: issueT.teamId })
       .from(issueT)
       .where(eq(issueT.id, issueId))
       .limit(1);
@@ -280,16 +306,35 @@ export async function updateIssueContent(
       set.descriptionDoc = null;
    }
    if (patch.milestone !== undefined) set.milestone = patch.milestone;
-   await db
-      .insert(issueContent)
-      .values({
-         issueId,
-         description: set.description ?? null,
-         descriptionDoc: set.descriptionDoc ?? null,
-         milestone: patch.milestone ?? null,
-      })
-      .onConflictDoUpdate({ target: issueContent.issueId, set });
-   publish({ entity: 'issue', action: 'updated', id: issueId });
+   const touchesDescription = set.description !== undefined;
+   await db.transaction(async (tx) => {
+      if (touchesDescription && patch.expectedDescriptionVersion) {
+         // Serializa escritas concorrentes da mesma issue: a checagem e a gravação são
+         // atômicas (sem isto, os dois PATCHes podiam passar pela checagem juntos).
+         await tx
+            .select({ id: issueT.id })
+            .from(issueT)
+            .where(eq(issueT.id, issueId))
+            .for('update');
+         const [cur] = await tx
+            .select({ d: issueContent.description, doc: issueContent.descriptionDoc })
+            .from(issueContent)
+            .where(eq(issueContent.issueId, issueId))
+            .limit(1);
+         if (descriptionVersionOf(cur?.d, cur?.doc) !== patch.expectedDescriptionVersion)
+            throw new ApiError(409, 'A descrição foi alterada por outra pessoa');
+      }
+      await tx
+         .insert(issueContent)
+         .values({
+            issueId,
+            description: set.description ?? null,
+            descriptionDoc: set.descriptionDoc ?? null,
+            milestone: patch.milestone ?? null,
+         })
+         .onConflictDoUpdate({ target: issueContent.issueId, set });
+   });
+   publish({ entity: 'issue', action: 'updated', id: issueId, teamId: exists[0].teamId });
    return getIssueDetail(db, issueId);
 }
 
