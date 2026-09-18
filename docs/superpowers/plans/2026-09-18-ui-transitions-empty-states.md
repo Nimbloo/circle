@@ -4,10 +4,10 @@
 
 ## Estado (handoff entre agentes)
 
-- **Onde:** checkout principal `C:/Projetos/circle`, branch `danilo/ui-transitions-empty-states` (a partir de `origin/develop` `fde188f`), não publicada.
+- **Onde:** checkout principal `C:/Projetos/circle`, branch `danilo/ui-transitions-empty-states` (a partir de `origin/develop` `fde188f`), publicada (PR #169).
 - **Feito:** Tasks 1–8 commitadas (`5f5ecfb`..`b85f872`). Desvios do plano: roadmap usa o título "No projects to plot yet"; inbox ganhou também o vazio "filtrado" (há notificações, mas os filtros escondem todas); issue-labels ganhou guarda de `catalog.loaded` (antes dizia "No labels yet" durante a carga).
 - **Última verificação:** 2026-09-18, Claude — `pnpm test` 175 arquivos/1093 testes ok, `pnpm typecheck` ok, `pnpm lint` ok, `pnpm build` ok.
-- **Próximo passo:** inspeção visual + checagem do SSE no browser (Task 9), depois PR para `develop`.
+- **Próximo passo:** PR #169 aberto para `develop`; falta a inspeção visual + checagem do SSE no browser (Task 9).
 - **Bloqueios:** o dev seam (`CIRCLE_DEV_AUTH_EMAIL`) não existe hoje em `lib/api/auth.ts`/`middleware.ts` de nenhum checkout — sem ele o `pnpm dev` exige login Keycloak real.
 
 **Goal:** Padronizar loading de navegação (ícone do Circle), entrada de rota discreta e estados vazios contextuais, sem remontar o shell do workspace nem mexer no realtime.
