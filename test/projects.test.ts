@@ -113,6 +113,8 @@ describe('projects', () => {
       const { db, lead } = await setup();
       const p = await createProject(db, { name: 'A', statusId: 'proj-in-progress', ...base });
       const issueId = randomUUID();
+      const milestoneId = randomUUID();
+      await db.insert(projectMilestone).values({ id: milestoneId, projectId: p.id, name: 'M1' });
       await db.insert(issueT).values({
          id: issueId,
          identifier: 'CORE-1',
@@ -124,6 +126,7 @@ describe('projects', () => {
          createdById: lead,
          projectId: p.id,
          cycleId: null,
+         milestoneId,
          rank: 'a0',
          createdAt: new Date(),
          updatedAt: new Date(),
@@ -136,14 +139,13 @@ describe('projects', () => {
          blocks: '[]',
          createdAt: new Date(),
       });
-      await db.insert(projectMilestone).values({ id: randomUUID(), projectId: p.id, name: 'M1' });
-
       expect(await deleteProject(db, p.id)).toBe(true);
       expect(await getProject(db, p.id)).toBeNull();
 
       const issues = await db.select().from(issueT).where(eq(issueT.id, issueId));
       expect(issues).toHaveLength(1); // issue preservada
       expect(issues[0].projectId).toBeNull(); // vínculo nulificado
+      expect(issues[0].milestoneId).toBeNull(); // milestone também é desvinculado
 
       expect(
          await db.select().from(projectUpdate).where(eq(projectUpdate.projectId, p.id))
