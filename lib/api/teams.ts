@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { eq, count, and } from 'drizzle-orm';
+import { eq, count, and, inArray } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    team as teamT,
@@ -44,13 +44,20 @@ export interface TeamDto {
 
 export type TeamSort = 'name' | 'members' | 'projects';
 
-async function countsByTeam(db: Db) {
+async function countsByTeam(db: Db, teamIds?: string[]) {
+   if (teamIds?.length === 0)
+      return { members: new Map<string, number>(), projects: new Map<string, number>() };
+   const memberQuery = db
+      .select({ teamId: teamMember.teamId, n: count() })
+      .from(teamMember)
+      .groupBy(teamMember.teamId);
+   const projectQuery = db
+      .select({ teamId: projectT.teamId, n: count() })
+      .from(projectT)
+      .groupBy(projectT.teamId);
    const [memberCounts, projectCounts] = await Promise.all([
-      db
-         .select({ teamId: teamMember.teamId, n: count() })
-         .from(teamMember)
-         .groupBy(teamMember.teamId),
-      db.select({ teamId: projectT.teamId, n: count() }).from(projectT).groupBy(projectT.teamId),
+      teamIds ? memberQuery.where(inArray(teamMember.teamId, teamIds)) : memberQuery,
+      teamIds ? projectQuery.where(inArray(projectT.teamId, teamIds)) : projectQuery,
    ]);
    return {
       members: new Map(memberCounts.map((r) => [r.teamId, Number(r.n)])),
@@ -58,12 +65,15 @@ async function countsByTeam(db: Db) {
    };
 }
 
-async function joinedTeamIds(db: Db, userId?: string): Promise<Set<string>> {
+async function joinedTeamIds(db: Db, userId?: string, teamIds?: string[]): Promise<Set<string>> {
    if (!userId) return new Set();
+   if (teamIds?.length === 0) return new Set();
+   const predicates = [eq(teamMember.userId, userId)];
+   if (teamIds) predicates.push(inArray(teamMember.teamId, teamIds));
    const rows = await db
       .select({ teamId: teamMember.teamId })
       .from(teamMember)
-      .where(eq(teamMember.userId, userId));
+      .where(and(...predicates));
    return new Set(rows.map((r) => r.teamId));
 }
 
@@ -104,18 +114,18 @@ export async function listTeams(
    meId?: string
 ): Promise<TeamDto[]> {
    const [teams, counts, joined, requested] = await Promise.all([
-      db.select().from(teamT),
-      countsByTeam(db),
-      joinedTeamIds(db, meId),
+      opts.teamIds
+         ? opts.teamIds.length
+            ? db.select().from(teamT).where(inArray(teamT.id, opts.teamIds))
+            : Promise.resolve([])
+         : db.select().from(teamT),
+      countsByTeam(db, opts.teamIds),
+      joinedTeamIds(db, meId, opts.teamIds),
       pendingRequestTeamIds(db, meId),
    ]);
    const requestedSet = new Set(requested);
    let dtos = teams.map((t) => toDto(t, counts, joined, requestedSet));
 
-   if (opts.teamIds) {
-      const scope = new Set(opts.teamIds);
-      dtos = dtos.filter((d) => scope.has(d.id));
-   }
    if (opts.membership?.length) {
       const wantJoined = opts.membership.includes('Joined');
       const wantNot = opts.membership.includes('Not-Joined');

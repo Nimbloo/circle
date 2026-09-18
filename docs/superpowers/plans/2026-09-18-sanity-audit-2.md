@@ -4,9 +4,9 @@
 
 ## Estado (handoff entre agentes)
 
-- **Onde:** branch `danilo/sanity-audit-2` (de `origin/develop` `5592983`), checkout principal `C:/Projetos/circle`. Cada frente roda num worktree próprio e é integrada nesta branch.
-- **Feito:** achados consolidados em `docs/superpowers/specs/2026-09-18-sanity-audit-2-findings.md`; decisões do usuário registradas abaixo.
-- **Última verificação:** —
+- **Onde:** worktree `C:/Projetos/.codex-worktrees/circle-sanity-c2`, branch `danilo/sanity-audit-2-c2`. Cada frente roda em worktree próprio e é integrada na branch principal do plano.
+- **Feito:** achados consolidados, decisões do usuário registradas e Frente C2 (#11, #13, #14, #21, #23, #24, #31, #37, #40, Cx#7) implementada sem commit.
+- **Última verificação:** 2026-09-18 — Vitest direcionado: 5 arquivos, 30 testes passados; `tsc --noEmit`: exit code 0.
 - **Próximo passo:** frentes A, B, C1, D (Claude) e C2 (Codex) em paralelo → integração → suíte completa → remedição.
 - **Bloqueios:** nenhum.
 
@@ -93,16 +93,16 @@ Arquivos: `lib/api/events.ts`, `app/api/v1/events/route.ts`, `lib/api/issues.ts`
 
 Arquivos: `db/schema.ts`, `db/migrations/**` (única frente que gera), `lib/api/members.ts`, `lib/api/teams.ts`, `lib/api/projects.ts`, `lib/api/project-snapshots.ts`, `lib/api/statuses.ts`, `lib/api/search.ts`, `lib/api/issue-detail.ts` (só `listMyActivity`), `lib/api/workspace.ts` (só housekeeping), `lib/api/http.ts`/`scope.ts`/`auth.ts` (só #40), rotas correspondentes.
 
-- [ ] #11 `listMyActivity` com `ORDER BY created_at DESC LIMIT` em cada query.
-- [ ] #13 (servidor) `deleteProject` limpa `issue.milestoneId`; migration: limpar órfãos existentes + FK `issue.milestone_id → project_milestone ON DELETE SET NULL` + índice.
-- [ ] #14 `updateProject` com `teamId` diferente e issues de outro time → **409** (decisão do usuário).
-- [ ] #21 Housekeeping do bootstrap: guarda por pod (1×/dia por time), rollover sequencial, snapshot com agregação SQL e upsert `WHERE ... IS DISTINCT FROM`.
-- [ ] #23 Busca: ramos indexados (GIN de issue/issue_content) via `UNION`, ramo de comentário com limite próprio; `likeSearch` só quando fizer sentido.
-- [ ] #24 Reordenação de status em transação; lista parcial é normalizada (ids enviados na ordem dada, os demais depois na ordem atual — retrocompatível); publica `catalog/updated`.
-- [ ] #31 Último admin: validação + alteração em transação com lock das linhas de admin.
-- [ ] #37 Índices: `notification(issue_id)`, `notification(recipient_id, created_at desc)`, parcial `notification(recipient_id) where read = false`, `issue_pr_link(issue_id)`, `activity_event(actor_id, created_at)`, `comment(author_id, created_at)`.
-- [ ] #40 Usuário resolvido uma vez por request (sem refazer 3–4 lookups de `app_user`), sem mudar contratos.
-- [ ] Cx#7 `listMembers`/`listTeams` aplicam escopo no SQL (não carregam tudo para filtrar em memória).
+- [x] #11 `listMyActivity` com `ORDER BY created_at DESC LIMIT` em cada query.
+- [x] #13 (servidor) `deleteProject` limpa `issue.milestoneId`; migration: limpar órfãos existentes + FK `issue.milestone_id → project_milestone ON DELETE SET NULL` + índice.
+- [x] #14 `updateProject` com `teamId` diferente e issues de outro time → **409** (decisão do usuário).
+- [x] #21 Housekeeping do bootstrap: guarda por pod (1×/dia por time), rollover sequencial, snapshot com agregação SQL e upsert `WHERE ... IS DISTINCT FROM`.
+- [x] #23 Busca: ramos indexados (GIN de issue/issue_content) via `UNION`, ramo de comentário com limite próprio; `likeSearch` só quando fizer sentido.
+- [x] #24 Reordenação de status em transação; lista parcial é normalizada (ids enviados na ordem dada, os demais depois na ordem atual — retrocompatível); publica `catalog/updated`.
+- [x] #31 Último admin: validação + alteração em transação com lock das linhas de admin.
+- [x] #37 Índices: `notification(issue_id)`, `notification(recipient_id, created_at desc)`, parcial `notification(recipient_id) where read = false`, `issue_pr_link(issue_id)`, `activity_event(actor_id, created_at)`, `comment(author_id, created_at)`.
+- [x] #40 Usuário resolvido uma vez por request (sem refazer 3–4 lookups de `app_user`), sem mudar contratos.
+- [x] Cx#7 `listMembers`/`listTeams` aplicam escopo no SQL (não carregam tudo para filtrar em memória).
 
 ### Frente D — UI/layout (Claude)
 

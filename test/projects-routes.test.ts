@@ -3,7 +3,7 @@ import { makeTestDb } from './helpers/db';
 import { seedTeam } from './helpers/fixtures';
 import { __setTestDb, type Db } from '@/db';
 import { PATCH as patchProject } from '@/app/api/v1/projects/[id]/route';
-import { createProject } from '@/lib/api/projects';
+import { createProject, getProject } from '@/lib/api/projects';
 import { createIssue, getIssue } from '@/lib/api/issues';
 import { getProjectDetail } from '@/lib/api/project-detail';
 
@@ -39,7 +39,7 @@ async function seedProject() {
 }
 
 describe('PATCH /api/v1/projects/{id} — teamId (board por time)', () => {
-   it('move o projeto para outro time e registra "changed team"; issues ficam no time original', async () => {
+   it('bloqueia troca de time quando o projeto possui issue de outro time', async () => {
       const project = await seedProject();
       const issue = await createIssue(
          db,
@@ -54,16 +54,11 @@ describe('PATCH /api/v1/projects/{id} — teamId (board por time)', () => {
       );
 
       const res = await patch(project.id, { teamId: 'DESIGN' });
-      expect(res.status).toBe(200);
-      const json = await res.json();
-      expect(json.data.teamId).toBe('DESIGN');
+      expect(res.status).toBe(409);
+      expect(res.headers.get('content-type')).toContain('application/problem+json');
 
-      // Issues do projeto NÃO mudam de time (o identifier CORE-n continua válido).
+      expect((await getProject(db, project.id))?.teamId).toBe('CORE');
       expect((await getIssue(db, issue.id))?.teamId).toBe('CORE');
-
-      const detail = await getProjectDetail(db, project.id);
-      expect(detail?.activity).toHaveLength(1);
-      expect(detail?.activity[0].text).toContain('team');
    });
 
    it('time inexistente → 400 problem+json, sem alterar o projeto', async () => {

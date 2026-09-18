@@ -39,6 +39,24 @@ export interface WorkspaceBootstrap {
    views: ViewDto[];
 }
 
+const housekeepingDays = new WeakMap<object, Map<string, string>>();
+
+function claimHousekeeping(db: Db, teamId: string, day: string): boolean {
+   let days = housekeepingDays.get(db as object);
+   if (!days) {
+      days = new Map();
+      housekeepingDays.set(db as object, days);
+   }
+   if (days.get(teamId) === day) return false;
+   days.set(teamId, day);
+   return true;
+}
+
+function releaseHousekeeping(db: Db, teamId: string, day: string): void {
+   const days = housekeepingDays.get(db as object);
+   if (days?.get(teamId) === day) days.delete(teamId);
+}
+
 /**
  * Uma chamada: toda a referência do workspace, costurada server-side.
  * `rollover` (default true) faz o auto-rollover lazy de cycles. Refetches disparados
@@ -111,13 +129,27 @@ export async function bootstrapWorkspace(
    // escrita a cada evento; o boot da página já cobre.
    const teamIds = teams.map((t) => t.id);
    if (opts.rollover !== false) {
-      await Promise.all(teamIds.map((id) => rolloverCyclesForTeam(db, id)));
+      const day = new Date().toISOString().slice(0, 10);
+      const housekeepingTeams: string[] = [];
+      for (const id of teamIds) {
+         if (!claimHousekeeping(db, id, day)) continue;
+         try {
+            await rolloverCyclesForTeam(db, id);
+            housekeepingTeams.push(id);
+         } catch (error) {
+            releaseHousekeeping(db, id, day);
+            throw error;
+         }
+      }
       // Roadmap (#102): o snapshot diário do projeto também é lazy — o boot grava o
-      // dia (upsert idempotente) para o gráfico de progresso ter história sem job.
-      await snapshotProjects(
-         db,
-         projects.map((p) => p.id)
-      );
+      // dia (upsert idempotente) uma vez por time e por pod.
+      if (housekeepingTeams.length > 0) {
+         const scope = new Set(housekeepingTeams);
+         await snapshotProjects(
+            db,
+            projects.filter((project) => scope.has(project.teamId)).map((project) => project.id)
+         );
+      }
    }
 
    // cycles de todos os times — 2 queries no total (era N+1: 1 chamada por time,

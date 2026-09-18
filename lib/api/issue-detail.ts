@@ -866,8 +866,14 @@ export async function listMyActivity(
    userId: string,
    limit = 50
 ): Promise<MyActivityItemDto[]> {
+   const take = Math.max(0, limit);
    const [events, comments] = await Promise.all([
-      db.select().from(activityEvent).where(eq(activityEvent.actorId, userId)),
+      db
+         .select()
+         .from(activityEvent)
+         .where(eq(activityEvent.actorId, userId))
+         .orderBy(desc(activityEvent.createdAt))
+         .limit(take),
       db
          .select({
             id: commentT.id,
@@ -876,7 +882,9 @@ export async function listMyActivity(
             createdAt: commentT.createdAt,
          })
          .from(commentT)
-         .where(eq(commentT.authorId, userId)),
+         .where(eq(commentT.authorId, userId))
+         .orderBy(desc(commentT.createdAt))
+         .limit(take),
    ]);
    const issueIds = [
       ...new Set([...events.map((e) => e.issueId), ...comments.map((c) => c.issueId)]),
@@ -927,7 +935,7 @@ export async function listMyActivity(
       });
    }
    items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-   return items.slice(0, limit);
+   return items.slice(0, take);
 }
 
 export async function addReaction(
