@@ -30,7 +30,7 @@ export function SettingsShell({
          <div className="relative -left-[2.5px] mx-auto w-full max-w-[640px] py-16 pb-20 max-md:left-0 max-md:px-5 max-md:py-8">
             <div className="relative px-4 max-md:px-0">
                <div className="flex items-start gap-1.5">
-                  <SidebarTrigger className="-ml-1 mt-0.5 md:hidden" />
+                  <SidebarTrigger className="-ml-1 mt-0.5 lg:hidden" />
                   <div className="min-w-0">
                      <h1 className="text-2xl font-medium leading-8">{title}</h1>
                      {description && (
