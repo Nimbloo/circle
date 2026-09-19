@@ -213,29 +213,9 @@ export async function listProjects(db: Db, opts: ListProjectsOptions = {}): Prom
            .from(projectT)
            .where(and(...predicates))
       : await db.select().from(projectT);
-   let dtos = await assemble(db, rows, maps);
-
-   if (opts.tab === 'active' || opts.includeClosed === false) {
-      dtos = dtos.filter((d) => !CLOSED_CATEGORIES.has(d.status.category));
-   }
-   if (opts.health?.length) {
-      const set = new Set(opts.health);
-      dtos = dtos.filter((d) => set.has(d.health.id));
-   }
-   if (opts.priority?.length) {
-      const set = new Set(opts.priority);
-      dtos = dtos.filter((d) => set.has(d.priority.id));
-   }
-   // Sub-times (#100): a lista do time pai inclui os projetos dos filhos.
-   if (opts.team) {
-      const expanded = new Set(await teamDescendantIds(db, [opts.team]));
-      dtos = dtos.filter((d) => expanded.has(d.teamId));
-   }
-   if (opts.teamIds) {
-      const scope = new Set(opts.teamIds);
-      dtos = dtos.filter((d) => scope.has(d.teamId));
-   }
-   if (opts.initiative) dtos = dtos.filter((d) => d.initiativeId === opts.initiative);
+   // Filtros (escopo, sub-times, health, priority, initiative, fechados) já vão no SQL
+   // acima — sem refiltrar em memória nem expandir os sub-times duas vezes.
+   const dtos = await assemble(db, rows, maps);
 
    const dir = opts.dir === 'desc' ? -1 : 1;
    const by = opts.sort ?? 'title';
