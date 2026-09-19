@@ -29,8 +29,8 @@ const DocSchema = z
    .transform((doc) => doc as EditorDoc);
 
 const UpdateSchema = z.object({
-   name: z.string().min(1).optional(),
-   icon: z.string().nullish(),
+   name: z.string().min(1).max(196).optional(),
+   icon: z.string().max(16).nullish(),
    pinned: z.boolean().optional(),
    // Corpo do documento (aditivo) + concorrência otimista, como na descrição da issue.
    descriptionDoc: DocSchema.nullish(),

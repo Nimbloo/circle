@@ -29,7 +29,7 @@ export async function GET(req: Request, { params }: Params) {
 }
 
 const UpdateSchema = z.object({
-   name: z.string().min(1).optional(),
+   name: z.string().min(1).max(128).optional(),
    icon: z.string().nullish(),
    color: z.string().nullish(),
    estimateScale: z.enum(['fibonacci', 'exponential', 'linear', 'tshirt']).optional(),

@@ -102,6 +102,7 @@ function CreateDialog({
                   <Input
                      id="webhook-url"
                      value={url}
+                     maxLength={512}
                      placeholder="https://exemplo.com/circle"
                      onChange={(e) => setUrl(e.target.value)}
                   />

@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 type Params = { params: Promise<{ id: string }> };
 
 const UpdateSchema = z.object({
-   name: z.string().min(1).optional(),
+   name: z.string().min(1).max(128).optional(),
    color: z.string().min(1).optional(),
    groupId: z.string().max(64).nullish(),
 });

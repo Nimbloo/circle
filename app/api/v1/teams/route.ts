@@ -38,8 +38,8 @@ export async function GET(req: Request) {
 }
 
 const CreateTeamSchema = z.object({
-   id: z.string().min(2),
-   name: z.string().min(1),
+   id: z.string().min(2).max(16),
+   name: z.string().min(1).max(128),
    icon: z.string().nullish(),
    color: z.string().nullish(),
    parentId: z.string().max(16).nullish(),

@@ -18,7 +18,7 @@ export async function GET(req: Request) {
 
 const CreateSchema = z.object({
    id: z.string().min(1).optional(),
-   name: z.string().min(1),
+   name: z.string().min(1).max(128),
    color: z.string().min(1),
    groupId: z.string().max(64).nullish(),
 });

@@ -23,12 +23,12 @@ export async function GET(req: Request) {
 }
 
 const CreateSchema = z.object({
-   slug: z.string().min(1),
-   name: z.string().min(1),
+   slug: z.string().min(1).max(96),
+   name: z.string().min(1).max(196),
    type: z.enum(['issue', 'project']),
    filter: ViewFilterSchema,
    description: z.string().nullish(),
-   icon: z.string().nullish(),
+   icon: z.string().max(16).nullish(),
    teamId: z.string().nullish(),
 });
 
