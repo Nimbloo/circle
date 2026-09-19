@@ -38,18 +38,20 @@
 
 Arquivos: `components/common/issues/**`, `components/layout/sidebar/create-new-issue/**`, `components/layout/headers/issue/**`, `components/layout/headers/issues/**`, `components/layout/headers/display-options.tsx`, `components/common/my-issues/**`, `components/layout/headers/my-issues/**`, `store/issues-store.ts` (só `rankBetween` defensivo), `store/bulk-selection-store.ts`, `lib/api/issues.ts` (só #20 e Is#21).
 
-- [ ] #2 `IssueGrid` com `memo` e props estáveis; medir com teste de render (card não re-renderiza em mudança de outra issue).
-- [ ] #3 + Is#15 `getItemKey` por id (linha e coluna do board).
-- [ ] #4 + Is#16 + R2 `useIssueDropTarget` ciente de grouping/ordering: reorder só com ordering `manual` (arrastar em outra ordenação troca para manual, como o Linear); drop entre grupos altera o campo do agrupamento (status/priority/assignee/project/label) ou é recusado; `rankBetween` nunca lança; coluna vazia aceita drop.
-- [ ] #26 `IssueDetailView` com `key={issue.id}`; Is#22 erro com retry.
-- [ ] #27 reação/edição/resolve de comentário otimistas; recarregar só a activity; ignorar o eco da própria ação (usar `clientId` de F5b se existir, senão `actorEmail`).
-- [ ] #29 My issues > Assigned derivado do store (`assignees` já vêm no DTO).
-- [ ] #30 bulk: um toast agregado, seleção podada quando issue some/esconde, popovers fecham, sem desativados; usar endpoint de lote se F4/F5a criar (não criar aqui).
-- [ ] #31 + R1 seletores únicos de status/prioridade/label (unificar `common/issues/*` e `create-new-issue/*`) com `keywords={[name]}`.
-- [ ] #32 seletor de projeto filtra pelo time da issue/modal.
-- [ ] #33 anterior/próxima segue a lista de origem (store de navegação com a ordem visível); J/K na lista e no detalhe.
-- [ ] R7 menu de contexto único no nível da lista.
-- [ ] Baixas: Is#13 (toast só após API; catch nas promises), Is#17 (status default = 1º unstarted; ⌘Enter; rascunho preservado ao fechar; sem link para identifier otimista), Is#18, Is#19/Ad#15 (saved search com loading/erro/reação a eventos), Is#20 (validar `labelIds` e label exclusiva no create), Is#21 (delete avisa relacionadas), Me (`aria-label` no botão Display).
+- [x] #2 `IssueGrid` com `memo` e props estáveis; medir com teste de render (card não re-renderiza em mudança de outra issue).
+- [x] #3 + Is#15 `getItemKey` por id (linha e coluna do board).
+- [x] #4 + Is#16 + R2 `useIssueDropTarget` ciente de grouping/ordering: reorder só com ordering `manual` (arrastar em outra ordenação troca para manual, como o Linear); drop entre grupos altera o campo do agrupamento (status/priority/assignee/project/label) ou é recusado; `rankBetween` nunca lança; coluna vazia aceita drop.
+- [x] #26 `IssueDetailView` com `key={issue.id}`; Is#22 erro com retry.
+- [x] #27 reação/edição/resolve de comentário otimistas; recarregar só a activity; ignorar o eco da própria ação (usar `clientId` de F5b se existir, senão `actorEmail`).
+- [x] #29 My issues > Assigned derivado do store (`assignees` já vêm no DTO).
+- [x] #30 bulk: um toast agregado, seleção podada quando issue some/esconde, popovers fecham, sem desativados; usar endpoint de lote se F4/F5a criar (não criar aqui).
+- [x] #31 + R1 seletores únicos de status/prioridade/label (unificar `common/issues/*` e `create-new-issue/*`) com `keywords={[name]}`.
+- [x] #32 seletor de projeto filtra pelo time da issue/modal.
+- [x] #33 anterior/próxima segue a lista de origem (store de navegação com a ordem visível); J/K na lista e no detalhe.
+- [x] R7 menu de contexto único no nível da lista.
+- [x] Baixas: Is#13 (toast só após API; catch nas promises), Is#17 (status default = 1º unstarted; ⌘Enter; rascunho preservado ao fechar; sem link para identifier otimista), Is#18, Is#19/Ad#15 (saved search com loading/erro/reação a eventos), Is#20 (validar `labelIds` e label exclusiva no create), Is#21 (delete avisa relacionadas), Me (`aria-label` no botão Display).
+
+**Estado F1 (2026-09-18, claude):** todas as tasks entregues na branch `danilo/s3-f1` (worktree `.claude/worktrees/s3-f1`). Última verificação: 23 arquivos de teste da frente (85 testes) verdes, `pnpm typecheck` e `pnpm lint` limpos. Fora da posse: `components/common/views/view-details.tsx` (Is#19/Ad#15, dono F4), `lib/adapters-issue-detail.ts` (1 linha, #27, dono F5b) e `store/issues-store.ts` além do `rankBetween` (id único `ISSUE_MUTATION_TOAST` no toast de erro, #30, dono F5b); `store/issue-navigation-store.ts` é novo (#33). #27 usa `actorEmail` para ignorar o eco (trocar pelo `clientId` da F5b na integração, se existir). #30 sem endpoint de lote (não criado aqui).
 
 ### F2 — Planejamento (Claude) · worktree `.claude/worktrees/s3-f2`
 

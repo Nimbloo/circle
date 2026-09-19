@@ -2,7 +2,8 @@
 
 import type { Issue } from '@/data/issues';
 import type { IssueDetail } from '@/data/issue-details';
-import { adaptIssueDetail, textToBlocks } from '@/lib/adapters-issue-detail';
+import { adaptActivity, adaptIssueDetail, textToBlocks } from '@/lib/adapters-issue-detail';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { adaptIssues } from '@/lib/adapters';
 import { api, ApiError } from '@/lib/client';
 import { blocksToDoc, type EditorDoc } from '@/lib/editor-doc';
@@ -18,7 +19,7 @@ import { Plus } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DetailSidePanel, DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 import { BlockEditor } from '@/components/common/editor/block-editor';
-import { ActivityFeed } from './activity-feed';
+import { ActivityFeed, type CommentPatch } from './activity-feed';
 import { AttachmentsSection } from './attachments-section';
 import { useAttachmentUploader } from './use-attachment-uploader';
 import { filesOf, isImageFile } from '@/lib/attachments-client';
@@ -91,10 +92,20 @@ function AddExistingSubIssue({
  * aberto/fechado pelo `detail-panel-store`), o mesmo de initiative e project; o
  * conteúdo ocupa a largura restante, centralizado nos 791px medidos no Linear.
  */
-export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailViewProps) {
+export function IssueDetailView(props: IssueDetailViewProps) {
+   // Uma instância por issue (#26): trocar A→B remonta — sem frame com o detail de A sob
+   // B nem refs de versão da descrição compartilhados (409 falso ao navegar).
+   return <IssueDetailBody key={props.issue.id} {...props} />;
+}
+
+/** Janela em que uma mudança remota desta issue é tratada como eco da própria ação. */
+const OWN_ECHO_MS = 2000;
+
+function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps) {
    const { orgId } = useParams<{ orgId: string }>();
    const inStore = useIssuesStore((s) => s.issues.some((i) => i.id === issue.id));
    const statuses = useStatuses();
+   const meEmail = useWorkspaceStore((s) => s.me?.email);
 
    const [detail, setDetail] = useState<IssueDetail | null>(null);
    const [loading, setLoading] = useState(true);
@@ -118,17 +129,10 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
    const [editorEpoch, setEditorEpoch] = useState(0);
    const descriptionBox = useRef<HTMLDivElement>(null);
 
-   // Ao trocar DE issue, volta ao skeleton. Depende do id (não do objeto): o splice do
-   // SSE (applyRemote) troca a referência da issue no store e antes disparava um
-   // refetch + skeleton em tela cheia a cada update — o "refresh completo" da página.
+   // O fetch depende do id (não do objeto): o splice do SSE (applyRemote) troca a
+   // referência da issue no store e não deve refazer o GET. A troca DE issue remonta
+   // (key no `IssueDetailView`), então o estado já nasce limpo.
    const detailIssueId = issue.id;
-   useEffect(() => {
-      setDetail(null);
-      setLoading(true);
-      setLocalTitle(null);
-      setEditingTitle(false);
-      setDescriptionDoc(null);
-   }, [detailIssueId]);
 
    useEffect(() => {
       if (!detailIssueId) return;
@@ -163,16 +167,75 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
       // eslint-disable-next-line react-hooks/exhaustive-deps -- onDetailLoaded é callback estável do pai
    }, [detailIssueId, reloadKey]);
 
+   // Só o feed (#27): comentário novo/removido não precisa do detail inteiro.
+   const activitySeq = useRef(0);
+   const reloadActivity = useCallback(() => {
+      const seq = ++activitySeq.current;
+      api.issues
+         .activity(detailIssueId)
+         .then((list) => {
+            if (seq !== activitySeq.current) return;
+            const activity = adaptActivity(list);
+            setDetail((d) => (d ? { ...d, activity } : d));
+         })
+         .catch(() => {
+            // mantém o feed atual; o próximo evento/reload reconcilia
+         });
+   }, [detailIssueId]);
+   const reloadActivityRef = useRef(reloadActivity);
+   reloadActivityRef.current = reloadActivity;
+
+   // Patch otimista de comentário (reação/edição/resolve) aplicado no feed local.
+   const patchComment = useCallback((id: string, patch: CommentPatch) => {
+      setDetail((d) =>
+         d
+            ? {
+                 ...d,
+                 activity: d.activity.map((it) =>
+                    it.kind === 'comment' && it.id === id ? { ...it, ...patch } : it
+                 ),
+              }
+            : d
+      );
+   }, []);
+
+   // Eco da própria ação: o SSE avisa esta aba também. Com `actorEmail` no evento, o eco
+   // é reconhecido; sem ele, dentro da janela da ação, recarrega só o feed no fim dela
+   // (um evento de outra pessoa no mesmo intervalo não se perde).
+   const ownActionUntil = useRef(0);
+   const echoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+   const markOwnAction = useCallback(() => {
+      ownActionUntil.current = Date.now() + OWN_ECHO_MS;
+   }, []);
+   useEffect(
+      () => () => {
+         if (echoTimer.current) clearTimeout(echoTimer.current);
+      },
+      []
+   );
+
    // Realtime: quando o SSE avisa que esta issue mudou (comment/reaction/relation de
    // OUTRO usuário), refaz o fetch do detail/feed. Sem isso, o painel aberto fica stale.
    useEffect(() => {
       const onChanged = (e: Event) => {
-         const id = (e as CustomEvent<{ id?: string }>).detail?.id;
-         if (!id || id === detailIssueId) setReloadKey((k) => k + 1);
+         const d = (e as CustomEvent<{ id?: string; actorEmail?: string }>).detail ?? {};
+         if (d.id && d.id !== detailIssueId) return;
+         const remaining = ownActionUntil.current - Date.now();
+         if (remaining > 0) {
+            if (d.actorEmail && d.actorEmail === meEmail) return;
+            if (!d.actorEmail) {
+               echoTimer.current ??= setTimeout(() => {
+                  echoTimer.current = null;
+                  reloadActivityRef.current();
+               }, remaining);
+               return;
+            }
+         }
+         setReloadKey((k) => k + 1);
       };
       window.addEventListener(ISSUE_CHANGED_EVENT, onChanged);
       return () => window.removeEventListener(ISSUE_CHANGED_EVENT, onChanged);
-   }, [detailIssueId]);
+   }, [detailIssueId, meEmail]);
 
    // Depois do remount pós-conflito, o editor novo volta a salvar (o flush do editor
    // antigo, no unmount, já foi descartado).
@@ -193,11 +256,21 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
       filesOf(list).filter((f) => !isImageFile(f));
 
    if (loading || !detail) {
-      // Loading → skeleton; erro real (não-loading, sem detail) → mensagem.
+      // Loading → skeleton; erro real (não-loading, sem detail) → mensagem com retry.
       if (loading) return <IssueDetailSkeleton />;
       return (
-         <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-            Could not load issue details.
+         <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+            <span>Could not load issue details.</span>
+            <button
+               type="button"
+               onClick={() => {
+                  setLoading(true);
+                  setReloadKey((k) => k + 1);
+               }}
+               className="rounded-md border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-accent/50"
+            >
+               Try again
+            </button>
          </div>
       );
    }
@@ -217,7 +290,11 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
       setEditingTitle(false);
       if (!next || next === displayTitle) return;
       if (inStore) {
-         useIssuesStore.getState().updateIssue(issue.id, { title: next });
+         // Store reverte + toast no erro; sem rejeição solta (Is#13).
+         void useIssuesStore
+            .getState()
+            .updateIssue(issue.id, { title: next })
+            .catch(() => undefined);
       } else {
          setLocalTitle(next);
          try {
@@ -406,7 +483,10 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
                      projectId: issue.project?.id ?? null,
                      assigneeId: issue.assignee?.id ?? null,
                   }}
-                  onCommentAdded={reload}
+                  onCommentAdded={reloadActivity}
+                  onCommentPatch={patchComment}
+                  onOwnAction={markOwnAction}
+                  onIssueChanged={reload}
                />
             </div>
          </article>

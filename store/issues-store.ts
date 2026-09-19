@@ -79,6 +79,26 @@ const sortByRank = (issues: Issue[]) => [...issues].sort(byRank);
 /** true quando `a` é estritamente mais velha que `b` (pelo `updatedAt` do servidor). */
 const isOlder = (a: Issue, b: Issue) => !!a.updatedAt && !!b.updatedAt && a.updatedAt < b.updatedAt;
 
+/**
+ * `rankBetween` que nunca lança: vizinhos invertidos (lista velha no cliente, drags
+ * concorrentes) são reordenados; empate ancora logo depois. Falha residual → null (o
+ * chamador mantém o rank atual e o servidor devolve o real).
+ */
+function safeRankBetween(before: string | null, after: string | null): string | null {
+   try {
+      if (before && after) {
+         if (before === after) return rankBetween(before, null);
+         return before < after ? rankBetween(before, after) : rankBetween(after, before);
+      }
+      return rankBetween(before, after);
+   } catch {
+      return null;
+   }
+}
+
+/** Id do toast de erro de mutação de issue: falhas em rajada (lote) viram UM toast. */
+export const ISSUE_MUTATION_TOAST = 'issue-mutation-error';
+
 /** Token da hidratação corrente: uma hidratação que termina depois de outra mais nova é descartada. */
 let hydrateSeq = 0;
 
@@ -421,7 +441,7 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          .catch((e) => {
             done();
             if (prev) set((state) => revertFields(state, id, prev, updatedIssue, keys));
-            toast.error('Falha ao atualizar a issue');
+            toast.error('Falha ao atualizar a issue', { id: ISSUE_MUTATION_TOAST });
             throw e;
          })
          .then((dto) => {
@@ -443,7 +463,7 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
                      ? {}
                      : { issues: sortByRank([...state.issues, removed]) }
                );
-            toast.error('Falha ao excluir a issue');
+            toast.error('Falha ao excluir a issue', { id: ISSUE_MUTATION_TOAST });
             throw e;
          })
          .then(() => {});
@@ -538,7 +558,7 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
       // direcionado à issue movida (não clobra reorders concorrentes que já sucederam).
       const rankOf = (nid: string | null) =>
          nid ? (current.find((i) => i.id === nid)?.rank ?? null) : null;
-      const optimisticRank = rankBetween(rankOf(beforeId), rankOf(afterId));
+      const optimisticRank = safeRankBetween(rankOf(beforeId), rankOf(afterId)) ?? prevRank;
 
       const applyRank = (rank: string) => (state: IssuesState) => ({
          issues: sortByRank(state.issues.map((i) => (i.id === id ? { ...i, rank } : i))),

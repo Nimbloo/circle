@@ -42,23 +42,52 @@ function IssueViewBody({ view }: { view: View }) {
    // que os demais filtros da view já deixaram passar, na ordem de relevância.
    const q = view.filter.q?.trim() ?? '';
    const [rankedIds, setRankedIds] = useState<string[] | null>(null);
+   const [searchError, setSearchError] = useState(false);
+   const [attempt, setAttempt] = useState(0);
+   // Is#19/Ad#15: sem termo zera; com termo, a 1ª busca mostra carregando (não o vazio) e
+   // falha vira erro com retry. Mudança nas issues (eventos) refaz a busca com debounce,
+   // mantendo o resultado anterior na tela (sem voltar ao carregando).
+   // Termo/time novos (view editada): o ranking antigo não vale — volta ao carregando.
+   const searchKey = `${q}|${view.teamId ?? ''}`;
+   const [prevSearchKey, setPrevSearchKey] = useState(searchKey);
+   if (searchKey !== prevSearchKey) {
+      setPrevSearchKey(searchKey);
+      setRankedIds(null);
+      setSearchError(false);
+   }
+   const hasResult = rankedIds !== null;
    useEffect(() => {
       if (!q) {
          setRankedIds(null);
+         setSearchError(false);
          return;
       }
       let active = true;
-      api.search
-         .query({ q, types: ['issue'], teamId: view.teamId, limit: 100 })
-         .then((res) => {
-            if (!active) return;
-            setRankedIds(res.groups.find((g) => g.type === 'issue')?.items.map((i) => i.id) ?? []);
-         })
-         .catch(() => active && setRankedIds([]));
+      const timer = setTimeout(
+         () => {
+            api.search
+               .query({ q, types: ['issue'], teamId: view.teamId, limit: 100 })
+               .then((res) => {
+                  if (!active) return;
+                  setSearchError(false);
+                  setRankedIds(
+                     res.groups.find((g) => g.type === 'issue')?.items.map((i) => i.id) ?? []
+                  );
+               })
+               .catch(() => {
+                  // Refetch em segundo plano que falha mantém o resultado que já está na tela.
+                  if (active && !hasResult) setSearchError(true);
+               });
+         },
+         hasResult ? 400 : 0
+      );
       return () => {
          active = false;
+         clearTimeout(timer);
       };
-   }, [q, view.teamId]);
+      // `liveIssues`: evento remoto/local mudou as issues → o ranking pode ter mudado.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [q, view.teamId, attempt, liveIssues]);
 
    const issues = useMemo(() => {
       if (!q) return filtered;
@@ -79,9 +108,15 @@ function IssueViewBody({ view }: { view: View }) {
                   totalIssues={issues}
                   statuses={allStatus}
                   isViewTypeGrid={viewType === 'grid'}
-                  loading={loading}
-                  error={error}
-                  onRetry={() => hydrate()}
+                  loading={loading || (!!q && rankedIds === null && !searchError)}
+                  error={error || searchError}
+                  onRetry={() => {
+                     if (error) void hydrate();
+                     if (searchError) {
+                        setSearchError(false);
+                        setAttempt((n) => n + 1);
+                     }
+                  }}
                />
             </div>
             {openPanel === 'insights' && (

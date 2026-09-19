@@ -40,7 +40,8 @@ export function CycleSelector({ issue, children }: CycleSelectorProps) {
 
    const select = (cycleId: string) => {
       setOpen(false);
-      if (cycleId !== issue.cycleId) updateIssue(issue.id, { cycleId });
+      // O store já reverte e avisa o erro; aqui só não deixa a rejeição solta (Is#13).
+      if (cycleId !== issue.cycleId) void updateIssue(issue.id, { cycleId }).catch(() => undefined);
    };
 
    return (

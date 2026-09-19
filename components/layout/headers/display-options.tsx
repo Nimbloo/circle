@@ -85,8 +85,18 @@ export function DisplayOptions() {
    return (
       <Popover>
          <PopoverTrigger asChild>
-            <Button className="relative gap-1" size="xs" variant="secondary">
-               <SlidersHorizontal className="size-4" />
+            <Button
+               className="relative gap-1"
+               size="xs"
+               variant="secondary"
+               // O ponto azul (opções alteradas) é só visual: o nome acessível o anuncia.
+               aria-label={
+                  !isDefault || viewType === 'grid'
+                     ? 'Display options (modified)'
+                     : 'Display options'
+               }
+            >
+               <SlidersHorizontal className="size-4" aria-hidden />
                Display
                {(!isDefault || viewType === 'grid') && (
                   <span className="absolute right-0 top-0 size-2 rounded-full bg-primary" />

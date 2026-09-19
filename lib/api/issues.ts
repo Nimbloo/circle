@@ -668,6 +668,31 @@ async function assertProjectOfTeam(db: Db, projectId: string, teamId: string): P
       throw new ApiError(400, `Project '${projectId}' é de outro time (${row.teamId})`);
 }
 
+/**
+ * Labels do create (Is#20): sem repetição, todas existentes (400 em vez do 500 da FK) e
+ * no máximo uma por grupo exclusivo — a mesma regra que `addLabel` aplica depois.
+ */
+async function validateCreateLabels(db: Db, requested: string[]): Promise<string[]> {
+   const ids = [...new Set(requested)];
+   if (ids.length === 0) return ids;
+   const rows = await db
+      .select({ id: labelT.id, groupId: labelT.groupId })
+      .from(labelT)
+      .where(inArray(labelT.id, ids));
+   const found = new Map(rows.map((r) => [r.id, r.groupId]));
+   const missing = ids.filter((labelId) => !found.has(labelId));
+   if (missing.length) throw new ApiError(400, `Label '${missing[0]}' não existe`);
+   const groups = new Set<string>();
+   for (const labelId of ids) {
+      const groupId = found.get(labelId);
+      if (!groupId) continue;
+      if (groups.has(groupId))
+         throw new ApiError(400, `Só uma label do grupo '${groupId}' por issue`);
+      groups.add(groupId);
+   }
+   return ids;
+}
+
 function assertParentOfTeam(parent: typeof issue.$inferSelect, teamId: string): void {
    if (parent.teamId !== teamId)
       throw new ApiError(400, `Issue-pai '${parent.id}' é de outro time (${parent.teamId})`);
@@ -736,6 +761,7 @@ export async function createIssue(
    const startCat = statusRow.category;
    if (!catalogs.priorities.get(priorityId))
       throw new ApiError(400, `Priority '${priorityId}' não existe`);
+   const labelIds = await validateCreateLabels(db, input.labelIds ?? []);
 
    // Descrição: o doc do editor (derivando a projeção em texto, 400 se inválido) ou o
    // texto puro do cliente antigo.
@@ -814,10 +840,10 @@ export async function createIssue(
             milestone: null,
          });
       }
-      if (input.labelIds?.length) {
+      if (labelIds.length) {
          await tx
             .insert(issueLabel)
-            .values(input.labelIds.map((labelId) => ({ issueId: id, labelId })))
+            .values(labelIds.map((labelId) => ({ issueId: id, labelId })))
             .onConflictDoNothing();
       }
       const events = [{ event: 'created', text: 'created the issue' }];
@@ -1431,6 +1457,20 @@ export async function deleteIssue(db: Db, id: string, actorEmail?: string): Prom
    const prev = existing[0];
    if (actorEmail) await assertCanWriteIssue(db, actorEmail, id);
    const children = await db.select({ id: issue.id }).from(issue).where(eq(issue.parentId, id));
+   // Relacionadas (duas direções) perdem a relação no delete: avisa as telas delas (Is#21).
+   const relationRows = await db
+      .select({ issueId: issueRelation.issueId, relatedId: issueRelation.relatedId })
+      .from(issueRelation)
+      .where(or(eq(issueRelation.issueId, id), eq(issueRelation.relatedId, id)));
+   const relatedIds = [
+      ...new Set(relationRows.map((r) => (r.issueId === id ? r.relatedId : r.issueId))),
+   ].filter((rid) => rid !== id);
+   const related = relatedIds.length
+      ? await db
+           .select({ id: issue.id, teamId: issue.teamId })
+           .from(issue)
+           .where(inArray(issue.id, relatedIds))
+      : [];
    // Os anexos (da issue e dos comentários dela) somem por cascade, mas os OBJETOS no
    // S3 ficariam órfãos — guarda as URLs antes e limpa depois do commit (best-effort).
    const attachmentUrls = await issueAttachmentUrls(db, id);
@@ -1473,6 +1513,8 @@ export async function deleteIssue(db: Db, id: string, actorEmail?: string): Prom
    publish({ entity: 'issue', action: 'deleted', id, actorEmail, teamId: prev.teamId });
    for (const c of children)
       publish({ entity: 'issue', action: 'updated', id: c.id, teamId: prev.teamId });
+   for (const r of related)
+      publish({ entity: 'issue', action: 'updated', id: r.id, actorEmail, teamId: r.teamId });
    // O pai perdeu uma filha e o projeto/ciclo, uma issue (#8).
    if (prev.parentId)
       publish({ entity: 'issue', action: 'updated', id: prev.parentId, teamId: prev.teamId });

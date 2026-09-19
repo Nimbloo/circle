@@ -10,6 +10,7 @@ import { usePriorities, useLabels } from '@/store/catalog-store';
 import { useDisplaySetting } from '@/store/display-settings-store';
 import { useFilterStore } from '@/store/filter-store';
 import { useBulkSelectionStore } from '@/store/bulk-selection-store';
+import { useIssueNavigationStore, type IssueNavItem } from '@/store/issue-navigation-store';
 import { Box, ChevronDown, Layers, Tag, User, X } from 'lucide-react';
 import { FC, useEffect, useMemo, useState } from 'react';
 import { DndProvider } from 'react-dnd';
@@ -18,6 +19,7 @@ import { GroupIssues, IssueGroupDescriptor } from './group-issues';
 import { VirtualIssueList } from './virtual-issue-list';
 import { CustomDragLayer } from './issue-grid';
 import { BulkActionsBar } from './bulk-actions-bar';
+import { IssueContextMenuHost } from './issue-context-menu-host';
 
 interface GroupedIssuesViewProps {
    /** Issues to display (after the filter bar has been applied). */
@@ -273,6 +275,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                            ) : (
                               <User className="size-4 text-muted-foreground" />
                            ),
+                           drop: { field: 'assignee', assignee: assignee ?? null },
                         },
                         issues: visible.get(key) ?? [],
                         total: totalGroup.length,
@@ -285,6 +288,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                      id: priority.id,
                      name: priority.name,
                      icon: <priority.icon className="size-4 text-muted-foreground" />,
+                     drop: { field: 'priority', priority },
                   },
                   issues: visibleIssues.filter((issue) => issue.priority.id === priority.id),
                   total: scopeIssues.filter((issue) => issue.priority.id === priority.id).length,
@@ -304,6 +308,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                            id: key,
                            name: project?.name ?? 'No project',
                            icon: <Icon className="size-4 text-muted-foreground" />,
+                           drop: { field: 'project', project },
                         },
                         issues: visible.get(key) ?? [],
                         total: totalGroup.length,
@@ -361,6 +366,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                      name: statusItem.name,
                      icon: <statusItem.icon />,
                      status: statusItem,
+                     drop: { field: 'status', status: statusItem },
                   },
                   issues: visibleIssues.filter((issue) => issue.status.id === statusItem.id),
                   total: scopeIssues.filter((issue) => issue.status.id === statusItem.id).length,
@@ -386,7 +392,36 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
       showSubIssues,
    ]);
 
-   const hiddenCount = Math.max(0, totalIssues.length - issues.length);
+   // Seleção em lote segue o que está na tela (#30): issue apagada, filtrada ou escondida
+   // (done/sub-issues) sai da seleção — a barra nunca age sobre o que o usuário não vê.
+   const retainSelection = useBulkSelectionStore((s) => s.retain);
+   // A mesma ordem visível vira a lista de origem do detalhe (#33: anterior/próxima, J/K).
+   const setNavOrder = useIssueNavigationStore((s) => s.setOrder);
+   useEffect(() => {
+      const visible = new Set<string>();
+      const order: IssueNavItem[] = [];
+      for (const entry of groups)
+         for (const issue of entry.issues) {
+            if (visible.has(issue.id)) continue; // por label, a issue aparece em vários grupos
+            visible.add(issue.id);
+            order.push({ id: issue.id, identifier: issue.identifier });
+         }
+      retainSelection(visible);
+      setNavOrder(order);
+   }, [groups, retainSelection, setNavOrder]);
+
+   // Is#18: só o que o FILTRO escondeu. Done/sub-issues escondidas pelas opções de display
+   // saem das duas contagens (antes inflavam o rodapé e o faziam aparecer à toa).
+   const hiddenCount = useMemo(() => {
+      const inDisplayScope = (issue: Issue) =>
+         (completedIssues !== 'none' ||
+            (issue.status.category !== 'completed' && issue.status.category !== 'canceled')) &&
+         (showSubIssues || !issue.parentId);
+      return Math.max(
+         0,
+         totalIssues.filter(inDisplayScope).length - issues.filter(inDisplayScope).length
+      );
+   }, [issues, totalIssues, completedIssues, showSubIssues]);
    const showFooter = hasActiveFilters && hiddenCount > 0;
 
    // Nenhuma issue em grupo algum (e não é filtro que escondeu tudo): carregando, falha
@@ -412,17 +447,19 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
             <BulkActionsBar />
             <div className="h-full flex flex-col">
                <div className="flex-1 min-h-0 overflow-x-auto">
-                  <div className="flex h-full min-w-max gap-0 px-1">
-                     {boardGroups.map((entry) => (
-                        <GroupIssues
-                           key={entry.group.id}
-                           group={entry.group}
-                           issues={entry.issues}
-                           count={entry.issues.length}
-                        />
-                     ))}
-                     {hiddenGroups.length > 0 && <HiddenColumns entries={hiddenGroups} />}
-                  </div>
+                  <IssueContextMenuHost>
+                     <div className="flex h-full min-w-max gap-0 px-1">
+                        {boardGroups.map((entry) => (
+                           <GroupIssues
+                              key={entry.group.id}
+                              group={entry.group}
+                              issues={entry.issues}
+                              count={entry.issues.length}
+                           />
+                        ))}
+                        {hiddenGroups.length > 0 && <HiddenColumns entries={hiddenGroups} />}
+                     </div>
+                  </IssueContextMenuHost>
                </div>
                {showFooter && (
                   <div className="shrink-0 border-t bg-container">
@@ -447,7 +484,9 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
             <div className="h-full flex flex-col min-h-0">
                {/* Lista VIRTUALIZADA: só as linhas visíveis vão pro DOM (fluido a 1000+). */}
                <div className="flex-1 min-h-0">
-                  <VirtualIssueList entries={listGroups} />
+                  <IssueContextMenuHost>
+                     <VirtualIssueList entries={listGroups} />
+                  </IssueContextMenuHost>
                </div>
                {showFooter && (
                   <div className="shrink-0 border-t bg-container">

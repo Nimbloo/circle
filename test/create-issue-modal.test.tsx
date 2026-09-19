@@ -2,7 +2,7 @@
 
 import './setup-dom';
 import React from 'react';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CreateNewIssue } from '@/components/layout/sidebar/create-new-issue';
@@ -13,9 +13,11 @@ import { seedCatalog, status } from './helpers/catalog-fixture';
 import { useCatalogStore } from '@/store/catalog-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { useIssuesStore } from '@/store/issues-store';
 
+const createMock = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/client', () => ({
-   api: { teams: { templates: vi.fn(async () => []) }, issues: {} },
+   api: { teams: { templates: vi.fn(async () => []) }, issues: { create: createMock } },
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('next/navigation', () => ({
@@ -67,7 +69,7 @@ describe('modal de criar issue', () => {
       expect(titleInput().value).toBe('Título em andamento');
    });
 
-   it('#2 fechar e reabrir começa um formulário novo (com o status padrão do "+")', async () => {
+   it('Is#17 fechar e reabrir preserva o rascunho; o "+" de uma coluna aplica o status', async () => {
       const user = userEvent.setup();
       render(<CreateNewIssue />);
       act(() => useCreateIssueStore.getState().openModal());
@@ -77,9 +79,67 @@ describe('modal de criar issue', () => {
       const inProgress = status.find((s) => s.id === 'in-progress')!;
       act(() => useCreateIssueStore.getState().openModal(inProgress));
 
-      expect(titleInput().value).toBe('');
+      expect(titleInput().value).toBe('Rascunho');
       // Trigger do seletor de status (combobox não tira o nome do conteúdo).
       expect(screen.getByText('In Progress').closest('[role="combobox"]')).toBeTruthy();
+   });
+
+   it('Is#17 status padrão é o 1º status "unstarted" do catálogo, não um id fixo', () => {
+      const custom = { ...status.find((s) => s.id === 'to-do')!, id: 'ready', name: 'Ready' };
+      const prev = useCatalogStore.getState().statuses;
+      act(() =>
+         useCatalogStore.setState({ statuses: [custom, ...prev.filter((s) => s.id !== 'to-do')] })
+      );
+      try {
+         render(<CreateNewIssue />);
+         act(() => useCreateIssueStore.getState().openModal());
+         expect(screen.getByText('Ready').closest('[role="combobox"]')).toBeTruthy();
+      } finally {
+         act(() => useCatalogStore.setState({ statuses: prev }));
+      }
+   });
+
+   it('Is#17 ⌘Enter cria a issue; a otimista não carrega identifier inventado', async () => {
+      let optimisticIdentifier: string | undefined;
+      createMock.mockImplementation(async () => {
+         optimisticIdentifier = useIssuesStore.getState().issues.at(-1)?.identifier;
+         throw new Error('offline');
+      });
+      const user = userEvent.setup();
+      render(<CreateNewIssue />);
+      act(() => useCreateIssueStore.getState().openModal());
+      await user.type(titleInput(), 'Nova');
+      await user.keyboard('{Meta>}{Enter}{/Meta}');
+
+      await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));
+      expect(optimisticIdentifier).toBe('');
+   });
+
+   it('Is#17 criar com sucesso limpa o rascunho', async () => {
+      createMock.mockImplementation(async (input: { title: string }) => ({
+         id: 'srv-1',
+         identifier: 'ENG-1',
+         teamId: 'ENG',
+         title: input.title,
+         status: { id: 'to-do', name: 'Todo', color: '#000', category: 'unstarted' },
+         priority: { id: 'no-priority', name: 'No priority' },
+         assignee: null,
+         assignees: [],
+         labels: [],
+         createdAt: '2026-01-01T00:00:00.000Z',
+         updatedAt: '2026-01-01T00:00:00.000Z',
+         cycleId: '',
+         rank: 'a',
+      }));
+      const user = userEvent.setup();
+      render(<CreateNewIssue />);
+      act(() => useCreateIssueStore.getState().openModal());
+      await user.type(titleInput(), 'Feita');
+      await user.keyboard('{Control>}{Enter}{/Control}');
+      await waitFor(() => expect(useCreateIssueStore.getState().isOpen).toBe(false));
+
+      act(() => useCreateIssueStore.getState().openModal());
+      expect(titleInput().value).toBe('');
    });
 
    it('#5 o botão da sidebar abre UMA instância do modal (a do provider)', async () => {

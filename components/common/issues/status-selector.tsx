@@ -1,65 +1,13 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import {
-   Command,
-   CommandEmpty,
-   CommandGroup,
-   CommandInput,
-   CommandItem,
-   CommandList,
-} from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useIssuesStore } from '@/store/issues-store';
 import { Status } from '@/data/status';
-import type { Issue } from '@/data/issues';
 import { useStatuses } from '@/store/catalog-store';
-import { CheckIcon } from 'lucide-react';
 import { useId, useState } from 'react';
 import { renderStatusIcon } from '@/lib/status-utils';
-import { useIssueCounts } from './issue-counts';
-
-const byStatus = (issue: Issue) => issue.status.id;
-
-/** Opções do popover — montadas só com ele aberto, então só aí assinam as issues. */
-function StatusOptions({
-   value,
-   onSelect,
-}: {
-   value: string;
-   onSelect: (statusId: string) => void;
-}) {
-   const allStatus = useStatuses();
-   const counts = useIssueCounts(byStatus);
-
-   return (
-      <Command>
-         <CommandInput placeholder="Set status..." />
-         <CommandList>
-            <CommandEmpty>No status found.</CommandEmpty>
-            <CommandGroup>
-               {allStatus.map((item) => (
-                  <CommandItem
-                     key={item.id}
-                     value={item.id}
-                     onSelect={onSelect}
-                     className="flex items-center justify-between"
-                  >
-                     <div className="flex items-center gap-2">
-                        <item.icon />
-                        {item.name}
-                     </div>
-                     {value === item.id && <CheckIcon size={16} className="ml-auto" />}
-                     <span className="text-muted-foreground text-xs">
-                        {counts.get(item.id) ?? 0}
-                     </span>
-                  </CommandItem>
-               ))}
-            </CommandGroup>
-         </CommandList>
-      </Command>
-   );
-}
+import { StatusOptions } from './property-options';
 
 interface StatusSelectorProps {
    status: Status;

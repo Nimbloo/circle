@@ -43,7 +43,7 @@ vi.mock('react-dnd-html5-backend', async () => {
  * varria as ~3k issues por opção. As contagens agora vivem dentro do popover aberto.
  */
 
-const PROJECT = makeProject({ id: 'p1', name: 'Alpha' });
+const PROJECT = makeProject({ id: 'p1', name: 'Alpha', teamId: 'ENG' });
 const todo = status.find((s) => s.id === 'to-do')!;
 const noPriority = priorities.find((p) => p.id === 'no-priority')!;
 

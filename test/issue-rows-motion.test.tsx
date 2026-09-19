@@ -73,7 +73,11 @@ describe('linhas sem layoutId não usam motion.div', () => {
    it('card do board virtualizado (layout=false) é div simples', () => {
       render(
          <DndProvider backend={HTML5Backend}>
-            <IssueGrid issue={issue} getOrderedIssues={() => [issue]} layout={false} />
+            <IssueGrid
+               issue={issue}
+               getGroup={() => ({ group: { id: 'g', name: 'G', icon: null }, issues: [issue] })}
+               layout={false}
+            />
          </DndProvider>
       );
       expect(motionNodes()).toHaveLength(0);

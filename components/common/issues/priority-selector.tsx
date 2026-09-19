@@ -1,64 +1,12 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import {
-   Command,
-   CommandEmpty,
-   CommandGroup,
-   CommandInput,
-   CommandItem,
-   CommandList,
-} from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useIssuesStore } from '@/store/issues-store';
 import { Priority } from '@/data/priorities';
-import type { Issue } from '@/data/issues';
 import { usePriorities } from '@/store/catalog-store';
-import { CheckIcon } from 'lucide-react';
 import { useId, useState } from 'react';
-import { useIssueCounts } from './issue-counts';
-
-const byPriority = (issue: Issue) => issue.priority.id;
-
-/** Opções do popover — montadas só com ele aberto, então só aí assinam as issues. */
-function PriorityOptions({
-   value,
-   onSelect,
-}: {
-   value: string;
-   onSelect: (priorityId: string) => void;
-}) {
-   const priorities = usePriorities();
-   const counts = useIssueCounts(byPriority);
-
-   return (
-      <Command>
-         <CommandInput placeholder="Set priority..." />
-         <CommandList>
-            <CommandEmpty>No priority found.</CommandEmpty>
-            <CommandGroup>
-               {priorities.map((item) => (
-                  <CommandItem
-                     key={item.id}
-                     value={item.id}
-                     onSelect={onSelect}
-                     className="flex items-center justify-between"
-                  >
-                     <div className="flex items-center gap-2">
-                        <item.icon className="text-muted-foreground size-4" />
-                        {item.name}
-                     </div>
-                     {value === item.id && <CheckIcon size={16} className="ml-auto" />}
-                     <span className="text-muted-foreground text-xs">
-                        {counts.get(item.id) ?? 0}
-                     </span>
-                  </CommandItem>
-               ))}
-            </CommandGroup>
-         </CommandList>
-      </Command>
-   );
-}
+import { PriorityOptions } from './property-options';
 
 interface PrioritySelectorProps {
    priority: Priority;
