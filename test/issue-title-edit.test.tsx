@@ -92,7 +92,7 @@ describe('editar o título da issue (is#11)', () => {
       await user.keyboard('{Shift>}{Enter}{/Shift}');
       expect(box.value).not.toContain('\n');
       await waitFor(() => expect(apiMocks.issues.update).toHaveBeenCalled());
-      expect(apiMocks.issues.update.mock.calls[0][1]).toEqual({ title: 'Novo título' });
+      expect(apiMocks.issues.update).toHaveBeenCalledWith('a', { title: 'Novo título' });
    });
 
    it('texto colado com quebras vira uma linha só', async () => {
