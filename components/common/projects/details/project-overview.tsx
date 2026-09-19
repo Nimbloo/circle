@@ -13,6 +13,8 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { projectUpdateHealthColor, projectUpdateHealthLabel } from '@/data/project-details';
+import { formatPlanDay } from '../format-day';
 import { DocumentOutline, type OutlineItem } from './document-outline';
 import { ProjectResources } from './project-resources';
 import { useSharedProjectDetail } from './use-project-detail';
@@ -62,6 +64,7 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
       [detail.descriptionDoc, detail.description]
    );
    const [liveDoc, setLiveDoc] = useState<EditorDoc | null>(null);
+   const lastUpdate = detail.updates[0];
    const outlineItems = useMemo<OutlineItem[]>(
       () =>
          docHeadings(liveDoc ?? doc).map((h, index) => ({
@@ -198,13 +201,33 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                      />
                   </div>
 
-                  {/* Update CTA */}
+                  {/* Update CTA — com o health do ÚLTIMO update (pl#11) */}
                   <Link
                      href={`/${orgId}/project/${project.id}/activity`}
                      className="-mx-4 mt-4 flex h-[66px] items-center justify-center gap-2 rounded-[10px] border text-sm text-muted-foreground transition-colors hover:bg-accent/30 hover:text-foreground"
                   >
-                     <PenLine className="size-4" />
-                     Write {detail.updates.length === 0 ? 'first ' : ''}project update
+                     {lastUpdate ? (
+                        <>
+                           <span className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium">
+                              <span
+                                 className="size-2 rounded-full"
+                                 style={{
+                                    backgroundColor: projectUpdateHealthColor[lastUpdate.health],
+                                 }}
+                              />
+                              {projectUpdateHealthLabel[lastUpdate.health]}
+                           </span>
+                           <span className="truncate">
+                              Last update on {formatPlanDay(lastUpdate.date)} by{' '}
+                              {lastUpdate.author.name}
+                           </span>
+                        </>
+                     ) : (
+                        <>
+                           <PenLine className="size-4" />
+                           Write first project update
+                        </>
+                     )}
                   </Link>
 
                   {/* Description */}

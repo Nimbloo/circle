@@ -12,7 +12,19 @@ import {
    DropdownMenuItem,
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+   AlertDialog,
+   AlertDialogAction,
+   AlertDialogCancel,
+   AlertDialogContent,
+   AlertDialogDescription,
+   AlertDialogFooter,
+   AlertDialogHeader,
+   AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { api } from '@/lib/client';
+import { blocksToMarkdown, markdownToBlocks } from '../update-blocks';
 import {
    ProjectUpdate,
    ProjectUpdateHealth,
@@ -42,7 +54,55 @@ function HealthBadge({ health }: { health: ProjectUpdateHealth }) {
    );
 }
 
-function UpdateCard({ update }: { update: ProjectUpdate }) {
+function UpdateCard({
+   update,
+   projectId,
+   onChanged,
+}: {
+   update: ProjectUpdate;
+   projectId: string;
+   /** Ausente em update otimista (ainda sem id do servidor): sem editar/excluir. */
+   onChanged?: () => void | Promise<void>;
+}) {
+   const [draft, setDraft] = useState<string | null>(null);
+   const [draftHealth, setDraftHealth] = useState<ProjectUpdateHealth>(update.health);
+   const [confirmOpen, setConfirmOpen] = useState(false);
+   const [busy, setBusy] = useState(false);
+   const editable = Boolean(onChanged);
+
+   const save = async () => {
+      if (draft === null || draft.trim() === '' || busy) return;
+      setBusy(true);
+      try {
+         await api.projects.updateUpdate(projectId, update.id, {
+            health: draftHealth,
+            blocks: markdownToBlocks(draft),
+         });
+         setDraft(null);
+         await onChanged?.();
+         toast.success('Update edited');
+      } catch {
+         toast.error('Could not edit the update');
+      } finally {
+         setBusy(false);
+      }
+   };
+
+   const remove = async () => {
+      if (busy) return;
+      setBusy(true);
+      try {
+         await api.projects.removeUpdate(projectId, update.id);
+         setConfirmOpen(false);
+         await onChanged?.();
+         toast.success('Update deleted');
+      } catch {
+         toast.error('Could not delete the update');
+      } finally {
+         setBusy(false);
+      }
+   };
+
    return (
       <div className="border rounded-lg p-4">
          <div className="flex items-center gap-2 text-sm">
@@ -54,13 +114,119 @@ function UpdateCard({ update }: { update: ProjectUpdate }) {
             <span className="text-xs text-muted-foreground">
                {format(parseISO(update.date), 'MMM d')}
             </span>
-            <span className="ml-auto">
-               <HealthBadge health={update.health} />
+            <span className="ml-auto flex items-center gap-1">
+               {draft === null ? (
+                  <HealthBadge health={update.health} />
+               ) : (
+                  <DropdownMenu>
+                     <DropdownMenuTrigger className="outline-none" aria-label="Update health">
+                        <HealthBadge health={draftHealth} />
+                     </DropdownMenuTrigger>
+                     <DropdownMenuContent align="end" className="w-40">
+                        {(Object.keys(projectUpdateHealthLabel) as ProjectUpdateHealth[]).map(
+                           (value) => (
+                              <DropdownMenuItem key={value} onClick={() => setDraftHealth(value)}>
+                                 <span
+                                    className="size-2 rounded-full"
+                                    style={{ backgroundColor: projectUpdateHealthColor[value] }}
+                                 />
+                                 {projectUpdateHealthLabel[value]}
+                              </DropdownMenuItem>
+                           )
+                        )}
+                     </DropdownMenuContent>
+                  </DropdownMenu>
+               )}
+               {editable && draft === null && (
+                  <DropdownMenu>
+                     <DropdownMenuTrigger asChild>
+                        <Button
+                           size="icon"
+                           variant="ghost"
+                           className="size-7"
+                           aria-label="Update actions"
+                        >
+                           <MoreHorizontal className="size-4 text-muted-foreground" />
+                        </Button>
+                     </DropdownMenuTrigger>
+                     <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                           onSelect={() => {
+                              setDraftHealth(update.health);
+                              setDraft(blocksToMarkdown(update.blocks));
+                           }}
+                        >
+                           <Pencil className="size-4" />
+                           Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                           variant="destructive"
+                           onSelect={(event) => {
+                              event.preventDefault();
+                              setConfirmOpen(true);
+                           }}
+                        >
+                           <Trash2 className="size-4" />
+                           Delete
+                        </DropdownMenuItem>
+                     </DropdownMenuContent>
+                  </DropdownMenu>
+               )}
             </span>
          </div>
-         <div className="mt-2 text-sm leading-relaxed">
-            <ContentBlocks blocks={update.blocks} />
-         </div>
+         {draft === null ? (
+            <div className="mt-2 text-sm leading-relaxed">
+               <ContentBlocks blocks={update.blocks} />
+            </div>
+         ) : (
+            <div className="mt-2">
+               <textarea
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  aria-label="Edit update"
+                  autoFocus
+                  className="w-full min-h-24 resize-y rounded-md border bg-transparent p-2 text-sm outline-none"
+               />
+               <div className="mt-2 flex items-center gap-2">
+                  <Button
+                     size="xs"
+                     onClick={save}
+                     disabled={busy || draft.trim() === ''}
+                     aria-label="Save update"
+                  >
+                     Save
+                  </Button>
+                  <Button size="xs" variant="ghost" onClick={() => setDraft(null)}>
+                     Cancel
+                  </Button>
+               </div>
+            </div>
+         )}
+
+         <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <AlertDialogContent>
+               <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this update?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                     The update is removed from the timeline and the project health goes back to the
+                     previous update. This cannot be undone.
+                  </AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter>
+                  <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                     aria-label="Delete update"
+                     disabled={busy}
+                     onClick={(event) => {
+                        event.preventDefault();
+                        void remove();
+                     }}
+                  >
+                     Delete
+                  </AlertDialogAction>
+               </AlertDialogFooter>
+            </AlertDialogContent>
+         </AlertDialog>
       </div>
    );
 }
@@ -100,7 +266,8 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
       const optimistic = postUpdate(projectId, health, text);
       setText('');
       try {
-         await api.projects.postUpdate(projectId, { health, blocks: optimistic.blocks });
+         // Blocos do markdown do composer: listas e headings sobrevivem (pl#11).
+         await api.projects.postUpdate(projectId, { health, blocks: markdownToBlocks(text) });
          await reload(); // o update persistido volta em detail.updates
          removeUpdate(projectId, optimistic.id); // limpa o otimista (evita duplicar)
          toast.success('Update posted');
@@ -199,7 +366,12 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
                         <h3 className="text-lg font-semibold mb-3">{month}</h3>
                         <div className="flex flex-col gap-3">
                            {monthUpdates.map((update) => (
-                              <UpdateCard key={update.id} update={update} />
+                              <UpdateCard
+                                 key={update.id}
+                                 update={update}
+                                 projectId={projectId}
+                                 onChanged={update.id.startsWith('posted-') ? undefined : reload}
+                              />
                            ))}
                         </div>
                      </div>

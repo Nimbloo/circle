@@ -13,7 +13,10 @@ describe('project update propaga health (#25 paridade Linear)', () => {
       const [before] = await db.select().from(project).where(eq(project.id, fx.projectId));
       expect(before.healthId).toBe('on-track'); // valor do fixture
 
-      await postProjectUpdate(db, fx.projectId, fx.ownerId, { health: 'off-track', blocks: [] });
+      await postProjectUpdate(db, fx.projectId, fx.ownerId, {
+         health: 'off-track',
+         blocks: [{ type: 'paragraph', text: 'atrasou' }],
+      });
 
       const [after] = await db.select().from(project).where(eq(project.id, fx.projectId));
       expect(after.healthId).toBe('off-track'); // veio do último update
