@@ -37,6 +37,7 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { FolderKanban, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { errorReason } from '@/lib/error-reason';
 import { SettingsShell } from './shared';
 import { useAsyncResource } from '@/hooks/use-async-resource';
 import { CATALOG_CHANGED_EVENT, useLiveReload } from '@/lib/use-live-sync';
@@ -95,8 +96,8 @@ function TemplateDialog({
          onOpenChange(false);
          onSaved();
          toast.success(editing ? 'Template atualizado' : 'Template criado');
-      } catch {
-         toast.error('Não foi possível salvar o template');
+      } catch (err) {
+         toast.error(errorReason(err, 'Não foi possível salvar o template'));
       } finally {
          setBusy(false);
       }
@@ -229,17 +230,32 @@ export default function ProjectTemplatesSettings() {
          setToDelete(null);
          await load();
          toast.success('Template excluído');
-      } catch {
-         toast.error('Não foi possível excluir o template');
+      } catch (err) {
+         toast.error(errorReason(err, 'Não foi possível excluir o template'));
       }
    };
 
    return (
       <SettingsShell
          title="Project templates"
+         action={
+            isAdmin && teamId ? (
+               <Button
+                  size="sm"
+                  onClick={() => {
+                     setEditing(null);
+                     setDialogOpen(true);
+                  }}
+                  className="gap-1"
+               >
+                  <Plus className="size-4" />
+                  Novo template
+               </Button>
+            ) : undefined
+         }
          description="Templates pré-preenchem nome, descrição, status, prioridade e health ao criar um projeto. São definidos por time."
       >
-         <div className="flex items-center justify-between gap-3 mb-4">
+         <div className="mb-4 flex items-center gap-3">
             <Select value={teamId} onValueChange={setTeamId}>
                <SelectTrigger className="w-64">
                   <SelectValue placeholder="Selecione um time" />
@@ -252,22 +268,9 @@ export default function ProjectTemplatesSettings() {
                   ))}
                </SelectContent>
             </Select>
-            {isAdmin && teamId && (
-               <Button
-                  size="sm"
-                  onClick={() => {
-                     setEditing(null);
-                     setDialogOpen(true);
-                  }}
-                  className="gap-1"
-               >
-                  <Plus className="size-4" />
-                  Novo template
-               </Button>
-            )}
          </div>
 
-         <div className="rounded-lg border bg-container overflow-hidden">
+         <div className="overflow-hidden rounded-[10px] bg-card">
             {loading ? (
                <LoadingArea rows={4} />
             ) : resource.error ? (

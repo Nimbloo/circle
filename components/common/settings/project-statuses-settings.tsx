@@ -35,6 +35,7 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { errorReason } from '@/lib/error-reason';
 import { SettingsShell } from './shared';
 
 const CATEGORY_GROUPS: { label: string; categories: StatusCategory[] }[] = [
@@ -98,8 +99,8 @@ function StatusDialog({
          onOpenChange(false);
          onSaved();
          toast.success(editing ? 'Status atualizado' : 'Status criado');
-      } catch {
-         toast.error('Não foi possível salvar o status');
+      } catch (err) {
+         toast.error(errorReason(err, 'Não foi possível salvar o status'));
       } finally {
          setBusy(false);
       }
@@ -193,8 +194,8 @@ export default function ProjectStatusesSettings() {
       try {
          useCatalogStore.getState().setStatuses(await api.statuses.reorder(ids));
          toast.success('Ordem atualizada');
-      } catch {
-         toast.error('Não foi possível reordenar');
+      } catch (err) {
+         toast.error(errorReason(err, 'Não foi possível reordenar'));
       }
    };
 
@@ -221,7 +222,7 @@ export default function ProjectStatusesSettings() {
          const msg =
             e instanceof ApiError && e.status === 409
                ? 'Status em uso — reatribua as issues/projetos antes de excluir.'
-               : 'Não foi possível excluir o status';
+               : errorReason(e, 'Não foi possível excluir o status');
          toast.error(msg);
       } finally {
          setDeleteBusy(false);
@@ -233,7 +234,7 @@ export default function ProjectStatusesSettings() {
          title="Issue statuses"
          description="Os estágios do workflow das issues (por categoria). Vale para todo o workspace. Projetos têm seus próprios status (Backlog/Planned/In Progress/Completed/Canceled)."
       >
-         <div className="rounded-lg border bg-container overflow-hidden">
+         <div className="overflow-hidden rounded-[10px] bg-card">
             {CATEGORY_GROUPS.map((group) => {
                const items = statuses.filter((s) => group.categories.includes(s.category));
                return (

@@ -32,6 +32,7 @@ import { cn } from '@/lib/utils';
 import { Plus, RefreshCw, Trash2, Webhook } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { errorReason } from '@/lib/error-reason';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
 
 /**
@@ -79,8 +80,8 @@ function CreateDialog({
          onOpenChange(false);
          onCreated(created);
          toast.success('Webhook criado');
-      } catch {
-         toast.error('Não foi possível criar o webhook (URL válida?)');
+      } catch (err) {
+         toast.error(errorReason(err, 'Não foi possível criar o webhook (URL válida?)'));
       } finally {
          setBusy(false);
       }
@@ -156,8 +157,8 @@ function Deliveries({ webhookId }: { webhookId: string }) {
          const updated = await api.webhooks.redeliver(delivery.id);
          setItems((list) => list?.map((d) => (d.id === updated.id ? updated : d)) ?? null);
          toast.success(updated.status === 'success' ? 'Reenviado' : 'Reenvio falhou de novo');
-      } catch {
-         toast.error('Não foi possível reenviar');
+      } catch (err) {
+         toast.error(errorReason(err, 'Não foi possível reenviar'));
       } finally {
          setBusyId(null);
       }
@@ -222,7 +223,9 @@ export default function WebhooksSettings() {
       api.webhooks
          .list()
          .then((list) => alive && setHooks(list))
-         .catch(() => alive && toast.error('Não foi possível carregar os webhooks'))
+         .catch(
+            (err) => alive && toast.error(errorReason(err, 'Não foi possível carregar os webhooks'))
+         )
          .finally(() => alive && setLoading(false));
       return () => {
          alive = false;
@@ -236,10 +239,23 @@ export default function WebhooksSettings() {
          const dto = await api.webhooks.update(hook.id, { enabled });
          setHooks((list) => list.map((h) => (h.id === dto.id ? dto : h)));
          toast.success(enabled ? 'Webhook ativado' : 'Webhook desativado');
-      } catch {
+      } catch (err) {
          setHooks((list) => list.map((h) => (h.id === hook.id ? hook : h)));
-         toast.error('Não foi possível atualizar o webhook');
+         toast.error(errorReason(err, 'Não foi possível atualizar o webhook'));
       }
+   };
+
+   /** Copiar pode ser negado (permissão/contexto inseguro): avisa e mantém o segredo. */
+   const copySecret = async () => {
+      if (!secret) return;
+      try {
+         await navigator.clipboard.writeText(secret);
+      } catch {
+         toast.error('Não foi possível copiar — copie o segredo manualmente antes de fechar');
+         return;
+      }
+      toast.success('Segredo copiado');
+      setSecret(null);
    };
 
    const remove = async (hook: WebhookDto) => {
@@ -249,7 +265,7 @@ export default function WebhooksSettings() {
       try {
          await api.webhooks.remove(hook.id);
          toast.success('Webhook excluído');
-      } catch {
+      } catch (err) {
          // Rollback SÓ do item: restaurar a lista inteira desfazia o que mudou no meio
          // (toggle/criação de outro webhook enquanto o DELETE estava em voo).
          setHooks((list) => {
@@ -258,7 +274,7 @@ export default function WebhooksSettings() {
             next.splice(Math.max(0, Math.min(index, next.length)), 0, hook);
             return next;
          });
-         toast.error('Não foi possível excluir o webhook');
+         toast.error(errorReason(err, 'Não foi possível excluir o webhook'));
       }
    };
 
@@ -290,8 +306,11 @@ export default function WebhooksSettings() {
                      <SettingsCard key={hook.id}>
                         <SettingsRow
                            icon={<Webhook className="size-4" />}
-                           title={hook.url}
-                           muted={!hook.enabled}
+                           title={
+                              <span className={cn('truncate', !hook.enabled && 'opacity-60')}>
+                                 {hook.url}
+                              </span>
+                           }
                            description={hook.events.join(', ')}
                            trailing={
                               <div className="flex items-center gap-2">
@@ -336,8 +355,14 @@ export default function WebhooksSettings() {
             }}
          />
 
-         <Dialog open={Boolean(secret)} onOpenChange={(v) => !v && setSecret(null)}>
-            <DialogContent>
+         {/* O segredo só volta uma vez: o diálogo NÃO fecha por Esc nem por clique fora
+             (ad#12) — some só quando a pessoa copia ou diz que já guardou. */}
+         <Dialog open={Boolean(secret)}>
+            <DialogContent
+               showCloseButton={false}
+               onEscapeKeyDown={(e) => e.preventDefault()}
+               onInteractOutside={(e) => e.preventDefault()}
+            >
                <DialogHeader>
                   <DialogTitle>Segredo de assinatura</DialogTitle>
                   <DialogDescription>
@@ -349,14 +374,10 @@ export default function WebhooksSettings() {
                   {secret}
                </code>
                <DialogFooter>
-                  <Button
-                     onClick={() => {
-                        if (secret) void navigator.clipboard?.writeText(secret);
-                        setSecret(null);
-                     }}
-                  >
-                     Copiar e fechar
+                  <Button variant="ghost" onClick={() => setSecret(null)}>
+                     Já guardei
                   </Button>
+                  <Button onClick={() => void copySecret()}>Copiar e fechar</Button>
                </DialogFooter>
             </DialogContent>
          </Dialog>

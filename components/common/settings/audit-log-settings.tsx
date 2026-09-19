@@ -96,7 +96,7 @@ export default function AuditLogSettings() {
                className="py-10"
             />
          ) : (
-            <div className="content-enter rounded-lg border bg-container overflow-hidden divide-y divide-border/60">
+            <div className="content-enter divide-y divide-border/60 overflow-hidden rounded-[10px] bg-card">
                {entries.map((e) => {
                   const meta = formatMeta(e.meta);
                   return (

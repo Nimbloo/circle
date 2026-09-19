@@ -46,7 +46,6 @@ import {
    Pencil,
    Radar,
    RefreshCcw,
-   Repeat,
    Settings,
    Sparkles,
    Tag,

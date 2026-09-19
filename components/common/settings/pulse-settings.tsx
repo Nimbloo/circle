@@ -16,7 +16,7 @@ interface Bucket {
 
 function StatCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
    return (
-      <div className="rounded-lg border bg-container px-4 py-3">
+      <div className="overflow-hidden rounded-[10px] bg-card px-4 py-3">
          <div className="text-2xl font-semibold tabular-nums">{value}</div>
          <div className="text-sm text-muted-foreground">{label}</div>
          {hint && <div className="text-xs text-muted-foreground/70 mt-0.5">{hint}</div>}
@@ -28,7 +28,7 @@ function StatCard({ label, value, hint }: { label: string; value: string; hint?:
 function BarList({ title, buckets }: { title: string; buckets: Bucket[] }) {
    const max = Math.max(1, ...buckets.map((b) => b.count));
    return (
-      <div className="rounded-lg border bg-container p-4">
+      <div className="overflow-hidden rounded-[10px] bg-card p-4">
          <h3 className="text-sm font-medium mb-3">{title}</h3>
          <div className="flex flex-col gap-2">
             {buckets.length === 0 && <div className="text-xs text-muted-foreground">Sem dados</div>}

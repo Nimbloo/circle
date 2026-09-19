@@ -8,6 +8,7 @@ import type { TeamDto } from '@/lib/api/teams';
 import { Check, Clock } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { errorReason } from '@/lib/error-reason';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
 
 /** "Join or create a team" settings page. */
@@ -45,8 +46,8 @@ export default function NewTeam() {
          setKey('');
          setName('');
          toast.success(`Time ${id} criado — você já é membro`);
-      } catch {
-         toast.error('Não deu pra criar o time (key inválida ou já existe)');
+      } catch (err) {
+         toast.error(errorReason(err, 'Não deu pra criar o time'));
       } finally {
          setBusy(false);
       }
@@ -59,8 +60,8 @@ export default function NewTeam() {
          await api.teams.requestJoin(team.id);
          await refresh();
          toast.success(`Solicitação enviada para ${team.name} — aguarde aprovação`);
-      } catch {
-         toast.error('Não deu pra solicitar entrada');
+      } catch (err) {
+         toast.error(errorReason(err, 'Não deu pra solicitar entrada'));
       } finally {
          setPendingId(null);
       }
