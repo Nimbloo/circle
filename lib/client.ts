@@ -524,9 +524,12 @@ export const api = {
       update: (id: string, body: UpdateViewInput) => patch<ViewDto>(`/views/${id}`, body),
       remove: (id: string) => del<{ deleted: boolean }>(`/views/${id}`),
       results: (id: string) =>
-         get<{ type: string; issues?: IssueDto[]; projects?: ProjectDto[] }>(
-            `/views/${id}/results`
-         ),
+         get<{
+            type: string;
+            issues?: IssueDto[];
+            projects?: ProjectDto[];
+            truncated?: boolean;
+         }>(`/views/${id}/results`),
    },
 
    inbox: {
