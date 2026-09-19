@@ -4,16 +4,29 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Team } from '@/data/teams';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useTeamsDisplayStore } from '@/store/teams-display-store';
-import { Box, Check, Play } from 'lucide-react';
+import { Box, Check, ChevronRight, Play } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { TeamContextMenu } from './team-context-menu';
 
 interface TeamLineProps {
    team: Team;
+   /** Nível na hierarquia de sub-times (0 = topo): dá o recuo da linha. */
+   depth?: number;
+   /** Tem sub-times? Então a linha ganha o chevron de expandir/recolher. */
+   hasChildren?: boolean;
+   expanded?: boolean;
+   onToggle?: () => void;
 }
 
-export default function TeamLine({ team }: TeamLineProps) {
+export default function TeamLine({
+   team,
+   depth = 0,
+   hasChildren = false,
+   expanded = true,
+   onToggle,
+}: TeamLineProps) {
    const { orgId } = useParams<{ orgId: string }>();
    const { displayProperties } = useTeamsDisplayStore();
    // Deriva da fatia assinada: `getCyclesByTeam` devolve array NOVO a cada leitura,
@@ -30,10 +43,32 @@ export default function TeamLine({ team }: TeamLineProps) {
       <TeamContextMenu team={team}>
          <Link
             href={`/${orgId}/team/${team.id}/overview`}
-            className="content-enter h-12 pl-[18px] pr-[34px] flex w-full items-center text-[13px] hover:bg-accent/40"
+            style={{ paddingLeft: 18 + depth * 20 }}
+            className="content-enter flex h-12 w-full items-center pr-[34px] text-[13px] hover:bg-accent/40"
          >
             {/* Name + identifier */}
             <div className="flex min-w-0 flex-1 items-center gap-2">
+               {/* Sub-times (#100): o chevron fica FORA do Link (botão dentro de <a> não
+                   dispara), então o clique não navega. */}
+               {hasChildren ? (
+                  <button
+                     type="button"
+                     aria-label={`${expanded ? 'Collapse' : 'Expand'} ${team.name}`}
+                     aria-expanded={expanded}
+                     onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onToggle?.();
+                     }}
+                     className="-ml-1 inline-flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+                  >
+                     <ChevronRight
+                        className={cn('size-3.5 transition-transform', expanded && 'rotate-90')}
+                     />
+                  </button>
+               ) : (
+                  depth > 0 && <span className="-ml-1 size-4 shrink-0" />
+               )}
                <span className="inline-flex size-[18px] shrink-0 items-center justify-center rounded bg-muted/50 text-xs">
                   {team.icon}
                </span>

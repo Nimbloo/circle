@@ -57,14 +57,14 @@ export const settingsNav: SettingsNavGroup[] = [
       items: [
          { name: 'Labels', url: '/settings/issue-labels', icon: Tag },
          { name: 'Templates', url: '/settings/issue-templates', icon: FileText },
+         // A tela edita o workflow de ISSUE (o nome dela é "Issue statuses"); estava
+         // listada em Projects, prometendo status de projeto (ad#8).
+         { name: 'Statuses', url: '/settings/project-statuses', icon: Target },
       ],
    },
    {
       label: 'Projects',
-      items: [
-         { name: 'Templates', url: '/settings/project-templates', icon: FileText },
-         { name: 'Statuses', url: '/settings/project-statuses', icon: Target },
-      ],
+      items: [{ name: 'Templates', url: '/settings/project-templates', icon: FileText }],
    },
    {
       label: 'Features',
