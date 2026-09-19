@@ -54,21 +54,21 @@ Arquivos: `components/common/issues/**`, `components/layout/sidebar/create-new-i
 
 Arquivos: `components/common/{projects,initiatives,roadmap,cycles}/**`, `app/[orgId]/project/**`, `lib/api/{projects,project-detail,project-dependencies,initiatives,initiative-detail,roadmap,cycles,project-snapshots}.ts`, rotas `app/api/v1/{projects,initiatives,roadmap,cycles}/**`, `store/{project-updates,roadmap-display,projects-display,initiatives-display}-store.ts`.
 
-- [ ] #5 `PropertyButton` com `forwardRef` + props; R3-Pl pickers de initiative extraídos + `useInitiativePatch` otimista; #46 PATCHs serializados.
-- [ ] #34 overview: erro na 1ª carga → `ErrorState`, editor não monta.
-- [ ] #35 impedir dois ciclos `current` (409 ou rebaixar o anterior na transação); índice parcial fica com F5a.
-- [ ] #36 bootstrap de cycles agregado no SQL; items/snapshots só do current; upsert de `cycle_snapshot` com `IS DISTINCT FROM` e fora do GET.
-- [ ] #37 adicionar projeto à initiative remove vínculo antigo + publica eventos.
-- [ ] #38 diálogo de ciclo semeia só ao abrir.
-- [ ] #39 teclado do roadmap/timeline: rascunho + 1 commit (R5).
-- [ ] #40 roadmap: live reload com debounce, sequência, `ErrorState`; snapshot fora do GET.
-- [ ] #41 função única de "projeto concluído" no servidor, usada por lista/detalhe/roadmap; rollups de initiative publicados.
-- [ ] #42 criar projeto com compensação (sem duplicar).
-- [ ] #43 board de projetos: `canDrop` falso quando 409 esperado; mensagem do `ApiError`.
-- [ ] #44 datas com `parseISO`.
-- [ ] #45 + R4 + R5 `useProjectDetail(projectId)` em `app/[orgId]/project/[projectId]/layout.tsx` (loading/ready/error, seq, live reload, preserva no erro) compartilhado por overview/issues/activity e peek; `resyncAll` dispara eventos de janela (coordenar com F5b: F5b adiciona o dispatch).
-- [ ] #18 (projeto) descrição do projeto com concorrência otimista (`descriptionVersion`, igual à issue).
-- [ ] Baixas Pl#17–22 (dependência com lock, updates em transação + limite, `getUpcomingCycle`, teclado/forms nos diálogos, toggles mortos do display, `teamDescendantIds` 1×, PATCH redundante no picker, status da linha pós-erro, breakdown por todas as labels, recharts sob demanda, foco da timeline, foco nos pontos do chart, lista de initiatives O(I×P), "hoje" em UTC).
+- [x] #5 `PropertyButton` com `forwardRef` + props; R3-Pl pickers de initiative extraídos + `useInitiativePatch` otimista; #46 PATCHs serializados.
+- [x] #34 overview: erro na 1ª carga → `ErrorState`, editor não monta.
+- [x] #35 impedir dois ciclos `current` (409 ou rebaixar o anterior na transação); índice parcial fica com F5a.
+- [x] #36 bootstrap de cycles agregado no SQL; items/snapshots só do current; upsert de `cycle_snapshot` com `IS DISTINCT FROM` e fora do GET.
+- [x] #37 adicionar projeto à initiative remove vínculo antigo + publica eventos.
+- [x] #38 diálogo de ciclo semeia só ao abrir.
+- [x] #39 teclado do roadmap/timeline: rascunho + 1 commit (R5).
+- [x] #40 roadmap: live reload com debounce, sequência, `ErrorState`; snapshot fora do GET.
+- [x] #41 função única de "projeto concluído" no servidor, usada por lista/detalhe/roadmap; rollups de initiative publicados.
+- [x] #42 criar projeto com compensação (sem duplicar).
+- [x] #43 board de projetos: `canDrop` falso quando 409 esperado; mensagem do `ApiError`.
+- [x] #44 datas com `parseISO`.
+- [x] #45 + R4 + R5 `useProjectDetail(projectId)` em `app/[orgId]/project/[projectId]/layout.tsx` (loading/ready/error, seq, live reload, preserva no erro) compartilhado por overview/issues/activity e peek; `resyncAll` dispara eventos de janela (coordenar com F5b: F5b adiciona o dispatch).
+- [x] #18 (projeto) descrição do projeto com concorrência otimista (`descriptionVersion`, igual à issue).
+- [x] Baixas Pl#17–22 (dependência com lock, updates em transação + limite, `getUpcomingCycle`, teclado/forms nos diálogos, toggles mortos do display, `teamDescendantIds` 1×, PATCH redundante no picker, status da linha pós-erro, breakdown por todas as labels, recharts sob demanda, foco da timeline, foco nos pontos do chart, lista de initiatives O(I×P), "hoje" em UTC).
 
 ### F3 — Comunicação e ferramentas (Claude) · worktree `.claude/worktrees/s3-f3`
 
