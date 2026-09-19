@@ -75,7 +75,13 @@ export async function createProjectTemplate(
       healthId: input.healthId ?? null,
    });
    const [row] = await db.select().from(tmplT).where(eq(tmplT.id, id)).limit(1);
-   publish({ entity: 'catalog', action: 'created', id });
+   publish({
+      entity: 'catalog',
+      action: 'created',
+      id,
+      kind: 'project_template',
+      teamId: input.teamId,
+   });
    return toDto(row);
 }
 
@@ -96,16 +102,32 @@ export async function updateProjectTemplate(
    if (patch.healthId !== undefined) values.healthId = patch.healthId;
    if (Object.keys(values).length > 0) {
       await db.update(tmplT).set(values).where(eq(tmplT.id, id));
-      publish({ entity: 'catalog', action: 'updated', id });
+      publish({
+         entity: 'catalog',
+         action: 'updated',
+         id,
+         kind: 'project_template',
+         teamId: existing[0].teamId,
+      });
    }
    const [row] = await db.select().from(tmplT).where(eq(tmplT.id, id)).limit(1);
    return toDto(row);
 }
 
 export async function deleteProjectTemplate(db: Db, id: string): Promise<boolean> {
-   const existing = await db.select({ id: tmplT.id }).from(tmplT).where(eq(tmplT.id, id)).limit(1);
+   const existing = await db
+      .select({ id: tmplT.id, teamId: tmplT.teamId })
+      .from(tmplT)
+      .where(eq(tmplT.id, id))
+      .limit(1);
    if (existing.length === 0) return false;
    await db.delete(tmplT).where(eq(tmplT.id, id));
-   publish({ entity: 'catalog', action: 'deleted', id });
+   publish({
+      entity: 'catalog',
+      action: 'deleted',
+      id,
+      kind: 'project_template',
+      teamId: existing[0].teamId,
+   });
    return true;
 }

@@ -133,6 +133,33 @@ export async function getMember(db: Db, id: string): Promise<MemberDto | null> {
    return toDto(rows[0], memberships.get(id) ?? []);
 }
 
+/**
+ * Membros de UM time com o DTO completo (#7): as rotas de membros de time devolviam 6
+ * campos tipados como `MemberDto[]` e o store zerava `teamIds` de quem vinha na lista.
+ * `teamIds` traz TODOS os times do membro, não só este.
+ */
+export async function listTeamMemberDtos(db: Db, teamId: string): Promise<MemberDto[]> {
+   const ids = (
+      await db
+         .select({ id: teamMember.userId })
+         .from(teamMember)
+         .where(eq(teamMember.teamId, teamId))
+   ).map((r) => r.id);
+   if (ids.length === 0) return [];
+   const [users, rows] = await Promise.all([
+      db.select().from(appUser).where(inArray(appUser.id, ids)),
+      db
+         .select({ userId: teamMember.userId, teamId: teamMember.teamId })
+         .from(teamMember)
+         .where(inArray(teamMember.userId, ids)),
+   ]);
+   const map = new Map<string, string[]>();
+   for (const r of rows) map.set(r.userId, [...(map.get(r.userId) ?? []), r.teamId]);
+   return users
+      .map((u) => toDto(u, map.get(u.id) ?? []))
+      .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 // Fonte única em data/users (módulo puro, compartilhado com o client);
 // o re-export mantém o contrato deste módulo para as rotas da API.
 export { MEMBER_ROLES, type MemberRole };

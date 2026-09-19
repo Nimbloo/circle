@@ -4,8 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { api } from '@/lib/client';
-import { ApiError } from '@/lib/api/errors';
+import { api, ApiError } from '@/lib/client';
 import type { InviteDto } from '@/lib/api/invites';
 import {
    Select,
@@ -58,8 +57,14 @@ export function InvitePanel() {
       void refresh();
    }, [refresh]);
 
+   // Clipboard pode ser negado (permissão/contexto inseguro): o link segue na tela.
    const copy = async (url: string) => {
-      await navigator.clipboard.writeText(url);
+      try {
+         await navigator.clipboard.writeText(url);
+      } catch {
+         toast.error('Não foi possível copiar — copie o link manualmente');
+         return;
+      }
       setCopied(true);
       toast.success('Link copiado');
       setTimeout(() => setCopied(false), 1600);
@@ -71,11 +76,11 @@ export function InvitePanel() {
       setBusy(true);
       try {
          const dto = await api.invites.create(value, role);
+         // O popover fica ABERTO: é nele que o link (que só volta uma vez) aparece.
          setFreshLink({ email: dto.email, url: dto.url });
          setEmail('');
-         setOpen(false);
-         await refresh();
-         await copy(dto.url);
+         void refresh();
+         void copy(dto.url);
       } catch (e) {
          const msg =
             e instanceof ApiError && (e.status === 400 || e.status === 409)

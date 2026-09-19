@@ -12,6 +12,8 @@ import { useCatalogStore } from '@/store/catalog-store';
 import { useFavoritesStore } from '@/store/favorites-store';
 import { api, ApiError } from '@/lib/client';
 import { isFromThisTab, isOwnEcho } from '@/lib/client-id';
+import { isSessionEnded } from '@/lib/session-redirect';
+import { invalidateCustomEmojis } from '@/hooks/use-custom-emojis';
 import type { CircleEntity } from '@/lib/api/events';
 
 /**
@@ -98,6 +100,8 @@ interface CircleEventLike {
    clientId?: string;
    /** `content`: só o conteúdo (descrição) mudou — o DTO da lista não (#18). */
    scope?: 'content';
+   /** Subtipo do `catalog` (#53; aditivo). Ausente = dado do bootstrap (status). */
+   kind?: string;
 }
 
 /** `detail` dos eventos de janela: id do recurso e, se vier, o time. */
@@ -106,6 +110,8 @@ export interface LiveEventDetail {
    teamId?: string;
    /** A mutação saiu DESTA aba (eco): a tela que já aplicou a resposta pode ignorar. */
    own?: boolean;
+   /** Subtipo do `catalog` (#53): template, project_template, sla, emoji. */
+   kind?: string;
 }
 
 /** Todos os eventos de janela: um resync avisa todas as telas com cache local. */
@@ -138,6 +144,15 @@ export const INITIATIVE_CHANGED_EVENT = 'circle:initiative-changed';
 export const DOCUMENT_CHANGED_EVENT = 'circle:document-changed';
 /** Configuração de workflow do time (SLA/automações/catálogo) mudou. */
 export const AUTOMATION_CHANGED_EVENT = 'circle:automation-changed';
+/**
+ * Dado de catálogo FORA do bootstrap mudou (#53) — `detail.kind` diz qual (template,
+ * project_template). A tela que o exibe recarrega; o bootstrap não é refeito.
+ */
+export const CATALOG_CHANGED_EVENT = 'circle:catalog-changed';
+/** Time mudou (`detail.id` = `detail.teamId` = time): ex. fila de solicitações de entrada (#58). */
+export const TEAM_CHANGED_EVENT = 'circle:team-changed';
+/** Job de import do usuário mudou de estado (`detail.id` = job): a tela relê o job. */
+export const IMPORT_JOB_EVENT = 'circle:import-job';
 
 function dispatch(name: string, detail: LiveEventDetail): void {
    window.dispatchEvent(new CustomEvent(name, { detail }));
@@ -160,7 +175,7 @@ export function useLiveReload(
    useEffect(() => {
       reloadRef.current = reload;
    });
-   const { id, teamId } = filter;
+   const { id, teamId, kind } = filter;
    const { ignoreOwn = false } = options;
    useEffect(() => {
       const on = (e: Event) => {
@@ -168,11 +183,12 @@ export function useLiveReload(
          if (id && detail.id && detail.id !== id) return;
          if (teamId && detail.teamId && detail.teamId !== teamId) return;
          if (ignoreOwn && detail.own) return;
+         if (kind && detail.kind && detail.kind !== kind) return;
          void reloadRef.current();
       };
       window.addEventListener(event, on);
       return () => window.removeEventListener(event, on);
-   }, [event, id, teamId, ignoreOwn]);
+   }, [event, id, teamId, kind, ignoreOwn]);
 }
 
 /** Label criada/editada: aplica a lista (catálogo) e reflete nas issues em memória. */
@@ -426,6 +442,7 @@ export function useLiveSync(): void {
                   );
                return;
             case 'team':
+               if (id) dispatch(TEAM_CHANGED_EVENT, { id, teamId: id });
                if (!id) scheduleHydrate('workspace');
                else if (deleted) ws.removeTeamLocal(id);
                // Time fora do escopo (convidado) responde 404: nada a aplicar.
@@ -461,9 +478,17 @@ export function useLiveSync(): void {
                dispatch(DOCUMENT_CHANGED_EVENT, { id, teamId: parsed.teamId });
                return;
             case 'catalog':
-               // Status/templates/SLA/emoji chegam pelo bootstrap (STATUS = colunas do board).
-               scheduleHydrate('workspace');
-               dispatch(AUTOMATION_CHANGED_EVENT, { id, teamId: parsed.teamId });
+               // #53: só status (sem `kind`) vive no bootstrap (STATUS = colunas do board).
+               // Template/SLA/emoji avisam só quem os exibe.
+               if (parsed.kind === 'emoji') invalidateCustomEmojis();
+               else if (parsed.kind === 'sla')
+                  dispatch(AUTOMATION_CHANGED_EVENT, { id, teamId: parsed.teamId });
+               else if (parsed.kind)
+                  dispatch(CATALOG_CHANGED_EVENT, { id, teamId: parsed.teamId, kind: parsed.kind });
+               else {
+                  scheduleHydrate('workspace');
+                  dispatch(AUTOMATION_CHANGED_EVENT, { id, teamId: parsed.teamId });
+               }
                return;
             case 'notification': {
                const me = useWorkspaceStore.getState().me?.id;
@@ -477,6 +502,10 @@ export function useLiveSync(): void {
                scheduleHydrate('notifications');
                return;
             }
+            case 'import':
+               // Endereçado ao dono (`recipientId`); só a tela de import escuta.
+               dispatch(IMPORT_JOB_EVENT, { id });
+               return;
             case 'review_comment':
             case 'review':
                // Sem store de reviews: quem escuta é a tela — o detalhe aberto recarrega
@@ -496,7 +525,8 @@ export function useLiveSync(): void {
       };
 
       const connect = () => {
-         if (closed || source) return;
+         // Sessão encerrada (#12): o cliente já foi para o login; não reconecta.
+         if (closed || source || isSessionEnded()) return;
          source = new EventSource('/api/v1/events');
          source.onopen = () => {
             tentativas = 0;
@@ -524,7 +554,13 @@ export function useLiveSync(): void {
                // de 1 em 1 segundo, em uníssono, é uma enxurrada no pod que subiu.
                const espera = Math.min(1000 * 2 ** tentativas, MAX_BACKOFF_MS);
                tentativas += 1;
-               setTimeout(connect, espera * (0.5 + Math.random() / 2));
+               // EventSource não expõe o status: um 401 do stream fecha a conexão igual a
+               // uma queda. Sonda a sessão (`/me`) antes — 401 encerra (#12) e o
+               // `connect` desiste; qualquer outro resultado reconecta.
+               setTimeout(
+                  () => void api.me().then(connect, connect),
+                  espera * (0.5 + Math.random() / 2)
+               );
             }
          };
       };

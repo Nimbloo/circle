@@ -235,7 +235,7 @@ export default function IssueLabelsSettings() {
       <div className="h-full w-full overflow-y-auto">
          <div className="px-14 py-16 pb-20 max-md:px-5 max-md:py-8">
             <div className="mb-[13px] flex items-center gap-1.5">
-               <SidebarTrigger className="-ml-1 md:hidden" />
+               <SidebarTrigger className="-ml-1 lg:hidden" />
                <h1 className="text-2xl font-medium leading-8">Issue labels</h1>
             </div>
 

@@ -4,6 +4,7 @@ import { handle, requireEmail } from '@/lib/api/http';
 import { getOrCreateUser } from '@/lib/api/users';
 import {
    getUserSettings,
+   patchUserSettings,
    putUserSettings,
    SettingsSchema,
    MAX_SETTINGS_BYTES,
@@ -32,5 +33,23 @@ export async function PUT(req: Request) {
       }
       const parsed = SettingsSchema.parse(raw ? JSON.parse(raw) : {});
       return ok(await putUserSettings(db, user.id, parsed));
+   }, req);
+}
+
+/**
+ * PATCH /settings — merge por SEÇÃO (#15): cada seção enviada (`theme`, `notifications`,
+ * `preferences`, `layout`) substitui a gravada; as outras ficam. Mesmo schema fechado e
+ * mesmo teto do PUT (sobre o blob mesclado).
+ */
+export async function PATCH(req: Request) {
+   return handle(async () => {
+      const email = await requireEmail(req);
+      const user = await getOrCreateUser(db, email);
+      const raw = await req.text();
+      if (Buffer.byteLength(raw, 'utf8') > MAX_SETTINGS_BYTES) {
+         return problem(413, 'Payload Too Large', 'Corpo excede o limite de 32KB');
+      }
+      const patch = SettingsSchema.parse(raw ? JSON.parse(raw) : {});
+      return ok(await patchUserSettings(db, user.id, patch));
    }, req);
 }

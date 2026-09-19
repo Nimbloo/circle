@@ -35,9 +35,11 @@ import type { ProjectTemplateDto } from '@/lib/api/project-templates';
 import { useStatuses, usePriorities, useHealthStates } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { FolderKanban, Pencil, Plus, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { SettingsShell } from './shared';
+import { useAsyncResource } from '@/hooks/use-async-resource';
+import { CATALOG_CHANGED_EVENT, useLiveReload } from '@/lib/use-live-sync';
 
 const NONE = '__none__';
 
@@ -203,8 +205,6 @@ export default function ProjectTemplatesSettings() {
    const isAdmin = me?.admin ?? false;
 
    const [teamId, setTeamId] = useState('');
-   const [templates, setTemplates] = useState<ProjectTemplateDto[]>([]);
-   const [loading, setLoading] = useState(false);
    const [dialogOpen, setDialogOpen] = useState(false);
    const [editing, setEditing] = useState<ProjectTemplateDto | null>(null);
    const [toDelete, setToDelete] = useState<ProjectTemplateDto | null>(null);
@@ -213,27 +213,14 @@ export default function ProjectTemplatesSettings() {
       if (!teamId && teams.length > 0) setTeamId(teams[0].id);
    }, [teams, teamId]);
 
-   // Skeleton só quando carrega um time DIFERENTE do exibido (1ª carga ou troca de
-   // time — senão mostraria templates do time errado); o reload pós-mutation do
-   // mesmo time é silencioso, sem piscar a lista.
-   const loadedTeamRef = useRef<string | null>(null);
-   const load = useCallback(async () => {
-      if (!teamId) return;
-      if (loadedTeamRef.current !== teamId) setLoading(true);
-      try {
-         setTemplates(await api.teams.projectTemplates(teamId));
-         loadedTeamRef.current = teamId;
-      } catch {
-         // Falha de refetch do MESMO time não apaga a lista exibida.
-         if (loadedTeamRef.current !== teamId) setTemplates([]);
-      } finally {
-         setLoading(false);
-      }
-   }, [teamId]);
-
-   useEffect(() => {
-      void load();
-   }, [load]);
+   // R4 (#57): seq por time — resposta atrasada do time anterior nunca aparece; troca
+   // de time mostra skeleton; reload do mesmo time é silencioso; falha vira erro, não vazio.
+   const resource = useAsyncResource(teamId || null, (id) => api.teams.projectTemplates(id));
+   const templates = resource.data ?? [];
+   const loading = resource.loading;
+   const load = resource.reload;
+   // Template criado/editado por OUTRO admin chega por evento `catalog` (#53).
+   useLiveReload(CATALOG_CHANGED_EVENT, { teamId, kind: 'project_template' }, load);
 
    const confirmDelete = async () => {
       if (!toDelete) return;
@@ -283,6 +270,13 @@ export default function ProjectTemplatesSettings() {
          <div className="rounded-lg border bg-container overflow-hidden">
             {loading ? (
                <ListSkeleton rows={4} />
+            ) : resource.error ? (
+               <div className="flex flex-col items-center gap-2 py-10 text-sm text-muted-foreground">
+                  Não foi possível carregar os templates.
+                  <Button size="sm" variant="outline" onClick={() => void load()}>
+                     Tentar novamente
+                  </Button>
+               </div>
             ) : templates.length === 0 ? (
                <EmptyState
                   icon={FolderKanban}

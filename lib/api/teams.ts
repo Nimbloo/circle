@@ -13,14 +13,17 @@ import {
    documentFolder as documentFolderT,
    teamSla,
    teamAutomation,
+   issueTemplate as issueTemplateT,
+   projectTemplate as projectTemplateT,
 } from '@/db/schema';
 import { getOrCreateUser } from './users';
-import { assertTeamParent, teamChildIds } from './hierarchy';
+import { assertTeamParent } from './hierarchy';
 import { sendEmail } from './integrations/mailer';
 import { ctaEmailHtml } from './integrations/email-templates';
 import { escapeHtml } from './notify';
 import { ApiError } from './errors';
-import { publish } from './events';
+import { publish, publishInternal } from './events';
+import { listTeamMemberDtos, type MemberDto } from './members';
 
 type TeamRow = typeof teamT.$inferSelect;
 
@@ -157,19 +160,9 @@ export async function getTeam(db: Db, id: string, meId?: string): Promise<TeamDt
    return toDto(rows[0], counts, joined, new Set(requested));
 }
 
-export async function listTeamMembers(db: Db, teamId: string) {
-   return db
-      .select({
-         id: appUser.id,
-         slug: appUser.slug,
-         name: appUser.name,
-         email: appUser.email,
-         avatarUrl: appUser.avatarUrl,
-         role: appUser.role,
-      })
-      .from(teamMember)
-      .innerJoin(appUser, eq(teamMember.userId, appUser.id))
-      .where(eq(teamMember.teamId, teamId));
+/** Membros do time com `MemberDto` completo (#7) — ver `listTeamMemberDtos`. */
+export async function listTeamMembers(db: Db, teamId: string): Promise<MemberDto[]> {
+   return listTeamMemberDtos(db, teamId);
 }
 
 export interface CreateTeamInput {
@@ -191,6 +184,15 @@ export async function createTeam(
    input: CreateTeamInput,
    creatorEmail?: string
 ): Promise<TeamDto> {
+   // Convidado só enxerga os times de que participa; criar time é papel de membro.
+   if (creatorEmail) {
+      const creator = await db
+         .select({ role: appUser.role })
+         .from(appUser)
+         .where(eq(appUser.email, creatorEmail.trim().toLowerCase()))
+         .limit(1);
+      if (creator[0]?.role === 'Guest') throw new ApiError(403, 'Convidados não podem criar times');
+   }
    const id = input.id.trim().toUpperCase();
    if (!/^[A-Z][A-Z0-9]{1,15}$/.test(id))
       throw new ApiError(
@@ -265,22 +267,23 @@ export async function addTeamMember(db: Db, teamId: string, email: string): Prom
    // E-mail (best-effort): só em inserção nova e com remetente configurado. Acesso ao
    // Circle já é via SSO Keycloak (grupo `app-circle`) — aqui é só o aviso de que
    // entrou no time, sem link de senha/convite nativo (retirado).
+   // Fire-and-forget: o SES não segura a resposta de quem adicionou (Ad#21–40).
    if (inserted.length && process.env.CIRCLE_MAIL_FROM) {
-      try {
-         const teamName = t[0].name;
-         await sendEmail(
-            user.email,
-            `Você entrou no time ${teamName}`,
-            ctaEmailHtml({
-               title: `Você foi adicionado ao time ${teamName}`,
-               intro: `Agora você faz parte do time ${teamName} no Circle.`,
-               buttonLabel: 'Abrir o Circle',
-               buttonUrl: 'https://circle.nimbloo.ai',
-            })
-         );
-      } catch (err) {
-         console.error('[circle] notificação de time por e-mail falhou:', err);
-      }
+      const teamName = t[0].name;
+      void Promise.resolve()
+         .then(() =>
+            sendEmail(
+               user.email,
+               `Você entrou no time ${teamName}`,
+               ctaEmailHtml({
+                  title: `Você foi adicionado ao time ${teamName}`,
+                  intro: `Agora você faz parte do time ${teamName} no Circle.`,
+                  buttonLabel: 'Abrir o Circle',
+                  buttonUrl: 'https://circle.nimbloo.ai',
+               })
+            )
+         )
+         .catch((err) => console.error('[circle] notificação de time por e-mail falhou:', err));
    }
 }
 
@@ -341,6 +344,8 @@ export async function requestToJoin(
          set: { status: 'pending', createdAt: new Date(), decidedAt: null, decidedBy: null },
       });
    publish({ entity: 'member', action: 'updated', id: user.id, teamId });
+   // #58: a fila de solicitações (tela de membros do time, admin) recarrega ao vivo.
+   publishInternal({ entity: 'team', action: 'updated', id: teamId, teamId });
    notifyAdminsOfJoinRequest(t[0].name, user.name).catch(() => {});
    return { status: 'pending' };
 }
@@ -383,7 +388,7 @@ export async function decideJoinRequest(
    deciderId: string
 ): Promise<{
    requests: JoinRequestDto[];
-   members: Awaited<ReturnType<typeof listTeamMembers>>;
+   members: MemberDto[];
 }> {
    const rows = await db
       .select()
@@ -403,6 +408,7 @@ export async function decideJoinRequest(
       .set({ status: decision, decidedAt: new Date(), decidedBy: deciderId })
       .where(eq(teamJoinRequest.id, requestId));
    publish({ entity: 'member', action: 'updated', id: rows[0].userId, teamId });
+   publishInternal({ entity: 'team', action: 'updated', id: teamId, teamId });
    const [requests, members] = await Promise.all([
       listJoinRequests(db, teamId),
       listTeamMembers(db, teamId),
@@ -482,54 +488,76 @@ export async function updateTeam(
  * automações) e o team. Retorna false se o time não existir.
  */
 export async function deleteTeam(db: Db, id: string): Promise<boolean> {
-   const existing = await db.select({ id: teamT.id }).from(teamT).where(eq(teamT.id, id)).limit(1);
-   if (existing.length === 0) return false;
-
-   const [issues, projects, cycles, views, folders] = await Promise.all([
-      db.select({ n: count() }).from(issueT).where(eq(issueT.teamId, id)),
-      db.select({ n: count() }).from(projectT).where(eq(projectT.teamId, id)),
-      db.select({ n: count() }).from(cycleT).where(eq(cycleT.teamId, id)),
-      db.select({ n: count() }).from(savedViewT).where(eq(savedViewT.teamId, id)),
-      db.select({ n: count() }).from(documentFolderT).where(eq(documentFolderT.teamId, id)),
-   ]);
-   const total =
-      Number(issues[0].n) +
-      Number(projects[0].n) +
-      Number(cycles[0].n) +
-      Number(views[0].n) +
-      Number(folders[0].n);
-   if (total > 0)
-      throw new ApiError(
-         409,
-         `Team '${id}' tem issues/projects/cycles/views/folders — esvazie antes de apagar`
-      );
-
-   // Sub-times (#100): reancora os filhos no avô antes de apagar. Sem isto o FK
-   // self-referente (team.parent_id) estoura 23503, e deixar `parent_id` apontando
-   // pra um time inexistente não é opção.
-   const children = await teamChildIds(db, id);
-   if (children.length) {
-      const [row] = await db
-         .select({ parentId: teamT.parentId })
+   // Tudo numa transação (#59): antes cada passo era um statement solto, e uma falha no
+   // meio (FK de template, por exemplo) deixava o time sem membros, sem SLA e sem
+   // automações — parcialmente destruído. O `FOR UPDATE` no time serializa com quem
+   // estiver criando conteúdo nele durante a checagem de "vazio".
+   const deleted = await db.transaction(async (tx) => {
+      const existing = await tx
+         .select({ id: teamT.id, parentId: teamT.parentId })
          .from(teamT)
          .where(eq(teamT.id, id))
+         .for('update')
          .limit(1);
-      await db
-         .update(teamT)
-         .set({ parentId: row?.parentId ?? null })
-         .where(eq(teamT.parentId, id));
-   }
+      if (existing.length === 0) return false;
 
-   // Solicitações de entrada (histórico) NÃO bloqueiam a deleção — limpa antes do time,
-   // senão o FK (team_join_request.team_id, sem onDelete) estoura 23503 → 404 enganoso.
-   await db.delete(teamJoinRequest).where(eq(teamJoinRequest.teamId, id));
-   // SLA e automações são CONFIGURAÇÃO do time, não conteúdo: somem com ele. Sem isto o
-   // FK estourava 23503 → 404 enganoso, e como `ensureDefaultAutomations` semeia a regra
-   // padrão na primeira leitura, quase todo time ficava indelével.
-   await db.delete(teamSla).where(eq(teamSla.teamId, id));
-   await db.delete(teamAutomation).where(eq(teamAutomation.teamId, id));
-   await db.delete(teamMember).where(eq(teamMember.teamId, id));
-   await db.delete(teamT).where(eq(teamT.id, id));
-   publish({ entity: 'team', action: 'deleted', id, teamId: id });
-   return true;
+      const [issues, projects, cycles, views, folders] = await Promise.all([
+         tx.select({ n: count() }).from(issueT).where(eq(issueT.teamId, id)),
+         tx.select({ n: count() }).from(projectT).where(eq(projectT.teamId, id)),
+         tx.select({ n: count() }).from(cycleT).where(eq(cycleT.teamId, id)),
+         tx.select({ n: count() }).from(savedViewT).where(eq(savedViewT.teamId, id)),
+         tx.select({ n: count() }).from(documentFolderT).where(eq(documentFolderT.teamId, id)),
+      ]);
+      const total =
+         Number(issues[0].n) +
+         Number(projects[0].n) +
+         Number(cycles[0].n) +
+         Number(views[0].n) +
+         Number(folders[0].n);
+      if (total > 0)
+         throw new ApiError(
+            409,
+            `Team '${id}' tem issues/projects/cycles/views/folders — esvazie antes de apagar`
+         );
+
+      // Sub-times (#100): reancora os filhos no avô antes de apagar. Sem isto o FK
+      // self-referente (team.parent_id) estoura 23503, e deixar `parent_id` apontando
+      // pra um time inexistente não é opção.
+      await tx
+         .update(teamT)
+         .set({ parentId: existing[0].parentId ?? null })
+         .where(eq(teamT.parentId, id));
+
+      // Solicitações de entrada (histórico) NÃO bloqueiam a deleção — limpa antes do time,
+      // senão o FK (team_join_request.team_id, sem onDelete) estoura 23503 → 404 enganoso.
+      await tx.delete(teamJoinRequest).where(eq(teamJoinRequest.teamId, id));
+      // SLA, automações e templates (issue/projeto) são CONFIGURAÇÃO do time, não
+      // conteúdo: somem com ele. Sem isto o FK estourava 23503 → 404 enganoso, e como
+      // `ensureDefaultAutomations` semeia a regra padrão na primeira leitura, quase todo
+      // time ficava indelével.
+      await tx.delete(teamSla).where(eq(teamSla.teamId, id));
+      await tx.delete(teamAutomation).where(eq(teamAutomation.teamId, id));
+      await tx.delete(issueTemplateT).where(eq(issueTemplateT.teamId, id));
+      await tx.delete(projectTemplateT).where(eq(projectTemplateT.teamId, id));
+      await tx.delete(teamMember).where(eq(teamMember.teamId, id));
+      await tx.delete(teamT).where(eq(teamT.id, id));
+      return true;
+   });
+   if (deleted) publish({ entity: 'team', action: 'deleted', id, teamId: id });
+   return deleted;
+}
+
+/**
+ * Destino da landing da org (`/[orgId]`): 1º time do qual o usuário é membro → 1º time
+ * existente → criar time. Convidado (Ad#21–40) nunca cai em time fora do escopo nem em
+ * "criar time" (não pode): sem time, vai para My issues.
+ */
+export async function orgLandingPath(db: Db, email: string | null): Promise<string> {
+   if (!email) return 'settings/teams/new';
+   const me = await getOrCreateUser(db, email);
+   const joined = await listTeams(db, { membership: ['Joined'] }, me.id);
+   if (joined.length > 0) return `team/${joined[0].id}/all`;
+   if (me.role === 'Guest') return 'my-issues';
+   const all = await listTeams(db, {}, me.id);
+   return all.length > 0 ? `team/${all[0].id}/all` : 'settings/teams/new';
 }

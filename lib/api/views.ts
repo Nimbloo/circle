@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import { and, eq, isNotNull, or } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { savedView, team as teamT } from '@/db/schema';
@@ -11,29 +12,29 @@ import { ApiError } from './errors';
 import { publish } from './events';
 import { assertCanWriteTeam } from './scope';
 
-export interface ViewFilter {
-   statusCategories?: string[];
-   statusIds?: string[];
-   labelIds?: string[];
-   priorityIds?: string[];
-   hasProject?: boolean;
-   unassigned?: boolean;
+/**
+ * Schema ÚNICO do filtro de view (#6/R6): POST e PATCH das rotas validam por ele e o
+ * tipo `ViewFilter` deriva dele. Antes cada rota tinha a sua cópia sem
+ * `assigneeIds`/`projectIds` e o zod descartava os campos em silêncio.
+ */
+export const ViewFilterSchema = z.object({
+   statusCategories: z.array(z.string()).optional(),
+   statusIds: z.array(z.string()).optional(),
+   labelIds: z.array(z.string()).optional(),
+   priorityIds: z.array(z.string()).optional(),
+   hasProject: z.boolean().optional(),
+   unassigned: z.boolean().optional(),
    /**
-    * Responsáveis e projetos ESPECÍFICOS. Antes a view só tinha os booleanos acima
-    * (`unassigned`/`hasProject`), então não dava para salvar as duas perguntas mais
-    * comuns do dia a dia: "o que está com a Ana" e "o que é do Projeto X".
-    *
-    * Convivem com os booleanos: `unassigned` + `assigneeIds` significa "sem responsável
-    * OU com um destes", que é como o Linear trata a mesma combinação.
+    * Responsáveis e projetos ESPECÍFICOS. Convivem com os booleanos: `unassigned` +
+    * `assigneeIds` significa "sem responsável OU com um destes", como no Linear.
     */
-   assigneeIds?: string[];
-   projectIds?: string[];
-   /**
-    * Saved search (#99): termo full-text. A view resolve pelo MESMO motor da busca
-    * (`lib/api/search.ts`), então o resultado salvo é idêntico ao que a tela mostrou.
-    */
-   q?: string;
-}
+   assigneeIds: z.array(z.string()).optional(),
+   projectIds: z.array(z.string()).optional(),
+   /** Saved search (#99): termo full-text resolvido por `lib/api/search.ts`. */
+   q: z.string().max(200).optional(),
+});
+
+export type ViewFilter = z.infer<typeof ViewFilterSchema>;
 
 type ViewRow = typeof savedView.$inferSelect;
 
@@ -162,7 +163,13 @@ export async function createView(
       createdAt: now,
       updatedAt: now,
    });
-   publish({ entity: 'view', action: 'created', id, actorEmail: ownerEmail });
+   publish({
+      entity: 'view',
+      action: 'created',
+      id,
+      actorEmail: ownerEmail,
+      ...viewAudience(input.teamId ?? null, owner.id),
+   });
    return (await getView(db, id))!;
 }
 
@@ -178,18 +185,34 @@ export interface UpdateViewInput {
    filter?: ViewFilter;
 }
 
-/** Verifica se o ator é dono da view (ou admin); 404 se não existir, 403 se não autorizado. */
-async function assertViewOwner(db: Db, id: string, actorEmail: string): Promise<boolean> {
+/**
+ * Quem recebe o evento da view (Ad#21–40): pessoal → só o dono (`recipientId`); de time →
+ * `teamId` (convidado de outro time não recebe). Antes todo cliente recebia o evento de
+ * toda view pessoal e fazia um GET que dava 404.
+ */
+function viewAudience(
+   teamId: string | null,
+   ownerId: string
+): { teamId: string } | { recipientId: string } {
+   return teamId ? { teamId } : { recipientId: ownerId };
+}
+
+/** Verifica se o ator é dono da view (ou admin); null se não existir, 403 se não autorizado. */
+async function assertViewOwner(
+   db: Db,
+   id: string,
+   actorEmail: string
+): Promise<{ ownerId: string; teamId: string | null } | null> {
    const existing = await db
-      .select({ ownerId: savedView.ownerId })
+      .select({ ownerId: savedView.ownerId, teamId: savedView.teamId })
       .from(savedView)
       .where(eq(savedView.id, id))
       .limit(1);
-   if (existing.length === 0) return false;
+   if (existing.length === 0) return null;
    const me = await getOrCreateUser(db, actorEmail);
    if (existing[0].ownerId !== me.id && !(await isAdmin(actorEmail, db)))
       throw new ApiError(403, 'Apenas o dono da view (ou admin)');
-   return true;
+   return existing[0];
 }
 
 export async function updateView(
@@ -198,7 +221,8 @@ export async function updateView(
    patch: UpdateViewInput,
    actorEmail: string
 ): Promise<ViewDto | null> {
-   if (!(await assertViewOwner(db, id, actorEmail))) return null;
+   const prev = await assertViewOwner(db, id, actorEmail);
+   if (!prev) return null;
    const set: Record<string, unknown> = { updatedAt: new Date() };
    if (patch.name !== undefined) set.name = patch.name;
    if (patch.description !== undefined) set.description = patch.description;
@@ -214,14 +238,34 @@ export async function updateView(
       set.teamId = patch.teamId;
    }
    await db.update(savedView).set(set).where(eq(savedView.id, id));
-   publish({ entity: 'view', action: 'updated', id, actorEmail });
+   // Estava compartilhada: quem a via (o time antigo) precisa do evento mesmo que ela
+   // vire pessoal ou mude de time — o GET dá 404 e o cliente a remove.
+   const nextTeamId = patch.teamId !== undefined ? patch.teamId : prev.teamId;
+   publish({
+      entity: 'view',
+      action: 'updated',
+      id,
+      actorEmail,
+      ...(prev.teamId && prev.teamId !== nextTeamId
+         ? nextTeamId
+            ? {} // mudou de time: os dois times precisam saber
+            : { teamId: prev.teamId }
+         : viewAudience(nextTeamId, prev.ownerId)),
+   });
    return getView(db, id);
 }
 
 export async function deleteView(db: Db, id: string, actorEmail: string): Promise<boolean> {
-   if (!(await assertViewOwner(db, id, actorEmail))) return false;
+   const prev = await assertViewOwner(db, id, actorEmail);
+   if (!prev) return false;
    await db.delete(savedView).where(eq(savedView.id, id));
-   publish({ entity: 'view', action: 'deleted', id, actorEmail });
+   publish({
+      entity: 'view',
+      action: 'deleted',
+      id,
+      actorEmail,
+      ...viewAudience(prev.teamId, prev.ownerId),
+   });
    return true;
 }
 

@@ -49,6 +49,11 @@ export type CircleEntity =
    /** Favorito do usuário (sempre com `recipientId`): as outras abas dele recarregam a lista. */
    | 'favorite'
    /**
+    * Job de import em background (#10): endereçado ao DONO (`recipientId`), `id` = job.
+    * A tela de import consulta `GET /import/jobs/:id` ao receber.
+    */
+   | 'import'
+   /**
     * Sinal LOCAL do pod (não vem de mutação): a conexão LISTEN caiu e voltou, então
     * eventos de outros pods podem ter se perdido no intervalo. O cliente deve tratar
     * como uma reconexão — re-hidratar issues, workspace e notificações.
@@ -62,6 +67,9 @@ import { CLIENT_ID_HEADER, CLIENT_ID_PATTERN } from '@/lib/client-id';
 export { CLIENT_ID_HEADER };
 
 export type CircleAction = 'created' | 'updated' | 'deleted';
+
+/** O que mudou num evento `catalog` fora do bootstrap (#53). */
+export type CatalogKind = 'template' | 'project_template' | 'sla' | 'emoji';
 
 export interface CircleEvent {
    entity: CircleEntity;
@@ -92,6 +100,11 @@ export interface CircleEvent {
     * recarrega só o detalhe aberto, sem GET da issue em todos os clientes.
     */
    scope?: 'content';
+   /**
+    * Subtipo do `catalog` (#53). Ausente = dado que vive no bootstrap (status): o cliente
+    * re-hidrata o workspace. Com kind, só quem exibe aquele dado recarrega.
+    */
+   kind?: CatalogKind;
    /**
     * Selo monotônico só para ordenação/deduplicação no cliente. É um contador
     * incremental (NÃO `Date.now()`): o valor absoluto é irrelevante e evita
@@ -124,7 +137,10 @@ export function eventForViewer(event: CircleEvent, viewer: EventViewer): CircleE
    if (event.recipientId) return event.recipientId === viewer.userId ? event : null;
    if (viewer.teamIds === null) return event;
    if (event.teamId) return viewer.teamIds.includes(event.teamId) ? event : null;
-   return { entity: event.entity, action: event.action, ts: event.ts };
+   // `kind` não revela nada do recurso e evita que o convidado refaça o bootstrap à toa.
+   return event.kind
+      ? { entity: event.entity, action: event.action, kind: event.kind, ts: event.ts }
+      : { entity: event.entity, action: event.action, ts: event.ts };
 }
 
 /**
@@ -303,6 +319,17 @@ export function runListener(opts: ListenerOptions): () => void {
 async function startListener(): Promise<void> {
    if (g.__circleListenStarted || !notifyEnabled()) return;
    g.__circleListenStarted = true;
+   // Mesmo gatilho (1º subscribe em runtime real, uma vez por pod): liga o timer do sweep
+   // de webhooks (#55) — o retry deixa de depender de tráfego. Import preguiçoso (Edge).
+   void (async () => {
+      try {
+         const { db } = await import('@/db');
+         const { startWebhookSweepTimer } = await import('./webhooks');
+         startWebhookSweepTimer(db);
+      } catch {
+         // best-effort: sem timer, o sweep ainda roda por publish e pela tela.
+      }
+   })();
    const { Client } = await import('pg');
    runListener({
       makeClient: () => new Client({ connectionString: process.env.DATABASE_URL, keepAlive: true }),
@@ -351,8 +378,10 @@ function stamp(event: Omit<CircleEvent, 'ts'>): CircleEvent {
  * que são só do realtime — ex.: o evento coarse do fim de um import (#21), que não
  * representa uma mutação única para assinantes externos. Nunca lança.
  */
-export function publishInternal(event: Omit<CircleEvent, 'ts'>): void {
-   deliver(stamp(event));
+export function publishInternal(event: Omit<CircleEvent, 'ts'>): CircleEvent {
+   const full = stamp(event);
+   deliver(full);
+   return full;
 }
 
 function deliver(full: CircleEvent): void {
@@ -405,7 +434,8 @@ function dispatchWebhooks(event: CircleEvent): void {
    void (async () => {
       try {
          const { db } = await import('@/db');
-         const { onCircleEvent } = await import('./webhooks');
+         const { onCircleEvent, startWebhookSweepTimer } = await import('./webhooks');
+         startWebhookSweepTimer(db); // #55: pod que só publica (sem SSE) também varre
          await onCircleEvent(db, event);
       } catch {
          // Webhook é best-effort: nunca derruba a mutação que originou o evento.

@@ -230,14 +230,21 @@ export default function WebhooksSettings() {
    };
 
    const remove = async (hook: WebhookDto) => {
-      const previous = hooks;
+      const index = hooks.findIndex((h) => h.id === hook.id);
       setHooks((list) => list.filter((h) => h.id !== hook.id));
       setRemoving(null);
       try {
          await api.webhooks.remove(hook.id);
          toast.success('Webhook excluído');
       } catch {
-         setHooks(previous);
+         // Rollback SÓ do item: restaurar a lista inteira desfazia o que mudou no meio
+         // (toggle/criação de outro webhook enquanto o DELETE estava em voo).
+         setHooks((list) => {
+            if (list.some((h) => h.id === hook.id)) return list;
+            const next = [...list];
+            next.splice(Math.max(0, Math.min(index, next.length)), 0, hook);
+            return next;
+         });
          toast.error('Não foi possível excluir o webhook');
       }
    };

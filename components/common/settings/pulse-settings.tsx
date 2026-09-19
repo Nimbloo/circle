@@ -69,7 +69,6 @@ export default function PulseSettings() {
 
    const data = useMemo(() => {
       const byCategory = new Map<string, { count: number; color: string }>();
-      const byStatus = new Map<string, { count: number; color: string }>();
       const byPriority = new Map<string, number>();
       const byTeam = new Map<string, number>();
 
@@ -78,11 +77,6 @@ export default function PulseSettings() {
          const c = byCategory.get(cat) ?? { count: 0, color: i.status?.color ?? '#888' };
          c.count += 1;
          byCategory.set(cat, c);
-
-         const sName = i.status?.name ?? '—';
-         const s = byStatus.get(sName) ?? { count: 0, color: i.status?.color ?? '#888' };
-         s.count += 1;
-         byStatus.set(sName, s);
 
          const pName = i.priority?.name ?? 'No priority';
          byPriority.set(pName, (byPriority.get(pName) ?? 0) + 1);

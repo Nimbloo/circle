@@ -1,6 +1,7 @@
 import NextAuth from 'next-auth';
 import { authConfig } from '@/auth.config';
 import { isPublicApiPath } from '@/lib/api/public-routes';
+import { loginRedirectUrl } from '@/lib/session-redirect';
 
 // Instância EDGE-SAFE (só a authConfig, sem Credentials/db) — evita puxar pg/bcrypt/
 // node:crypto pro bundle Edge do middleware.
@@ -12,7 +13,8 @@ const { auth } = NextAuth(authConfig);
  *  - `/api/*`: sem sessão → **401 JSON** (não redirect), exceto a allowlist pública
  *    (`/api/auth/*` = fluxo NextAuth; `/api/healthz` e `/api/readyz` = probes do
  *    kubelet, que não têm sessão — redirecionar/401 mataria o pod).
- *  - páginas: sem sessão → redirect `/login` (exceto `/login` e `/signup`).
+ *  - páginas: sem sessão → redirect `/login?callbackUrl=<deep-link>` (exceto `/login` e
+ *    `/signup`).
  *
  * Fecha por padrão: uma rota nova sob `/api/v1` já nasce protegida. É a PRIMEIRA de
  * duas camadas — os handlers repetem a checagem com `requireEmail` (garantido pelo
@@ -53,7 +55,10 @@ export default auth(async (req) => {
    );
    if (isPublicPage) return;
    if (!req.auth) {
-      return Response.redirect(new URL('/login', req.nextUrl.origin));
+      // Deep-link preservado (#12): depois do login, volta para onde estava.
+      return Response.redirect(
+         new URL(loginRedirectUrl(pathname, req.nextUrl.search), req.nextUrl.origin)
+      );
    }
 });
 
