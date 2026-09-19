@@ -13,9 +13,11 @@ import {
    documentFolder as documentFolderT,
    teamSla,
    teamAutomation,
+   issueTemplate as issueTemplateT,
+   projectTemplate as projectTemplateT,
 } from '@/db/schema';
 import { getOrCreateUser } from './users';
-import { assertTeamParent, teamChildIds } from './hierarchy';
+import { assertTeamParent } from './hierarchy';
 import { sendEmail } from './integrations/mailer';
 import { ctaEmailHtml } from './integrations/email-templates';
 import { escapeHtml } from './notify';
@@ -473,54 +475,61 @@ export async function updateTeam(
  * automações) e o team. Retorna false se o time não existir.
  */
 export async function deleteTeam(db: Db, id: string): Promise<boolean> {
-   const existing = await db.select({ id: teamT.id }).from(teamT).where(eq(teamT.id, id)).limit(1);
-   if (existing.length === 0) return false;
-
-   const [issues, projects, cycles, views, folders] = await Promise.all([
-      db.select({ n: count() }).from(issueT).where(eq(issueT.teamId, id)),
-      db.select({ n: count() }).from(projectT).where(eq(projectT.teamId, id)),
-      db.select({ n: count() }).from(cycleT).where(eq(cycleT.teamId, id)),
-      db.select({ n: count() }).from(savedViewT).where(eq(savedViewT.teamId, id)),
-      db.select({ n: count() }).from(documentFolderT).where(eq(documentFolderT.teamId, id)),
-   ]);
-   const total =
-      Number(issues[0].n) +
-      Number(projects[0].n) +
-      Number(cycles[0].n) +
-      Number(views[0].n) +
-      Number(folders[0].n);
-   if (total > 0)
-      throw new ApiError(
-         409,
-         `Team '${id}' tem issues/projects/cycles/views/folders — esvazie antes de apagar`
-      );
-
-   // Sub-times (#100): reancora os filhos no avô antes de apagar. Sem isto o FK
-   // self-referente (team.parent_id) estoura 23503, e deixar `parent_id` apontando
-   // pra um time inexistente não é opção.
-   const children = await teamChildIds(db, id);
-   if (children.length) {
-      const [row] = await db
-         .select({ parentId: teamT.parentId })
+   // Tudo numa transação (#59): antes cada passo era um statement solto, e uma falha no
+   // meio (FK de template, por exemplo) deixava o time sem membros, sem SLA e sem
+   // automações — parcialmente destruído. O `FOR UPDATE` no time serializa com quem
+   // estiver criando conteúdo nele durante a checagem de "vazio".
+   const deleted = await db.transaction(async (tx) => {
+      const existing = await tx
+         .select({ id: teamT.id, parentId: teamT.parentId })
          .from(teamT)
          .where(eq(teamT.id, id))
+         .for('update')
          .limit(1);
-      await db
-         .update(teamT)
-         .set({ parentId: row?.parentId ?? null })
-         .where(eq(teamT.parentId, id));
-   }
+      if (existing.length === 0) return false;
 
-   // Solicitações de entrada (histórico) NÃO bloqueiam a deleção — limpa antes do time,
-   // senão o FK (team_join_request.team_id, sem onDelete) estoura 23503 → 404 enganoso.
-   await db.delete(teamJoinRequest).where(eq(teamJoinRequest.teamId, id));
-   // SLA e automações são CONFIGURAÇÃO do time, não conteúdo: somem com ele. Sem isto o
-   // FK estourava 23503 → 404 enganoso, e como `ensureDefaultAutomations` semeia a regra
-   // padrão na primeira leitura, quase todo time ficava indelével.
-   await db.delete(teamSla).where(eq(teamSla.teamId, id));
-   await db.delete(teamAutomation).where(eq(teamAutomation.teamId, id));
-   await db.delete(teamMember).where(eq(teamMember.teamId, id));
-   await db.delete(teamT).where(eq(teamT.id, id));
-   publish({ entity: 'team', action: 'deleted', id });
-   return true;
+      const [issues, projects, cycles, views, folders] = await Promise.all([
+         tx.select({ n: count() }).from(issueT).where(eq(issueT.teamId, id)),
+         tx.select({ n: count() }).from(projectT).where(eq(projectT.teamId, id)),
+         tx.select({ n: count() }).from(cycleT).where(eq(cycleT.teamId, id)),
+         tx.select({ n: count() }).from(savedViewT).where(eq(savedViewT.teamId, id)),
+         tx.select({ n: count() }).from(documentFolderT).where(eq(documentFolderT.teamId, id)),
+      ]);
+      const total =
+         Number(issues[0].n) +
+         Number(projects[0].n) +
+         Number(cycles[0].n) +
+         Number(views[0].n) +
+         Number(folders[0].n);
+      if (total > 0)
+         throw new ApiError(
+            409,
+            `Team '${id}' tem issues/projects/cycles/views/folders — esvazie antes de apagar`
+         );
+
+      // Sub-times (#100): reancora os filhos no avô antes de apagar. Sem isto o FK
+      // self-referente (team.parent_id) estoura 23503, e deixar `parent_id` apontando
+      // pra um time inexistente não é opção.
+      await tx
+         .update(teamT)
+         .set({ parentId: existing[0].parentId ?? null })
+         .where(eq(teamT.parentId, id));
+
+      // Solicitações de entrada (histórico) NÃO bloqueiam a deleção — limpa antes do time,
+      // senão o FK (team_join_request.team_id, sem onDelete) estoura 23503 → 404 enganoso.
+      await tx.delete(teamJoinRequest).where(eq(teamJoinRequest.teamId, id));
+      // SLA, automações e templates (issue/projeto) são CONFIGURAÇÃO do time, não
+      // conteúdo: somem com ele. Sem isto o FK estourava 23503 → 404 enganoso, e como
+      // `ensureDefaultAutomations` semeia a regra padrão na primeira leitura, quase todo
+      // time ficava indelével.
+      await tx.delete(teamSla).where(eq(teamSla.teamId, id));
+      await tx.delete(teamAutomation).where(eq(teamAutomation.teamId, id));
+      await tx.delete(issueTemplateT).where(eq(issueTemplateT.teamId, id));
+      await tx.delete(projectTemplateT).where(eq(projectTemplateT.teamId, id));
+      await tx.delete(teamMember).where(eq(teamMember.teamId, id));
+      await tx.delete(teamT).where(eq(teamT.id, id));
+      return true;
+   });
+   if (deleted) publish({ entity: 'team', action: 'deleted', id });
+   return deleted;
 }

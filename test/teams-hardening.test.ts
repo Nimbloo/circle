@@ -77,3 +77,22 @@ describe('deleteTeam limpa a configuração do time', () => {
       ).toEqual([]);
    });
 });
+
+describe('deleteTeam em transação trata templates (#59)', () => {
+   it('templates de issue e projeto são configuração: somem com o time', async () => {
+      const { createTemplate } = await import('@/lib/api/templates');
+      const { createProjectTemplate } = await import('@/lib/api/project-templates');
+      const { issueTemplate, projectTemplate } = await import('@/db/schema');
+      await createTemplate(db, { teamId: 'OPEN', name: 'Bug' });
+      await createProjectTemplate(db, { teamId: 'OPEN', name: 'Launch' });
+
+      expect(await deleteTeam(db, 'OPEN')).toBe(true);
+      expect(await db.select().from(teamT).where(eq(teamT.id, 'OPEN'))).toEqual([]);
+      expect(
+         await db.select().from(issueTemplate).where(eq(issueTemplate.teamId, 'OPEN'))
+      ).toEqual([]);
+      expect(
+         await db.select().from(projectTemplate).where(eq(projectTemplate.teamId, 'OPEN'))
+      ).toEqual([]);
+   });
+});
