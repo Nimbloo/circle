@@ -9,6 +9,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { useHealthStates } from '@/store/catalog-store';
 import { useState } from 'react';
+import { parseDay } from '@/lib/project-dates';
 
 interface HealthPopoverProps {
    project: Project;
@@ -103,7 +104,7 @@ export function HealthPopover({ project, onHealthChange }: HealthPopoverProps) {
                         </>
                      )}
                      <span className="text-xs text-muted-foreground">
-                        {new Date(project.startDate).toLocaleDateString()}
+                        {parseDay(project.startDate).toLocaleDateString()}
                      </span>
                   </div>
                </div>

@@ -5,17 +5,15 @@ import { GroupedIssuesView } from '@/components/common/issues/grouped-issues-vie
 import { ListSkeleton } from '@/components/common/list-skeleton';
 import { applyIssueFilters } from '@/components/common/issues/issue-filter-columns';
 import { IssueFilterBar } from '@/components/common/issues/issue-filter-bar';
-import { adaptProjectDetail, emptyProjectDetail } from '@/lib/adapters-project-detail';
-import { api } from '@/lib/client';
-import type { ProjectDetail } from '@/data/project-details';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
 import { selectIssuesLoading, useIssuesStore } from '@/store/issues-store';
 import { useViewStore } from '@/store/view-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 import { ProjectSidePanel } from './project-side-panel';
+import { useSharedProjectDetail } from './use-project-detail';
 
 interface ProjectIssuesProps {
    projectId: string;
@@ -34,23 +32,8 @@ export default function ProjectIssues({ projectId }: ProjectIssuesProps) {
    const error = useIssuesStore((s) => s.error);
    const hydrate = useIssuesStore((s) => s.hydrate);
 
-   const [detail, setDetail] = useState<ProjectDetail>(() => emptyProjectDetail(projectId));
-   // Refetch do detalhe após mutação no painel (milestones) — sem ele o painel é read-only.
-   const [reloadKey, setReloadKey] = useState(0);
-   useEffect(() => {
-      let active = true;
-      api.projects
-         .detail(projectId)
-         .then((dto) => {
-            if (active) setDetail(adaptProjectDetail(dto));
-         })
-         .catch(() => {
-            if (active) setDetail(emptyProjectDetail(projectId));
-         });
-      return () => {
-         active = false;
-      };
-   }, [projectId, reloadKey]);
+   // Detalhe compartilhado pelas abas (layout da rota, #45), com live reload.
+   const { detail, reload } = useSharedProjectDetail(projectId);
 
    const issues = useMemo(
       () => allIssues.filter((issue) => issue.project?.id === projectId),
@@ -96,7 +79,7 @@ export default function ProjectIssues({ projectId }: ProjectIssuesProps) {
                issues={issues}
                insightsIssues={displayedIssues}
                projectId={projectId}
-               onChanged={() => setReloadKey((k) => k + 1)}
+               onChanged={reload}
             />
          </div>
       </div>

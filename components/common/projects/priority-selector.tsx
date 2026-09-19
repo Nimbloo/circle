@@ -29,10 +29,8 @@ export function PrioritySelector({ priority, onPriorityChange }: PrioritySelecto
 
    const handlePriorityChange = (priorityId: string) => {
       setOpen(false);
-
-      if (onPriorityChange) {
-         onPriorityChange(priorityId);
-      }
+      if (priorityId === value) return;
+      onPriorityChange?.(priorityId);
    };
 
    return (

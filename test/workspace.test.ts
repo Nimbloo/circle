@@ -5,12 +5,10 @@ import { seedWorkspaceFixture, seedTeam, seedUser } from './helpers/fixtures';
 import { bootstrapWorkspace } from '@/lib/api/workspace';
 import { cycle } from '@/db/schema';
 import { getCycle } from '@/lib/api/cycles';
+import { workspaceDay } from '@/lib/workspace-day';
 
-const isoDay = (n: number) => {
-   const d = new Date();
-   d.setDate(d.getDate() + n);
-   return d.toISOString().slice(0, 10);
-};
+/** Dias relativos ao "hoje" do workspace (o mesmo fuso do rollover). */
+const isoDay = (n: number) => workspaceDay(new Date(Date.now() + n * 86_400_000));
 
 async function seedExpiredCurrentCycle(db: Awaited<ReturnType<typeof makeTestDb>>) {
    await seedTeam(db, 'CORE');

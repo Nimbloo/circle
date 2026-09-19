@@ -10,35 +10,29 @@ export type ProjectsOrdering = 'start-date' | 'target-date' | 'title';
 export type ClosedProjectsFilter = 'all' | 'hide';
 
 export type ProjectDisplayPropertyKey =
-   | 'milestones'
    | 'priority'
    | 'status'
    | 'health'
    | 'lead'
-   | 'members'
    | 'targetDate'
    | 'issues'
    | 'labels';
 
 export const PROJECT_DISPLAY_PROPERTIES: { key: ProjectDisplayPropertyKey; label: string }[] = [
-   { key: 'milestones', label: 'Milestones' },
    { key: 'priority', label: 'Priority' },
    { key: 'status', label: 'Status' },
    { key: 'health', label: 'Health' },
    { key: 'lead', label: 'Lead' },
-   { key: 'members', label: 'Members' },
    { key: 'targetDate', label: 'Target date' },
    { key: 'issues', label: 'Issues' },
    { key: 'labels', label: 'Labels' },
 ];
 
 const DEFAULT_PROPERTIES: Record<ProjectDisplayPropertyKey, boolean> = {
-   milestones: false,
    priority: true,
    status: true,
    health: true,
    lead: true,
-   members: false,
    targetDate: true,
    issues: true,
    labels: false,
@@ -79,6 +73,38 @@ const DEFAULTS = {
    showWeekNumbers: false,
    displayProperties: DEFAULT_PROPERTIES,
 };
+
+/**
+ * Display na configuração padrão (esconde o Reset). Compara TODOS os campos que o Reset
+ * restaura — antes `showProjectList`/`showWeekNumbers` ficavam de fora e o Reset sumia.
+ */
+export function isProjectsDisplayDefault(
+   state: Pick<
+      ProjectsDisplayState,
+      | 'viewTypes'
+      | 'grouping'
+      | 'ordering'
+      | 'closedProjects'
+      | 'showEmptyGroups'
+      | 'showProjectList'
+      | 'showWeekNumbers'
+      | 'displayProperties'
+   >,
+   tab: ProjectsTab
+): boolean {
+   return (
+      state.viewTypes[tab] === DEFAULTS.viewTypes[tab] &&
+      state.grouping === DEFAULTS.grouping &&
+      state.ordering === DEFAULTS.ordering &&
+      state.closedProjects === DEFAULTS.closedProjects &&
+      state.showEmptyGroups === DEFAULTS.showEmptyGroups &&
+      state.showProjectList === DEFAULTS.showProjectList &&
+      state.showWeekNumbers === DEFAULTS.showWeekNumbers &&
+      PROJECT_DISPLAY_PROPERTIES.every(
+         ({ key }) => Boolean(state.displayProperties[key]) === DEFAULT_PROPERTIES[key]
+      )
+   );
+}
 
 export const useProjectsDisplayStore = create<ProjectsDisplayState>()(
    persist(

@@ -4,11 +4,9 @@ import { EmptyState } from '@/components/common/empty-state';
 import { DetailSidePanel, DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 import { BlockEditor } from '@/components/common/editor/block-editor';
 import { Button } from '@/components/ui/button';
-import { adaptProjectDetail, emptyProjectDetail } from '@/lib/adapters-project-detail';
-import { api } from '@/lib/client';
-import { PROJECT_CHANGED_EVENT, useLiveReload } from '@/lib/use-live-sync';
+import { ErrorState } from '@/components/common/error-state';
+import { api, ApiError } from '@/lib/client';
 import { blocksToDoc, docHeadings, type EditorDoc } from '@/lib/editor-doc';
-import type { ProjectDetail } from '@/data/project-details';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { ChevronDown, PenLine } from 'lucide-react';
@@ -19,6 +17,7 @@ import { toast } from 'sonner';
 import { DocumentOutline, type OutlineItem } from './document-outline';
 import { ProjectResources } from './project-resources';
 import { ProjectSidePanel } from './project-side-panel';
+import { useSharedProjectDetail } from './use-project-detail';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface ProjectOverviewProps {
@@ -33,40 +32,17 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    const { orgId } = useParams<{ orgId: string }>();
    const scrollRef = useRef<HTMLDivElement>(null);
 
-   const [detail, setDetail] = useState<ProjectDetail>(() => emptyProjectDetail(projectId));
+   // Detalhe compartilhado pelas abas (layout da rota, #45): loading/ready/error, live
+   // reload e refetch que preserva a tela. O editor só monta com `ready` — montar vazio
+   // (1ª carga falha ou em curso) e o autosave apagaria a descrição real (#34).
+   const { status, detail, reload, setDetail, descriptionVersion, setDescriptionVersion } =
+      useSharedProjectDetail(projectId);
+   const detailReady = status === 'ready';
    const [summaryDraft, setSummaryDraft] = useState<string | null>(null);
-   // O editor só monta depois da 1ª carga: montar vazio e receber o doc depois
-   // arriscaria o usuário começar a digitar sobre o vazio e sobrescrever a descrição.
-   const [detailReady, setDetailReady] = useState(false);
-   const reload = useCallback(async () => {
-      try {
-         setDetail(adaptProjectDetail(await api.projects.detail(projectId)));
-      } catch {
-         // Falha de REFETCH não apaga o detail já exibido (antes zerava a tela
-         // com emptyProjectDetail num erro transitório); a 1ª carga tem o próprio
-         // catch no useEffect abaixo.
-      }
-   }, [projectId]);
-   // Mudança de OUTRO usuário no projeto: recarrega em silêncio (o editor só aceita o
-   // doc externo sem foco, então não pisa no que está sendo digitado).
-   useLiveReload(PROJECT_CHANGED_EVENT, { id: projectId }, reload);
-   useEffect(() => {
-      let active = true;
-      api.projects
-         .detail(projectId)
-         .then((dto) => {
-            if (active) setDetail(adaptProjectDetail(dto));
-         })
-         .catch(() => {
-            if (active) setDetail(emptyProjectDetail(projectId));
-         })
-         .finally(() => {
-            if (active) setDetailReady(true);
-         });
-      return () => {
-         active = false;
-      };
-   }, [projectId]);
+   // Concorrência otimista da descrição (#18): versão vista + fila de saves + conflito.
+   const versionRef = useRef<string | null>(null);
+   const saveQueue = useRef<Promise<void>>(Promise.resolve());
+   const [editorEpoch, setEditorEpoch] = useState(0);
 
    const handleSaveSummary = async () => {
       if (summaryDraft === null) return;
@@ -114,13 +90,56 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    }, []);
    useEffect(markHeadings, [markHeadings, outlineItems]);
 
-   const saveDescription = async (next: EditorDoc) => {
-      try {
-         await api.projects.updateDetail(projectId, { descriptionDoc: next });
-      } catch {
-         toast.error('Could not save the description');
-      }
+   // Saves em fila (um por vez) mandando a versão vista; 409 = outra pessoa gravou no
+   // meio: recarrega a versão dela e remonta o editor em vez de sobrescrever.
+   const saveDescription = (next: EditorDoc) => {
+      saveQueue.current = saveQueue.current.then(async () => {
+         try {
+            const dto = await api.projects.updateDetail(projectId, {
+               descriptionDoc: next,
+               expectedDescriptionVersion: versionRef.current,
+            });
+            versionRef.current = dto.descriptionVersion ?? null;
+            setDescriptionVersion(versionRef.current);
+         } catch (e) {
+            if (!(e instanceof ApiError && e.status === 409)) {
+               toast.error('Could not save the description');
+               return;
+            }
+            toast.warning(
+               'The description was changed by someone else. Loaded the latest version.'
+            );
+            versionRef.current = null;
+            await reload();
+            setEditorEpoch((n) => n + 1);
+         }
+      });
    };
+   // Versão vinda de recarga (1ª carga, evento remoto, conflito): só é adotada com o
+   // editor SEM foco — é quando o editor também aceita o doc externo. Digitando, fica a
+   // versão antiga e o próximo save detecta o conflito (409) em vez de sobrescrever.
+   useEffect(() => {
+      if (!descriptionVersion) return;
+      const editing = scrollRef.current
+         ?.querySelector('.ProseMirror')
+         ?.contains(document.activeElement);
+      if (!editing || versionRef.current === null) versionRef.current = descriptionVersion;
+   }, [descriptionVersion]);
+
+   if (project && status === 'error') {
+      return (
+         <ErrorState
+            className="min-h-full"
+            title="Could not load the project"
+            description="Check your connection and try again."
+            action={
+               <Button size="sm" variant="outline" onClick={() => void reload()}>
+                  Try again
+               </Button>
+            }
+         />
+      );
+   }
 
    if (!project) {
       // Ainda carregando → skeleton; carregado sem projeto → not found.
@@ -224,7 +243,7 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                      </div>
                      {detailReady ? (
                         <BlockEditor
-                           key={projectId}
+                           key={`${projectId}:${editorEpoch}`}
                            doc={doc}
                            placeholder="Add a description…"
                            onChange={setLiveDoc}

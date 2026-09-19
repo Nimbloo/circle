@@ -4,6 +4,7 @@ import { makeTestDb } from './helpers/db';
 import { seedTeam } from './helpers/fixtures';
 import { cycle, issue } from '@/db/schema';
 import { rolloverCyclesForTeam } from '@/lib/api/cycles';
+import { workspaceDay } from '@/lib/workspace-day';
 
 async function setup() {
    const db = await makeTestDb();
@@ -11,11 +12,9 @@ async function setup() {
    return db;
 }
 
-const iso = (d: Date) => d.toISOString().slice(0, 10);
+/** Dias relativos ao "hoje" do workspace (o mesmo fuso do rollover). */
 function daysFromNow(n: number): string {
-   const d = new Date();
-   d.setDate(d.getDate() + n);
-   return iso(d);
+   return workspaceDay(new Date(Date.now() + n * 86_400_000));
 }
 
 describe('cycles auto-rollover (#24)', () => {

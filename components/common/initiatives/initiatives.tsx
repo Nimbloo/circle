@@ -24,7 +24,8 @@ import {
 import { cn } from '@/lib/utils';
 import { dayLabel } from '@/lib/initiative-period';
 import { Initiative, INITIATIVE_STATUS_META, InitiativeStatus } from '@/data/initiatives';
-import { health as allHealth } from '@/data/projects';
+import { health as allHealth, type Project } from '@/data/projects';
+import { isProjectCompleted } from '@/lib/project-completion';
 import { usePriorities } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
@@ -325,13 +326,26 @@ export function InitiativesDisplayOptions() {
 
 /* ---------------------------------- rows ---------------------------------- */
 
-function ActiveProjectDots({ initiative }: { initiative: Initiative }) {
-   // Deriva da fatia assinada: o getter devolve array NOVO a cada leitura, entao nao
-   // pode ir dentro do seletor (referencia nova = re-render infinito).
+/**
+ * Índice id→projeto memoizado pela referência do array do store: cada linha resolve
+ * só os SEUS projetos (O(k)) em vez de varrer todos (a lista era O(I×P)).
+ */
+const projectIndexCache = new WeakMap<Project[], Map<string, Project>>();
+function useLinkedProjects(projectIds: string[]): Project[] {
    const allProjects = useWorkspaceStore((s) => s.projects);
-   const linked = new Set(initiative.projectIds);
-   const started = allProjects.filter(
-      (project) => linked.has(project.id) && project.status.category === 'started'
+   return useMemo(() => {
+      let index = projectIndexCache.get(allProjects);
+      if (!index) {
+         index = new Map(allProjects.map((p) => [p.id, p]));
+         projectIndexCache.set(allProjects, index);
+      }
+      return projectIds.map((id) => index.get(id)).filter((p): p is Project => Boolean(p));
+   }, [allProjects, projectIds]);
+}
+
+function ActiveProjectDots({ initiative }: { initiative: Initiative }) {
+   const started = useLinkedProjects(initiative.projectIds).filter(
+      (project) => project.status.category === 'started'
    );
    const byHealth = new Map<string, number>();
    for (const project of started) {
@@ -362,15 +376,9 @@ function InitiativeRow({
    showStatus: boolean;
 }) {
    const { displayProperties } = useInitiativesDisplayStore();
-   // Deriva da fatia assinada: o getter devolve array NOVO a cada leitura, entao nao
-   // pode ir dentro do seletor (referencia nova = re-render infinito).
-   const allProjects = useWorkspaceStore((s) => s.projects);
-   const linkedIds = new Set(initiative.projectIds);
-   const projects = allProjects.filter((p) => linkedIds.has(p.id));
-   // Mesma regra do `countCompletedProjects` do store, derivada da fatia ja assinada.
-   const completed = projects.filter(
-      (p) => p.status.category === 'completed' || p.percentComplete >= 100
-   ).length;
+   const projects = useLinkedProjects(initiative.projectIds);
+   // Definição única de "concluído" (#41).
+   const completed = projects.filter(isProjectCompleted).length;
 
    return (
       <InitiativeContextMenu initiative={initiative}>

@@ -6,6 +6,7 @@ import { Project } from '@/data/projects';
 import { cn } from '@/lib/utils';
 import { useProjectsDisplayStore } from '@/store/projects-display-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { useIssuesStore } from '@/store/issues-store';
 import { format, parseISO } from 'date-fns';
 import { Calendar } from 'lucide-react';
 import Link from 'next/link';
@@ -120,6 +121,16 @@ function ProjectCard({ project }: { project: Project }) {
    );
 }
 
+/**
+ * O servidor recusa (409) trocar o time de um projeto que tem issues de outro time;
+ * a coluna nem aceita o drop nesse caso (#43) — antes o card ia e voltava com erro.
+ */
+function hasIssuesOutsideTeam(projectId: string, teamId: string): boolean {
+   return useIssuesStore
+      .getState()
+      .issues.some((issue) => issue.project?.id === projectId && issue.teamId !== teamId);
+}
+
 function BoardColumn({
    group,
    onDropProject,
@@ -135,7 +146,11 @@ function BoardColumn({
       () => ({
          accept: ProjectDragType,
          canDrop: (item: Project) =>
-            status ? item.status.id !== status.id : teamId !== undefined && item.teamId !== teamId,
+            status
+               ? item.status.id !== status.id
+               : teamId !== undefined &&
+                 item.teamId !== teamId &&
+                 !hasIssuesOutsideTeam(item.id, teamId),
          drop: (item: Project) => onDropProject(item, group),
          collect: (monitor) => ({ isOver: monitor.isOver(), canDrop: monitor.canDrop() }),
       }),

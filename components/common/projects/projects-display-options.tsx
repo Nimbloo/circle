@@ -13,7 +13,7 @@ import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import {
    PROJECT_DISPLAY_PROPERTIES,
-   type ProjectDisplayPropertyKey,
+   isProjectsDisplayDefault,
    ProjectsGrouping,
    ProjectsOrdering,
    ProjectsViewType,
@@ -46,18 +46,6 @@ const ORDERINGS: { value: ProjectsOrdering; label: string }[] = [
    { value: 'target-date', label: 'Target date' },
    { value: 'title', label: 'Title' },
 ];
-
-const DEFAULT_PROPERTY_VALUES: Record<ProjectDisplayPropertyKey, boolean> = {
-   milestones: false,
-   priority: true,
-   status: true,
-   health: true,
-   lead: true,
-   members: false,
-   targetDate: true,
-   issues: true,
-   labels: false,
-};
 
 function OptionRow({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
    return (
@@ -94,15 +82,19 @@ export function ProjectsDisplayOptions() {
       resetDisplaySettings,
    } = useProjectsDisplayStore();
    const viewType = viewTypes[tab];
-   const isDefault =
-      viewType === (tab === 'all' ? 'list' : 'timeline') &&
-      grouping === 'status' &&
-      ordering === 'start-date' &&
-      closedProjects === 'all' &&
-      !showEmptyGroups &&
-      Object.entries(DEFAULT_PROPERTY_VALUES).every(
-         ([key, enabled]) => displayProperties[key as ProjectDisplayPropertyKey] === enabled
-      );
+   const isDefault = isProjectsDisplayDefault(
+      {
+         viewTypes,
+         grouping,
+         ordering,
+         closedProjects,
+         showEmptyGroups,
+         showProjectList,
+         showWeekNumbers,
+         displayProperties,
+      },
+      tab
+   );
 
    return (
       <Popover>

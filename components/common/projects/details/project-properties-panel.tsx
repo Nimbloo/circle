@@ -10,6 +10,7 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { PanelFilterTarget, usePanelFilter } from '@/components/common/issues/use-panel-filter';
 import { api } from '@/lib/client';
 import { cn } from '@/lib/utils';
+import { bucketIssues } from '@/lib/issue-breakdown';
 import { format, parseISO } from 'date-fns';
 import { ProjectProgressChart } from './project-progress-chart';
 import { ProjectDependenciesPicker } from './project-dependencies-picker';
@@ -44,16 +45,10 @@ interface BreakdownRow {
 
 function buildRows<T>(
    issues: Issue[],
-   keyOf: (issue: Issue) => T | undefined,
+   keyOf: (issue: Issue) => T | readonly T[] | undefined,
    describe: (key: T, sample: Issue) => Omit<BreakdownRow, 'total' | 'completedPercent'>
 ): BreakdownRow[] {
-   const buckets = new Map<T, Issue[]>();
-   for (const issue of issues) {
-      const key = keyOf(issue);
-      if (key === undefined) continue;
-      buckets.set(key, [...(buckets.get(key) ?? []), issue]);
-   }
-   return [...buckets.entries()]
+   return [...bucketIssues(issues, keyOf).entries()]
       .map(([key, bucket]) => ({
          ...describe(key, bucket[0]),
          total: bucket.length,
@@ -223,20 +218,23 @@ export function ProjectPropertiesPanel({
       () =>
          buildRows(
             issues,
-            (issue) => issue.labels[0]?.id,
-            (key, sample) => ({
-               key: String(key),
-               label: sample.labels[0]?.name ?? 'Unlabeled',
-               leading: (
-                  <span
-                     className="size-2.5 rounded-full shrink-0"
-                     style={{
-                        backgroundColor: sample.labels[0]?.color ?? 'var(--muted-foreground)',
-                     }}
-                  />
-               ),
-               target: { columnId: 'labels', value: String(key) },
-            })
+            (issue) => issue.labels.map((label) => label.id),
+            (key, sample) => {
+               const label = sample.labels.find((candidate) => candidate.id === key);
+               return {
+                  key: String(key),
+                  label: label?.name ?? 'Unlabeled',
+                  leading: (
+                     <span
+                        className="size-2.5 rounded-full shrink-0"
+                        style={{
+                           backgroundColor: label?.color ?? 'var(--muted-foreground)',
+                        }}
+                     />
+                  ),
+                  target: { columnId: 'labels', value: String(key) },
+               };
+            }
          ),
       [issues]
    );

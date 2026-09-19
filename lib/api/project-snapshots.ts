@@ -12,6 +12,7 @@
 import { asc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { issue as issueT, projectSnapshot as snapshotT, status as statusT } from '@/db/schema';
+import { workspaceDay } from '@/lib/workspace-day';
 
 export interface ProjectSnapshotPoint {
    date: string;
@@ -28,7 +29,8 @@ interface Agg {
 
 const EMPTY_AGG = (): Agg => ({ scope: 0, started: 0, completed: 0 });
 
-export const isoDay = (d: Date): string => d.toISOString().slice(0, 10);
+/** Dia do snapshot no fuso do workspace (o mesmo "hoje" do rollover de ciclos). */
+export const isoDay = (d: Date): string => workspaceDay(d);
 
 /** scope/started/completed atuais por projeto, contando issues. */
 async function aggregatesByProject(db: Db, projectIds: string[]): Promise<Map<string, Agg>> {
