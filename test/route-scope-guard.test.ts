@@ -38,6 +38,7 @@ const EXEMPT: ReadonlySet<string> = new Set([
    'POST /me/avatar',
    'DELETE /me/avatar',
    'PATCH /notifications/[id]',
+   'DELETE /notifications/[id]',
    'POST /notifications/read-all',
    'POST /uploads',
 

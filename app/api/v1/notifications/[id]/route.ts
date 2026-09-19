@@ -3,7 +3,7 @@ import { db } from '@/db';
 import { ok, notFound } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
 import { getOrCreateUser } from '@/lib/api/users';
-import { setRead, setSnooze } from '@/lib/api/notifications';
+import { deleteNotification, setRead, setSnooze } from '@/lib/api/notifications';
 import { ApiError } from '@/lib/api/errors';
 
 export const runtime = 'nodejs';
@@ -37,5 +37,17 @@ export async function PATCH(req: Request, { params }: Params) {
          touched = (await setSnooze(db, id, until, me.id)) || touched;
       }
       return touched ? ok({ id, ...body }) : notFound(`Notificação '${id}' não encontrada`);
+   }, req);
+}
+
+/** Exclui a notificação (co#3), escopada ao destinatário: a de outro usuário dá 404. */
+export async function DELETE(req: Request, { params }: Params) {
+   return handle(async () => {
+      const { id } = await params;
+      const email = await requireEmail(req);
+      const me = await getOrCreateUser(db, email);
+      return (await deleteNotification(db, id, me.id))
+         ? ok({ id, deleted: true })
+         : notFound(`Notificação '${id}' não encontrada`);
    }, req);
 }
