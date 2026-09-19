@@ -86,6 +86,11 @@ export interface CircleEvent {
     */
    clientId?: string;
    /**
+    * `content`: só o conteúdo (descrição) mudou — nada do DTO da lista (#18). O cliente
+    * recarrega só o detalhe aberto, sem GET da issue em todos os clientes.
+    */
+   scope?: 'content';
+   /**
     * Selo monotônico só para ordenação/deduplicação no cliente. É um contador
     * incremental (NÃO `Date.now()`): o valor absoluto é irrelevante e evita
     * depender de `Date.now()` — proibido em alguns ambientes de build/AOT.
