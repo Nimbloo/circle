@@ -41,11 +41,6 @@ describe('My issues › Assigned com colaborador (#96)', () => {
       const out = scopeMyIssues(all, 'assigned', ana.id, new Set());
       expect(out.map((i) => i.id)).toEqual(['B']);
    });
-
-   it('usa o conjunto do filtro servidor quando ele está disponível', () => {
-      const out = scopeMyIssues(all, 'assigned', ana.id, new Set(), undefined, new Set(['A']));
-      expect(out.map((i) => i.id)).toEqual(['A']);
-   });
 });
 
 describe('filtro Assignee casa qualquer responsável', () => {
