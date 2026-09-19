@@ -161,7 +161,9 @@ export function GroupIssues({ group, issues, count }: GroupIssuesProps) {
                   aria-label={`Create issue in ${group.name}`}
                   onClick={(e) => {
                      e.stopPropagation();
-                     openModal(group.status);
+                     // is#24: o "+" pré-preenche o campo da coluna (status/priority/
+                     // assignee/project) — antes só status funcionava.
+                     openModal(group.drop);
                   }}
                >
                   <Plus className="size-4" />

@@ -159,6 +159,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
          ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      // DELETE sobrevive ao fechamento da página (exclusão com Undo enviada no `pagehide`).
+      keepalive: method === 'DELETE',
    });
    return (await parseResponse(res)).data as T;
 }

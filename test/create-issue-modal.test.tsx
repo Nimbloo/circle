@@ -46,7 +46,7 @@ const titleInput = () => screen.getByPlaceholderText('Título da issue') as HTML
 describe('modal de criar issue', () => {
    beforeEach(() => {
       seedCatalog();
-      act(() => useCreateIssueStore.setState({ isOpen: false, defaultStatus: null }));
+      act(() => useCreateIssueStore.setState({ isOpen: false, defaultDrop: null }));
       useWorkspaceStore.setState({ teams: [], users: [], projects: [], me: null });
    });
 
@@ -77,7 +77,7 @@ describe('modal de criar issue', () => {
 
       act(() => useCreateIssueStore.getState().closeModal());
       const inProgress = status.find((s) => s.id === 'in-progress')!;
-      act(() => useCreateIssueStore.getState().openModal(inProgress));
+      act(() => useCreateIssueStore.getState().openModal({ field: 'status', status: inProgress }));
 
       expect(titleInput().value).toBe('Rascunho');
       // Trigger do seletor de status (combobox não tira o nome do conteúdo).

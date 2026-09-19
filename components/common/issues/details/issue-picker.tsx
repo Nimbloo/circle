@@ -25,6 +25,19 @@ interface IssuePickerProps {
 
 /** Espera antes de bater no servidor enquanto o usuário digita. */
 const SEARCH_DEBOUNCE_MS = 200;
+/**
+ * Teto de linhas renderizadas (is#9): o store tem milhares de issues e o cmdk renderizava
+ * todas (long task de ~450 ms ao abrir e a cada tecla). A busca filtra antes de cortar.
+ */
+const MAX_CANDIDATES = 50;
+
+/** Minúsculas e sem acento — "numero" acha "número". */
+function fold(text: string): string {
+   return text
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .toLowerCase();
+}
 
 /**
  * Picker de issue por identifier/título (#95): candidatos do `issues-store` (rápido,
@@ -60,19 +73,39 @@ export function IssuePicker({ excludeIds, onSelect, placeholder, teamId }: Issue
    }, [query, teamId]);
 
    const candidates = useMemo(() => {
+      const terms = fold(query.trim()).split(/\s+/).filter(Boolean);
+      const matches = (issue: Issue) => {
+         if (terms.length === 0) return true;
+         const hay = fold(`${issue.identifier} ${issue.title}`);
+         return terms.every((t) => hay.includes(t));
+      };
       const seen = new Set<string>();
       const out: Issue[] = [];
-      for (const issue of [...storeIssues, ...remote]) {
+      // Identifier exato primeiro ("ENG-12" não pode perder para "ENG-120").
+      const exact = query.trim().toUpperCase();
+      const exactHit = exact
+         ? (remote.find((i) => i.identifier === exact) ??
+           storeIssues.find((i) => i.identifier === exact))
+         : undefined;
+      const ordered = exactHit
+         ? [exactHit, ...remote, ...storeIssues]
+         : [...remote, ...storeIssues];
+      for (const issue of ordered) {
+         if (out.length >= MAX_CANDIDATES) break;
          if (excludeIds.has(issue.id) || seen.has(issue.id)) continue;
          if (teamId && issue.teamId && issue.teamId !== teamId) continue;
+         // O servidor já filtrou os remotos (busca por conteúdo); o store filtra aqui.
+         if (issue !== exactHit && !remote.includes(issue) && !matches(issue)) continue;
          seen.add(issue.id);
          out.push(issue);
       }
       return out;
-   }, [storeIssues, remote, excludeIds, teamId]);
+   }, [storeIssues, remote, excludeIds, teamId, query]);
 
+   // A filtragem é nossa (acima, com teto): o filtro interno do cmdk refaria a busca
+   // sobre a lista e esconderia os resultados do servidor que casam por conteúdo.
    return (
-      <Command>
+      <Command shouldFilter={false}>
          <CommandInput
             placeholder={placeholder ?? 'Buscar issues...'}
             value={query}

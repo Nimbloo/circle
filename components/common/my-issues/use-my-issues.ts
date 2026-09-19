@@ -1,7 +1,9 @@
 'use client';
 
 import { Issue } from '@/data/issues';
+import { api } from '@/lib/client';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
+import { useEffect, useState } from 'react';
 
 export const MY_ISSUES_TABS = ['assigned', 'created', 'subscribed', 'activity'] as const;
 export type MyIssuesTab = (typeof MY_ISSUES_TABS)[number];
@@ -16,6 +18,28 @@ export const MY_ISSUES_TAB_ITEMS: { label: string; value: MyIssuesTab }[] = [
 /** Shared tab state (URL-backed) between the header and the page body. */
 export function useMyIssuesTab() {
    return useQueryState('tab', parseAsStringLiteral(MY_ISSUES_TABS).withDefault('assigned'));
+}
+
+/**
+ * Ids das issues com atividade minha (aba "Activity"). Busca sob demanda quando a
+ * aba está ativa; usado tanto pelo header (contador) quanto pelo corpo (board) para
+ * não divergir (is#17: o contador mostrava o total de "Subscribed" na aba Activity
+ * por não ter esses ids).
+ */
+export function useMyIssuesActiveIds(tab: MyIssuesTab): ReadonlySet<string> {
+   const [activeIds, setActiveIds] = useState<ReadonlySet<string>>(new Set());
+   useEffect(() => {
+      if (tab !== 'activity') return;
+      let alive = true;
+      api.me
+         .activity()
+         .then((items) => alive && setActiveIds(new Set(items.map((i) => i.issueId))))
+         .catch(() => {});
+      return () => {
+         alive = false;
+      };
+   }, [tab]);
+   return activeIds;
 }
 
 const isCreatedByMe = (issue: Issue, meId: string): boolean => issue.createdById === meId;

@@ -18,7 +18,10 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import { GroupIssues, IssueGroupDescriptor } from './group-issues';
 import { VirtualIssueList } from './virtual-issue-list';
 import { CustomDragLayer } from './issue-grid';
+import { IssueLineDragLayer } from './issue-line';
 import { BulkActionsBar } from './bulk-actions-bar';
+import { useBulkSelectionKeys } from './use-bulk-selection-keys';
+import { useIssueDeleteShortcut } from './use-issue-delete-shortcut';
 import { IssueContextMenuHost } from './issue-context-menu-host';
 import { labelColor } from '@/components/common/palette';
 
@@ -111,7 +114,7 @@ const sortIssues = (issues: Issue[], ordering: string, completedByRecency = fals
                if (!a.dueDate && !b.dueDate) return 0;
                if (!a.dueDate) return 1;
                if (!b.dueDate) return -1;
-               return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+               return a.dueDate.localeCompare(b.dueDate);
             });
          case 'priority':
          default:
@@ -232,9 +235,11 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
    const labels = useLabels();
    const hasActiveFilters = filters.length > 0;
 
-   // Limpa a seleção em lote ao desmontar (troca de view).
+   // Limpa a seleção em lote ao desmontar (troca de view) e no Esc (is#10).
    const clearSelection = useBulkSelectionStore((s) => s.clear);
    useEffect(() => () => clearSelection(), [clearSelection]);
+   useBulkSelectionKeys();
+   useIssueDeleteShortcut();
 
    const groups = useMemo<GroupEntry[]>(() => {
       const hideDone = (list: Issue[]) =>
@@ -479,7 +484,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
 
    return (
       <DndProvider backend={HTML5Backend}>
-         <CustomDragLayer />
+         <IssueLineDragLayer />
          <BulkActionsBar />
          {listGroups.length === 0 && !showFooter ? (
             <IssuesEmptyState loading={loading} error={error} onRetry={onRetry} />

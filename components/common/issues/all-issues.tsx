@@ -61,14 +61,16 @@ export default function AllIssues({ categories }: AllIssuesProps) {
    const scopedIssues = useMemo<Issue[]>(() => {
       let list = teamId ? issues.filter((issue) => issue.teamId === teamId) : issues;
       if (categories) list = list.filter((issue) => categories.includes(issue.status.category));
-      // Snooze de triage (paridade Linear): issue em triage adiada some da fila até vencer.
-      const now = Date.now();
-      list = list.filter(
-         (issue) =>
-            issue.status.category !== 'triage' ||
-            !issue.snoozedUntil ||
-            new Date(issue.snoozedUntil).getTime() <= now
-      );
+      // Snooze de triage (paridade Linear): issue em triage adiada some SÓ da fila de
+      // triage até vencer (is#23: aplicava sempre, e a issue sumia também de "All
+      // issues", sem jeito de ver/desfazer — o context menu já tem "Remover snooze",
+      // mas só ajuda se a issue continuar visível em algum lugar).
+      if (categories?.includes('triage')) {
+         const now = Date.now();
+         list = list.filter(
+            (issue) => !issue.snoozedUntil || new Date(issue.snoozedUntil).getTime() <= now
+         );
+      }
       return list;
    }, [issues, categories, teamId]);
 

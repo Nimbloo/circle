@@ -26,7 +26,7 @@ import { useSearchStore } from '@/store/search-store';
 import { useViewStore } from '@/store/view-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useEffect, useMemo, useState } from 'react';
-import { scopeMyIssues, useMyIssuesTab } from './use-my-issues';
+import { scopeMyIssues, useMyIssuesActiveIds, useMyIssuesTab } from './use-my-issues';
 import { SidePanelSlot } from '@/components/common/detail-side-panel';
 
 /**
@@ -70,20 +70,9 @@ export default function MyIssues() {
       return new Set([...(tab === 'subscribed' ? allSubscribed : []), ...live]);
    }, [subscribedIssueIds, allSubscribed, tab]);
 
-   // Aba "Activity" (padrão Linear = board de issues em que estive ativo): busca os
-   // ids das issues com atividade minha e usa como escopo do board.
-   const [activeIds, setActiveIds] = useState<ReadonlySet<string>>(new Set());
-   useEffect(() => {
-      if (tab !== 'activity') return;
-      let alive = true;
-      api.me
-         .activity()
-         .then((items) => alive && setActiveIds(new Set(items.map((i) => i.issueId))))
-         .catch(() => {});
-      return () => {
-         alive = false;
-      };
-   }, [tab]);
+   // Aba "Activity" (padrão Linear = board de issues em que estive ativo): ids das
+   // issues com atividade minha, usados como escopo do board.
+   const activeIds = useMyIssuesActiveIds(tab);
 
    // Aba "Assigned" (#29): derivada do store — os DTOs já trazem todos os responsáveis
    // (principal + colaboradores). Sem busca `assignee=me` a cada mudança de responsável.

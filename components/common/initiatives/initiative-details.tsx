@@ -6,7 +6,6 @@ import { LoadingArea } from '@/components/common/loading-area';
 import { ProjectGroup } from '@/components/common/projects/projects';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Initiative } from '@/data/initiatives';
-import { Project } from '@/data/projects';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { initiativeWithDescendants } from '@/lib/initiative-tree';
 import { api } from '@/lib/client';

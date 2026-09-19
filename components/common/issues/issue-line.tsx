@@ -19,6 +19,7 @@ import { StatusSelector } from './status-selector';
 import { SubIssueProgress } from './sub-issue-progress';
 import { ParentIssueChip } from './parent-issue-chip';
 import { SlaBadge } from './sla-badge';
+import { DUE_DATE_TONE_CLASS, dueDateLabel, dueDateTone } from './due-date';
 import type { IssueGroupContext } from './group-issues';
 import { IssueDragType, useIssueDropTarget } from './use-issue-drop-target';
 import { LabelSelector } from '@/components/layout/sidebar/create-new-issue/label-selector';
@@ -28,7 +29,7 @@ import { DueDateSelector } from '@/components/layout/sidebar/create-new-issue/du
 import { estimateLabel, normalizeScale } from '@/data/estimate-scales';
 import { motion } from 'motion/react';
 import { memo, useEffect, useRef, type Ref } from 'react';
-import { DragSourceMonitor, useDrag } from 'react-dnd';
+import { DragSourceMonitor, useDrag, useDragLayer } from 'react-dnd';
 import { getEmptyImage } from 'react-dnd-html5-backend';
 
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
@@ -56,11 +57,16 @@ function IssueRow({
    issue,
    layoutId = false,
    dragging = false,
+   dropIndicator = null,
+   getGroup,
 }: {
    ref?: Ref<HTMLDivElement>;
    issue: Issue;
    layoutId?: boolean;
    dragging?: boolean;
+   /** Linha de inserção de 2px (is#21): onde a issue arrastada vai cair ao soltar aqui. */
+   dropIndicator?: 'above' | 'below' | null;
+   getGroup?: () => IssueGroupContext;
 }) {
    const { orgId } = useParams<{ orgId: string }>();
    // Selector estreito: assina só displayProperties (não o store inteiro) — senão toda
@@ -75,6 +81,13 @@ function IssueRow({
    const selected = useBulkSelectionStore((s) => s.selected.has(issue.id));
    const anySelected = useBulkSelectionStore((s) => s.selected.size > 0);
    const toggleSelected = useBulkSelectionStore((s) => s.toggle);
+   const selectRange = useBulkSelectionStore((s) => s.selectRange);
+   // Shift+clique seleciona o intervalo dentro do grupo visível (is#10).
+   const pick = (e: { shiftKey: boolean }) => {
+      const ordered = getGroup?.().issues.map((i) => i.id);
+      if (e.shiftKey && ordered) selectRange(ordered, issue.id);
+      else toggleSelected(issue.id);
+   };
    const updateIssue = useIssuesStore((s) => s.updateIssue);
    const updateIssueProject = useIssuesStore((s) => s.updateIssueProject);
    const addIssueLabel = useIssuesStore((s) => s.addIssueLabel);
@@ -102,14 +115,24 @@ function IssueRow({
          data-issue-id={issue.id}
          {...(layoutId && { layoutId: `issue-line-${issue.identifier || issue.id}` })}
          className={cn(
-            'group/line flex h-11 w-full items-center justify-start px-3 hover:bg-accent/40 focus-within:bg-accent/40',
+            'group/line relative flex h-11 w-full items-center justify-start px-3 hover:bg-accent/40 focus-within:bg-accent/40',
             selected && 'bg-primary/5'
          )}
          style={dragging ? { opacity: 0.5, cursor: 'grabbing' } : undefined}
       >
+         {dropIndicator && (
+            <span
+               aria-hidden
+               data-testid="drop-indicator"
+               className={cn(
+                  'pointer-events-none absolute inset-x-0 h-0.5 bg-primary',
+                  dropIndicator === 'above' ? 'top-0' : 'bottom-0'
+               )}
+            />
+         )}
          <button
             type="button"
-            onClick={() => toggleSelected(issue.id)}
+            onClick={pick}
             aria-label={selected ? 'Deselect issue' : 'Select issue'}
             aria-pressed={selected}
             className={cn(
@@ -219,9 +242,12 @@ function IssueRow({
                   <button
                      type="button"
                      aria-label="Change due date"
-                     className="hidden shrink-0 rounded text-xs text-destructive outline-hidden hover:underline focus-visible:ring-2 focus-visible:ring-ring sm:inline-block"
+                     className={cn(
+                        'hidden shrink-0 rounded text-xs outline-hidden hover:underline focus-visible:ring-2 focus-visible:ring-ring sm:inline-block',
+                        DUE_DATE_TONE_CLASS[dueDateTone(issue.dueDate)]
+                     )}
                   >
-                     Due {format(new Date(issue.dueDate), 'MMM dd')}
+                     Due {dueDateLabel(issue.dueDate)}
                   </button>
                </DueDateSelector>
             )}
@@ -273,15 +299,24 @@ function DraggableIssueRow({
       [issue]
    );
 
-   // Preview custom (CustomDragLayer) em vez do ghost nativo do browser.
+   // Preview custom (IssueLineDragLayer) em vez do ghost nativo do browser.
    useEffect(() => {
       preview(getEmptyImage(), { captureDraggingState: true });
    }, [preview]);
 
-   const drop = useIssueDropTarget(issue.id, getGroup, ref);
+   const { drop, isOver, dropAbove } = useIssueDropTarget(issue.id, getGroup, ref);
    drag(drop(ref));
 
-   return <IssueRow ref={ref} issue={issue} layoutId={layoutId} dragging={isDragging} />;
+   return (
+      <IssueRow
+         ref={ref}
+         issue={issue}
+         layoutId={layoutId}
+         dragging={isDragging}
+         dropIndicator={isOver ? (dropAbove ? 'above' : 'below') : null}
+         getGroup={getGroup}
+      />
+   );
 }
 
 function IssueLineComponent({ issue, layoutId = false, getGroup }: IssueLineProps) {
@@ -295,3 +330,36 @@ function IssueLineComponent({ issue, layoutId = false, getGroup }: IssueLineProp
 /** Memoizada: só re-renderiza quando as props mudam — importante na lista
  *  virtualizada, onde o container re-renderiza ao rolar (evita re-render das linhas). */
 export const IssueLine = memo(IssueLineComponent);
+
+/**
+ * Fantasma do drag na lista (is#21): antes, a lista reaproveitava o card do board
+ * (`CustomDragLayer`, issue-grid.tsx) — largo demais e com o layout errado. Aqui o
+ * fantasma tem a cara de uma linha.
+ */
+export function IssueLineDragLayer() {
+   const { itemType, isDragging, item, currentOffset } = useDragLayer((monitor) => ({
+      item: monitor.getItem() as Issue,
+      itemType: monitor.getItemType(),
+      currentOffset: monitor.getSourceClientOffset(),
+      isDragging: monitor.isDragging(),
+   }));
+
+   if (!isDragging || itemType !== IssueDragType || !currentOffset || !item) {
+      return null;
+   }
+
+   return (
+      <div
+         className="fixed left-0 top-0 z-50 pointer-events-none"
+         style={{
+            transform: `translate(${currentOffset.x}px, ${currentOffset.y}px)`,
+            width: '420px',
+         }}
+      >
+         <div className="flex h-11 items-center gap-2 rounded-md border border-border bg-card px-3 shadow-[var(--card-shadow)]">
+            <item.status.icon />
+            <span className="truncate text-[13px] font-medium">{item.title}</span>
+         </div>
+      </div>
+   );
+}
