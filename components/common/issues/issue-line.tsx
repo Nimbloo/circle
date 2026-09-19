@@ -19,6 +19,7 @@ import { StatusSelector } from './status-selector';
 import { SubIssueProgress } from './sub-issue-progress';
 import { ParentIssueChip } from './parent-issue-chip';
 import { SlaBadge } from './sla-badge';
+import { DUE_DATE_TONE_CLASS, dueDateLabel, dueDateTone } from './due-date';
 import type { IssueGroupContext } from './group-issues';
 import { IssueDragType, useIssueDropTarget } from './use-issue-drop-target';
 import { LabelSelector } from '@/components/layout/sidebar/create-new-issue/label-selector';
@@ -219,9 +220,12 @@ function IssueRow({
                   <button
                      type="button"
                      aria-label="Change due date"
-                     className="hidden shrink-0 rounded text-xs text-destructive outline-hidden hover:underline focus-visible:ring-2 focus-visible:ring-ring sm:inline-block"
+                     className={cn(
+                        'hidden shrink-0 rounded text-xs outline-hidden hover:underline focus-visible:ring-2 focus-visible:ring-ring sm:inline-block',
+                        DUE_DATE_TONE_CLASS[dueDateTone(issue.dueDate)]
+                     )}
                   >
-                     Due {format(new Date(issue.dueDate), 'MMM dd')}
+                     Due {dueDateLabel(issue.dueDate)}
                   </button>
                </DueDateSelector>
             )}

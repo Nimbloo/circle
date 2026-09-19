@@ -37,6 +37,7 @@ import {
    UserPen,
 } from 'lucide-react';
 import { labelColor } from '@/components/common/palette';
+import { parseDueDate } from './due-date';
 
 /* ------------------------- Options dos catálogos (hidratados) --------------- */
 
@@ -337,7 +338,9 @@ function buildIssueFilterColumns(
       dtf
          .date()
          .id('dueDate')
-         .accessor((i: Issue) => (i.dueDate ? new Date(i.dueDate) : (undefined as unknown as Date)))
+         .accessor((i: Issue) =>
+            i.dueDate ? parseDueDate(i.dueDate) : (undefined as unknown as Date)
+         )
          .displayName('Due date')
          .icon(CalendarClock)
          .build(),
