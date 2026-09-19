@@ -48,6 +48,7 @@ import {
    UserRoundMinus,
    UserRoundPlus,
 } from 'lucide-react';
+import { MOTION_MS } from '@/lib/motion';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -88,6 +89,16 @@ function Keys({ keys }: { keys: string[] }) {
  */
 export function CommandPalette() {
    const [open, setOpen] = useState(false);
+   // O corpo sobrevive ao fechamento pelo tempo da saída do dialog: antes a palette
+   // desmontava seca, sem animação. Fechada de vez, ele some — e a próxima abertura nasce
+   // com rota e busca limpas, sem assinar issues/workspace enquanto está fora (#51).
+   const [mounted, setMounted] = useState(false);
+   if (open && !mounted) setMounted(true);
+   useEffect(() => {
+      if (open || !mounted) return;
+      const timer = setTimeout(() => setMounted(false), MOTION_MS.fast);
+      return () => clearTimeout(timer);
+   }, [open, mounted]);
 
    // ⌘K / Ctrl+K
    useEffect(() => {
@@ -112,13 +123,13 @@ export function CommandPalette() {
    return (
       <>
          <RecentsRecorder />
-         {open && <CommandPaletteBody onClose={close} />}
+         {mounted && <CommandPaletteBody open={open} onClose={close} />}
       </>
    );
 }
 
-/** Corpo da paleta: montado só enquanto aberta (estado de rota/busca nasce limpo). */
-function CommandPaletteBody({ onClose }: { onClose: () => void }) {
+/** Corpo da palette: montado enquanto aberta e durante a saída (estado nasce limpo). */
+function CommandPaletteBody({ open, onClose }: { open: boolean; onClose: () => void }) {
    const [route, setRoute] = useState<PaletteRoute>('root');
    const [query, setQuery] = useState('');
    /** When true, the issue context chip was dismissed with ⌫. */
@@ -352,7 +363,7 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
 
    return (
       <Dialog
-         open
+         open={open}
          onOpenChange={(value) => {
             if (!value) onClose();
          }}
