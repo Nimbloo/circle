@@ -11,9 +11,8 @@ import { PreferencesApplier } from '@/components/layout/preferences-applier';
 /**
  * Hidrata os stores de domínio a partir da API no mount (client-side).
  * Se o hydrate das issues falhar, o store seta `error: true` (não engole o erro):
- * o board mostra o estado de falha com botão "Tentar de novo". O estado inicial
- * (mock) é mantido como fallback de render.
- * O inbox depende das issues (o preview reusa a issue viva), então hidrata depois.
+ * o board mostra o estado de falha com botão "Tentar de novo". O inbox hidrata em
+ * paralelo às issues (não depende delas para renderizar).
  *
  * Também abre o canal SSE (`useLiveSync`) para sincronização em tempo real: quando
  * OUTRO usuário muda algo, os stores afetados re-hidratam em ~1s sem refresh manual.
@@ -23,10 +22,10 @@ export function DataHydrator() {
       // Único lugar que pede o auto-rollover de cycles (escrita); refetches não.
       useWorkspaceStore.getState().hydrate({ rollover: true });
       void startUserSettingsSync();
-      void useIssuesStore
-         .getState()
-         .hydrate()
-         .then(() => useNotificationsStore.getState().hydrate());
+      // Em paralelo: o inbox renderiza a partir do `dto.issue` da notificação, sem
+      // esperar o board inteiro (milhares de issues) carregar primeiro.
+      void useIssuesStore.getState().hydrate();
+      void useNotificationsStore.getState().hydrate();
    }, []);
    useLiveSync();
    return <PreferencesApplier />;
