@@ -20,6 +20,7 @@ import { VirtualIssueList } from './virtual-issue-list';
 import { CustomDragLayer } from './issue-grid';
 import { BulkActionsBar } from './bulk-actions-bar';
 import { useBulkSelectionKeys } from './use-bulk-selection-keys';
+import { useIssueDeleteShortcut } from './use-issue-delete-shortcut';
 import { IssueContextMenuHost } from './issue-context-menu-host';
 import { labelColor } from '@/components/common/palette';
 
@@ -235,6 +236,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
    const clearSelection = useBulkSelectionStore((s) => s.clear);
    useEffect(() => () => clearSelection(), [clearSelection]);
    useBulkSelectionKeys();
+   useIssueDeleteShortcut();
 
    const groups = useMemo<GroupEntry[]>(() => {
       const hideDone = (list: Issue[]) =>

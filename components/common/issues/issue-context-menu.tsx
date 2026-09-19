@@ -45,6 +45,7 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { useStatuses, usePriorities, useLabels } from '@/store/catalog-store';
 import { toast } from 'sonner';
 import { labelColor } from '@/components/common/palette';
+import { deleteIssuesWithUndo } from './delete-with-undo';
 
 interface IssueContextMenuProps {
    issueId?: string;
@@ -99,12 +100,10 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
    // (sem unhandled rejection) e o toast de sucesso espera a API confirmar.
    const settle = (p: Promise<unknown>) => void p.catch(() => {});
 
+   // is#16: a exclusão some da lista na hora e o toast oferece Undo (o DELETE espera).
    const handleDelete = () => {
       if (!issueId) return;
-      deleteIssue(issueId).then(
-         () => toast.success('Issue deleted'),
-         () => {}
-      );
+      deleteIssuesWithUndo([issueId]);
    };
 
    // Edições inline reversíveis (status/priority/assignee/label/project/cycle/due):
