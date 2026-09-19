@@ -11,6 +11,7 @@ import { useRightPanelStore } from '@/store/right-panel-store';
 import { User, X } from 'lucide-react';
 import { useMemo } from 'react';
 import { CapacityRing } from './capacity-ring';
+import { CycleBurnupEmpty } from './cycle-burnup-empty';
 import { bucketIssues } from '@/lib/issue-breakdown';
 import dynamic from 'next/dynamic';
 
@@ -294,7 +295,11 @@ export function CycleDetailsPanel({ cycle, issues }: CycleDetailsPanelProps) {
                   </div>
                </div>
             </div>
-            <CycleBurnupChart cycle={cycle} height={150} compact />
+            {cycle.burnup?.length ? (
+               <CycleBurnupChart cycle={cycle} height={150} compact />
+            ) : (
+               <CycleBurnupEmpty height={150} />
+            )}
          </div>
 
          {/* Breakdowns */}
