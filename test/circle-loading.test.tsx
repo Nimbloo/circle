@@ -31,4 +31,24 @@ describe('CircleLoading', () => {
       expect(container.querySelector('svg')?.getAttribute('width')).toBe(px);
       expect(screen.getByRole('status').dataset.size).toBe(size);
    });
+
+   it('gira um arco sobre o anel apagado, com o ponto central fixo', () => {
+      const { container } = render(<CircleLoading />);
+      const svg = container.querySelector('svg')!;
+      expect(svg.querySelector('[data-part="track"]')).not.toBeNull();
+      expect(svg.querySelector('[data-part="dot"]')).not.toBeNull();
+      const arc = svg.querySelector('[data-part="arc"]')!;
+      expect(arc).not.toBeNull();
+      expect(arc.getAttribute('class')).toContain('circle-loading-arc');
+      // O ponto central não gira: fica fora do grupo animado.
+      expect(arc.contains(svg.querySelector('[data-part="dot"]'))).toBe(false);
+   });
+
+   it('inline: sem bloco em coluna, cabe dentro de botão', () => {
+      render(<CircleLoading size="sm" inline label="Carregando…" />);
+      const status = screen.getByRole('status');
+      expect(status.tagName).toBe('SPAN');
+      expect(status.className).toContain('inline-flex');
+      expect(status.className).not.toContain('flex-col');
+   });
 });

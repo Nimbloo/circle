@@ -469,28 +469,38 @@ html[data-underline-links='true'] a[href]:not([role='button']):not(.no-underline
    }
 }
 
-/* Loading de rota (CircleLoading): entra após 120 ms — navegação rápida não pisca — e
-   pulsa de leve. Seletor direto pelo mesmo motivo do collapsible (Turbopack/animate-*). */
+/* Loading padrão (CircleLoading): entra após 120 ms — carga rápida não pisca — e um arco
+   gira sobre o anel apagado do logo. `view-box` + `center`: o arco gira em torno do centro
+   do logo, não do próprio contorno. Seletor direto pelo mesmo motivo do collapsible
+   (Turbopack/animate-*). */
 @keyframes circle-loading-in {
    from {
       opacity: 0;
    }
 }
-@keyframes circle-loading-pulse {
-   from {
-      opacity: 0.55;
-      transform: scale(0.92);
-   }
+@keyframes circle-loading-spin {
    to {
-      opacity: 1;
-      transform: scale(1);
+      transform: rotate(360deg);
    }
 }
 .circle-loading {
    animation: circle-loading-in 150ms ease-out 120ms backwards;
 }
-.circle-loading-mark {
-   animation: circle-loading-pulse 900ms ease-in-out infinite alternate;
+.circle-loading-arc {
+   transform-box: view-box;
+   transform-origin: center;
+   animation: circle-loading-spin 900ms linear infinite;
+}
+
+/* Conteúdo que chega depois do loading (e vazio/erro): mesmo fade da rota. Só `opacity`
+   pelo mesmo motivo do `route-enter` (transform deslocaria os `position: fixed`). */
+@keyframes content-enter {
+   from {
+      opacity: 0;
+   }
+}
+.content-enter {
+   animation: content-enter 180ms cubic-bezier(0.2, 0, 0, 1) backwards;
 }
 
 /* Entrada de rota do workspace ([orgId]/template.tsx). Só `opacity`: `transform` no wrapper,
@@ -507,7 +517,8 @@ html[data-underline-links='true'] a[href]:not([role='button']):not(.no-underline
 
 @media (prefers-reduced-motion: reduce) {
    .circle-loading,
-   .circle-loading-mark,
+   .circle-loading-arc,
+   .content-enter,
    .route-enter {
       animation: none;
    }
