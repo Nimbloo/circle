@@ -242,8 +242,9 @@ export function CreateProjectButton() {
       <Dialog
          open={open}
          onOpenChange={(v) => {
+            // Fechar (Esc ou clique fora) NÃO descarta o rascunho (pl#19): o formulário
+            // volta como estava; `reset()` só depois de criar de verdade.
             setOpen(v);
-            if (!v) reset();
          }}
       >
          <DialogTrigger asChild>
@@ -252,7 +253,17 @@ export function CreateProjectButton() {
                <span className="hidden sm:inline ml-1">Create project</span>
             </Button>
          </DialogTrigger>
-         <DialogContent showCloseButton={false} className="sm:max-w-2xl p-0 gap-0 overflow-hidden">
+         <DialogContent
+            showCloseButton={false}
+            className="sm:max-w-2xl p-0 gap-0 overflow-hidden"
+            onKeyDown={(event) => {
+               // ⌘/Ctrl+Enter cria, como no modal de issue (pl#19).
+               if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                  event.preventDefault();
+                  void create();
+               }
+            }}
+         >
             <DialogTitle className="sr-only">New project</DialogTitle>
 
             {/* Header: breadcrumb do time + fechar */}
