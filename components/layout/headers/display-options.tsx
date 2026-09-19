@@ -20,7 +20,7 @@ import {
    isDefaultDisplaySettings,
    useDisplaySettings,
 } from '@/store/display-settings-store';
-import { useViewStore } from '@/store/view-store';
+import { DEFAULT_VIEW_TYPE, useViewStore } from '@/store/view-store';
 import {
    ArrowUpNarrowWide,
    ArrowUpDown,
@@ -284,7 +284,11 @@ export function DisplayOptions() {
 
             <div className="flex h-9 items-center justify-between border-t px-4">
                <button
-                  onClick={resetDisplaySettings}
+                  onClick={() => {
+                     resetDisplaySettings();
+                     // is#24: o Reset zerava grouping/ordering/etc mas deixava o board ligado.
+                     setViewType(DEFAULT_VIEW_TYPE);
+                  }}
                   className="text-xs text-muted-foreground hover:text-foreground"
                >
                   Reset

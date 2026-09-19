@@ -59,7 +59,7 @@ beforeEach(() => {
    seedCatalog();
    params.value = { orgId: 'nimbloo' };
    createMock.mockImplementation(() => new Promise(() => {}));
-   act(() => useCreateIssueStore.setState({ isOpen: false, defaultStatus: null }));
+   act(() => useCreateIssueStore.setState({ isOpen: false, defaultDrop: null }));
    useWorkspaceStore.setState({
       teams: [team('ENG', 'Engineering'), team('OPS', 'Operations')] as never,
       users: [],

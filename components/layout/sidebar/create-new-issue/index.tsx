@@ -27,13 +27,40 @@ import { BlockEditor } from '@/components/common/editor/block-editor';
 import { blocksToDoc, EMPTY_DOC } from '@/lib/editor-doc';
 import { textToBlocks } from '@/lib/text-blocks';
 import { ChevronRight } from 'lucide-react';
+import type { GroupDropValue } from '@/components/common/issues/use-issue-drop-target';
+
+/**
+ * Aplica o campo pré-preenchido pelo "+" de uma coluna do board (is#24): antes só
+ * status funcionava — coluna de assignee/priority/project abria o form em branco.
+ */
+function applyGroupDrop(base: Issue, drop: GroupDropValue | null): Issue {
+   if (!drop) return base;
+   switch (drop.field) {
+      case 'status':
+         return { ...base, status: drop.status };
+      case 'priority':
+         return { ...base, priority: drop.priority };
+      case 'assignee':
+         return {
+            ...base,
+            assignee: drop.assignee,
+            assignees: drop.assignee ? [drop.assignee] : [],
+         };
+      case 'project':
+         return { ...base, project: drop.project };
+      default: {
+         const exhaustive: never = drop;
+         return exhaustive;
+      }
+   }
+}
 
 /** Mesmo teto do servidor (frente S) para o título da issue. */
 const TITLE_MAX = 512;
 
 export function CreateNewIssue() {
    const [createMore, setCreateMore] = useState<boolean>(false);
-   const { isOpen, defaultStatus, openModal, closeModal } = useCreateIssueStore();
+   const { isOpen, defaultDrop, openModal, closeModal } = useCreateIssueStore();
    const addIssue = useIssuesStore((s) => s.addIssue);
    const status = useStatuses();
    const priorities = usePriorities();
@@ -52,7 +79,7 @@ export function CreateNewIssue() {
    const teamId = params?.teamId ?? contextIssueTeam ?? pickable[0]?.id ?? '';
 
    const createDefaultData = useCallback(() => {
-      return {
+      const base: Issue = {
          id: crypto.randomUUID(),
          // Sem identifier inventado (Is#17): a issue otimista não tem link até o servidor
          // devolver o real — antes o "LNUI-123" levava a um 404.
@@ -61,7 +88,7 @@ export function CreateNewIssue() {
          description: '',
          descriptionDoc: null,
          // 1º status "unstarted" do catálogo (Is#17), não um id fixo que pode não existir.
-         status: defaultStatus || status.find((s) => s.category === 'unstarted') || status[0],
+         status: status.find((s) => s.category === 'unstarted') || status[0],
          assignee: null,
          assignees: [],
          priority: priorities.find((p) => p.id === 'no-priority')!,
@@ -76,7 +103,8 @@ export function CreateNewIssue() {
          // Rank otimista; o servidor reatribui o rank real no re-hydrate após o POST.
          rank: new LexoRank('a3c').toString(),
       };
-   }, [defaultStatus, status, priorities, teamId]);
+      return applyGroupDrop(base, defaultDrop);
+   }, [defaultDrop, status, priorities, teamId]);
 
    const [addIssueForm, setAddIssueForm] = useState<Issue>(createDefaultData);
 
@@ -90,7 +118,7 @@ export function CreateNewIssue() {
       if (isOpen) {
          const pristine = !addIssueForm.title && !addIssueForm.descriptionDoc;
          if (pristine) setAddIssueForm(createDefaultData());
-         else if (defaultStatus) setAddIssueForm((f) => ({ ...f, status: defaultStatus }));
+         else if (defaultDrop) setAddIssueForm((f) => applyGroupDrop(f, defaultDrop));
       }
    }
 
