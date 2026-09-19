@@ -40,7 +40,25 @@ export interface ExportBundle {
    version: 1;
    exportedAt: string;
    count: number;
+   /** Havia mais issues que o limite do export: o arquivo NÃO é completo (aditivo). */
+   truncated: boolean;
    issues: ExportedIssue[];
+}
+
+/** Teto de issues por export (CSV e JSON). */
+export const EXPORT_LIMIT = 5000;
+
+/**
+ * Issues do export com detecção de truncamento: busca `limit + 1` para saber se havia
+ * mais (Ad#21–40 — antes parava em 5000 em silêncio e o arquivo parecia completo).
+ */
+export async function exportIssueRows(
+   db: Db,
+   opts: IssueListOptions = {},
+   limit = EXPORT_LIMIT
+): Promise<{ issues: Awaited<ReturnType<typeof listIssues>>; truncated: boolean }> {
+   const rows = await listIssues(db, { ...opts, limit: limit + 1 });
+   return { issues: rows.slice(0, limit), truncated: rows.length > limit };
 }
 
 const iso = (v: Date | string | null): string =>
@@ -48,7 +66,7 @@ const iso = (v: Date | string | null): string =>
 
 /** Monta o bundle JSON das issues que casam com os filtros (mesmos da listagem/CSV). */
 export async function exportIssuesJson(db: Db, opts: IssueListOptions = {}): Promise<ExportBundle> {
-   const issues = await listIssues(db, { limit: 5000, ...opts });
+   const { issues, truncated } = await exportIssueRows(db, opts);
    const ids = issues.map((i) => i.id);
 
    const [descriptions, comments] = await Promise.all([
@@ -94,6 +112,7 @@ export async function exportIssuesJson(db: Db, opts: IssueListOptions = {}): Pro
       version: 1,
       exportedAt: new Date().toISOString(),
       count: issues.length,
+      truncated,
       issues: issues.map((i) => ({
          id: i.id,
          identifier: i.identifier,
