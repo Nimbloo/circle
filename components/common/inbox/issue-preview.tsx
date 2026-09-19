@@ -13,7 +13,14 @@ import { getNotificationIcon } from '@/lib/notification-utils';
 import type { InboxLineItem } from './issue-line';
 import { useRelativeTime } from '@/lib/relative-time';
 import { useIssuesStore } from '@/store/issues-store';
-import { ArrowUpRight, Check } from 'lucide-react';
+import { ArrowUpRight, Check, ChevronLeft, Clock, Trash2 } from 'lucide-react';
+import {
+   DropdownMenu,
+   DropdownMenuContent,
+   DropdownMenuItem,
+   DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { SNOOZE_OPTIONS, snoozeUntilIso } from './snooze-options';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { NotificationBox } from './icons/motification-box';
@@ -28,6 +35,14 @@ interface IssuePreviewProps {
    notification?: InboxPreviewItem;
    onMarkAsRead?: (id: string) => void;
    onMarkAsUnread?: (id: string) => void;
+   /** Adia ate o instante ISO (co#10: adiar sem depender do hover da linha). */
+   onSnooze?: (id: string, until: string) => void;
+   onDelete?: (id: string) => void;
+   /** Menu de adiar controlado (a tecla H o abre). */
+   snoozeMenuOpen?: boolean;
+   onSnoozeMenuOpenChange?: (open: boolean) => void;
+   /** Mobile: volta para a lista (unico cabecalho da tela). */
+   onBack?: () => void;
 }
 
 /** Contexto da notificação (quem/quando/o quê) exibido acima da issue. */
@@ -70,6 +85,11 @@ export default function IssuePreview({
    notification,
    onMarkAsRead,
    onMarkAsUnread,
+   onSnooze,
+   onDelete,
+   snoozeMenuOpen,
+   onSnoozeMenuOpenChange,
+   onBack,
 }: IssuePreviewProps) {
    const { orgId } = useParams<{ orgId: string }>();
    // Issue viva atrás da notificação (o IssueDetailView precisa da issue do store).
@@ -99,6 +119,17 @@ export default function IssuePreview({
          {/* Header */}
          <div className="flex h-11 shrink-0 items-center justify-between border-b border-border px-4">
             <div className="flex items-center gap-2 min-w-0">
+               {onBack && (
+                  <Button
+                     variant="ghost"
+                     size="icon"
+                     className="size-7 shrink-0"
+                     aria-label="Back to inbox"
+                     onClick={onBack}
+                  >
+                     <ChevronLeft className="size-4" />
+                  </Button>
+               )}
                {HeaderStatusIcon && <HeaderStatusIcon />}
                <span className="text-sm font-medium truncate">{notification.identifier}</span>
             </div>
@@ -123,6 +154,42 @@ export default function IssuePreview({
                      className="gap-1"
                   >
                      Mark as unread
+                  </Button>
+               )}
+               {onSnooze && (
+                  <DropdownMenu open={snoozeMenuOpen} onOpenChange={onSnoozeMenuOpenChange}>
+                     <DropdownMenuTrigger asChild>
+                        <Button
+                           variant="ghost"
+                           size="icon"
+                           className="size-7"
+                           aria-label="Snooze notification"
+                        >
+                           <Clock className="size-4 text-muted-foreground" />
+                        </Button>
+                     </DropdownMenuTrigger>
+                     <DropdownMenuContent align="end">
+                        {SNOOZE_OPTIONS.map((option) => (
+                           <DropdownMenuItem
+                              key={option.label}
+                              onClick={() => onSnooze(notification.id, snoozeUntilIso(option))}
+                           >
+                              <Clock className="size-3.5 text-muted-foreground" />
+                              {option.label}
+                           </DropdownMenuItem>
+                        ))}
+                     </DropdownMenuContent>
+                  </DropdownMenu>
+               )}
+               {onDelete && (
+                  <Button
+                     variant="ghost"
+                     size="icon"
+                     className="size-7"
+                     aria-label="Delete notification"
+                     onClick={() => onDelete(notification.id)}
+                  >
+                     <Trash2 className="size-4 text-muted-foreground" />
                   </Button>
                )}
                <Button variant="ghost" size="xs" asChild>
