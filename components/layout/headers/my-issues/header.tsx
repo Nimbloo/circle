@@ -108,7 +108,8 @@ function HeaderOptions() {
    const count = scopeMyIssues(issues, tab, meId, subscribedIds, activeIds).length;
 
    return (
-      <ViewBar>
+      // is#18: sem overflow, o toolbar estourava a largura em telas ~390px.
+      <ViewBar className="overflow-x-auto">
          <div className="flex items-center gap-3">
             <div className="flex items-center gap-1">
                {MY_ISSUES_TAB_ITEMS.map((item) => (

@@ -135,16 +135,18 @@ export default function HeaderNav() {
                <span className="hidden text-[13px] md:inline">{team.name}</span>
             </Link>
             {cycle && (
-               <>
+               // Chevron e link escondem juntos abaixo de sm (is#18): separados, o link some
+               // e sobra um "›" órfão no breadcrumb mobile (`E › ›`).
+               <span className="hidden shrink-0 items-center gap-1.5 sm:flex">
                   <ChevronRight className="size-3.5 text-muted-foreground shrink-0" />
                   <Link
                      href={`/${orgId}/team/${team.id}/cycles`}
-                     className="hidden shrink-0 items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground sm:flex"
+                     className="flex shrink-0 items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
                   >
                      <CyclePlayIcon className="size-3.5" />
                      {cycle.name}
                   </Link>
-               </>
+               </span>
             )}
             {parent && (
                <>
