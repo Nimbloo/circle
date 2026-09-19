@@ -104,7 +104,7 @@ export function DisplayOptions() {
             </Button>
          </PopoverTrigger>
          <PopoverContent
-            className="min-h-[541px] w-[302px] rounded-xl border-[var(--popover-border)] bg-popover p-0 pt-2 shadow-[var(--popover-shadow)]"
+            className="w-[302px] rounded-xl border-[var(--popover-border)] bg-popover p-0 pt-2 shadow-[var(--popover-shadow)]"
             align="end"
             sideOffset={5}
             style={{ boxShadow: 'var(--popover-shadow)' }}
@@ -210,7 +210,7 @@ export function DisplayOptions() {
                </div>
             </div>
 
-            <div className="flex h-[81px] flex-col gap-3 border-t px-4 py-2.5">
+            <div className="flex flex-col gap-3 border-t px-4 py-2.5">
                <div className="flex items-center justify-between gap-2">
                   <span className="text-xs text-muted-foreground">Completed issues</span>
                   <Select
