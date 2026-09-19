@@ -44,6 +44,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useStatuses, usePriorities, useLabels } from '@/store/catalog-store';
 import { toast } from 'sonner';
+import { labelColor } from '@/components/common/palette';
 
 interface IssueContextMenuProps {
    issueId?: string;
@@ -335,7 +336,7 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
                         <ContextMenuItem key={label.id} onClick={() => handleLabelToggle(label.id)}>
                            <span
                               className="inline-block size-3 rounded-full"
-                              style={{ backgroundColor: label.color }}
+                              style={{ backgroundColor: labelColor(label.color) }}
                               aria-hidden="true"
                            />
                            {label.name}

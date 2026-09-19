@@ -7,6 +7,7 @@ import { TagIcon } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { LabelOptions } from '@/components/common/issues/property-options';
+import { labelColor } from '@/components/common/palette';
 
 interface LabelSelectorProps {
    selectedLabels: LabelInterface[];
@@ -60,7 +61,7 @@ export function LabelSelector({ selectedLabels, onChange, children }: LabelSelec
                               <div
                                  key={label.id}
                                  className={`size-3 rounded-full`}
-                                 style={{ backgroundColor: label.color }}
+                                 style={{ backgroundColor: labelColor(label.color) }}
                               />
                            ))}
                         </div>

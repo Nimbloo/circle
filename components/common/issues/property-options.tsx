@@ -16,6 +16,7 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { CheckIcon, FolderIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useIssueCounts } from './issue-counts';
+import { labelColor } from '@/components/common/palette';
 
 /**
  * Listas de opção dos seletores de propriedade (R1), compartilhadas pela linha/card de
@@ -136,7 +137,7 @@ export function LabelOptions({
                      <div className="flex items-center gap-2">
                         <div
                            className="size-3 rounded-full"
-                           style={{ backgroundColor: label.color }}
+                           style={{ backgroundColor: labelColor(label.color) }}
                         />
                         <span>{label.name}</span>
                      </div>

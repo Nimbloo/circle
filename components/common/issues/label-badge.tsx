@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { LabelInterface } from '@/data/labels';
+import { labelColor } from '@/components/common/palette';
 
 export function LabelBadge({ label }: { label: LabelInterface[] }) {
    return (
@@ -12,7 +13,7 @@ export function LabelBadge({ label }: { label: LabelInterface[] }) {
             >
                <span
                   className="size-1.5 rounded-full"
-                  style={{ backgroundColor: l.color }}
+                  style={{ backgroundColor: labelColor(l.color) }}
                   aria-hidden="true"
                ></span>
                {l.name}

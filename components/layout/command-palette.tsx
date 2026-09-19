@@ -51,6 +51,7 @@ import {
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { labelColor } from '@/components/common/palette';
 
 type PaletteRoute =
    | 'root'
@@ -857,7 +858,7 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
                               >
                                  <span
                                     className="size-3 rounded-full"
-                                    style={{ backgroundColor: label.color }}
+                                    style={{ backgroundColor: labelColor(label.color) }}
                                  />
                                  {label.name}
                                  {active && <Check className="ml-auto size-4" />}

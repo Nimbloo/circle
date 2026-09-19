@@ -20,6 +20,7 @@ import { VirtualIssueList } from './virtual-issue-list';
 import { CustomDragLayer } from './issue-grid';
 import { BulkActionsBar } from './bulk-actions-bar';
 import { IssueContextMenuHost } from './issue-context-menu-host';
+import { labelColor } from '@/components/common/palette';
 
 interface GroupedIssuesViewProps {
    /** Issues to display (after the filter bar has been applied). */
@@ -324,7 +325,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                      icon: (
                         <span
                            className="size-2.5 rounded-full"
-                           style={{ backgroundColor: label.color }}
+                           style={{ backgroundColor: labelColor(label.color) }}
                         />
                      ),
                   },
