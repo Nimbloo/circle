@@ -24,7 +24,11 @@ export async function GET(req: Request, { params }: Params) {
 const CreateSchema = z.discriminatedUnion('kind', [
    z.object({
       kind: z.literal('folder'),
-      name: z.string().min(1),
+      name: z
+         .string()
+         .trim()
+         .min(1, 'name é obrigatório')
+         .max(128, 'name deve ter no máximo 128 caracteres'),
       icon: z.string().nullish(),
       id: z.string().optional(),
    }),
@@ -32,8 +36,21 @@ const CreateSchema = z.discriminatedUnion('kind', [
       kind: z.literal('document'),
       // `folderId` OU `newFolder` (Ad#37, aditivo): pasta nova criada junto, atômica.
       folderId: z.string().min(1).optional(),
-      newFolder: z.object({ name: z.string().min(1), icon: z.string().nullish() }).optional(),
-      name: z.string().min(1),
+      newFolder: z
+         .object({
+            name: z
+               .string()
+               .trim()
+               .min(1, 'name é obrigatório')
+               .max(128, 'name deve ter no máximo 128 caracteres'),
+            icon: z.string().nullish(),
+         })
+         .optional(),
+      name: z
+         .string()
+         .trim()
+         .min(1, 'name é obrigatório')
+         .max(128, 'name deve ter no máximo 128 caracteres'),
       icon: z.string().nullish(),
       pinned: z.boolean().optional(),
    }),

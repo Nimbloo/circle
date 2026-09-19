@@ -15,9 +15,11 @@ vi.mock('@aws-sdk/client-bedrock-runtime', () => ({
 
 import { randomUUID } from 'node:crypto';
 import { makeTestDb } from './helpers/db';
+import { __setTestDb } from '@/db';
 import { agentChat, agentMessage } from '@/db/schema';
 import { getOrCreateUser } from '@/lib/api/users';
 import { getAgentChat, listAgentChats, sendAgentMessage } from '@/lib/api/agent';
+import { POST as sendChat } from '@/app/api/v1/agent/chats/route';
 
 /**
  * #50 — falha do Bedrock gravava a mensagem do usuário sem resposta; o próximo envio
@@ -41,6 +43,25 @@ describe('agent: persistência robusta a falha do Bedrock (#50)', () => {
       const db = await makeTestDb();
       sendMock.mockRejectedValueOnce(new Error('ThrottlingException'));
       await expect(sendAgentMessage(db, ME, null, 'oi')).rejects.toThrow();
+      expect(await listAgentChats(db, ME)).toHaveLength(0);
+      expect(await db.select().from(agentMessage)).toHaveLength(0);
+   });
+
+   it('rota avisa indisponibilidade do provedor com 503 e não persiste o chat falho', async () => {
+      const db = await makeTestDb();
+      __setTestDb(db);
+      sendMock.mockRejectedValueOnce(new Error('ThrottlingException'));
+
+      const res = await sendChat(
+         new Request('http://x/api/v1/agent/chats', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-forwarded-email': ME },
+            body: JSON.stringify({ content: 'oi' }),
+         })
+      );
+
+      expect(res.status).toBe(503);
+      expect((await res.json()).detail).toContain('provedor do Agent');
       expect(await listAgentChats(db, ME)).toHaveLength(0);
       expect(await db.select().from(agentMessage)).toHaveLength(0);
    });

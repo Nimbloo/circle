@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, inArray, ne, notInArray, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, lte, ne, notInArray, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    cycle as cycleT,
@@ -569,10 +569,37 @@ async function assertSingleCurrent(tx: Tx, teamId: string, exceptId: string | nu
       );
 }
 
+async function assertNoDateOverlap(
+   tx: Tx,
+   teamId: string,
+   startDate: string,
+   endDate: string,
+   exceptId: string | null
+): Promise<void> {
+   await tx.select({ id: teamT.id }).from(teamT).where(eq(teamT.id, teamId)).for('update');
+   const [other] = await tx
+      .select({ id: cycleT.id, name: cycleT.name })
+      .from(cycleT)
+      .where(
+         and(
+            eq(cycleT.teamId, teamId),
+            lte(cycleT.startDate, endDate),
+            gte(cycleT.endDate, startDate),
+            exceptId ? ne(cycleT.id, exceptId) : sql`true`
+         )
+      )
+      .orderBy(asc(cycleT.startDate))
+      .limit(1);
+   if (other) throw new ApiError(409, `O ciclo informado sobrepõe o ciclo "${other.name}".`);
+}
+
 /** Cria um ciclo no time: auto-numera (max(number)+1), valida team e datas. */
 export async function createCycle(db: Db, input: CreateCycleInput): Promise<CycleDto> {
    const teamRows = await db.select().from(teamT).where(eq(teamT.id, input.teamId)).limit(1);
    if (teamRows.length === 0) throw new ApiError(404, `Team '${input.teamId}' não existe`);
+
+   if (input.capacity !== undefined && (!Number.isInteger(input.capacity) || input.capacity < 0))
+      throw new ApiError(400, 'capacity deve ser um inteiro maior ou igual a zero');
 
    if (input.startDate > input.endDate) throw new ApiError(400, 'startDate deve ser <= endDate');
 
@@ -588,13 +615,15 @@ export async function createCycle(db: Db, input: CreateCycleInput): Promise<Cycl
       const number = (maxRows[0]?.m ?? 0) + 1;
       try {
          await db.transaction(async (tx) => {
+            await assertNoDateOverlap(tx, input.teamId, input.startDate, input.endDate, null);
             if (input.status === 'current') await assertSingleCurrent(tx, input.teamId, null);
             await tx.insert(cycleT).values({
                id,
                number,
                name: input.name,
                teamId: input.teamId,
-               status: input.status ?? 'planned',
+               // Um ciclo novo já está na fila temporal do time; só vira current no rollover.
+               status: input.status ?? 'upcoming',
                startDate: input.startDate,
                endDate: input.endDate,
                capacity: input.capacity ?? 0,
@@ -629,6 +658,9 @@ export async function updateCycle(
    if (existing.length === 0) return null;
    const prev = existing[0];
 
+   if (patch.capacity !== undefined && (!Number.isInteger(patch.capacity) || patch.capacity < 0))
+      throw new ApiError(400, 'capacity deve ser um inteiro maior ou igual a zero');
+
    const startDate = patch.startDate ?? prev.startDate;
    const endDate = patch.endDate ?? prev.endDate;
    if (startDate > endDate) throw new ApiError(400, 'startDate deve ser <= endDate');
@@ -642,6 +674,7 @@ export async function updateCycle(
 
    if (Object.keys(set).length > 0) {
       await db.transaction(async (tx) => {
+         await assertNoDateOverlap(tx, prev.teamId, startDate, endDate, id);
          if (patch.status === 'current') await assertSingleCurrent(tx, prev.teamId, id);
          await tx.update(cycleT).set(set).where(eq(cycleT.id, id));
       });

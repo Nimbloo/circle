@@ -1,6 +1,7 @@
 import { asc } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { status, projectStatus, priority, label, health } from '@/db/schema';
+import { subscribe } from './events';
 
 /** Catálogos (options dos filtros do frontend). Leituras simples ordenadas. */
 
@@ -24,7 +25,7 @@ export function listHealthStates(db: Db) {
    return db.select().from(health);
 }
 
-// ── Cache dos catálogos (semeados e fixos) ──────────────────────────
+// ── Cache dos catálogos (TTL curto + invalidação por evento) ────────
 type StatusRow = typeof status.$inferSelect;
 type PriorityRow = typeof priority.$inferSelect;
 type LabelRow = typeof label.$inferSelect;
@@ -40,21 +41,28 @@ export interface Catalogs {
 const CACHE_TTL_MS = 30_000;
 let cache: { at: number; data: Catalogs } | null = null;
 
+subscribe((event) => {
+   if (event.entity === 'catalog' || event.entity === 'label') resetCatalogCache();
+});
+
 /** Reseta o cache module-level (uso em testes). */
 export function resetCatalogCache(): void {
    cache = null;
 }
 
 /**
- * Catálogos com cache module-level de TTL curto — são semeados e fixos, então
- * evitamos reconsultá-los a cada listagem de issue. Reconsulta após o TTL.
- * Em teste (NODE_ENV==='test') o cache é desabilitado: cada caso usa um DB
- * PGlite distinto, então reconsultamos sempre para não vazar entre DBs.
+ * Catálogos com cache module-level de TTL curto. Mutações invalidam a cópia
+ * por evento local ou recebido pelo LISTEN entre pods; o TTL é o fallback.
+ * Em teste (NODE_ENV==='test') o cache é desabilitado por padrão: cada caso usa um DB
+ * PGlite distinto, então reconsultamos sempre para não vazar entre DBs. O env explícito
+ * permite testar o comportamento real do cache.
  */
 export async function getCachedCatalogs(db: Db): Promise<Catalogs> {
-   const disabled = process.env.NODE_ENV === 'test';
+   const enabled =
+      process.env.CIRCLE_CATALOG_CACHE_ENABLED === 'true' ||
+      (process.env.CIRCLE_CATALOG_CACHE_ENABLED === undefined && process.env.NODE_ENV !== 'test');
    const now = Date.now();
-   if (!disabled && cache && now - cache.at < CACHE_TTL_MS) {
+   if (enabled && cache && now - cache.at < CACHE_TTL_MS) {
       return cache.data;
    }
    const [statuses, priorities, labels, healthStates] = await Promise.all([
@@ -64,6 +72,6 @@ export async function getCachedCatalogs(db: Db): Promise<Catalogs> {
       db.select().from(health),
    ]);
    const data: Catalogs = { statuses, priorities, labels, health: healthStates };
-   if (!disabled) cache = { at: now, data };
+   if (enabled) cache = { at: now, data };
    return data;
 }

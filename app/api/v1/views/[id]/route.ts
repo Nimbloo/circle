@@ -24,7 +24,12 @@ export async function GET(req: Request, { params }: Params) {
 }
 
 const UpdateSchema = z.object({
-   name: z.string().min(1).optional(),
+   name: z
+      .string()
+      .trim()
+      .min(1, 'name é obrigatório')
+      .max(128, 'name deve ter no máximo 128 caracteres')
+      .optional(),
    // Compartilhamento: time que enxerga a view; `null` a torna pessoal.
    teamId: z.string().max(16).nullish(),
    description: z.string().nullish(),
