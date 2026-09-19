@@ -7,7 +7,7 @@ import { format } from 'date-fns';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { motion } from 'motion/react';
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { DragSourceMonitor, useDrag, useDragLayer, useDrop } from 'react-dnd';
 import { getEmptyImage } from 'react-dnd-html5-backend';
 import { AssigneeUser } from './assignee-user';
@@ -92,7 +92,7 @@ export function CustomDragLayer() {
    );
 }
 
-export function IssueGrid({ issue, getOrderedIssues, layout = true }: IssueGridProps) {
+function IssueGridComponent({ issue, getOrderedIssues, layout = true }: IssueGridProps) {
    const ref = useRef<HTMLDivElement>(null);
    const { orgId } = useParams<{ orgId: string }>();
    const displayProperties = useDisplaySetting('displayProperties');
@@ -100,13 +100,17 @@ export function IssueGrid({ issue, getOrderedIssues, layout = true }: IssueGridP
    const updateIssueStatus = useIssuesStore((s) => s.updateIssueStatus);
 
    // Set up drag functionality.
-   const [{ isDragging }, drag, preview] = useDrag(() => ({
-      type: IssueDragType,
-      item: issue,
-      collect: (monitor: DragSourceMonitor) => ({
-         isDragging: monitor.isDragging(),
+   // Deps [issue]: sem elas o item arrastado ficava congelado na 1ª versão da issue.
+   const [{ isDragging }, drag, preview] = useDrag(
+      () => ({
+         type: IssueDragType,
+         item: issue,
+         collect: (monitor: DragSourceMonitor) => ({
+            isDragging: monitor.isDragging(),
+         }),
       }),
-   }));
+      [issue]
+   );
 
    // Use empty image as drag preview (we'll create a custom one with DragLayer)
    useEffect(() => {
@@ -227,3 +231,7 @@ export function IssueGrid({ issue, getOrderedIssues, layout = true }: IssueGridP
       </ContextMenu>
    );
 }
+
+/** Memoizado: um evento de outra issue não re-renderiza os cards montados (#2). As props
+ *  são estáveis — a issue inalterada mantém a referência e `getOrderedIssues` é getter. */
+export const IssueGrid = memo(IssueGridComponent);
