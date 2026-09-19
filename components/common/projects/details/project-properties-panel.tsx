@@ -18,6 +18,7 @@ import { ProgressHistory } from '../progress-history';
 import { ArrowRight, Calendar, Check, Compass, Plus, Tag, Trash2, UserPlus, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { labelColor } from '@/components/common/palette';
 
 interface ProjectPropertiesPanelProps {
    project: Project;
@@ -360,7 +361,7 @@ export function ProjectPropertiesPanel({
                         >
                            <span
                               className="size-2 rounded-full"
-                              style={{ backgroundColor: label.color }}
+                              style={{ backgroundColor: labelColor(label.color) }}
                            />
                            {label.name}
                         </span>

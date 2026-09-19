@@ -16,6 +16,7 @@ import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { ProjectGroup } from './projects';
 import { ProjectContextMenu } from './project-context-menu';
+import { labelColor } from '@/components/common/palette';
 
 export const ProjectDragType = 'PROJECT';
 /** Instrução de DnD lida por leitores de tela (aria-describedby dos cards). */
@@ -82,7 +83,7 @@ function ProjectCard({ project }: { project: Project }) {
                      >
                         <span
                            className="size-1.5 rounded-full"
-                           style={{ backgroundColor: label.color }}
+                           style={{ backgroundColor: labelColor(label.color) }}
                         />
                         {label.name}
                      </span>

@@ -35,6 +35,7 @@ import { StatusWithPercent } from './status-with-percent';
 import { DatePicker } from './date-picker';
 import { ProjectContextMenu } from './project-context-menu';
 import { parseDay } from '@/lib/project-dates';
+import { labelColor } from '@/components/common/palette';
 
 interface ProjectLineProps {
    project: Project;
@@ -110,7 +111,7 @@ export default function ProjectLine({ project, showTeam = false }: ProjectLinePr
                      >
                         <span
                            className="size-1.5 rounded-full"
-                           style={{ backgroundColor: label.color }}
+                           style={{ backgroundColor: labelColor(label.color) }}
                         />
                         {label.name}
                      </span>

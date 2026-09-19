@@ -41,6 +41,7 @@ import type { ComponentType, CSSProperties } from 'react';
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 import { persistNewProject, type CreateProgress } from './create-project-persist';
 import { toast } from 'sonner';
+import { labelColor } from '@/components/common/palette';
 
 /** Status icons são uma união (Lucide | Remixicon); o cast expõe className/style. */
 type IconCmp = ComponentType<{ className?: string; style?: CSSProperties }>;
@@ -561,7 +562,7 @@ export function CreateProjectButton() {
                                     <CommandItem key={l.id} onSelect={() => toggleLabel(l.id)}>
                                        <span
                                           className="size-2.5 rounded-full"
-                                          style={{ backgroundColor: l.color }}
+                                          style={{ backgroundColor: labelColor(l.color) }}
                                        />
                                        {l.name}
                                        {labelIds.includes(l.id) && (

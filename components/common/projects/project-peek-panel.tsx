@@ -19,6 +19,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useMemo } from 'react';
 import { ProjectProgressChart, PROGRESS_COLORS } from './details/project-progress-chart';
 import { useSharedProjectDetail } from './details/use-project-detail';
+import { labelColor } from '@/components/common/palette';
 
 interface ProjectPeekPanelProps {
    projectId: string;
@@ -223,7 +224,7 @@ export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) 
                         >
                            <span
                               className="size-2 rounded-full"
-                              style={{ backgroundColor: label.color }}
+                              style={{ backgroundColor: labelColor(label.color) }}
                            />
                            {label.name}
                         </span>
