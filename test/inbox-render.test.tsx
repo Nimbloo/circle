@@ -9,7 +9,7 @@ import { NavInbox } from '@/components/layout/sidebar/nav-inbox';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import type { Issue } from '@/data/issues';
 import { priorities } from '@/data/priorities';
-import { status } from '@/data/status';
+import { status } from './helpers/catalog-fixture';
 import { useIssuesStore } from '@/store/issues-store';
 import { useNotificationsStore, type InboxNotification } from '@/store/notifications-store';
 

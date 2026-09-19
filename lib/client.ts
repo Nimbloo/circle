@@ -81,6 +81,7 @@ import type {
    RoadmapMilestone,
 } from '@/lib/api/roadmap';
 import type { ProjectSnapshotPoint } from '@/lib/api/project-snapshots';
+import { CLIENT_ID_HEADER, getClientId } from '@/lib/client-id';
 
 export type { SearchEntityType, SearchGroup, SearchItem, SearchResult };
 export type { RoadmapDto, RoadmapDependency, RoadmapGroup, RoadmapMilestone, ProjectSnapshotPoint };
@@ -121,7 +122,11 @@ export class ApiError extends Error {
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
    const res = await fetch(`/api/v1${path}`, {
       method,
-      headers: body !== undefined ? { 'content-type': 'application/json' } : undefined,
+      // Aba de origem (If#16): o servidor carimba no evento SSE e esta aba reconhece o eco.
+      headers: {
+         [CLIENT_ID_HEADER]: getClientId(),
+         ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+      },
       body: body !== undefined ? JSON.stringify(body) : undefined,
    });
    const json = await res.json().catch(() => null);
@@ -145,7 +150,11 @@ async function requestEnvelope<T>(path: string): Promise<{ data: T; meta?: unkno
 
 /** POST multipart (upload de arquivo): o navegador define o content-type com o boundary. */
 async function postForm<T>(path: string, form: FormData): Promise<T> {
-   const res = await fetch(`/api/v1${path}`, { method: 'POST', body: form });
+   const res = await fetch(`/api/v1${path}`, {
+      method: 'POST',
+      headers: { [CLIENT_ID_HEADER]: getClientId() },
+      body: form,
+   });
    const json = await res.json().catch(() => null);
    if (!res.ok) {
       const detail = (json && (json.detail || json.title)) || res.statusText;
@@ -289,6 +298,14 @@ export const api = {
    issues: {
       list: (opts?: IssueListOptions) => get<IssueDto[]>(`/issues${issueQuery(opts)}`),
       get: (id: string) => get<IssueDto>(`/issues/${id}`),
+      /** Resync incremental (#14): o que mudou desde `since` + ids vivos (lápides por ausência). */
+      changes: (since: string) =>
+         requestEnvelope<IssueDto[]>(
+            `/issues?updatedSince=${encodeURIComponent(since)}`
+         ) as Promise<{
+            data: IssueDto[];
+            meta?: { ids?: string[]; truncated?: boolean };
+         }>,
       create: (input: CreateIssueClientInput) => post<IssueDto>('/issues', input),
       update: (id: string, patchInput: UpdateIssueInput) =>
          patch<IssueDto>(`/issues/${id}`, patchInput),

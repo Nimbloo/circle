@@ -334,7 +334,16 @@ export async function updateIssueContent(
          })
          .onConflictDoUpdate({ target: issueContent.issueId, set });
    });
-   publish({ entity: 'issue', action: 'updated', id: issueId, teamId: exists[0].teamId });
+   // Descrição/milestone em texto não fazem parte do DTO da lista: `scope: 'content'`
+   // (#18) — os outros clientes só recarregam o detalhe aberto, sem GET da issue.
+   publish({
+      entity: 'issue',
+      action: 'updated',
+      id: issueId,
+      teamId: exists[0].teamId,
+      actorEmail,
+      scope: 'content',
+   });
    return getIssueDetail(db, issueId);
 }
 

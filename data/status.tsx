@@ -121,115 +121,73 @@ export const StatusTriageIcon: React.FC<{ color: string }> = ({ color }) => (
 );
 
 /* -------------------------------------------------------------------------- */
-/*                             Status definitions                             */
+/*                      Ícone a partir do DTO (sem catálogo mock)             */
 /* -------------------------------------------------------------------------- */
 
-export const InProgressIcon: React.FC = () => <StatusPieIcon color="#facc15" fraction={0.25} />;
-export const TechnicalReviewIcon: React.FC = () => <StatusPieIcon color="#22c55e" fraction={0.4} />;
-export const DoneIcon: React.FC = () => <StatusCheckIcon color="#5e6ad2" />;
-export const PausedIcon: React.FC = () => <StatusPieIcon color="#26b5ce" fraction={0.5} />;
-export const ToDoIcon: React.FC = () => <StatusPieIcon color="#99a2b2" fraction={0} />;
-export const BacklogIcon: React.FC = () => <StatusGearIcon color="#95a2b3" />;
-export const TriageIcon: React.FC = () => <StatusTriageIcon color="#f2790f" />;
-export const IdeaIcon: React.FC = () => <StatusGearIcon color="#5e6ad2" />;
-export const ProductFeedbackIcon: React.FC = () => <StatusPieIcon color="#f2994a" fraction={0.8} />;
-export const BlockedIcon: React.FC = () => <StatusPieIcon color="#eb5757" fraction={0.65} />;
-export const ShippedIcon: React.FC = () => <StatusCheckIcon color="#4cb782" />;
-export const CanceledIcon: React.FC = () => <StatusXIcon color="#95a2b3" />;
-export const DuplicateIcon: React.FC = () => <StatusDuplicateIcon color="#95a2b3" />;
-
-/**
- * All workflow statuses.
- *
- * NOTE: the first six entries keep the same indexes as the historical
- * status list (in-progress, technical-review, done, paused, to-do, backlog)
- * so mock data referencing `status[0..5]` keeps working.
- */
-export const status: Status[] = [
-   {
-      id: 'in-progress',
-      name: 'In Progress',
-      color: '#facc15',
-      category: 'started',
-      icon: InProgressIcon,
-   },
-   {
-      id: 'technical-review',
-      name: 'Technical Review',
-      color: '#22c55e',
-      category: 'started',
-      icon: TechnicalReviewIcon,
-   },
-   { id: 'done', name: 'Done', color: '#5e6ad2', category: 'completed', icon: DoneIcon },
-   { id: 'paused', name: 'Paused', color: '#26b5ce', category: 'started', icon: PausedIcon },
-   { id: 'to-do', name: 'Todo', color: '#99a2b2', category: 'unstarted', icon: ToDoIcon },
-   { id: 'backlog', name: 'Backlog', color: '#95a2b3', category: 'backlog', icon: BacklogIcon },
-   { id: 'triage', name: 'Triage', color: '#f2790f', category: 'triage', icon: TriageIcon },
-   { id: 'idea', name: 'Idea', color: '#5e6ad2', category: 'backlog', icon: IdeaIcon },
-   {
-      id: 'product-feedback',
-      name: 'Product Feedback',
-      color: '#f2994a',
-      category: 'started',
-      icon: ProductFeedbackIcon,
-   },
-   { id: 'blocked', name: 'Blocked', color: '#eb5757', category: 'started', icon: BlockedIcon },
-   { id: 'shipped', name: 'Shipped', color: '#4cb782', category: 'completed', icon: ShippedIcon },
-   { id: 'canceled', name: 'Canceled', color: '#95a2b3', category: 'canceled', icon: CanceledIcon },
-   {
-      id: 'duplicate',
-      name: 'Duplicate',
-      color: '#95a2b3',
-      category: 'canceled',
-      icon: DuplicateIcon,
-   },
-];
-
-/**
- * Workflow ordering (triage → backlog → unstarted → started → completed → canceled),
- * used by the insights table.
- */
-const CATEGORY_ORDER: Record<StatusCategory, number> = {
-   triage: 0,
-   backlog: 1,
-   unstarted: 2,
-   planned: 2,
-   started: 3,
-   completed: 4,
-   canceled: 5,
-};
-
-/** Display order used by grouped issue views (started statuses first, Linear-like). */
-const DISPLAY_CATEGORY_ORDER: Record<StatusCategory, number> = {
-   started: 0,
-   unstarted: 1,
-   planned: 1,
-   triage: 2,
-   backlog: 3,
-   completed: 4,
-   canceled: 5,
-};
-
-export const workflowOrderedStatus: Status[] = [...status].sort(
-   (a, b) =>
-      CATEGORY_ORDER[a.category] - CATEGORY_ORDER[b.category] ||
-      status.indexOf(a) - status.indexOf(b)
-);
-
-export const displayOrderedStatus: Status[] = [...status].sort(
-   (a, b) =>
-      DISPLAY_CATEGORY_ORDER[a.category] - DISPLAY_CATEGORY_ORDER[b.category] ||
-      status.indexOf(a) - status.indexOf(b)
-);
-
-export function getStatusesByCategory(categories: StatusCategory[]): Status[] {
-   return displayOrderedStatus.filter((s) => categories.includes(s.category));
+export interface StatusIconProps {
+   category: StatusCategory;
+   color: string;
+   /** Preenchimento do "pie" em `started` (0–1); a posição no workflow define. */
+   fraction?: number;
+   /** Nome do status: só distingue "Duplicate" dentro de `canceled`. */
+   name?: string;
 }
 
-export const StatusIcon: React.FC<{ statusId: string }> = ({ statusId }) => {
-   const currentStatus = status.find((s) => s.id === statusId);
-   if (!currentStatus) return null;
-
-   const IconComponent = currentStatus.icon;
-   return <IconComponent />;
+/**
+ * Ícone ÚNICO de status, derivado de categoria + cor do DTO (#16). Status criado ou
+ * renomeado no servidor ganha ícone coerente sem depender de um catálogo local.
+ */
+export const StatusIcon: React.FC<StatusIconProps> = ({ category, color, fraction, name }) => {
+   switch (category) {
+      case 'triage':
+         return <StatusTriageIcon color={color} />;
+      case 'backlog':
+         return <StatusGearIcon color={color} />;
+      case 'unstarted':
+      case 'planned':
+         return <StatusPieIcon color={color} fraction={0} />;
+      case 'started':
+         return <StatusPieIcon color={color} fraction={fraction ?? 0.5} />;
+      case 'completed':
+         return <StatusCheckIcon color={color} />;
+      case 'canceled':
+         return /duplicate/i.test(name ?? '') ? (
+            <StatusDuplicateIcon color={color} />
+         ) : (
+            <StatusXIcon color={color} />
+         );
+      default:
+         return <StatusPieIcon color={color} fraction={0} />;
+   }
 };
+
+const iconCache = new Map<string, React.FC>();
+
+/**
+ * Componente sem props (o formato de `Status.icon`) para um status. Memoizado por
+ * aparência: a mesma combinação devolve a MESMA referência (sem re-render à toa).
+ */
+export function statusIconFor(
+   category: StatusCategory,
+   color: string,
+   fraction?: number,
+   name?: string
+): React.FC {
+   const duplicate = category === 'canceled' && /duplicate/i.test(name ?? '');
+   const key = `${category}|${color}|${fraction ?? ''}|${duplicate ? 'dup' : ''}`;
+   let Icon = iconCache.get(key);
+   if (!Icon) {
+      const Bound: React.FC = () => (
+         <StatusIcon
+            category={category}
+            color={color}
+            fraction={fraction}
+            name={duplicate ? 'Duplicate' : undefined}
+         />
+      );
+      Bound.displayName = `StatusIcon(${category})`;
+      Icon = Bound;
+      iconCache.set(key, Icon);
+   }
+   return Icon;
+}

@@ -9,7 +9,6 @@ import { usePriorities, useStatuses } from '@/store/catalog-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
 import { toast } from 'sonner';
-import { v4 as uuidv4 } from 'uuid';
 import { StatusSelector } from './status-selector';
 import { PrioritySelector } from './priority-selector';
 import { AssigneeSelector } from './assignee-selector';
@@ -56,7 +55,7 @@ export function CreateNewIssue() {
    const createDefaultData = useCallback(() => {
       const identifier = generateUniqueIdentifier();
       return {
-         id: uuidv4(),
+         id: crypto.randomUUID(),
          identifier: `LNUI-${identifier}`,
          title: '',
          description: '',

@@ -547,6 +547,57 @@ export async function listIssues(
    return orderRows(dtos, opts.orderBy);
 }
 
+/** Resultado do resync incremental (#14). */
+export interface IssueChanges {
+   /** Issues que mudaram desde `since` (DTO completo). */
+   issues: IssueDto[];
+   /** Ids de TODAS as issues visíveis: o que o cliente tem e não está aqui foi apagado. */
+   ids: string[];
+   /** Mudanças demais para um delta: o cliente faz a hidratação completa. */
+   truncated: boolean;
+}
+
+/** Teto do delta: acima disso a hidratação completa (paginada) sai mais barata. */
+const MAX_CHANGES = 1000;
+
+/**
+ * Resync incremental (#14): em vez de re-hidratar tudo na reconexão, o cliente pede só
+ * o que mudou desde a sua marca d'água. Conta como mudança da issue, além do próprio
+ * `updated_at`: filha alterada (rollup), projeto renomeado e usuário (responsável,
+ * colaborador ou autor) alterado — tudo o que aparece embutido no DTO da lista.
+ * Apagadas não deixam linha: as lápides são as ausências em `ids`.
+ */
+export async function listIssueChanges(
+   db: Db,
+   since: Date,
+   opts: { teamIds?: string[]; limit?: number } = {}
+): Promise<IssueChanges> {
+   const cat = await loadCatalogs(db);
+   const scope = buildWhere(db, { teamIds: opts.teamIds }, cat.statuses);
+   const limit = opts.limit ?? MAX_CHANGES;
+   const changed = or(
+      gt(issue.updatedAt, since),
+      sql`${issue.id} in (select child.parent_id from issue child where child.updated_at > ${since} and child.parent_id is not null)`,
+      sql`${issue.projectId} in (select p.id from project p where p.updated_at > ${since})`,
+      sql`(${issue.assigneeId} in (select u.id from app_user u where u.updated_at > ${since}) or ${issue.createdById} in (select u.id from app_user u where u.updated_at > ${since}) or ${issue.id} in (select ia.issue_id from issue_assignee ia join app_user u on u.id = ia.user_id where u.updated_at > ${since}))`
+   )!;
+   const [rows, visible] = await Promise.all([
+      db
+         .select()
+         .from(issue)
+         .where(scope ? and(scope, changed) : changed)
+         .orderBy(asc(issue.rank), asc(issue.id))
+         .limit(limit + 1),
+      db.select({ id: issue.id }).from(issue).where(scope),
+   ]);
+   if (rows.length > limit) return { issues: [], ids: [], truncated: true };
+   return {
+      issues: await assemble(db, rows, cat),
+      ids: visible.map((r) => r.id),
+      truncated: false,
+   };
+}
+
 export async function getIssue(db: Db, id: string): Promise<IssueDto | null> {
    const cat = await loadCatalogs(db);
    const rows = await db.select().from(issue).where(eq(issue.id, id)).limit(1);
@@ -1606,6 +1657,8 @@ export async function addLabel(
          .returning({ labelId: issueLabel.labelId });
       // grava no histórico só quando o vínculo é novo (re-add idempotente não gera evento)
       if (rows.length > 0) {
+         // Label é parte do DTO da lista: conta como mudança da issue (resync incremental, #14).
+         await tx.update(issue).set({ updatedAt: new Date() }).where(eq(issue.id, id));
          await tx.insert(activityEvent).values({
             id: randomUUID(),
             issueId: id,
@@ -1637,6 +1690,7 @@ export async function removeLabel(
       .returning({ labelId: issueLabel.labelId });
    // grava no histórico só quando havia vínculo (delete no-op não gera evento)
    if (deleted.length > 0) {
+      await db.update(issue).set({ updatedAt: new Date() }).where(eq(issue.id, id));
       const labelRows = await db
          .select({ name: labelT.name })
          .from(labelT)

@@ -1,35 +1,47 @@
 /**
  * Adapters API DTO -> tipos ricos do frontend. A API carrega os DADOS (ids + valores);
- * os catálogos locais carregam a PRESENTAÇÃO UI-only (ícones React de status/priority/
- * project). Mesclamos por id — os componentes seguem recebendo o tipo `Issue`/`Project`
- * rico, sem mudança. Para dados demo (= os próprios mock-data) tudo resolve com ícone.
+ * o frontend só acrescenta a PRESENTAÇÃO (ícones React). Nada vem de catálogo mock
+ * (#16): status novo ou renomeado no servidor aparece com o nome/cor/ícone do DTO.
  */
 import { Circle, Cuboid } from 'lucide-react';
-import { status as statusCatalog, Status } from '@/data/status';
-import { priorities as priorityCatalog, Priority } from '@/data/priorities';
-import { projects as projectCatalog, health as healthCatalog, Project } from '@/data/projects';
-import { users as userCatalog, User } from '@/data/users';
+import { Status, StatusCategory, statusIconFor } from '@/data/status';
+import { priorities as priorityPresentation, Priority } from '@/data/priorities';
+import { health as healthCatalog, Project } from '@/data/projects';
+import { User } from '@/data/users';
 import type { Issue } from '@/data/issues';
 import type { IssueDto, UserRef, ProjectRef } from '@/lib/api/issues';
+import { useCatalogStore } from '@/store/catalog-store';
 
-const statusById = new Map(statusCatalog.map((s) => [s.id, s]));
-const priorityById = new Map(priorityCatalog.map((p) => [p.id, p]));
-const projectById = new Map(projectCatalog.map((p) => [p.id, p]));
-const userById = new Map(userCatalog.map((u) => [u.id, u]));
+const priorityById = new Map(priorityPresentation.map((p) => [p.id, p]));
 
-function adaptStatus(s: IssueDto['status']): Status {
-   return (
-      statusById.get(s.id) ?? {
-         id: s.id,
-         name: s.name,
-         color: s.color,
-         category: s.category as Status['category'],
-         icon: Circle,
-      }
-   );
+/**
+ * Status do DTO -> Status rico. Usa o objeto do catálogo (mesma referência, ícone com o
+ * "pie" da posição) quando ele bate com o DTO; senão monta do próprio DTO — status
+ * criado depois do bootstrap ou renomeado agora não fica sem ícone nem com nome velho.
+ */
+export function adaptStatus(s: {
+   id: string;
+   name: string;
+   color: string;
+   category: string;
+}): Status {
+   const catalog = useCatalogStore.getState();
+   const known =
+      catalog.statuses.find((x) => x.id === s.id) ??
+      catalog.projectStatuses.find((x) => x.id === s.id);
+   if (known && known.name === s.name && known.color === s.color && known.category === s.category)
+      return known;
+   const category = s.category as StatusCategory;
+   return {
+      id: s.id,
+      name: s.name,
+      color: s.color,
+      category,
+      icon: statusIconFor(category, s.color, undefined, s.name),
+   };
 }
 
-function adaptPriority(p: IssueDto['priority']): Priority {
+export function adaptPriority(p: { id: string; name: string }): Priority {
    return (
       priorityById.get(p.id) ?? {
          id: p.id,
@@ -40,42 +52,46 @@ function adaptPriority(p: IssueDto['priority']): Priority {
 }
 
 export function adaptUser(u: UserRef): User {
-   return (
-      userById.get(u.id) ?? {
-         id: u.id,
-         name: u.name,
-         email: u.email,
-         slug: u.slug,
-         avatarUrl: u.avatarUrl ?? '',
-         status: 'offline',
-         role: 'Member',
-         joinedDate: '2026-01-01',
-         teamIds: [],
-         timezone: 'UTC',
-      }
-   );
+   return {
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      slug: u.slug,
+      avatarUrl: u.avatarUrl ?? '',
+      status: 'offline',
+      role: 'Member',
+      joinedDate: '2026-01-01',
+      teamIds: [],
+      timezone: 'UTC',
+   };
 }
 
 const DEFAULT_HEALTH = healthCatalog.find((h) => h.id === 'no-update') ?? healthCatalog[0];
 
+/** Status neutro do Project fino (o ref embutido na issue não traz o status do projeto). */
+const UNKNOWN_PROJECT_STATUS: Status = {
+   id: '',
+   name: '',
+   color: 'var(--muted-foreground)',
+   category: 'backlog',
+   icon: statusIconFor('backlog', 'var(--muted-foreground)'),
+};
+
 /**
- * ProjectRef (embutido na issue) -> Project. Resolve pelo catálogo local se existir
- * (dados demo); senão sintetiza um Project fino a partir do ref (id/name/ícone) com
+ * ProjectRef (embutido na issue) -> Project fino a partir do ref (id/name/ícone) com
  * defaults seguros. Independente de ordem de hydrate (não consulta o workspace store).
  */
 function adaptProject(p: ProjectRef): Project {
-   const known = projectById.get(p.id);
-   if (known) return known;
    return {
       id: p.id,
       name: p.name,
-      status: statusCatalog[0],
+      status: UNKNOWN_PROJECT_STATUS,
       icon: Cuboid,
       percentComplete: 0,
       startDate: '',
       // Ref de projeto embutido na issue não carrega lead — null honesto (Project.lead: User|null).
       lead: null,
-      priority: priorityCatalog[0],
+      priority: adaptPriority({ id: 'no-priority', name: 'No priority' }),
       health: DEFAULT_HEALTH,
       teamId: '',
       labels: [],

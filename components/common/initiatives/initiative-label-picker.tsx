@@ -12,20 +12,7 @@ import {
    CommandList,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-
-const LABEL_COLOR: Record<string, string> = {
-   purple: 'var(--primary)',
-   indigo: 'var(--primary)',
-   red: 'var(--destructive)',
-   green: 'var(--review-open)',
-   yellow: 'var(--cycle-started)',
-   orange: 'var(--chart-4)',
-   pink: 'var(--chart-5)',
-   blue: 'var(--chart-3)',
-   cyan: 'var(--chart-2)',
-   teal: 'var(--chart-2)',
-   gray: 'var(--muted-foreground)',
-};
+import { labelColor } from '@/components/common/palette';
 
 export function InitiativeLabelPicker({
    labels,
@@ -75,8 +62,7 @@ export function InitiativeLabelPicker({
                            <span
                               className="size-2.5 rounded-full"
                               style={{
-                                 backgroundColor:
-                                    LABEL_COLOR[label.color] ?? 'var(--muted-foreground)',
+                                 backgroundColor: labelColor(label.color),
                               }}
                            />
                            {label.name}

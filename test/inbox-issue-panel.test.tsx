@@ -13,7 +13,7 @@ import {
    DetailSidePanelTrigger,
 } from '@/components/common/detail-side-panel';
 import type { InboxItem } from '@/data/inbox';
-import { status } from '@/data/status';
+import { status } from './helpers/catalog-fixture';
 import { DEFAULT_DETAIL_PANELS, useDetailPanelStore } from '@/store/detail-panel-store';
 import { useIssuesStore } from '@/store/issues-store';
 
