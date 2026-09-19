@@ -480,7 +480,10 @@ export function useLiveSync(): void {
                return;
             case 'document':
                // Documentos não vivem no bootstrap: só a tela aberta recarrega.
-               dispatch(DOCUMENT_CHANGED_EVENT, { id, teamId: parsed.teamId });
+               dispatch(
+                  DOCUMENT_CHANGED_EVENT,
+                  own ? { id, teamId: parsed.teamId, own } : { id, teamId: parsed.teamId }
+               );
                return;
             case 'catalog':
                // #53: só status (sem `kind`) vive no bootstrap (STATUS = colunas do board).
