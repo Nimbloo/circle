@@ -58,7 +58,7 @@ const cycle: Cycle = {
    number: 4,
    name: 'Cycle 4',
    teamId: 'CORE',
-   status: 'active',
+   status: 'current',
    startDate: '2026-09-01',
    endDate: '2026-09-14',
    capacity: 0,
