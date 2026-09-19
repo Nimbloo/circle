@@ -63,7 +63,7 @@ export default function Cycles() {
    }
 
    return (
-      <div className="w-full">
+      <div className="content-enter w-full">
          {cycles.map((cycle, idx) => (
             <div key={cycle.id} className="flex w-full flex-col">
                {idx === cooldownBefore && until && (

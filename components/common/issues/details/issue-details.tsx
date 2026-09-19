@@ -351,7 +351,7 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
    };
 
    return (
-      <div className="flex h-full w-full overflow-hidden">
+      <div className="content-enter flex h-full w-full overflow-hidden">
          {/* Main column — conteúdo centralizado nos 791px medidos no Linear. */}
          <article className="h-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-8 sm:px-8 sm:py-10 xl:pt-[59px]">
             <div className="mx-auto w-full max-w-[791px]">

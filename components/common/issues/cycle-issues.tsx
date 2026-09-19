@@ -102,7 +102,7 @@ export default function CycleIssues({ cycleView }: CycleIssuesProps) {
    }
 
    return (
-      <div className="w-full h-full flex flex-col overflow-hidden">
+      <div className="content-enter w-full h-full flex flex-col overflow-hidden">
          <IssueFilterBar />
          <div className="flex-1 min-h-0 w-full flex overflow-hidden">
             <div className="flex-1 min-w-0 h-full overflow-hidden">

@@ -39,7 +39,7 @@ export function EmptyState({
          role="status"
          data-variant={variant}
          className={cn(
-            'mx-auto flex w-full max-w-sm flex-col items-center justify-center px-6 py-16 text-center',
+            'content-enter mx-auto flex w-full max-w-sm flex-col items-center justify-center px-6 py-16 text-center',
             className
          )}
       >

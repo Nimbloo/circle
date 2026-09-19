@@ -89,7 +89,7 @@ export default function TeamMembers() {
    };
 
    return (
-      <div className="w-full">
+      <div className="content-enter w-full">
          {isAdmin && requests.length > 0 && (
             <div className="mx-6 mb-3 rounded-lg border border-amber-500/30 bg-amber-500/5">
                <div className="px-4 py-2 text-xs font-medium text-amber-600 dark:text-amber-400 border-b border-amber-500/20">

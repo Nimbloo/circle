@@ -384,7 +384,7 @@ function InitiativeRow({
       <InitiativeContextMenu initiative={initiative}>
          <Link
             href={`/${orgId}/initiative/${initiative.id}`}
-            className="h-[52px] pl-[52px] pr-[34px] flex items-center gap-3 rounded-lg text-[13px] hover:bg-accent/40 transition-colors"
+            className="content-enter h-[52px] pl-[52px] pr-[34px] flex items-center gap-3 rounded-lg text-[13px] hover:bg-accent/40 transition-colors"
          >
             <span className="flex min-w-0 flex-1 items-center gap-2.5">
                <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-muted/50 text-sm">

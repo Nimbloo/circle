@@ -636,7 +636,7 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
 
    return (
       <ViewportContext.Provider value={viewportStore}>
-         <div className="relative w-full h-full">
+         <div className="content-enter relative w-full h-full">
             {peekProjectId !== null && (
                <ProjectPeekPanel projectId={peekProjectId} onClose={() => setPeekProjectId(null)} />
             )}

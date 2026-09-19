@@ -80,7 +80,7 @@ export default function TeamOverview() {
    ];
 
    return (
-      <div className="w-full max-w-5xl -translate-x-[9px] mx-auto px-8 py-6 flex flex-col lg:flex-row gap-12">
+      <div className="content-enter w-full max-w-5xl -translate-x-[9px] mx-auto px-8 py-6 flex flex-col lg:flex-row gap-12">
          {/* Main column */}
          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3">

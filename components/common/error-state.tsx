@@ -19,7 +19,7 @@ export function ErrorState({
          role={role}
          aria-labelledby="error-state-title"
          className={cn(
-            'flex min-h-svh w-full flex-col items-center justify-center bg-background px-6 py-12 text-center',
+            'content-enter flex min-h-svh w-full flex-col items-center justify-center bg-background px-6 py-12 text-center',
             className
          )}
       >

@@ -157,7 +157,7 @@ export default function PulseSettings() {
 
 function PulseContent({ data }: { data: PulseData }) {
    return (
-      <>
+      <div className="content-enter">
          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             <StatCard label="Total de issues" value={String(data.total)} />
             <StatCard
@@ -176,6 +176,6 @@ function PulseContent({ data }: { data: PulseData }) {
                <BarList title="Por time" buckets={data.teamBuckets} />
             </div>
          </div>
-      </>
+      </div>
    );
 }

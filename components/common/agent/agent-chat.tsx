@@ -102,7 +102,7 @@ const ChatMessage = memo(function ChatMessage({ message }: { message: AgentMessa
 
    if (message.role === 'user') {
       return (
-         <div className="flex justify-end">
+         <div className="content-enter flex justify-end">
             <div className="flex items-start gap-2.5 max-w-[85%]">
                <div className="rounded-2xl rounded-tr-sm bg-accent px-4 py-2.5 text-sm">
                   {message.content}
@@ -116,7 +116,7 @@ const ChatMessage = memo(function ChatMessage({ message }: { message: AgentMessa
       );
    }
    return (
-      <div className="flex items-start gap-2.5">
+      <div className="content-enter flex items-start gap-2.5">
          <span className="mt-1 inline-flex size-6 items-center justify-center rounded-full border bg-container shrink-0">
             <Bot className="size-3.5" />
          </span>

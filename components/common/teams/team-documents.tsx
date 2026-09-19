@@ -1,6 +1,7 @@
 'use client';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { cn } from '@/lib/utils';
 import { LoadingArea } from '@/components/common/loading-area';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -165,7 +166,7 @@ export default function TeamDocuments() {
                   <Collapsible
                      key={folder.id}
                      defaultOpen={folder.documents.some((d) => d.pinned) || fi === 0}
-                     className={fi > 0 ? 'border-t border-border/40' : undefined}
+                     className={cn('content-enter', fi > 0 && 'border-t border-border/40')}
                   >
                      <CollapsibleTrigger asChild>
                         <button className="group w-full flex items-center gap-2 px-4 h-9 text-sm text-muted-foreground hover:text-foreground">

@@ -56,7 +56,7 @@ export default function ProjectIssues({ projectId }: ProjectIssuesProps) {
    }
 
    return (
-      <div className="w-full h-full flex flex-col overflow-hidden">
+      <div className="content-enter w-full h-full flex flex-col overflow-hidden">
          <IssueFilterBar />
          <div className="flex justify-end px-2.5 pt-2 xl:hidden">
             <DetailSidePanelTrigger kind="project" />

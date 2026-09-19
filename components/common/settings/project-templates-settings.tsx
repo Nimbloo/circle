@@ -292,7 +292,7 @@ export default function ProjectTemplatesSettings() {
                templates.map((tmpl) => (
                   <div
                      key={tmpl.id}
-                     className="flex items-center gap-3 px-4 py-3 border-b last:border-b-0 border-border/50"
+                     className="content-enter flex items-center gap-3 px-4 py-3 border-b last:border-b-0 border-border/50"
                   >
                      <FolderKanban className="size-4 text-muted-foreground shrink-0" />
                      <div className="min-w-0 flex-1">

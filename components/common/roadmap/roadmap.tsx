@@ -147,7 +147,7 @@ export default function Roadmap() {
    }
 
    return (
-      <div className="flex h-full w-full flex-col overflow-hidden">
+      <div className="content-enter flex h-full w-full flex-col overflow-hidden">
          <div className="min-h-0 flex-1">
             <RoadmapTimeline
                groups={groups}

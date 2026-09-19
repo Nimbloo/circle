@@ -1,7 +1,7 @@
 'use client';
 
 import { EmptyState } from '@/components/common/empty-state';
-import { DetailSidePanel, DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
+import { DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 import { BlockEditor } from '@/components/common/editor/block-editor';
 import { Button } from '@/components/ui/button';
 import { ErrorState } from '@/components/common/error-state';
@@ -154,7 +154,7 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    }
 
    return (
-      <div className="relative w-full h-full flex overflow-hidden">
+      <div className="content-enter relative w-full h-full flex overflow-hidden">
          {/* Main column */}
          <div className="flex-1 min-w-0 h-full relative">
             <DocumentOutline items={outlineItems} scrollRef={scrollRef} />

@@ -260,7 +260,7 @@ export default function IssueLabelsSettings() {
             {rows.map((label) => (
                <div
                   key={label.id}
-                  className="group flex items-center px-2 py-2.5 text-sm border-b border-muted-foreground/5 hover:bg-sidebar/50"
+                  className="content-enter group flex items-center px-2 py-2.5 text-sm border-b border-muted-foreground/5 hover:bg-sidebar/50"
                >
                   <div className="flex-1 min-w-0 flex items-center gap-2.5">
                      <span
