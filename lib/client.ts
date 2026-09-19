@@ -393,7 +393,14 @@ export const api = {
          post<FolderDto>(`/teams/${key}/documents`, { kind: 'folder', ...input }),
       createDocument: (
          key: string,
-         input: { folderId: string; name: string; icon?: string | null; pinned?: boolean }
+         input: {
+            /** Pasta existente, ou `newFolder` para criar a pasta junto (atômico). */
+            folderId?: string;
+            newFolder?: { name: string; icon?: string | null };
+            name: string;
+            icon?: string | null;
+            pinned?: boolean;
+         }
       ) => post<DocumentDto>(`/teams/${key}/documents`, { kind: 'document', ...input }),
       /** Templates de issue do time (CRUD; escrita exige admin). */
       templates: (key: string) => get<TemplateDto[]>(`/teams/${key}/templates`),
