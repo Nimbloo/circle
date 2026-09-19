@@ -34,7 +34,7 @@ export const MODEL_ID =
    process.env.BEDROCK_MODEL_ID ?? 'us.anthropic.claude-sonnet-4-5-20250929-v1:0';
 const MAX_TOOL_ROUNDS = 6;
 /** Teto de turnos do histórico enviados ao modelo (custo/latência e limite de contexto). */
-export const MAX_HISTORY_TURNS = 40;
+const MAX_HISTORY_TURNS = 40;
 
 let _client: BedrockRuntimeClient | null = null;
 function client(): BedrockRuntimeClient {
@@ -338,7 +338,7 @@ async function runTool(
  * Histórico aceito pelo Bedrock: sem vazios, turnos alternados (turnos seguidos do mesmo
  * papel — ex.: legado de uma falha antiga — são fundidos), com teto e começando por `user`.
  */
-export function normalizeHistory(history: AgentChatMessage[]): AgentChatMessage[] {
+function normalizeHistory(history: AgentChatMessage[]): AgentChatMessage[] {
    const merged: AgentChatMessage[] = [];
    for (const m of history) {
       if (m.content.trim() === '') continue;
@@ -474,18 +474,17 @@ export async function sendAgentMessage(
    content: string
 ): Promise<{ chatId: string; title: string; reply: string }> {
    const me = await getOrCreateUser(db, email);
-   let id = chatId;
    let title = '';
    let history: AgentChatMessage[] = [];
-   if (id) {
-      const chat = await getAgentChat(db, email, id);
+   if (chatId) {
+      const chat = await getAgentChat(db, email, chatId);
       if (!chat) throw new ApiError(404, 'Chat não encontrado');
       title = chat.title;
       history = chat.messages;
    }
-   const isNew = !id;
+   const isNew = !chatId;
    const reply = await runAgent(db, email, [...history, { role: 'user', content }]);
-   const chatKey = id ?? randomUUID();
+   const chatKey = chatId ?? randomUUID();
    if (isNew) title = content.trim().slice(0, 80) || 'New chat';
    const now = new Date();
    await db.transaction(async (tx) => {

@@ -37,7 +37,7 @@ const agentExamples = [
 ];
 
 /** Aviso honesto: respostas são geradas por IA sobre dados reais e podem conter erros. */
-function DemoBadge() {
+function AiNotice() {
    return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
          <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-medium text-primary">
@@ -49,7 +49,7 @@ function DemoBadge() {
    );
 }
 
-/** Memoizada: durante o streaming só a mensagem que recebe texto re-renderiza. */
+/** Memoizada: a resposta chega inteira e só a bolha que mudou re-renderiza. */
 const AgentMessageBody = memo(function AgentMessageBody({
    content,
    streaming,
@@ -255,7 +255,7 @@ export default function AgentChat() {
       return (
          <div className="w-full h-full flex flex-col items-center overflow-y-auto">
             <div className="w-full flex justify-center border-b bg-container px-4 py-2">
-               <DemoBadge />
+               <AiNotice />
             </div>
 
             <div className="flex-1 w-full max-w-2xl px-6 flex flex-col justify-center pb-24">
@@ -305,7 +305,7 @@ export default function AgentChat() {
    return (
       <div className="w-full h-full flex flex-col overflow-hidden">
          <div className="shrink-0 border-b bg-container px-4 py-2">
-            <DemoBadge />
+            <AiNotice />
          </div>
          <div
             ref={scrollRef}
