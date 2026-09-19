@@ -209,6 +209,9 @@ export default function ProjectTemplatesSettings() {
    const [dialogOpen, setDialogOpen] = useState(false);
    const [editing, setEditing] = useState<ProjectTemplateDto | null>(null);
    const [toDelete, setToDelete] = useState<ProjectTemplateDto | null>(null);
+   // Separado de `toDelete` (ad#4): fechar não pode esvaziar o nome no título durante a
+   // animação de saída — só zera o alvo ao abrir um novo.
+   const [deleteOpen, setDeleteOpen] = useState(false);
 
    useEffect(() => {
       if (!teamId && teams.length > 0) setTeamId(teams[0].id);
@@ -227,7 +230,7 @@ export default function ProjectTemplatesSettings() {
       if (!toDelete) return;
       try {
          await api.teams.deleteProjectTemplate(teamId, toDelete.id);
-         setToDelete(null);
+         setDeleteOpen(false);
          await load();
          toast.success('Template excluído');
       } catch (err) {
@@ -325,7 +328,10 @@ export default function ProjectTemplatesSettings() {
                               variant="ghost"
                               className="size-7 text-destructive hover:text-destructive"
                               aria-label="Excluir template"
-                              onClick={() => setToDelete(tmpl)}
+                              onClick={() => {
+                                 setToDelete(tmpl);
+                                 setDeleteOpen(true);
+                              }}
                            >
                               <Trash2 className="size-3.5" />
                            </Button>
@@ -346,7 +352,7 @@ export default function ProjectTemplatesSettings() {
             />
          )}
 
-         <AlertDialog open={!!toDelete} onOpenChange={(v) => !v && setToDelete(null)}>
+         <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
             <AlertDialogContent>
                <AlertDialogHeader>
                   <AlertDialogTitle>Excluir “{toDelete?.name}”?</AlertDialogTitle>

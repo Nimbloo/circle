@@ -166,6 +166,9 @@ export default function ProjectStatusesSettings() {
    const [editing, setEditing] = useState<EditStatus | null>(null);
    const [dialogCategory, setDialogCategory] = useState<StatusCategory>('backlog');
    const [toDelete, setToDelete] = useState<EditStatus | null>(null);
+   // Separado de `toDelete` (ad#4): fechar não pode esvaziar o nome no título durante a
+   // animação de saída — só zera o alvo ao abrir um novo.
+   const [deleteOpen, setDeleteOpen] = useState(false);
    const [deleteBusy, setDeleteBusy] = useState(false);
    /** Índice arrastado, escopado ao grupo — não se reordena entre categorias. */
    const [drag, setDrag] = useState<{ group: string; index: number } | null>(null);
@@ -215,7 +218,7 @@ export default function ProjectStatusesSettings() {
       try {
          await api.statuses.remove(toDelete.id);
          useCatalogStore.getState().removeStatus(toDelete.id);
-         setToDelete(null);
+         setDeleteOpen(false);
          toast.success('Status excluído');
       } catch (e) {
          // 409 = status em uso (mensagem específica do backend)
@@ -315,14 +318,15 @@ export default function ProjectStatusesSettings() {
                                     variant="ghost"
                                     className="size-7 text-destructive hover:text-destructive"
                                     aria-label="Excluir status"
-                                    onClick={() =>
+                                    onClick={() => {
                                        setToDelete({
                                           id: s.id,
                                           name: s.name,
                                           color: s.color,
                                           category: s.category,
-                                       })
-                                    }
+                                       });
+                                       setDeleteOpen(true);
+                                    }}
                                  >
                                     <Trash2 className="size-3.5" />
                                  </Button>
@@ -343,7 +347,7 @@ export default function ProjectStatusesSettings() {
             onSaved={() => undefined}
          />
 
-         <AlertDialog open={!!toDelete} onOpenChange={(v) => !v && setToDelete(null)}>
+         <AlertDialog open={deleteOpen} onOpenChange={(v) => !deleteBusy && setDeleteOpen(v)}>
             <AlertDialogContent>
                <AlertDialogHeader>
                   <AlertDialogTitle>Excluir status “{toDelete?.name}”?</AlertDialogTitle>

@@ -189,6 +189,9 @@ export default function IssueTemplatesSettings() {
    const [dialogOpen, setDialogOpen] = useState(false);
    const [editing, setEditing] = useState<TemplateDto | null>(null);
    const [toDelete, setToDelete] = useState<TemplateDto | null>(null);
+   // Separado de `toDelete` (ad#4): fechar não pode esvaziar o nome no título durante a
+   // animação de saída — só zera o alvo ao abrir um novo.
+   const [deleteOpen, setDeleteOpen] = useState(false);
 
    // Time default = primeiro do usuário.
    useEffect(() => {
@@ -208,7 +211,7 @@ export default function IssueTemplatesSettings() {
       if (!toDelete) return;
       try {
          await api.teams.deleteTemplate(teamId, toDelete.id);
-         setToDelete(null);
+         setDeleteOpen(false);
          await load();
          toast.success('Template excluído');
       } catch (err) {
@@ -306,7 +309,10 @@ export default function IssueTemplatesSettings() {
                               variant="ghost"
                               className="size-7 text-destructive hover:text-destructive"
                               aria-label="Excluir template"
-                              onClick={() => setToDelete(tmpl)}
+                              onClick={() => {
+                                 setToDelete(tmpl);
+                                 setDeleteOpen(true);
+                              }}
                            >
                               <Trash2 className="size-3.5" />
                            </Button>
@@ -327,7 +333,7 @@ export default function IssueTemplatesSettings() {
             />
          )}
 
-         <AlertDialog open={!!toDelete} onOpenChange={(v) => !v && setToDelete(null)}>
+         <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
             <AlertDialogContent>
                <AlertDialogHeader>
                   <AlertDialogTitle>Excluir “{toDelete?.name}”?</AlertDialogTitle>

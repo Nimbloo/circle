@@ -79,6 +79,10 @@ export default function TeamDocuments() {
    const [busy, setBusy] = useState(false);
    /** Documento aguardando confirmação de exclusão (Ad#21–40: excluía no 1º clique). */
    const [toDelete, setToDelete] = useState<{ id: string; name: string } | null>(null);
+   // Separados do alvo (ad#4): fechar não pode esvaziar o nome no título durante a
+   // animação de saída — só zera o alvo ao abrir um novo.
+   const [deleteOpen, setDeleteOpen] = useState(false);
+   const [folderDeleteOpen, setFolderDeleteOpen] = useState(false);
    /** Pasta sendo renomeada e pasta aguardando confirmação de exclusão (ad#6). */
    const [renamingFolder, setRenamingFolder] = useState<{
       id: string;
@@ -157,7 +161,7 @@ export default function TeamDocuments() {
       setBusy(true);
       try {
          await api.documents.removeFolder(folderId);
-         setFolderToDelete(null);
+         setFolderDeleteOpen(false);
          toast.success('Pasta excluída');
          await reload();
       } catch (err) {
@@ -179,7 +183,7 @@ export default function TeamDocuments() {
    const remove = async (docId: string) => {
       try {
          await api.documents.remove(docId);
-         setToDelete(null);
+         setDeleteOpen(false);
          toast.success('Documento excluído');
          await reload();
       } catch (err) {
@@ -274,13 +278,14 @@ export default function TeamDocuments() {
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                  className="text-destructive focus:text-destructive"
-                                 onClick={() =>
+                                 onClick={() => {
                                     setFolderToDelete({
                                        id: folder.id,
                                        name: folder.name,
                                        count: folder.documents.length,
-                                    })
-                                 }
+                                    });
+                                    setFolderDeleteOpen(true);
+                                 }}
                               >
                                  <Trash2 className="mr-2 size-3.5" /> Delete folder
                               </DropdownMenuItem>
@@ -358,7 +363,10 @@ export default function TeamDocuments() {
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem
                                        className="text-destructive focus:text-destructive"
-                                       onClick={() => setToDelete({ id: doc.id, name: doc.name })}
+                                       onClick={() => {
+                                          setToDelete({ id: doc.id, name: doc.name });
+                                          setDeleteOpen(true);
+                                       }}
                                     >
                                        <Trash2 className="size-3.5 mr-2" /> Delete
                                     </DropdownMenuItem>
@@ -371,7 +379,7 @@ export default function TeamDocuments() {
                ))}
          </div>
 
-         <AlertDialog open={toDelete !== null} onOpenChange={(o) => !o && setToDelete(null)}>
+         <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
             <AlertDialogContent>
                <AlertDialogHeader>
                   <AlertDialogTitle>Excluir “{toDelete?.name}”?</AlertDialogTitle>
@@ -393,10 +401,7 @@ export default function TeamDocuments() {
             </AlertDialogContent>
          </AlertDialog>
 
-         <AlertDialog
-            open={folderToDelete !== null}
-            onOpenChange={(o) => !o && setFolderToDelete(null)}
-         >
+         <AlertDialog open={folderDeleteOpen} onOpenChange={(o) => !busy && setFolderDeleteOpen(o)}>
             <AlertDialogContent>
                <AlertDialogHeader>
                   <AlertDialogTitle>Excluir a pasta “{folderToDelete?.name}”?</AlertDialogTitle>
