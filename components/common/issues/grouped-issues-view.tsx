@@ -410,7 +410,18 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
       setNavOrder(order);
    }, [groups, retainSelection, setNavOrder]);
 
-   const hiddenCount = Math.max(0, totalIssues.length - issues.length);
+   // Is#18: só o que o FILTRO escondeu. Done/sub-issues escondidas pelas opções de display
+   // saem das duas contagens (antes inflavam o rodapé e o faziam aparecer à toa).
+   const hiddenCount = useMemo(() => {
+      const inDisplayScope = (issue: Issue) =>
+         (completedIssues !== 'none' ||
+            (issue.status.category !== 'completed' && issue.status.category !== 'canceled')) &&
+         (showSubIssues || !issue.parentId);
+      return Math.max(
+         0,
+         totalIssues.filter(inDisplayScope).length - issues.filter(inDisplayScope).length
+      );
+   }, [issues, totalIssues, completedIssues, showSubIssues]);
    const showFooter = hasActiveFilters && hiddenCount > 0;
 
    // Nenhuma issue em grupo algum (e não é filtro que escondeu tudo): carregando, falha
