@@ -8,10 +8,10 @@ import {
    SidebarMenuButton,
    SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { openShortcutsHelp } from '@/lib/shortcuts';
 
 /** Rodapé da sidebar (paridade Linear): Invite + Help, ancorados na base. */
 export function NavFooter({ orgId }: { orgId: string }) {
-   const openCommand = () => window.dispatchEvent(new CustomEvent('circle:open-command'));
    return (
       <SidebarFooter className="group-data-[collapsible=icon]:hidden">
          <SidebarMenu>
@@ -24,7 +24,7 @@ export function NavFooter({ orgId }: { orgId: string }) {
                </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-               <SidebarMenuButton size="sm" onClick={openCommand}>
+               <SidebarMenuButton size="sm" onClick={openShortcutsHelp}>
                   <HelpCircle className="text-muted-foreground" />
                   <span>Help &amp; shortcuts</span>
                </SidebarMenuButton>
