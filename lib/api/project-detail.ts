@@ -556,21 +556,24 @@ export async function postProjectUpdate(
    if (!UPDATE_HEALTHS.includes(input.health)) throw new ApiError(400, 'health inválido');
    const id = randomUUID();
    const now = new Date();
-   await db.insert(projectUpdate).values({
-      id,
-      projectId,
-      authorId,
-      health: input.health,
-      blocks: JSON.stringify(input.blocks ?? []),
-      createdAt: now,
-   });
    // Paridade Linear: o health do projeto vem do ÚLTIMO update. Os valores do update
    // (on-track/at-risk/off-track) são exatamente ids do catálogo health, então propaga
-   // direto — antes o update era registrado mas o health do projeto não mudava.
-   await db
-      .update(projectT)
-      .set({ healthId: input.health, healthUpdatedAt: now })
-      .where(eq(projectT.id, projectId));
+   // direto. Update e health na mesma transação (falha no meio não deixa os dois
+   // divergentes).
+   await db.transaction(async (tx) => {
+      await tx.insert(projectUpdate).values({
+         id,
+         projectId,
+         authorId,
+         health: input.health,
+         blocks: JSON.stringify(input.blocks ?? []),
+         createdAt: now,
+      });
+      await tx
+         .update(projectT)
+         .set({ healthId: input.health, healthUpdatedAt: now })
+         .where(eq(projectT.id, projectId));
+   });
    const users = await loadUsers(db, [authorId]);
    publish({ entity: 'project', action: 'updated', id: projectId });
    return {

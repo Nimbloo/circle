@@ -590,13 +590,15 @@ export interface InitiativeActivityDto {
 /** Feed de alterações da iniciativa, mais recente primeiro (espelha o de project). */
 export async function listInitiativeActivity(
    db: Db,
-   initiativeId: string
+   initiativeId: string,
+   limit = 100
 ): Promise<InitiativeActivityDto[]> {
    const rows = await db
       .select()
       .from(initiativeActivity)
       .where(eq(initiativeActivity.initiativeId, initiativeId))
-      .orderBy(desc(initiativeActivity.createdAt));
+      .orderBy(desc(initiativeActivity.createdAt))
+      .limit(limit);
    if (rows.length === 0) return [];
 
    const userIds = [...new Set(rows.map((r) => r.userId))];
