@@ -205,3 +205,37 @@ export async function putUserSettings(
       });
    return data ?? {};
 }
+
+/** Seções do blob; o PATCH troca cada seção enviada inteira (#15). */
+export type SettingsPatch = z.infer<typeof SettingsSchema>;
+
+/**
+ * Merge por SEÇÃO no servidor (#15): cada seção presente no patch substitui a gravada;
+ * as ausentes ficam como estão. Lê e grava na mesma transação com `FOR UPDATE`, então
+ * dois PATCHes concorrentes de seções diferentes (duas abas) não se apagam.
+ */
+export async function patchUserSettings(
+   db: Db,
+   userId: string,
+   patch: SettingsPatch
+): Promise<UserSettings> {
+   return db.transaction(async (tx) => {
+      const rows = await tx
+         .select({ data: userSettings.data })
+         .from(userSettings)
+         .where(eq(userSettings.userId, userId))
+         .for('update')
+         .limit(1);
+      let current: UserSettings = {};
+      try {
+         const parsed = rows.length ? JSON.parse(rows[0].data) : {};
+         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) current = parsed;
+      } catch {
+         // blob corrompido: recomeça do patch
+      }
+      const merged: UserSettings = { ...current };
+      for (const [section, value] of Object.entries(patch))
+         if (value !== undefined) merged[section] = value;
+      return putUserSettings(tx as unknown as Db, userId, merged);
+   });
+}

@@ -11,6 +11,7 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
+import { useSettingsSyncError } from '@/lib/user-settings-sync';
 
 /** Centered settings page: big title, optional description, stacked sections. */
 export function SettingsShell({
@@ -41,6 +42,7 @@ export function SettingsShell({
                </div>
                {action && <div className="absolute right-4 top-0 max-md:right-0">{action}</div>}
             </div>
+            <SettingsSyncWarning />
             <div className={cn('mt-8 flex flex-col gap-12', description && 'mt-[34px]')}>
                {children}
             </div>
@@ -199,5 +201,21 @@ export function EnabledDot({ children }: { children: React.ReactNode }) {
          <span className="size-1.5 shrink-0 rounded-full bg-[var(--online-indicator)]" />
          {children}
       </span>
+   );
+}
+
+/** Erro de sincronização das preferências (#15): sem isto, a falha era silenciosa. */
+function SettingsSyncWarning() {
+   const error = useSettingsSyncError();
+   if (!error) return null;
+   return (
+      <p
+         role="status"
+         className="mx-4 mt-4 text-[13px] leading-5 text-muted-foreground max-md:mx-0"
+      >
+         {error === 'load'
+            ? 'Could not load your saved preferences — changes will not be synced until the connection is back.'
+            : 'Could not save your preferences — retrying.'}
+      </p>
    );
 }

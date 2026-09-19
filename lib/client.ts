@@ -232,6 +232,9 @@ export const api = {
       get: () => get<Record<string, unknown>>('/settings'),
       put: (data: Record<string, unknown>) =>
          request<Record<string, unknown>>('PUT', '/settings', data),
+      /** Merge por seção no servidor (#15): só as seções enviadas são trocadas. */
+      patch: (sections: Record<string, unknown>) =>
+         patch<Record<string, unknown>>('/settings', sections),
    },
 
    /** Audit log de ações administrativas (só admin). */

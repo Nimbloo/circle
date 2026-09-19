@@ -2,13 +2,14 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 const get = vi.fn<() => Promise<Record<string, unknown>>>();
+// Gravação por seção (#15): o cliente usa o PATCH; o nome `put` do mock ficou.
 const put = vi.fn<(data: Record<string, unknown>) => Promise<Record<string, unknown>>>();
 
 vi.mock('@/lib/client', () => ({
    api: {
       settings: {
          get: () => get(),
-         put: (data: Record<string, unknown>) => put(data),
+         patch: (data: Record<string, unknown>) => put(data),
       },
    },
 }));
@@ -84,7 +85,7 @@ describe('user-settings-sync (layout)', () => {
       expect(put).not.toHaveBeenCalled();
    });
 
-   it('mudança em um store de layout dispara settings.put com `layout` (debounce)', async () => {
+   it('mudança em um store de layout dispara settings.patch só com `layout` (debounce)', async () => {
       useViewTypeStore.getState().setViewType('my-issues', 'grid');
       useDisplaySettingsStore.getState().setOrdering('team/ENG/all', 'title');
       useDetailPanelStore.getState().toggle('issue');
@@ -95,6 +96,7 @@ describe('user-settings-sync (layout)', () => {
       expect(put).toHaveBeenCalledTimes(1);
 
       const body = put.mock.calls[0][0] as { layout: Record<string, unknown> };
+      expect(Object.keys(body)).toEqual(['layout']);
       expect(body.layout).toEqual({
          displayByView: {
             'my-issues': {
