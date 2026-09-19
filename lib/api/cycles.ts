@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, inArray, notInArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne, notInArray, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    cycle as cycleT,
@@ -55,35 +55,56 @@ interface Agg {
  * "cycles use estimates to calculate effort"). Issue sem estimate conta como 1 ponto
  * (o mesmo default do Linear quando não há estimativa) — então times que não estimam
  * seguem vendo scope == nº de issues.
+ *
+ * A soma sai AGREGADA do SQL (#36); os marcos por issue (`items`, matéria-prima do
+ * burn-up sintético) só são lidos para `itemCycleIds` — o bootstrap não carrega as
+ * issues de todos os ciclos para descartar.
  */
-async function aggregatesByCycle(db: Db, cycleIds: string[]): Promise<Map<string, Agg>> {
+async function aggregatesByCycle(
+   db: Db,
+   cycleIds: string[],
+   itemCycleIds: readonly string[] = cycleIds
+): Promise<Map<string, Agg>> {
    const result = new Map<string, Agg>();
    if (cycleIds.length === 0) return result;
-   const [issues, statuses] = await Promise.all([
+   for (const cid of cycleIds) result.set(cid, { scope: 0, started: 0, completed: 0, items: [] });
+   const points = sql`case when ${issueT.estimate} > 0 then ${issueT.estimate} else 1 end`;
+   const [sums, items] = await Promise.all([
       db
          .select({
             cycleId: issueT.cycleId,
-            statusId: issueT.statusId,
-            estimate: issueT.estimate,
-            startedAt: issueT.startedAt,
-            completedAt: issueT.completedAt,
+            scope: sql<number>`coalesce(sum(${points}), 0)`,
+            started: sql<number>`coalesce(sum(${points}) filter (where ${statusT.category} = 'started'), 0)`,
+            completed: sql<number>`coalesce(sum(${points}) filter (where ${statusT.category} = 'completed'), 0)`,
          })
          .from(issueT)
-         .where(inArray(issueT.cycleId, cycleIds)),
-      db.select().from(statusT),
+         .innerJoin(statusT, eq(issueT.statusId, statusT.id))
+         .where(inArray(issueT.cycleId, cycleIds))
+         .groupBy(issueT.cycleId),
+      itemCycleIds.length
+         ? db
+              .select({
+                 cycleId: issueT.cycleId,
+                 estimate: issueT.estimate,
+                 startedAt: issueT.startedAt,
+                 completedAt: issueT.completedAt,
+              })
+              .from(issueT)
+              .where(inArray(issueT.cycleId, [...itemCycleIds]))
+         : Promise.resolve([]),
    ]);
-   const catById = new Map(statuses.map((s) => [s.id, s.category]));
-   for (const cid of cycleIds) result.set(cid, { scope: 0, started: 0, completed: 0, items: [] });
-   for (const i of issues) {
-      if (!i.cycleId) continue;
-      const agg = result.get(i.cycleId);
+   for (const row of sums) {
+      const agg = row.cycleId ? result.get(row.cycleId) : undefined;
       if (!agg) continue;
-      const points = i.estimate && i.estimate > 0 ? i.estimate : 1; // fallback 1/issue
-      agg.scope += points;
-      const cat = catById.get(i.statusId);
-      if (cat === 'started') agg.started += points;
-      else if (cat === 'completed') agg.completed += points;
-      agg.items.push({ points, startedAt: i.startedAt, completedAt: i.completedAt });
+      agg.scope = Number(row.scope);
+      agg.started = Number(row.started);
+      agg.completed = Number(row.completed);
+   }
+   for (const i of items) {
+      const agg = i.cycleId ? result.get(i.cycleId) : undefined;
+      if (!agg) continue;
+      const p = i.estimate && i.estimate > 0 ? i.estimate : 1; // fallback 1/issue
+      agg.items.push({ points: p, startedAt: i.startedAt, completedAt: i.completedAt });
    }
    return result;
 }
@@ -205,15 +226,36 @@ function toDto(row: CycleRow, agg: Agg, snapshots: SnapshotRow[], today: string)
 
 const EMPTY_AGG = (): Agg => ({ scope: 0, started: 0, completed: 0, items: [] });
 
-async function snapshotsByCycle(db: Db, cycleIds: string[]): Promise<Map<string, SnapshotRow[]>> {
+/**
+ * Snapshots por ciclo: a série inteira só para `fullIds` (quem desenha burn-up); para
+ * os demais, só o PRIMEIRO (base do `scopeDelta`) — `DISTINCT ON` no SQL (#36).
+ */
+async function snapshotsByCycle(
+   db: Db,
+   cycleIds: string[],
+   fullIds: readonly string[] = cycleIds
+): Promise<Map<string, SnapshotRow[]>> {
    const result = new Map<string, SnapshotRow[]>();
    if (cycleIds.length === 0) return result;
-   const rows = await db
-      .select()
-      .from(snapshotT)
-      .where(inArray(snapshotT.cycleId, cycleIds))
-      .orderBy(asc(snapshotT.date));
-   for (const r of rows) {
+   const full = new Set(fullIds);
+   const firstOnly = cycleIds.filter((id) => !full.has(id));
+   const [fullRows, firstRows] = await Promise.all([
+      full.size
+         ? db
+              .select()
+              .from(snapshotT)
+              .where(inArray(snapshotT.cycleId, [...full]))
+              .orderBy(asc(snapshotT.date))
+         : Promise.resolve([] as SnapshotRow[]),
+      firstOnly.length
+         ? db
+              .selectDistinctOn([snapshotT.cycleId])
+              .from(snapshotT)
+              .where(inArray(snapshotT.cycleId, firstOnly))
+              .orderBy(asc(snapshotT.cycleId), asc(snapshotT.date))
+         : Promise.resolve([] as SnapshotRow[]),
+   ]);
+   for (const r of [...fullRows, ...firstRows]) {
       const arr = result.get(r.cycleId) ?? [];
       arr.push(r);
       result.set(r.cycleId, arr);
@@ -223,8 +265,8 @@ async function snapshotsByCycle(db: Db, cycleIds: string[]): Promise<Map<string,
 
 /**
  * Upsert idempotente do snapshot do DIA (1 linha por cycle+data; repetir no mesmo dia
- * só atualiza os valores). Chamado para os cycles `current` no rollover e no GET do
- * detalhe — não há job.
+ * só atualiza os valores, e só se MUDARAM — `IS DISTINCT FROM`). Chamado para os cycles
+ * `current` no rollover (housekeeping do boot) — não há job, e o GET não escreve (#36).
  */
 async function upsertSnapshots(
    db: Db,
@@ -250,6 +292,11 @@ async function upsertSnapshots(
             started: sql`excluded.started`,
             completed: sql`excluded.completed`,
          },
+         where: sql`
+            ${snapshotT.scope} IS DISTINCT FROM excluded.scope OR
+            ${snapshotT.started} IS DISTINCT FROM excluded.started OR
+            ${snapshotT.completed} IS DISTINCT FROM excluded.completed
+         `,
       });
 }
 
@@ -273,12 +320,29 @@ export async function snapshotCurrentCycles(
    );
 }
 
-/** Aggregates + snapshots em 3 queries para N cycles, e monta os DTOs. */
-async function toDtos(db: Db, rows: CycleRow[], now: Date): Promise<CycleDto[]> {
+/**
+ * Aggregates + snapshots em poucas queries para N cycles, e monta os DTOs. `burnupIds`
+ * restringe quem ganha burn-up (e, portanto, quem precisa de marcos e série completa);
+ * os demais saem com `burnup: null`.
+ */
+async function toDtos(
+   db: Db,
+   rows: CycleRow[],
+   now: Date,
+   burnupIds: readonly string[] = rows.map((r) => r.id)
+): Promise<CycleDto[]> {
    const ids = rows.map((r) => r.id);
-   const [aggs, snaps] = await Promise.all([aggregatesByCycle(db, ids), snapshotsByCycle(db, ids)]);
+   const [aggs, snaps] = await Promise.all([
+      aggregatesByCycle(db, ids, burnupIds),
+      snapshotsByCycle(db, ids, burnupIds),
+   ]);
    const today = isoDay(now);
-   return rows.map((r) => toDto(r, aggs.get(r.id) ?? EMPTY_AGG(), snaps.get(r.id) ?? [], today));
+   const withBurnup = new Set(burnupIds);
+   return rows.map((r) => {
+      const dto = toDto(r, aggs.get(r.id) ?? EMPTY_AGG(), snaps.get(r.id) ?? [], today);
+      if (!withBurnup.has(r.id)) dto.burnup = null;
+      return dto;
+   });
 }
 
 /**
@@ -423,16 +487,20 @@ export async function listCyclesForTeams(
 ): Promise<CycleDto[]> {
    if (teamIds.length === 0) return [];
    const rows = await db.select().from(cycleT).where(inArray(cycleT.teamId, teamIds));
-   const dtos = await toDtos(db, rows, new Date());
    // `burnup: 'current'` (bootstrap): a série diária dos ciclos passados é o grosso do
-   // payload e só o detalhe do ciclo a desenha — fica para `getCycle`.
-   if (opts.burnup === 'current') for (const d of dtos) if (d.status !== 'current') d.burnup = null;
+   // payload e só o detalhe do ciclo a desenha — fica para `getCycle`. Sem burn-up, nem
+   // os marcos das issues nem a série de snapshots desses ciclos são lidos (#36).
+   const burnupIds =
+      opts.burnup === 'current'
+         ? rows.filter((r) => r.status === 'current').map((r) => r.id)
+         : rows.map((r) => r.id);
+   const dtos = await toDtos(db, rows, new Date(), burnupIds);
    return dtos.sort((a, b) => b.number - a.number);
 }
 
 /**
- * Detalhe do cycle. Se for `current`, grava o snapshot do dia antes de montar o DTO —
- * é o segundo ponto de coleta (junto com o rollover), já que não há job.
+ * Detalhe do cycle. Só leitura (#36): o snapshot do dia é gravado no housekeeping do
+ * boot (rollover), não a cada GET.
  */
 export async function getCycle(
    db: Db,
@@ -441,10 +509,6 @@ export async function getCycle(
 ): Promise<CycleDto | null> {
    const rows = await db.select().from(cycleT).where(eq(cycleT.id, id)).limit(1);
    if (rows.length === 0) return null;
-   if (rows[0].status === 'current') {
-      const aggs = await aggregatesByCycle(db, [id]);
-      await upsertSnapshots(db, [{ cycleId: id, agg: aggs.get(id) ?? EMPTY_AGG() }], isoDay(now));
-   }
    const [dto] = await toDtos(db, rows, now);
    return dto;
 }
@@ -479,6 +543,31 @@ export interface CreateCycleInput {
    capacity?: number;
 }
 
+/**
+ * Um único ciclo `current` por time (#35): criar/promover outro current responde 409.
+ * Roda dentro da transação com lock na linha do time — dois pedidos concorrentes não
+ * passam juntos. (O índice parcial no banco é a rede final.)
+ */
+async function assertSingleCurrent(tx: Tx, teamId: string, exceptId: string | null) {
+   await tx.select({ id: teamT.id }).from(teamT).where(eq(teamT.id, teamId)).for('update');
+   const [other] = await tx
+      .select({ id: cycleT.id, name: cycleT.name })
+      .from(cycleT)
+      .where(
+         and(
+            eq(cycleT.teamId, teamId),
+            eq(cycleT.status, 'current'),
+            exceptId ? ne(cycleT.id, exceptId) : sql`true`
+         )
+      )
+      .limit(1);
+   if (other)
+      throw new ApiError(
+         409,
+         `O time já tem um ciclo em andamento (${other.name}). Conclua-o antes de iniciar outro.`
+      );
+}
+
 /** Cria um ciclo no time: auto-numera (max(number)+1), valida team e datas. */
 export async function createCycle(db: Db, input: CreateCycleInput): Promise<CycleDto> {
    const teamRows = await db.select().from(teamT).where(eq(teamT.id, input.teamId)).limit(1);
@@ -497,15 +586,18 @@ export async function createCycle(db: Db, input: CreateCycleInput): Promise<Cycl
          .where(eq(cycleT.teamId, input.teamId));
       const number = (maxRows[0]?.m ?? 0) + 1;
       try {
-         await db.insert(cycleT).values({
-            id,
-            number,
-            name: input.name,
-            teamId: input.teamId,
-            status: input.status ?? 'planned',
-            startDate: input.startDate,
-            endDate: input.endDate,
-            capacity: input.capacity ?? 0,
+         await db.transaction(async (tx) => {
+            if (input.status === 'current') await assertSingleCurrent(tx, input.teamId, null);
+            await tx.insert(cycleT).values({
+               id,
+               number,
+               name: input.name,
+               teamId: input.teamId,
+               status: input.status ?? 'planned',
+               startDate: input.startDate,
+               endDate: input.endDate,
+               capacity: input.capacity ?? 0,
+            });
          });
          publish({ entity: 'cycle', action: 'created', id, teamId: input.teamId });
          return (await getCycle(db, id))!;
@@ -548,7 +640,10 @@ export async function updateCycle(
    if (patch.capacity !== undefined) set.capacity = patch.capacity;
 
    if (Object.keys(set).length > 0) {
-      await db.update(cycleT).set(set).where(eq(cycleT.id, id));
+      await db.transaction(async (tx) => {
+         if (patch.status === 'current') await assertSingleCurrent(tx, prev.teamId, id);
+         await tx.update(cycleT).set(set).where(eq(cycleT.id, id));
+      });
    }
 
    publish({ entity: 'cycle', action: 'updated', id, teamId: prev.teamId });

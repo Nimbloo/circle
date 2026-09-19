@@ -173,6 +173,8 @@ describe('cycles', () => {
 
    it('updates status and dates', async () => {
       const db = await setup();
+      // Um current por time (#35): conclui o c1 antes de promover o c2.
+      await updateCycle(db, 'c1', { status: 'completed' });
       const updated = await updateCycle(db, 'c2', {
          status: 'current',
          startDate: '2026-02-01',
