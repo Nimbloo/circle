@@ -46,6 +46,42 @@ describe('catalogs', () => {
       );
    });
 
+   it('leitura em voo não regrava o cache com dado anterior à invalidação', async () => {
+      vi.stubEnv('CIRCLE_CATALOG_CACHE_ENABLED', 'true');
+      const db = await makeTestDb();
+      resetCatalogCache();
+      // A leitura LÊ o banco antes da mutação, mas a resposta só chega depois dela (e da
+      // invalidação): sem guarda de geração, regravava o cache com o catálogo velho.
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      const slowDb = new Proxy(db, {
+         get(target, key) {
+            if (key !== 'select') return Reflect.get(target, key);
+            return () => ({
+               from: (table: never) =>
+                  target
+                     .select()
+                     .from(table)
+                     .then(async (rows) => {
+                        await gate;
+                        return rows;
+                     }),
+            });
+         },
+      }) as typeof db;
+      const inflight = getCachedCatalogs(slowDb);
+      await new Promise((r) => setTimeout(r, 50));
+      const created = await createStatus(db, {
+         name: 'Race',
+         color: '#ffffff',
+         category: 'started',
+      });
+      release();
+      await inflight;
+      const after = await getCachedCatalogs(db);
+      expect(after.statuses.some((s) => s.id === created.id)).toBe(true);
+   });
+
    it('invalidates the enabled cache after status and label mutations', async () => {
       vi.stubEnv('CIRCLE_CATALOG_CACHE_ENABLED', 'true');
       const db = await makeTestDb();

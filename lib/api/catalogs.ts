@@ -40,6 +40,8 @@ export interface Catalogs {
 
 const CACHE_TTL_MS = 30_000;
 let cache: { at: number; data: Catalogs } | null = null;
+/** Sobe a cada invalidação: leitura que começou antes dela não pode regravar o cache. */
+let generation = 0;
 
 subscribe((event) => {
    if (event.entity === 'catalog' || event.entity === 'label') resetCatalogCache();
@@ -48,6 +50,7 @@ subscribe((event) => {
 /** Reseta o cache module-level (uso em testes). */
 export function resetCatalogCache(): void {
    cache = null;
+   generation++;
 }
 
 /**
@@ -65,6 +68,7 @@ export async function getCachedCatalogs(db: Db): Promise<Catalogs> {
    if (enabled && cache && now - cache.at < CACHE_TTL_MS) {
       return cache.data;
    }
+   const startedAt = generation;
    const [statuses, priorities, labels, healthStates] = await Promise.all([
       db.select().from(status),
       db.select().from(priority),
@@ -72,6 +76,6 @@ export async function getCachedCatalogs(db: Db): Promise<Catalogs> {
       db.select().from(health),
    ]);
    const data: Catalogs = { statuses, priorities, labels, health: healthStates };
-   if (enabled) cache = { at: now, data };
+   if (enabled && startedAt === generation) cache = { at: now, data };
    return data;
 }
