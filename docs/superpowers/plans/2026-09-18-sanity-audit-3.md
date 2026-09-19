@@ -5,10 +5,23 @@
 ## Estado (handoff entre agentes)
 
 - **Onde:** branch `danilo/sanity-audit-3` (de `danilo/sanity-audit-2` @ `87350c1`, PR #170 ainda aberto). Frentes em worktrees próprios, integradas nesta branch.
-- **Feito:** achados em `docs/superpowers/specs/2026-09-18-sanity-audit-3-findings.md`; decisões do usuário abaixo. **F5a integrada** nesta branch (`1ac48f9`): o integrador tirou do `schema.ts` o `search_vector` declarado pelo Codex (evita o tsvector nos `select()` e a recriação no `db:generate`) e trocou o loop do rebalanceamento por um UPDATE com a fórmula da migration. A migration `0050` foi escrita à mão e **não tem snapshot** em `db/migrations/meta`: regenerar na integração, junto com o `import_job` da F4.
-- **Crash (2026-09-18 ~22h):** a sessão caiu com F1–F4 e F5b em andamento. Elas foram relançadas retomando dos commits de cada worktree (`.claude/worktrees/s3-*`).
-- **Última verificação:** 2026-09-18, Claude, testes da F5a (8/8) + issues/cycles/search: tudo verde, exceto `cycles.test.ts > updates status and dates`, que depende do `dabb5d5` da F2 (promove c2 depois de concluir c1).
-- **Próximo passo:** aguardar F1–F4 e F5b → merge F5b → F1 → F2 → F3 → F4 → regenerar a migration 0050 (snapshot) com o `import_job` → suíte completa → remedição.
+- **Feito:** todas as frentes integradas nesta branch: F5a `1ac48f9` → F5b `c6c2da6` → F1 `4ea865d` → F3 `7f80a37` → F2 `719c828` → F4 `978560c`.
+   - **Migration:** `0050_wealthy_sway` regenerada pelo `drizzle-kit`, com snapshot. Inclui o `import_job` da F4, rank `text`, índices de ciclo current e de `review.created_at`, e os passos de dados do Codex (normalização de rank, encerramento de ciclos current duplicados). `db:generate` confirma que não há mudança pendente.
+   - **Ajustes do integrador:**
+      - F5a sem `search_vector` no `schema.ts`, e o rebalanceamento feito num UPDATE só;
+      - eco do detalhe da issue pelo `own` (clientId), não mais pelo `actorEmail`;
+      - `labelColor` nas telas de issues, projetos e command palette;
+      - testes das frentes migrados do mock de `data/` para o `catalog-fixture`;
+      - `Progress` inline no import, porque o primitivo foi removido.
+- **Crash (2026-09-18 ~22h):** a sessão caiu com F1–F4 e F5b em andamento; elas foram relançadas retomando dos commits de cada worktree. O agente da F4 parou de novo, por limite de uso, e o restante da F4 foi relançado no worktree `s3-f4`, avançado até `978560c`:
+   - #24, Ad#5, Ad#22, Ad#25–28, Ad#30, Ad#32–38 e Ad#40;
+   - `labelColor` em members/settings/views.
+- **Última verificação:** 2026-09-18, Claude: testes de cada frente verdes após cada merge; typecheck e lint limpos. Suíte completa em andamento.
+- **Próximo passo:** suíte completa → merge do restante da F4 → `pnpm build` → remedição → PR.
+- **Pendências registradas:**
+   - busca em comentários sem índice trigram (Co);
+   - "hoje" do servidor fixo em `America/Sao_Paulo` via `CIRCLE_TIME_ZONE` (não há fuso por workspace);
+   - #30 bulk sem endpoint de lote.
 - **Bloqueios:** nenhum.
 
 **Goal:** resolver todos os achados da rodada 3 (alta, média, baixa e refactorings) sem regressão e com ganho medido.
