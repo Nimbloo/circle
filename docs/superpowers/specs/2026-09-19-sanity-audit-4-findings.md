@@ -178,3 +178,36 @@ Commits: 8a2759a (serviço cascata + impacto), 43d4d46 (store poda), 132237c (De
 Contrato novo aditivo: GET /api/v1/teams/:key/deletion-impact (admin) → {issues,projects,cycles,views,folders,documents}; DELETE não dá mais 409 por conteúdo.
 Cascata em transação cobre todas as FKs; outros times só perdem vínculo; storage de anexos após commit; eventos coarse após commit (team deleted único nos webhooks).
 Pendências: eventos extras notification/favorite por usuário e initiative.updated; audit sem contagens; identificador do time em texto (review.resolves_identifier, audit target, user_settings) não tocado; teste de UI não foi visto falhando antes.
+
+## Remedição após as correções (2026-09-19)
+
+Build de produção do código integrado (`danilo/sanity-audit-4`), banco clonado do `circle_perf` com as 52 migrations aplicadas, Playwright. Roteiro: `audit4/remed.js`, no scratchpad. Cada item foi conferido no navegador ou na API pelo integrador, e não só pelo relatório das frentes.
+
+| Achado                      | Resultado                                                                                    |
+| --------------------------- | -------------------------------------------------------------------------------------------- |
+| ad#1 cache de catálogos     | um status recém-criado aparece na mesma hora no PATCH e no GET da issue ✅                   |
+| pl#2 sidecar do projeto     | a prioridade abre o seletor e grava (`High → Urgent`, PATCH 200) ✅                          |
+| vi#4 / pl#16 painel lateral | a largura anima 400 → 65 → 0 px, sem salto ✅                                                |
+| pl#1 timeline               | o clique na barra abre o peek ✅                                                             |
+| is#1 triagem                | a lista fica visível (774 px) e a fila de sugestões tem rolagem própria (360 px) ✅          |
+| is#3 exclusão de thread     | o diálogo avisa "This comment and its 2 replies will be permanently deleted" ✅              |
+| is#4 modal de criação       | com 45 linhas de descrição, fica dentro da tela (y = 108, h = 684) e o botão é alcançável ✅ |
+| is#5 título em branco       | a API responde 400 ✅                                                                        |
+| pl#4 ciclos                 | ciclo novo nasce `upcoming`; ciclo sobreposto responde 409 ✅                                |
+| co#3 inbox                  | paginação por cursor, 100 + 100 notificações sem repetir ✅                                  |
+| co#4 ⌘K numa issue          | busca e navega ✅                                                                            |
+| co#5 / co#6 atalhos         | `S` abre só o seletor de status (a palette não abre junto); `?` abre o painel ✅             |
+| vi#1 popover                | a origem do transform fica no trigger (`302px 0px`); a entrada leva 160 ms ✅                |
+| vi#5 toast                  | usa a pele do tema (fundo e borda por token, raio de 8 px, 200 ms) ✅                        |
+| Exclusão de time em cascata | o impacto lista o conteúdo, o DELETE apaga tudo e o time some (404) ✅                       |
+
+**Correções feitas na integração**, além das entregas das frentes:
+
+- **Undo da exclusão de issue:** se o DELETE falhar, a issue volta para a lista; sair da página dentro da janela envia o DELETE na hora, com `keepalive`; o toast dura exatamente a janela de desfazer.
+- **Cache de catálogos:** guarda de geração, para uma leitura em voo não regravar dado anterior à invalidação.
+- **Diálogos de exclusão:** os 7 usam `useLatchedTarget`.
+- **Rotas de validação:** a versão da S (com `trim` e mensagens claras) somada ao limite de ícone da A.
+
+**Verificação final:** `pnpm test` com 373 arquivos e 1.881 testes, exit 0; `pnpm typecheck`, `pnpm lint` e `pnpm build` limpos; `db:generate` sem mudança pendente (migration `0051`, só aditiva).
+
+**Não remedido no navegador** (coberto só por testes automatizados das frentes): achados de severidade baixa, o mobile e as lacunas novas (corpo de documento, grupos de label, hierarquia de times, editar/excluir updates, reordenar favoritos).

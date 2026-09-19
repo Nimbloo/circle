@@ -14,7 +14,11 @@
      parte de barra de lote do is#21 (fica com a M). 21 commits em `danilo/s4-i`
      (`39242b5`..`69276f8`); typecheck e lint (`pnpm lint`/`pnpm typecheck`) limpos.
 - **Ambiente de E2E:** worktree `.claude/worktrees/s4-e2e` com o bypass de login aplicado **só nele** e servidores nas portas 3101–3105 (bancos `circle_e2e_1..5`). Serve para a remedição, depois de refazer o build com o código integrado.
-- **Próximo passo:** frentes S (Codex), M, I, P, C e A em paralelo → integração S → M → I → P → C → A → suíte, typecheck, lint e build → remedição E2E dos achados → PR.
+- **Integrado** (2026-09-19): S → M → C → P → A → I, mais as correções da integração.
+- **Última verificação:** 2026-09-19, Claude:
+   - `pnpm test` com 373 arquivos e 1.881 testes, exit 0; typecheck, lint e build limpos;
+   - remedição no navegador de 15 achados graves, todos ✅ (spec, seção "Remedição").
+- **Próximo passo:** PR empilhado sobre `danilo/circle-loading`; o que não foi remedido no navegador (baixas, mobile e lacunas novas) fica para avaliação manual.
 - **Bloqueios:** nenhum. A extensão do Chrome não está conectada, então não houve comparação lado a lado com o Linear real.
 
 ## Decisões do usuário (2026-09-19)
