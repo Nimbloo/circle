@@ -5,9 +5,10 @@
 ## Estado (handoff entre agentes)
 
 - **Onde:** branch `danilo/sanity-audit-3` (de `danilo/sanity-audit-2` @ `87350c1`, PR #170 ainda aberto). Frentes em worktrees próprios, integradas nesta branch.
-- **Feito:** achados em `docs/superpowers/specs/2026-09-18-sanity-audit-3-findings.md`; decisões do usuário abaixo.
-- **Última verificação:** —
-- **Próximo passo:** frentes F1–F4, F5b (Claude) e F5a (Codex) em paralelo → integração → suíte completa → remedição.
+- **Feito:** achados em `docs/superpowers/specs/2026-09-18-sanity-audit-3-findings.md`; decisões do usuário abaixo. **F5a integrada** nesta branch (`1ac48f9`): o integrador tirou do `schema.ts` o `search_vector` declarado pelo Codex (evita o tsvector nos `select()` e a recriação no `db:generate`) e trocou o loop do rebalanceamento por um UPDATE com a fórmula da migration. A migration `0050` foi escrita à mão e **não tem snapshot** em `db/migrations/meta`: regenerar na integração, junto com o `import_job` da F4.
+- **Crash (2026-09-18 ~22h):** a sessão caiu com F1–F4 e F5b em andamento. Elas foram relançadas retomando dos commits de cada worktree (`.claude/worktrees/s3-*`).
+- **Última verificação:** 2026-09-18, Claude, testes da F5a (8/8) + issues/cycles/search: tudo verde, exceto `cycles.test.ts > updates status and dates`, que depende do `dabb5d5` da F2 (promove c2 depois de concluir c1).
+- **Próximo passo:** aguardar F1–F4 e F5b → merge F5b → F1 → F2 → F3 → F4 → regenerar a migration 0050 (snapshot) com o `import_job` → suíte completa → remedição.
 - **Bloqueios:** nenhum.
 
 **Goal:** resolver todos os achados da rodada 3 (alta, média, baixa e refactorings) sem regressão e com ganho medido.
