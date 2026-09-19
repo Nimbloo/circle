@@ -9,6 +9,7 @@ import {
    AlertDialogFooter,
    AlertDialogHeader,
    AlertDialogTitle,
+   useLatchedTarget,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import {
@@ -371,8 +372,10 @@ export default function IssueLabelsSettings() {
    // Alvo e `open` separados: o alvo continua no título durante a saída do dialog
    // (antes o título esvaziava — "Delete label “”?").
    const [deleting, setDeleting] = useState<LabelInterface | null>(null);
+   const deletingLatched = useLatchedTarget(deleting);
    const [deleteOpen, setDeleteOpen] = useState(false);
    const [deletingGroup, setDeletingGroup] = useState<LabelGroupDto | null>(null);
+   const deletingGroupLatched = useLatchedTarget(deletingGroup);
    const [deleteGroupOpen, setDeleteGroupOpen] = useState(false);
    const [deleteBusy, setDeleteBusy] = useState(false);
 
@@ -640,7 +643,7 @@ export default function IssueLabelsSettings() {
          <AlertDialog open={deleteOpen} onOpenChange={(o) => !deleteBusy && setDeleteOpen(o)}>
             <AlertDialogContent>
                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete label “{deleting?.name}”?</AlertDialogTitle>
+                  <AlertDialogTitle>Delete label “{deletingLatched?.name}”?</AlertDialogTitle>
                   <AlertDialogDescription>
                      This removes the label from every issue and project it is applied to. This
                      action cannot be undone.
@@ -668,7 +671,7 @@ export default function IssueLabelsSettings() {
          >
             <AlertDialogContent>
                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete group “{deletingGroup?.name}”?</AlertDialogTitle>
+                  <AlertDialogTitle>Delete group “{deletingGroupLatched?.name}”?</AlertDialogTitle>
                   <AlertDialogDescription>
                      The labels in this group are kept and become ungrouped. Issues keep their
                      labels.

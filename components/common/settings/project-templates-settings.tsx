@@ -29,6 +29,7 @@ import {
    AlertDialogFooter,
    AlertDialogHeader,
    AlertDialogTitle,
+   useLatchedTarget,
 } from '@/components/ui/alert-dialog';
 import { api } from '@/lib/client';
 import type { ProjectTemplateDto } from '@/lib/api/project-templates';
@@ -209,6 +210,7 @@ export default function ProjectTemplatesSettings() {
    const [dialogOpen, setDialogOpen] = useState(false);
    const [editing, setEditing] = useState<ProjectTemplateDto | null>(null);
    const [toDelete, setToDelete] = useState<ProjectTemplateDto | null>(null);
+   const toDeleteLatched = useLatchedTarget(toDelete);
    // Separado de `toDelete` (ad#4): fechar não pode esvaziar o nome no título durante a
    // animação de saída — só zera o alvo ao abrir um novo.
    const [deleteOpen, setDeleteOpen] = useState(false);
@@ -357,7 +359,7 @@ export default function ProjectTemplatesSettings() {
          <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
             <AlertDialogContent>
                <AlertDialogHeader>
-                  <AlertDialogTitle>Excluir “{toDelete?.name}”?</AlertDialogTitle>
+                  <AlertDialogTitle>Excluir “{toDeleteLatched?.name}”?</AlertDialogTitle>
                   <AlertDialogDescription>
                      O template será removido. Projetos já criados não são afetados.
                   </AlertDialogDescription>

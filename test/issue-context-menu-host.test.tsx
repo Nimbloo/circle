@@ -21,7 +21,9 @@ const menuRenders = vi.hoisted(() => ({ ids: [] as (string | undefined)[] }));
 vi.mock('@/lib/client', () => ({
    api: { issues: { update: apiMocks.update, remove: apiMocks.remove } },
 }));
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('sonner', () => ({
+   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
+}));
 vi.mock('next/navigation', () => ({
    useParams: () => ({ orgId: 'nimbloo' }),
    usePathname: () => '/nimbloo/team/ENG/all',

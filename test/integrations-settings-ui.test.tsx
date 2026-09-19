@@ -52,6 +52,7 @@ vi.mock('@/lib/client', () => ({
          preview: apiMocks.importPreview,
          commit: apiMocks.importCommit,
          job: apiMocks.importJob,
+         activeJob: vi.fn(async () => null),
       },
    },
 }));

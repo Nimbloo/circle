@@ -29,6 +29,7 @@ import {
    AlertDialogFooter,
    AlertDialogHeader,
    AlertDialogTitle,
+   useLatchedTarget,
 } from '@/components/ui/alert-dialog';
 import { adaptFolders } from '@/lib/adapters-documents';
 import { api } from '@/lib/client';
@@ -79,6 +80,7 @@ export default function TeamDocuments() {
    const [busy, setBusy] = useState(false);
    /** Documento aguardando confirmação de exclusão (Ad#21–40: excluía no 1º clique). */
    const [toDelete, setToDelete] = useState<{ id: string; name: string } | null>(null);
+   const toDeleteLatched = useLatchedTarget(toDelete);
    // Separados do alvo (ad#4): fechar não pode esvaziar o nome no título durante a
    // animação de saída — só zera o alvo ao abrir um novo.
    const [deleteOpen, setDeleteOpen] = useState(false);
@@ -94,6 +96,7 @@ export default function TeamDocuments() {
       name: string;
       count: number;
    } | null>(null);
+   const folderToDeleteLatched = useLatchedTarget(folderToDelete);
 
    const reload = useCallback(() => {
       if (!teamId) return;
@@ -382,7 +385,7 @@ export default function TeamDocuments() {
          <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
             <AlertDialogContent>
                <AlertDialogHeader>
-                  <AlertDialogTitle>Excluir “{toDelete?.name}”?</AlertDialogTitle>
+                  <AlertDialogTitle>Excluir “{toDeleteLatched?.name}”?</AlertDialogTitle>
                   <AlertDialogDescription>
                      O documento será removido do time. Esta ação não pode ser desfeita.
                   </AlertDialogDescription>
@@ -404,7 +407,9 @@ export default function TeamDocuments() {
          <AlertDialog open={folderDeleteOpen} onOpenChange={(o) => !busy && setFolderDeleteOpen(o)}>
             <AlertDialogContent>
                <AlertDialogHeader>
-                  <AlertDialogTitle>Excluir a pasta “{folderToDelete?.name}”?</AlertDialogTitle>
+                  <AlertDialogTitle>
+                     Excluir a pasta “{folderToDeleteLatched?.name}”?
+                  </AlertDialogTitle>
                   <AlertDialogDescription>
                      {folderToDelete?.count
                         ? `A pasta e ${folderToDelete.count} documento${

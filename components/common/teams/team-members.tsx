@@ -9,6 +9,7 @@ import {
    AlertDialogFooter,
    AlertDialogHeader,
    AlertDialogTitle,
+   useLatchedTarget,
 } from '@/components/ui/alert-dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -42,6 +43,7 @@ export default function TeamMembers() {
    // Remover do time pede confirmação (ad#13); alvo e `open` separados para o nome
    // não sumir do título durante a saída.
    const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null);
+   const removingLatched = useLatchedTarget(removing);
    const [removeOpen, setRemoveOpen] = useState(false);
 
    // Solicitações de entrada pendentes (só admin enxerga/decide).
@@ -208,7 +210,7 @@ export default function TeamMembers() {
             <AlertDialogContent>
                <AlertDialogHeader>
                   <AlertDialogTitle>
-                     Remove {removing?.name} from {team.name}?
+                     Remove {removingLatched?.name} from {team.name}?
                   </AlertDialogTitle>
                   <AlertDialogDescription>
                      They stop being a member of this team. Issues assigned to them keep the

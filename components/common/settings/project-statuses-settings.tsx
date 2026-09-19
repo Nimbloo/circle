@@ -26,6 +26,7 @@ import {
    AlertDialogFooter,
    AlertDialogHeader,
    AlertDialogTitle,
+   useLatchedTarget,
 } from '@/components/ui/alert-dialog';
 import { api, ApiError } from '@/lib/client';
 import { cn } from '@/lib/utils';
@@ -166,6 +167,7 @@ export default function ProjectStatusesSettings() {
    const [editing, setEditing] = useState<EditStatus | null>(null);
    const [dialogCategory, setDialogCategory] = useState<StatusCategory>('backlog');
    const [toDelete, setToDelete] = useState<EditStatus | null>(null);
+   const toDeleteLatched = useLatchedTarget(toDelete);
    // Separado de `toDelete` (ad#4): fechar não pode esvaziar o nome no título durante a
    // animação de saída — só zera o alvo ao abrir um novo.
    const [deleteOpen, setDeleteOpen] = useState(false);
@@ -350,7 +352,7 @@ export default function ProjectStatusesSettings() {
          <AlertDialog open={deleteOpen} onOpenChange={(v) => !deleteBusy && setDeleteOpen(v)}>
             <AlertDialogContent>
                <AlertDialogHeader>
-                  <AlertDialogTitle>Excluir status “{toDelete?.name}”?</AlertDialogTitle>
+                  <AlertDialogTitle>Excluir status “{toDeleteLatched?.name}”?</AlertDialogTitle>
                   <AlertDialogDescription>
                      Só é possível excluir status que não estejam em uso por nenhuma issue, projeto
                      ou template.

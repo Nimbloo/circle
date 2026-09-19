@@ -21,6 +21,7 @@ import {
    AlertDialogFooter,
    AlertDialogHeader,
    AlertDialogTitle,
+   useLatchedTarget,
 } from '@/components/ui/alert-dialog';
 import { api } from '@/lib/client';
 import { errorReason } from '@/lib/error-reason';
@@ -174,6 +175,7 @@ export default function EmojisSettings() {
    // Excluir pede confirmação (ad#13). Alvo e `open` separados: o nome não some do
    // título durante a animação de saída.
    const [removing, setRemoving] = useState<EmojiDto | null>(null);
+   const removingLatched = useLatchedTarget(removing);
    const [removeOpen, setRemoveOpen] = useState(false);
    const [removeBusy, setRemoveBusy] = useState(false);
 
@@ -284,7 +286,7 @@ export default function EmojisSettings() {
          <AlertDialog open={removeOpen} onOpenChange={(o) => !removeBusy && setRemoveOpen(o)}>
             <AlertDialogContent>
                <AlertDialogHeader>
-                  <AlertDialogTitle>Remover :{removing?.shortcode}:?</AlertDialogTitle>
+                  <AlertDialogTitle>Remover :{removingLatched?.shortcode}:?</AlertDialogTitle>
                   <AlertDialogDescription>
                      O emoji customizado é excluído do workspace. Esta ação não pode ser desfeita.
                   </AlertDialogDescription>

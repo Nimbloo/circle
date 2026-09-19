@@ -34,7 +34,8 @@ describe('datas do planejamento no fuso local', () => {
 
    it('o DatePicker mostra o mesmo dia gravado', () => {
       render(<DatePicker date={parseDay('2026-09-30')} />);
-      expect(screen.getByText('Sep 30, 2026')).toBeTruthy();
+      // Formato curto do planejamento (pl#9): sem o ano quando é o ano corrente.
+      expect(screen.getByText(/^Sep 30(, 2026)?$/)).toBeTruthy();
    });
 
    it('"hoje" da timeline é o dia local, não o dia UTC', () => {
