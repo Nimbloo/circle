@@ -120,11 +120,11 @@ Arquivos: `components/common/issues/**`, `components/layout/sidebar/create-new-i
 
 Arquivos: `components/common/{projects,initiatives,roadmap,cycles}/**`, `app/[orgId]/project/**`, `components/layout/headers/{project,initiative,projects}/**`, `lib/api/{projects,project-detail,project-dependencies,initiatives,initiative-detail,roadmap,project-snapshots,project-updates}*.ts` + rotas correspondentes, `lib/client.ts` (métodos novos da P), `lib/timeline-scale.ts`, `lib/issue-breakdown.ts`.
 
-- [ ] pl#1 a pl#20, exceto pl#15 (idioma) e a parte de servidor do pl#4 e pl#18 (fica com a S; a P ajusta a UI de ciclos).
-- [ ] pl#2: sidecar do projeto editável (status/percent, prioridade, lead, members, datas, times, initiatives, labels, health), no padrão da linha de propriedade. Mesmo padrão no painel da initiative e no peek.
-- [ ] pl#6: `ProjectSidePanel` montado no `app/[orgId]/project/[projectId]/layout.tsx`, com dependências e snapshots guardados no provider.
-- [ ] pl#11: editar e excluir updates de projeto e de initiative, de ponta a ponta (rotas PATCH/DELETE + serviço + client + UI com menu "…"); health do último update no Overview e no sidecar; update vazio recusado.
-- [ ] pl#12: tokens `--progress-*` e `--health-*` (declarar em `globals.css` num bloco próprio e registrar para a M).
+- [x] pl#1 a pl#20, exceto pl#15 (idioma) e a parte de servidor do pl#4 e pl#18 (fica com a S; a P ajusta a UI de ciclos). **Pendência: pl#20** (chip do próprio projeto repetido na aba Issues) precisa de um prop/contexto em `components/common/issues/issue-line.tsx`/`grouped-issues-view.tsx` (frente I) para suprimir o chip quando a lista já está no escopo de um projeto — fora do que a P pode tocar sem invadir os arquivos da I. **Pendência menor: pl#17** — a parte "reordena após arrastar" (a timeline reordena ao vivo quando `ordering` é por data e o arraste muda a própria data-chave) não foi endereçada; exigiria ordem estável por sessão em `projects.tsx`, avaliado como fora do orçamento desta rodada.
+- [x] pl#2: sidecar do projeto editável (status/percent, prioridade, lead, members, datas, times, initiatives, labels, health), no padrão da linha de propriedade. Mesmo padrão no painel da initiative e no peek.
+- [x] pl#6: `ProjectSidePanel` montado no `app/[orgId]/project/[projectId]/layout.tsx`, com dependências e snapshots guardados no provider.
+- [x] pl#11: editar e excluir updates de projeto e de initiative, de ponta a ponta (rotas PATCH/DELETE + serviço + client + UI com menu "…"); health do último update no Overview e no sidecar; update vazio recusado.
+- [x] pl#12: tokens `--progress-*` e `--health-*` (declarar em `globals.css` num bloco próprio e registrar para a M).
 
 ### C — Comunicação e ferramentas (Claude) · `.claude/worktrees/s4-c`
 
