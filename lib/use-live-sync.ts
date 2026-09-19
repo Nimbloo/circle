@@ -7,6 +7,7 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { useCatalogStore } from '@/store/catalog-store';
 import { api } from '@/lib/client';
 import { isSessionEnded } from '@/lib/session-redirect';
+import { invalidateCustomEmojis } from '@/hooks/use-custom-emojis';
 import type { CircleEntity } from '@/lib/api/events';
 
 /**
@@ -70,12 +71,16 @@ interface CircleEventLike {
    teamId?: string;
    /** Destinatário da notificação (aditivo; sem ele, todo cliente recarrega o inbox). */
    recipientId?: string;
+   /** Subtipo do `catalog` (#53; aditivo). Ausente = dado do bootstrap (status). */
+   kind?: string;
 }
 
 /** `detail` dos eventos de janela: id do recurso e, se vier, o time. */
 export interface LiveEventDetail {
    id?: string;
    teamId?: string;
+   /** Subtipo do `catalog` (#53): template, project_template, sla, emoji. */
+   kind?: string;
 }
 
 /**
@@ -98,6 +103,11 @@ export const INITIATIVE_CHANGED_EVENT = 'circle:initiative-changed';
 export const DOCUMENT_CHANGED_EVENT = 'circle:document-changed';
 /** Configuração de workflow do time (SLA/automações/catálogo) mudou. */
 export const AUTOMATION_CHANGED_EVENT = 'circle:automation-changed';
+/**
+ * Dado de catálogo FORA do bootstrap mudou (#53) — `detail.kind` diz qual (template,
+ * project_template). A tela que o exibe recarrega; o bootstrap não é refeito.
+ */
+export const CATALOG_CHANGED_EVENT = 'circle:catalog-changed';
 /** Job de import do usuário mudou de estado (`detail.id` = job): a tela relê o job. */
 export const IMPORT_JOB_EVENT = 'circle:import-job';
 
@@ -115,17 +125,18 @@ export function useLiveReload(event: string, filter: LiveEventDetail, reload: ()
    useEffect(() => {
       reloadRef.current = reload;
    });
-   const { id, teamId } = filter;
+   const { id, teamId, kind } = filter;
    useEffect(() => {
       const on = (e: Event) => {
          const detail = ((e as CustomEvent<LiveEventDetail>).detail ?? {}) as LiveEventDetail;
          if (id && detail.id && detail.id !== id) return;
          if (teamId && detail.teamId && detail.teamId !== teamId) return;
+         if (kind && detail.kind && detail.kind !== kind) return;
          void reloadRef.current();
       };
       window.addEventListener(event, on);
       return () => window.removeEventListener(event, on);
-   }, [event, id, teamId]);
+   }, [event, id, teamId, kind]);
 }
 
 /** Label criada/editada: recarrega SÓ os labels (catálogo) e reflete nas issues em memória. */
@@ -286,9 +297,17 @@ export function useLiveSync(): void {
                dispatch(DOCUMENT_CHANGED_EVENT, { id, teamId: parsed.teamId });
                return;
             case 'catalog':
-               // Status/templates/SLA/emoji chegam pelo bootstrap (STATUS = colunas do board).
-               scheduleHydrate('workspace');
-               dispatch(AUTOMATION_CHANGED_EVENT, { id, teamId: parsed.teamId });
+               // #53: só status (sem `kind`) vive no bootstrap (STATUS = colunas do board).
+               // Template/SLA/emoji avisam só quem os exibe.
+               if (parsed.kind === 'emoji') invalidateCustomEmojis();
+               else if (parsed.kind === 'sla')
+                  dispatch(AUTOMATION_CHANGED_EVENT, { id, teamId: parsed.teamId });
+               else if (parsed.kind)
+                  dispatch(CATALOG_CHANGED_EVENT, { id, teamId: parsed.teamId, kind: parsed.kind });
+               else {
+                  scheduleHydrate('workspace');
+                  dispatch(AUTOMATION_CHANGED_EVENT, { id, teamId: parsed.teamId });
+               }
                return;
             case 'notification': {
                const me = useWorkspaceStore.getState().me?.id;
