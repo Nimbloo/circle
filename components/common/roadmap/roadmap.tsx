@@ -5,7 +5,14 @@ import { adaptProject } from '@/lib/adapters-workspace';
 import { api, type RoadmapDto } from '@/lib/client';
 import { useRoadmapDisplayStore } from '@/store/roadmap-display-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ErrorState } from '@/components/common/error-state';
+import { Button } from '@/components/ui/button';
+import {
+   INITIATIVE_CHANGED_EVENT,
+   PROJECT_CHANGED_EVENT,
+   useLiveReload,
+} from '@/lib/use-live-sync';
 import RoadmapTimeline, { type RoadmapRenderGroup } from './roadmap-timeline';
 
 /**
@@ -17,23 +24,53 @@ import RoadmapTimeline, { type RoadmapRenderGroup } from './roadmap-timeline';
  * (`lib/api/roadmap.ts`); aqui só resolvemos os projetos ricos pelo store para os
  * ícones e o reagendamento otimista continuarem valendo.
  */
+const LIVE_RELOAD_DEBOUNCE_MS = 250;
+
 export default function Roadmap() {
    const { showCompleted, showDependencies, showMilestones, showProjectList, ordering, zoom } =
       useRoadmapDisplayStore();
    const storeProjects = useWorkspaceStore((s) => s.projects);
    const [data, setData] = useState<RoadmapDto | null>(null);
    const [loading, setLoading] = useState(true);
+   const [failed, setFailed] = useState(false);
+   // Sequência (#40): só a resposta do pedido MAIS NOVO vale — uma lenta que chega
+   // depois não desfaz a recarga mais recente.
+   const seq = useRef(0);
 
    const load = useCallback(async () => {
+      const mine = ++seq.current;
       try {
-         setData(await api.roadmap.get({ includeCompleted: showCompleted, sort: ordering }));
+         const next = await api.roadmap.get({ includeCompleted: showCompleted, sort: ordering });
+         if (mine !== seq.current) return;
+         setData(next);
+         setFailed(false);
       } catch {
-         // Falha de refetch não apaga o roadmap já exibido; a 1ª carga mostra o vazio.
-         setData((current) => current);
+         // Falha de refetch não apaga o roadmap já exibido; a 1ª carga vira ErrorState.
+         if (mine === seq.current) setFailed(true);
       } finally {
-         setLoading(false);
+         if (mine === seq.current) setLoading(false);
       }
    }, [showCompleted, ordering]);
+
+   // Dependência, marco e rollup de initiative não mudam a assinatura do store: o
+   // evento de janela do projeto/initiative recarrega, com debounce para uma rajada
+   // (bulk, vários marcos) virar UMA busca.
+   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+   const scheduleReload = useCallback(() => {
+      if (debounce.current) clearTimeout(debounce.current);
+      debounce.current = setTimeout(() => {
+         debounce.current = null;
+         void load();
+      }, LIVE_RELOAD_DEBOUNCE_MS);
+   }, [load]);
+   useEffect(
+      () => () => {
+         if (debounce.current) clearTimeout(debounce.current);
+      },
+      []
+   );
+   useLiveReload(PROJECT_CHANGED_EVENT, {}, scheduleReload);
+   useLiveReload(INITIATIVE_CHANGED_EVENT, {}, scheduleReload);
 
    // Refaz o fetch quando as opções mudam e quando o workspace-store traz projeto
    // criado, movido de initiative, reagendado ou com status alterado — assim uma
@@ -79,7 +116,29 @@ export default function Roadmap() {
       }));
    }, [data, storeProjects]);
 
-   if (loading && !data) {
+   if (!data && failed && !loading) {
+      return (
+         <ErrorState
+            className="min-h-full"
+            title="Could not load the roadmap"
+            description="Check your connection and try again."
+            action={
+               <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                     setLoading(true);
+                     void load();
+                  }}
+               >
+                  Try again
+               </Button>
+            }
+         />
+      );
+   }
+
+   if (!data) {
       return (
          <div className="p-6">
             <ListSkeleton rows={8} />
