@@ -1,3 +1,4 @@
+import { after } from 'next/server';
 import { db } from '@/db';
 import { verifySignature, signatureFrom } from '@/lib/api/integrations/github';
 import {
@@ -51,7 +52,8 @@ export async function POST(req: Request) {
          const { updated } = await handleCheckRunEvent(db, payload);
          return Response.json({ ok: true, updated });
       }
-      const { linked } = await handlePullRequestEvent(db, payload ?? {});
+      // Arquivos/commits/checks do PR depois do ACK (Co#19): o GitHub espera resposta rápida.
+      const { linked } = await handlePullRequestEvent(db, payload ?? {}, { defer: after });
       return Response.json({ ok: true, linked });
    } catch (e) {
       console.warn('[circle] github webhook falhou:', (e as Error).message);
