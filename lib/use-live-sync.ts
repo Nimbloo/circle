@@ -2,9 +2,14 @@
 
 import { useEffect, useRef } from 'react';
 import { useIssuesStore } from '@/store/issues-store';
-import { useNotificationsStore } from '@/store/notifications-store';
+import {
+   isNotificationPatch,
+   useNotificationsStore,
+   type NotificationEvent,
+} from '@/store/notifications-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useCatalogStore } from '@/store/catalog-store';
+import { useFavoritesStore } from '@/store/favorites-store';
 import { api, ApiError } from '@/lib/client';
 import { isFromThisTab, isOwnEcho } from '@/lib/client-id';
 import type { CircleEntity } from '@/lib/api/events';
@@ -296,10 +301,19 @@ export function useLiveSync(): void {
 
          // NÃO pulamos por "ator sou eu": outras abas/dispositivos do mesmo usuário
          // não receberam o update otimista → precisam reconciliar com o servidor.
+         // Favorito renomeado/apagado: a sidebar acompanha (só se a entidade é favorita).
+         if (id && (entity === 'issue' || entity === 'project' || entity === 'view'))
+            useFavoritesStore.getState().onEntityChanged(entity, id);
+
          switch (entity) {
             case 'resync':
                // O LISTEN deste pod reconectou: o que passou durante a queda não vai chegar.
                resyncAll(POD_RESYNC_JITTER_MS);
+               return;
+            case 'favorite':
+               // Favorito mudou em outra aba/dispositivo do próprio usuário.
+               if (parsed.recipientId && parsed.recipientId !== ws.me?.id) return;
+               void useFavoritesStore.getState().refresh();
                return;
             case 'issue': {
                if (!id) scheduleHydrate('issues');
@@ -454,6 +468,12 @@ export function useLiveSync(): void {
             case 'notification': {
                const me = useWorkspaceStore.getState().me?.id;
                if (parsed.recipientId && me && parsed.recipientId !== me) return;
+               // Evento com o estado novo (`read`/`snoozedUntil`) vira patch local (#19).
+               const notificationEvent = parsed as NotificationEvent;
+               if (isNotificationPatch(notificationEvent)) {
+                  useNotificationsStore.getState().applyNotificationPatch(notificationEvent);
+                  return;
+               }
                scheduleHydrate('notifications');
                return;
             }

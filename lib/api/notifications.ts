@@ -18,6 +18,22 @@ export interface NotificationDto {
    issue: { id: string; identifier: string; title: string } | null;
 }
 
+/**
+ * Estado novo carregado no evento `notification` (campos ADITIVOS ao `CircleEvent`):
+ * o cliente aplica como patch local (`applyNotificationPatch`) em vez de re-hidratar o
+ * inbox — o que desfazia o otimista pendente da própria ação (#19).
+ *  - `read`: novo estado de leitura da notificação `id`.
+ *  - `snoozedUntil`: ISO do adiamento vigente, ou null ao desfazer.
+ *  - `all`: `markAllRead` — vale para TODAS as notificações do destinatário (`id` é o
+ *    do destinatário, legado).
+ * Evento sem nenhum desses campos (ex.: `created`) segue pedindo hidratação.
+ */
+export interface NotificationEventPatch {
+   read?: boolean;
+   snoozedUntil?: string | null;
+   all?: boolean;
+}
+
 async function assemble(db: Db, rows: NotifRow[]): Promise<NotificationDto[]> {
    if (rows.length === 0) return [];
    const actorIds = [...new Set(rows.map((r) => r.actorId).filter(Boolean) as string[])];
@@ -133,7 +149,10 @@ export async function setSnooze(
       .set({ snoozedUntil: until })
       .where(and(eq(notification.id, id), eq(notification.recipientId, recipientId)))
       .returning({ id: notification.id });
-   if (res.length > 0) publish({ entity: 'notification', action: 'updated', id, recipientId });
+   if (res.length > 0) {
+      const patch: NotificationEventPatch = { snoozedUntil: until ? until.toISOString() : null };
+      publish({ entity: 'notification', action: 'updated', id, recipientId, ...patch });
+   }
    return res.length > 0;
 }
 
@@ -151,7 +170,10 @@ export async function setRead(
       .returning({ id: notification.id });
    // Propaga por SSE: marcar lido/não-lido sincroniza o badge entre abas/dispositivos
    // (antes só setSnooze publicava — read-state não propagava em tempo real).
-   if (res.length > 0) publish({ entity: 'notification', action: 'updated', id, recipientId });
+   if (res.length > 0) {
+      const patch: NotificationEventPatch = { read };
+      publish({ entity: 'notification', action: 'updated', id, recipientId, ...patch });
+   }
    return res.length > 0;
 }
 
@@ -162,8 +184,16 @@ export async function markAllRead(db: Db, recipientId: string): Promise<number> 
       .where(and(eq(notification.recipientId, recipientId), eq(notification.read, false)))
       .returning({ id: notification.id });
    // `id` aqui é o do destinatário (legado: foram várias notificações).
-   if (res.length > 0)
-      publish({ entity: 'notification', action: 'updated', id: recipientId, recipientId });
+   if (res.length > 0) {
+      const patch: NotificationEventPatch = { read: true, all: true };
+      publish({
+         entity: 'notification',
+         action: 'updated',
+         id: recipientId,
+         recipientId,
+         ...patch,
+      });
+   }
    return res.length;
 }
 

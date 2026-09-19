@@ -5,6 +5,7 @@ import { favorite, issue as issueT, project as projectT, savedView } from '@/db/
 import { visibleTeamIds } from './scope';
 import { getOrCreateUser } from './users';
 import { ApiError } from './errors';
+import { publish } from './events';
 
 export type FavoriteEntityType = 'issue' | 'project' | 'view';
 const ENTITY_TYPES: FavoriteEntityType[] = ['issue', 'project', 'view'];
@@ -140,6 +141,9 @@ export async function addFavorite(
       .values({ id: randomUUID(), userId: user.id, entityType, entityId, position: nextPos })
       .onConflictDoNothing()
       .returning({ id: favorite.id });
+   // Outras abas/dispositivos do MESMO usuário atualizam a sidebar (só o dono recebe).
+   if (res.length > 0)
+      publish({ entity: 'favorite', action: 'created', id: entityId, recipientId: user.id });
    return { added: res.length > 0 };
 }
 
@@ -161,5 +165,7 @@ export async function removeFavorite(
          )
       )
       .returning({ id: favorite.id });
+   if (res.length > 0)
+      publish({ entity: 'favorite', action: 'deleted', id: entityId, recipientId: user.id });
    return { removed: res.length > 0 };
 }

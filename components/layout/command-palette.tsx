@@ -15,7 +15,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useLabels, usePriorities, useStatuses } from '@/store/catalog-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
 import { useIssuesStore } from '@/store/issues-store';
-import { useRecentsStore } from '@/store/recents-store';
+import { resolveRecents, useRecentsStore } from '@/store/recents-store';
+import { RecentsRecorder, useRecentsOwner } from './command-palette-recents';
 import { api, type SearchEntityType, type SearchGroup } from '@/lib/client';
 import { SearchSnippet } from '@/components/common/search/search-snippet';
 import { useShallow } from 'zustand/react/shallow';
@@ -78,9 +79,45 @@ function Keys({ keys }: { keys: string[] }) {
    );
 }
 
-/** ⌘K command palette — Linear-style, aware of the issue in context. */
+/**
+ * ⌘K command palette — Linear-style, aware of the issue in context. Esta casca fica
+ * sempre montada mas só guarda `open` e os atalhos: o CORPO (que assina issues,
+ * workspace e catálogos) só existe com a paleta aberta — fechada, uma mudança de issue
+ * não re-renderiza nada aqui (#51). O registro de "recentes" é um componente à parte.
+ */
 export function CommandPalette() {
    const [open, setOpen] = useState(false);
+
+   // ⌘K / Ctrl+K
+   useEffect(() => {
+      const onKeyDown = (event: KeyboardEvent) => {
+         if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+            event.preventDefault();
+            setOpen((value) => !value);
+         }
+      };
+      window.addEventListener('keydown', onKeyDown);
+      // Abertura via UI (ex.: botão "Search" da sidebar) — mesmo palette.
+      const onOpen = () => setOpen(true);
+      window.addEventListener('circle:open-command', onOpen);
+      return () => {
+         window.removeEventListener('keydown', onKeyDown);
+         window.removeEventListener('circle:open-command', onOpen);
+      };
+   }, []);
+
+   const close = useCallback(() => setOpen(false), []);
+
+   return (
+      <>
+         <RecentsRecorder />
+         {open && <CommandPaletteBody onClose={close} />}
+      </>
+   );
+}
+
+/** Corpo da paleta: montado só enquanto aberta (estado de rota/busca nasce limpo). */
+function CommandPaletteBody({ onClose }: { onClose: () => void }) {
    const [route, setRoute] = useState<PaletteRoute>('root');
    const [query, setQuery] = useState('');
    /** When true, the issue context chip was dismissed with ⌫. */
@@ -120,6 +157,7 @@ export function CommandPalette() {
    const cycles = useWorkspaceStore((s) => s.cycles);
    const allProjects = useWorkspaceStore((s) => s.projects);
    const users = useWorkspaceStore((s) => s.users);
+   const me = useWorkspaceStore((s) => s.me);
 
    // Times e views salvas entram no "Go to": no Linear o ⌘K alcança QUALQUER destino,
 
@@ -135,29 +173,35 @@ export function CommandPalette() {
    // DESCRIÇÃO da issue (corpo) — que a busca client-side não alcança — e traz também
    // initiatives e documents, que não vivem no store. Issues e projects seguem
    // resolvidos contra o store (render consistente); o snippet vem do servidor.
-   const [serverGroups, setServerGroups] = useState<SearchGroup[]>([]);
+   // Resultado marcado com a consulta que o gerou: só vale enquanto a consulta for a
+   // mesma — digitar mais não mistura o resultado antigo com o novo, e resposta atrasada
+   // de uma consulta velha é descartada (#51).
+   const [server, setServer] = useState<{ q: string; groups: SearchGroup[] }>({
+      q: '',
+      groups: [],
+   });
+   const currentQ = query.trim();
+   const serverGroups = useMemo(
+      () => (server.q === currentQ ? server.groups : []),
+      [server, currentQ]
+   );
+   const searchSeq = useRef(0);
    useEffect(() => {
-      const q = query.trim();
-      if (q.length < 2) {
-         setServerGroups([]);
-         return;
-      }
-      let active = true;
+      const q = currentQ;
+      const seq = ++searchSeq.current;
+      if (q.length < 2) return;
       const t = setTimeout(() => {
          api.search
             .query({ q, limit: 6 })
             .then((res) => {
-               if (active) setServerGroups(res.groups);
+               if (seq === searchSeq.current) setServer({ q, groups: res.groups });
             })
             .catch(() => {
                // best-effort: mantém só a busca client-side se o servidor falhar
             });
       }, 250);
-      return () => {
-         active = false;
-         clearTimeout(t);
-      };
-   }, [query]);
+      return () => clearTimeout(t);
+   }, [currentQ]);
 
    const serverItems = useCallback(
       (type: SearchEntityType) => serverGroups.find((g) => g.type === type)?.items ?? [],
@@ -222,73 +266,23 @@ export function CommandPalette() {
 
    const issue = contextCleared ? undefined : contextIssue;
 
-   // Registro de "recentes": grava a entidade da rota atual (issue/project) p/ o
-   // grupo "Recently viewed" do ⌘K. Captura toda visita, não só via palette.
-   const recents = useRecentsStore((s) => s.recents);
-   const pushRecent = useRecentsStore((s) => s.push);
-   // Guarda o último recent gravado: como as deps incluem `issues`/`allProjects` (arrays
-   // que trocam de ref a cada mutação do store), o effect re-roda muito; sem este guard
-   // ele re-gravaria o MESMO recent (localStorage + re-render à toa). Mantém o dep de
-   // `issues`/`allProjects` p/ o auto-heal (grava quando a entidade finalmente hidrata).
-   const lastPushedRef = useRef<string>('');
-   useEffect(() => {
-      const push = (r: Parameters<typeof pushRecent>[0]) => {
-         const key = `${r.type}:${r.id}`;
-         if (lastPushedRef.current === key) return;
-         lastPushedRef.current = key;
-         pushRecent(r);
-      };
-      const im = pathname.match(/^\/[^/]+\/issue\/([^/]+)/);
-      if (im) {
-         const found = issues.find((i) => i.identifier === im[1]);
-         if (found)
-            push({ type: 'issue', id: found.id, label: found.title, identifier: found.identifier });
-         return;
-      }
-      const pm = pathname.match(/^\/[^/]+\/project\/([^/]+)/);
-      if (pm) {
-         const found = allProjects.find((p) => p.id === pm[1]);
-         if (found) push({ type: 'project', id: found.id, label: found.name });
-      }
-   }, [pathname, issues, allProjects, pushRecent]);
+   const recentsOwner = useRecentsOwner();
+   const storedRecents = useRecentsStore((s) => (recentsOwner ? s.recentsOf(recentsOwner) : null));
+   const issuesLoaded = useIssuesStore((s) => s.loaded);
+   const workspaceLoaded = useWorkspaceStore((s) => s.loaded);
+   const recents = useMemo(
+      () =>
+         resolveRecents(storedRecents ?? [], issues, allProjects, issuesLoaded && workspaceLoaded),
+      [storedRecents, issues, allProjects, issuesLoaded, workspaceLoaded]
+   );
 
-   const reset = useCallback(() => {
-      setRoute('root');
-      setQuery('');
-      setContextCleared(false);
-   }, []);
-
-   const close = useCallback(() => {
-      setOpen(false);
-      reset();
-   }, [reset]);
+   const close = onClose;
 
    // Feedback truthful: toasta sucesso SÓ quando a mutação confirma na API. O store já
    // faz rollback + toast.error na falha (fonte única) → sem duplo-toast contraditório.
    const withToast = (p: Promise<void>, msg: string) => {
       void p.then(() => toast.success(msg)).catch(() => {});
    };
-
-   // ⌘K / Ctrl+K
-   useEffect(() => {
-      const onKeyDown = (event: KeyboardEvent) => {
-         if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-            event.preventDefault();
-            setOpen((value) => {
-               if (value) reset();
-               return !value;
-            });
-         }
-      };
-      window.addEventListener('keydown', onKeyDown);
-      // Abertura via UI (ex.: botão "Search" da sidebar) — mesmo palette.
-      const onOpen = () => setOpen(true);
-      window.addEventListener('circle:open-command', onOpen);
-      return () => {
-         window.removeEventListener('keydown', onKeyDown);
-         window.removeEventListener('circle:open-command', onOpen);
-      };
-   }, [reset]);
 
    const copy = useCallback(
       async (label: string, text: string) => {
@@ -306,8 +300,10 @@ export function CommandPalette() {
    const issueUrl = issue
       ? `${typeof window !== 'undefined' ? window.location.origin : ''}/${orgId}/issue/${issue.identifier}`
       : '';
+   // Branch no formato do Linear: `<usuário atual>/<id>-<título>` (antes usava o id do
+   // PRIMEIRO usuário do workspace, não o de quem copia).
    const branchName = issue
-      ? `${users[0]?.id ?? 'me'}/${issue.identifier.toLowerCase()}-${issue.title
+      ? `${me?.githubLogin || me?.slug || 'me'}/${issue.identifier.toLowerCase()}-${issue.title
            .toLowerCase()
            .replace(/[^a-z0-9]+/g, '-')
            .replace(/^-|-$/g, '')
@@ -355,10 +351,9 @@ export function CommandPalette() {
 
    return (
       <Dialog
-         open={open}
+         open
          onOpenChange={(value) => {
-            setOpen(value);
-            if (!value) reset();
+            if (!value) onClose();
          }}
       >
          <DialogContent

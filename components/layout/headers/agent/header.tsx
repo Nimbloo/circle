@@ -12,7 +12,7 @@ import { HeaderActions, HeaderGroup, LocationBar } from '@/components/layout/hea
 import { useAgentChatStore } from '@/store/agent-chat-store';
 import { ChevronDown, MessageSquare, Plus } from 'lucide-react';
 
-/** Lista de chats — montada só com o dropdown aberto (não re-renderiza no streaming). */
+/** Lista de chats — montada só com o dropdown aberto (não re-renderiza a cada resposta). */
 function ChatList() {
    const chats = useAgentChatStore((s) => s.chats);
    const setActiveChat = useAgentChatStore((s) => s.setActiveChat);
@@ -30,7 +30,7 @@ function ChatList() {
 }
 
 export default function Header() {
-   // Seletores estreitos: o título muda raramente; `chats` muda a cada palavra transmitida.
+   // Seletores estreitos: o título muda raramente; `chats` muda a cada mensagem.
    const activeTitle = useAgentChatStore(
       (s) => s.chats.find((chat) => chat.id === s.activeChatId)?.title
    );

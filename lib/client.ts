@@ -543,12 +543,19 @@ export const api = {
 
    reviews: {
       list: async (
-         opts: { limit?: number; offset?: number; list?: 'created' | 'for-you' } = {}
+         opts: {
+            limit?: number;
+            offset?: number;
+            list?: 'created' | 'for-you';
+            /** Filtro de status no servidor (aditivo): enviado como CSV. */
+            statuses?: string[];
+         } = {}
       ) => {
          const sp = new URLSearchParams();
          if (opts.limit != null) sp.set('limit', String(opts.limit));
          if (opts.offset != null) sp.set('offset', String(opts.offset));
          if (opts.list) sp.set('list', opts.list);
+         if (opts.statuses?.length) sp.set('status', opts.statuses.join(','));
          const qs = sp.toString();
          const { data, meta } = await requestEnvelope<ReviewDto[]>(`/reviews${qs ? `?${qs}` : ''}`);
          const m = (meta ?? {}) as { total?: number; limit?: number; offset?: number };

@@ -48,14 +48,28 @@ export function TriageSuggestionsQueue() {
       load();
    }, [load]);
 
-   // Uma issue mudou (sugestão pronta, accept/dismiss de outra aba): recarrega a lista.
+   const queued = useRef<Set<string>>(new Set());
+   queued.current = new Set(suggestions.map((s) => s.issueId));
+
+   // Uma issue mudou (sugestão pronta, accept/dismiss de outra aba): recarrega a lista —
+   // mas só se o evento pode mexer NESTA fila (#28). Issue conhecida de outro time, ou
+   // do time mas fora da triagem e fora da fila, não recarrega. Issue desconhecida pode
+   // ter acabado de entrar na fila.
    useEffect(() => {
-      window.addEventListener(ISSUE_CHANGED_EVENT, reload);
+      const onChanged = (e: Event) => {
+         const id = (e as CustomEvent<{ id?: string }>).detail?.id;
+         if (id && !queued.current.has(id)) {
+            const known = useIssuesStore.getState().issues.find((i) => i.id === id);
+            if (known && (known.teamId !== teamId || known.status?.category !== 'triage')) return;
+         }
+         reload();
+      };
+      window.addEventListener(ISSUE_CHANGED_EVENT, onChanged);
       return () => {
-         window.removeEventListener(ISSUE_CHANGED_EVENT, reload);
+         window.removeEventListener(ISSUE_CHANGED_EVENT, onChanged);
          if (timer.current) clearTimeout(timer.current);
       };
-   }, [reload]);
+   }, [reload, teamId]);
 
    // Só as pendentes e com algo a dizer (o heurístico sem duplicata não vira card).
    const pending = suggestions.filter(

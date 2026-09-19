@@ -10,6 +10,7 @@
  *
  * Os fetchers usam o cliente tipado global (`api.reviews`, em lib/client.ts).
  */
+import { relativeTime } from '@/lib/relative-time';
 import type {
    Review,
    ReviewComment,
@@ -31,21 +32,6 @@ const VALID_STATUS: readonly ReviewStatus[] = ['open', 'merged', 'closed'];
 
 function toStatus(raw: string): ReviewStatus {
    return (VALID_STATUS as readonly string[]).includes(raw) ? (raw as ReviewStatus) : 'open';
-}
-
-/** Tempo relativo compacto ("2h", "1d", "3w") a partir de um ISO. */
-function relativeTime(iso: string): string {
-   const then = new Date(iso).getTime();
-   if (Number.isNaN(then)) return '';
-   const diff = Math.max(0, Date.now() - then);
-   const min = Math.floor(diff / 60000);
-   if (min < 1) return 'now';
-   if (min < 60) return `${min}m`;
-   const hours = Math.floor(min / 60);
-   if (hours < 24) return `${hours}h`;
-   const days = Math.floor(hours / 24);
-   if (days < 7) return `${days}d`;
-   return `${Math.floor(days / 7)}w`;
 }
 
 const TEST_PATH = /(^|\/)(__tests__|tests?|spec)(\/|$)|\.(test|spec)\.[^/]+$/;
@@ -74,6 +60,7 @@ export function adaptReviewCommit(commit: ReviewCommitDto): ReviewCommit {
       sha: commit.sha.slice(0, 7),
       message: commit.message.split('\n')[0],
       timeAgo: commit.committedAt ? relativeTime(commit.committedAt) : '',
+      committedAt: commit.committedAt ?? null,
    };
 }
 
@@ -121,6 +108,7 @@ export function adaptReview(dto: ReviewDto | ReviewDetailDto): Review {
       status: toStatus(dto.status),
       list: 'for-you',
       timeAgo: relativeTime(dto.createdAt),
+      createdAt: dto.createdAt,
       repo: dto.repo,
       prNumber: dto.prNumber,
       targetBranch: dto.targetBranch ?? '',
@@ -160,7 +148,12 @@ export interface ReviewsPage {
  * já adaptados pra `Review`, mais o total do conjunto (pra o load-more/"X de Y").
  */
 export async function fetchReviews(
-   opts: { limit?: number; offset?: number; list?: 'created' | 'for-you' } = {}
+   opts: {
+      limit?: number;
+      offset?: number;
+      list?: 'created' | 'for-you';
+      statuses?: ReviewStatus[];
+   } = {}
 ): Promise<ReviewsPage> {
    const { items, total, limit, offset } = await api.reviews.list(opts);
    return { reviews: adaptReviews(items), total, limit, offset };

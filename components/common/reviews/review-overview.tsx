@@ -1,5 +1,6 @@
 'use client';
 
+import { TimeAgo } from './time-ago';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { Review, ReviewFileCategory } from '@/data/reviews';
@@ -164,7 +165,11 @@ export function ReviewOverview({
                      <GitCommitHorizontal className="size-3.5 shrink-0" />
                      <span className="truncate">
                         <span className="font-mono">{review.commits.at(-1)?.sha}</span>{' '}
-                        {review.commits.at(-1)?.message} · {review.commits.at(-1)?.timeAgo}
+                        {review.commits.at(-1)?.message} ·{' '}
+                        <TimeAgo
+                           iso={review.commits.at(-1)?.committedAt}
+                           fallback={review.commits.at(-1)?.timeAgo}
+                        />
                      </span>
                   </div>
                )}

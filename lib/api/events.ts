@@ -46,6 +46,8 @@ export type CircleEntity =
    | 'review'
    /** Regra de automação de um time (CRUD); `teamId` diz de qual time é a tela a recarregar. */
    | 'automation'
+   /** Favorito do usuário (sempre com `recipientId`): as outras abas dele recarregam a lista. */
+   | 'favorite'
    /**
     * Sinal LOCAL do pod (não vem de mutação): a conexão LISTEN caiu e voltou, então
     * eventos de outros pods podem ter se perdido no intervalo. O cliente deve tratar

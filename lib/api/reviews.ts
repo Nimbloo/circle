@@ -77,6 +77,8 @@ function toDto(r: Omit<ReviewRow, 'guide'>): ReviewDto {
 
 export interface ListReviewsOptions {
    status?: string;
+   /** Conjunto de status (filtro da lista no servidor); combinado com `status`, se vier. */
+   statuses?: string[];
    limit?: number;
    offset?: number;
    /**
@@ -113,6 +115,7 @@ export async function listReviews(db: Db, opts: ListReviewsOptions = {}): Promis
    const login = opts.viewerLogin?.trim();
    const clauses = [];
    if (opts.status) clauses.push(eq(review.status, opts.status));
+   if (opts.statuses?.length) clauses.push(inArray(review.status, opts.statuses));
    if (opts.list === 'created') {
       // Sem handle configurado, a clausula falsa devolve lista vazia — honesto. Antes as
       // duas abas mostravam o mesmo conjunto e ninguém percebia que não filtravam.
@@ -126,26 +129,18 @@ export async function listReviews(db: Db, opts: ListReviewsOptions = {}): Promis
             : sql`false`
       );
    }
+   // `where(undefined)` = sem filtro: uma query só, sem o ternário duplicado.
    const where = clauses.length ? and(...clauses) : undefined;
-
-   const rows = where
-      ? await db
-           .select(listColumns)
-           .from(review)
-           .where(where)
-           .orderBy(desc(review.createdAt))
-           .limit(limit)
-           .offset(offset)
-      : await db
-           .select(listColumns)
-           .from(review)
-           .orderBy(desc(review.createdAt))
-           .limit(limit)
-           .offset(offset);
-
-   const countRows = where
-      ? await db.select({ c: count() }).from(review).where(where)
-      : await db.select({ c: count() }).from(review);
+   const [rows, countRows] = await Promise.all([
+      db
+         .select(listColumns)
+         .from(review)
+         .where(where)
+         .orderBy(desc(review.createdAt))
+         .limit(limit)
+         .offset(offset),
+      db.select({ c: count() }).from(review).where(where),
+   ]);
    const total = Number(countRows[0]?.c ?? 0);
 
    return { items: rows.map(toDto), total };
@@ -314,6 +309,8 @@ interface GitHubPr {
    merged_at: string | null;
    html_url: string;
    created_at: string;
+   /** Momento da última mudança do PR no GitHub — ordena entregas do webhook (Co#19). */
+   updated_at?: string | null;
    user?: { login: string };
    requested_reviewers?: { login?: string }[] | null;
    body?: string | null;
@@ -651,7 +648,7 @@ async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike)
    // Auto-link PR↔issue (paridade Linear): PRs cujo título referencia um identifier
    // (ex.: CORE-123) viram linha em issue_pr_link, populando o painel "PR links" da
    // issue. Coletado no loop e resolvido em batch no fim (1 query por identifier set).
-   const linkByIdentifier = new Map<string, { title: string; status: string }>();
+   const links: PrLinkInput[] = [];
    for (const pr of prs) {
       const resolvesId = parseResolves(pr.title, pr.head?.ref, pr.body);
       const detail = detailByNumber.get(pr.number);
@@ -708,7 +705,13 @@ async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike)
       try {
          await db.insert(review).values(row).onConflictDoUpdate({ target: review.id, set });
          count += 1;
-         if (resolvesId) linkByIdentifier.set(resolvesId, { title: row.title, status: row.status });
+         if (resolvesId)
+            links.push({
+               identifier: resolvesId,
+               prNumber: pr.number,
+               title: row.title,
+               status: row.status,
+            });
          if (depth) await persistPrDepth(db, row.id, depth);
       } catch (e) {
          // Um PR com dado ruim NÃO aborta o sync do repo — loga e segue.
@@ -718,18 +721,37 @@ async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike)
 
    // Resolve os identifiers → issues reais (batch) e faz upsert dos links (id md5
    // determinístico = idempotente no re-sync). Identifier sem issue correspondente é ignorado.
-   await linkPrsToIssues(db, repo, linkByIdentifier);
+   await linkPrsToIssues(db, repo, links);
    return count;
 }
 
-/** Upsert idempotente de issue_pr_link para os identifiers que casam com issues reais. */
-async function linkPrsToIssues(
-   db: Db,
-   repo: string,
-   linkByIdentifier: Map<string, { title: string; status: string }>
-): Promise<void> {
-   if (linkByIdentifier.size === 0) return;
-   const identifiers = [...linkByIdentifier.keys()];
+/** PR que referencia uma issue (identifier), a ser ligado em issue_pr_link. */
+interface PrLinkInput {
+   identifier: string;
+   prNumber: number;
+   title: string;
+   status: string; // status do review (open|merged|closed)
+}
+
+/** Id do link: estável por (issue, repo, PR) — renomear o PR não duplica (Co#18). */
+function prLinkId(issueId: string, repo: string, prNumber: number): string {
+   return createHash('md5').update(`${issueId}|${repo}#${prNumber}`).digest('hex');
+}
+
+/** Id antigo (por título do PR): lido para migrar sem duplicar e sem perder o "já mergeado". */
+function legacyPrLinkId(issueId: string, repo: string, title: string): string {
+   return createHash('md5').update(`${issueId}|${repo}|${title}`).digest('hex');
+}
+
+/**
+ * Upsert idempotente de issue_pr_link para os PRs que casam com issues reais.
+ *  - A automação `pr.merged` roda só na TRANSIÇÃO do link para merged (#9): re-sync ou
+ *    re-entrega do webhook de um PR já mergeado não refecha a issue que alguém reabriu.
+ *  - `issue` só é publicado quando o link foi criado ou mudou (título/status).
+ */
+async function linkPrsToIssues(db: Db, repo: string, links: PrLinkInput[]): Promise<void> {
+   if (links.length === 0) return;
+   const identifiers = [...new Set(links.map((l) => l.identifier))];
    const [issues, statuses] = await Promise.all([
       db
          .select({
@@ -743,19 +765,40 @@ async function linkPrsToIssues(
          .where(inArray(issueT.identifier, identifiers)),
       db.select().from(statusT),
    ]);
+   if (issues.length === 0) return;
+   const issueByIdentifier = new Map(issues.map((i) => [i.identifier, i]));
    const catById = new Map(statuses.map((s) => [s.id, s.category]));
    // Status "concluído" alvo do auto-transition (menor position na categoria completed).
    const doneStatus = statuses
       .filter((s) => s.category === 'completed')
       .sort((a, b) => a.position - b.position)[0];
-   for (const iss of issues) {
-      const link = linkByIdentifier.get(iss.identifier);
-      if (!link) continue;
-      // PR mergeado → dispara as automações `pr.merged` do time (#97). O antigo fluxo
-      // fixo "move a issue pra Done" virou a regra default, semeada de forma lazy
-      // (`ensureDefaultAutomations`) — visível e editável em Team settings.
-      // Idempotente: a ação não faz nada quando a issue já está no status alvo.
-      if (link.status === 'merged' && doneStatus) {
+
+   const pairs = links.flatMap((link) => {
+      const iss = issueByIdentifier.get(link.identifier);
+      if (!iss) return [];
+      return [
+         {
+            link,
+            iss,
+            id: prLinkId(iss.id, repo, link.prNumber),
+            legacyId: legacyPrLinkId(iss.id, repo, link.title),
+         },
+      ];
+   });
+   if (pairs.length === 0) return;
+   const existing = await db
+      .select()
+      .from(issuePrLink)
+      .where(inArray(issuePrLink.id, [...new Set(pairs.flatMap((p) => [p.id, p.legacyId]))]));
+   const existingById = new Map(existing.map((e) => [e.id, e]));
+
+   for (const { link, iss, id, legacyId } of pairs) {
+      const status = prLinkStatus(link.status);
+      const current = existingById.get(id);
+      const legacy = existingById.get(legacyId);
+      const wasMerged = current?.status === 'merged' || legacy?.status === 'merged';
+      // PR mergeado → dispara as automações `pr.merged` do time (#97), só na transição.
+      if (link.status === 'merged' && !wasMerged && doneStatus) {
          const cat = catById.get(iss.statusId);
          if (cat !== 'completed' && cat !== 'canceled') {
             const applied = await runAutomations(db, 'pr.merged', iss.id, { actorId: null });
@@ -768,24 +811,35 @@ async function linkPrsToIssues(
                });
          }
       }
-      // id estável por (issue, repo, PR-título-normalizado) → re-sync atualiza, não duplica.
-      const id = createHash('md5').update(`${iss.id}|${repo}|${link.title}`).digest('hex');
+      const changed =
+         !current || current.title !== link.title || current.status !== status || Boolean(legacy);
       try {
-         await db
-            .insert(issuePrLink)
-            .values({ id, issueId: iss.id, title: link.title, status: prLinkStatus(link.status) })
-            .onConflictDoUpdate({
-               target: issuePrLink.id,
-               set: { title: link.title, status: prLinkStatus(link.status) },
-            });
+         if (changed) {
+            await db
+               .insert(issuePrLink)
+               .values({ id, issueId: iss.id, title: link.title, status })
+               .onConflictDoUpdate({ target: issuePrLink.id, set: { title: link.title, status } });
+            if (legacy) {
+               await db.delete(issuePrLink).where(eq(issuePrLink.id, legacyId));
+               existingById.delete(legacyId);
+            }
+            existingById.set(id, { id, issueId: iss.id, title: link.title, status });
+         }
          // resolvesTitle correto: o título da ISSUE do Circle (era o título do PR, enganoso
          // — exibido como "Ticket" no overview). Corrige os reviews deste repo que a resolvem.
          await db
             .update(review)
             .set({ resolvesTitle: iss.title })
-            .where(and(eq(review.repo, repo), eq(review.resolvesIdentifier, iss.identifier)));
-         // O painel "PR links" do detalhe da issue mudou (#34).
-         publish({ entity: 'issue', action: 'updated', id: iss.id, teamId: iss.teamId });
+            .where(
+               and(
+                  eq(review.repo, repo),
+                  eq(review.resolvesIdentifier, iss.identifier),
+                  sql`${review.resolvesTitle} is distinct from ${iss.title}`
+               )
+            );
+         // O painel "PR links" do detalhe da issue mudou (#34) — só quando mudou de fato.
+         if (changed)
+            publish({ entity: 'issue', action: 'updated', id: iss.id, teamId: iss.teamId });
       } catch (e) {
          console.warn(`[circle] pr-link upsert falhou (${iss.identifier}):`, (e as Error).message);
       }
@@ -812,13 +866,18 @@ export interface PullRequestEvent {
 export interface WebhookOptions {
    token?: string;
    fetchImpl?: FetchLike;
+   /**
+    * Agenda trabalho para DEPOIS da resposta (a rota passa o `after` do Next). Com ele, o
+    * ACK do webhook não espera arquivos/commits/checks do PR (Co#19); sem ele, roda inline.
+    */
+   defer?: (task: () => Promise<void>) => void;
 }
 
 export async function handlePullRequestEvent(
    db: Db,
    payload: PullRequestEvent,
    opts: WebhookOptions = {}
-): Promise<{ linked: string | null }> {
+): Promise<{ linked: string | null; stale?: boolean }> {
    const repoFull = payload.repository?.full_name;
    const pr = payload.pull_request;
    if (!repoFull || !pr) return { linked: null };
@@ -826,6 +885,11 @@ export async function handlePullRequestEvent(
    const resolvesId = parseResolves(pr.title, pr.head?.ref, pr.body);
    const status = statusOf(pr);
    const title = clip(pr.title, 512) as string;
+   // `syncedAt` guarda "estado do PR conhecido até": o `updated_at` do GitHub no webhook,
+   // o relógio do sync no polling (que lê o estado atual). Entrega com `updated_at`
+   // anterior ao gravado é velha — o GitHub não garante ordem — e não sobrescreve (Co#19).
+   const updatedAt = pr.updated_at ? new Date(pr.updated_at) : null;
+   const version = updatedAt && !Number.isNaN(updatedAt.getTime()) ? updatedAt : new Date();
    const row = {
       id: `${repo}#${pr.number}`,
       title,
@@ -844,7 +908,7 @@ export async function handlePullRequestEvent(
       checksPassed: 0,
       checksTotal: 0,
       createdAt: new Date(pr.created_at),
-      syncedAt: new Date(),
+      syncedAt: version,
    };
    const set: Partial<typeof review.$inferInsert> = {
       title: row.title,
@@ -864,26 +928,50 @@ export async function handlePullRequestEvent(
       set.additions = row.additions;
       set.deletions = row.deletions;
    }
-   await db.insert(review).values(row).onConflictDoUpdate({ target: review.id, set });
+   const written = await db
+      .insert(review)
+      .values(row)
+      .onConflictDoUpdate({
+         target: review.id,
+         set,
+         setWhere: sql`${review.syncedAt} <= ${version.toISOString()}`,
+      })
+      .returning({ id: review.id });
+   if (written.length === 0) return { linked: null, stale: true };
    if (resolvesId) {
-      await linkPrsToIssues(db, repo, new Map([[resolvesId, { title, status }]]));
+      await linkPrsToIssues(db, repo, [
+         { identifier: resolvesId, prNumber: pr.number, title, status },
+      ]);
    }
    // Arquivos/commits/checks do PR aberto, quando há token (best-effort — o ACK do
    // webhook não depende disso).
    const token = opts.token ?? process.env.GITHUB_TOKEN;
+   const doFetch = opts.fetchImpl ?? fetch;
    if (status === 'open' && token) {
-      try {
-         const depth = await fetchPrDepth(repo, pr, token, opts.fetchImpl ?? fetch);
-         if (depth.checks) {
-            await db
-               .update(review)
-               .set({ checksPassed: depth.checks.passed, checksTotal: depth.checks.total })
-               .where(eq(review.id, row.id));
+      const refreshDepth = async () => {
+         try {
+            const depth = await fetchPrDepth(repo, pr, token, doFetch);
+            if (depth.checks) {
+               await db
+                  .update(review)
+                  .set({ checksPassed: depth.checks.passed, checksTotal: depth.checks.total })
+                  .where(eq(review.id, row.id));
+            }
+            await persistPrDepth(db, row.id, depth);
+         } catch (e) {
+            console.warn(`[circle] profundidade do PR falhou (${row.id}):`, (e as Error).message);
          }
-         await persistPrDepth(db, row.id, depth);
-      } catch (e) {
-         console.warn(`[circle] profundidade do PR falhou (${row.id}):`, (e as Error).message);
+      };
+      if (opts.defer) {
+         // Responde já com o PR gravado; a profundidade chega num segundo evento.
+         publish({ entity: 'review', action: 'updated', id: row.id });
+         opts.defer(async () => {
+            await refreshDepth();
+            publish({ entity: 'review', action: 'updated', id: row.id });
+         });
+         return { linked: resolvesId };
       }
+      await refreshDepth();
    }
    // Só depois de gravar checks/arquivos (#34): antes o cliente recarregava no meio e
    // via o PR sem eles.
@@ -924,7 +1012,8 @@ export async function handleCheckRunEvent(
    const updated = existing.map((e) => e.id);
    await db
       .update(review)
-      .set({ checksPassed: checks.passed, checksTotal: checks.total, syncedAt: new Date() })
+      // Sem mexer em `syncedAt`: ele versiona o estado do PR (Co#19), não os checks.
+      .set({ checksPassed: checks.passed, checksTotal: checks.total })
       .where(inArray(review.id, updated));
    // Checks mudaram: a lista e o detalhe abertos atualizam (#34).
    for (const id of updated) publish({ entity: 'review', action: 'updated', id });
