@@ -7,6 +7,7 @@ import { getOrCreateUser } from './users';
 import { problem } from './response';
 import { ApiError } from './errors';
 import { captureServerError } from './observe-error';
+import { CLIENT_ID_HEADER, runWithEventOrigin } from './events';
 import { observeHttp, routePattern } from '@/lib/metrics';
 import { REQUEST_ID_HEADER, currentTraceId, logError, logRequest, requestIdFrom } from './log';
 import type { IssueListOptions } from './issues';
@@ -181,7 +182,10 @@ export async function handle(fn: () => Promise<Response>, req?: Request): Promis
    const method = req?.method ?? 'UNKNOWN';
    let res: Response;
    try {
-      res = await withRequestCache(fn);
+      // Aba de origem (If#16): os eventos publicados na request carregam o `clientId`.
+      res = await runWithEventOrigin(req?.headers.get(CLIENT_ID_HEADER), () =>
+         withRequestCache(fn)
+      );
    } catch (e) {
       if (e instanceof ApiError) {
          res = problem(e.status, titleFor(e.status), e.message);

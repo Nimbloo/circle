@@ -54,6 +54,10 @@ export type CircleEntity =
    | 'resync';
 
 import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { CLIENT_ID_HEADER, CLIENT_ID_PATTERN } from '@/lib/client-id';
+
+export { CLIENT_ID_HEADER };
 
 export type CircleAction = 'created' | 'updated' | 'deleted';
 
@@ -76,6 +80,11 @@ export interface CircleEvent {
    issueId?: string;
    /** Destinatário único do evento (opcional). Presente → só esse usuário o recebe. */
    recipientId?: string;
+   /**
+    * Aba que originou a mutação (header `x-circle-client-id`, If#16). A própria aba
+    * reconhece o eco e não refaz o GET do que a resposta já trouxe; as outras reagem.
+    */
+   clientId?: string;
    /**
     * Selo monotônico só para ordenação/deduplicação no cliente. É um contador
     * incremental (NÃO `Date.now()`): o valor absoluto é irrelevante e evita
@@ -310,13 +319,36 @@ export function subscribe(fn: Subscriber): () => void {
    };
 }
 
+/** Origem da request corrente (aba do cliente), propagada até o `publish`. */
+const eventOrigin = new AsyncLocalStorage<{ clientId?: string }>();
+
 /**
- * Publica um evento. Entrega local síncrona (clientes do próprio pod) + `pg_notify`
- * best-effort (outros pods). Carimba o `ts` internamente e NUNCA lança — um
- * subscriber ou o DB indisponível não podem derrubar a mutação que originou o evento.
+ * Roda `fn` com a aba de origem da request (header `x-circle-client-id`): todo evento
+ * publicado dentro dela sai com `clientId`. Valor fora do formato é ignorado.
  */
-export function publish(event: Omit<CircleEvent, 'ts'>): void {
-   const full: CircleEvent = { ...event, ts: nextTs() };
+export function runWithEventOrigin<T>(
+   clientId: string | null | undefined,
+   fn: () => Promise<T>
+): Promise<T> {
+   const valid = clientId && CLIENT_ID_PATTERN.test(clientId) ? clientId : undefined;
+   return eventOrigin.run({ clientId: valid }, fn);
+}
+
+function stamp(event: Omit<CircleEvent, 'ts'>): CircleEvent {
+   const clientId = event.clientId ?? eventOrigin.getStore()?.clientId;
+   return { ...event, ...(clientId ? { clientId } : {}), ts: nextTs() };
+}
+
+/**
+ * Canal SSE-ONLY: entrega local + `pg_notify` (outros pods), SEM webhooks. Para sinais
+ * que são só do realtime — ex.: o evento coarse do fim de um import (#21), que não
+ * representa uma mutação única para assinantes externos. Nunca lança.
+ */
+export function publishInternal(event: Omit<CircleEvent, 'ts'>): void {
+   deliver(stamp(event));
+}
+
+function deliver(full: CircleEvent): void {
    fanOutLocal(full);
    if (notifyEnabled()) {
       // fire-and-forget: usa o pool do drizzle (import preguiçoso), best-effort.
@@ -331,6 +363,17 @@ export function publish(event: Omit<CircleEvent, 'ts'>): void {
          }
       })();
    }
+}
+
+/**
+ * Publica um evento. Entrega local síncrona (clientes do próprio pod) + `pg_notify`
+ * best-effort (outros pods) + webhooks de saída. Carimba o `ts` (e o `clientId` da
+ * request) internamente e NUNCA lança — um subscriber ou o DB indisponível não podem
+ * derrubar a mutação que originou o evento.
+ */
+export function publish(event: Omit<CircleEvent, 'ts'>): void {
+   const full = stamp(event);
+   deliver(full);
    dispatchWebhooks(full);
 }
 
