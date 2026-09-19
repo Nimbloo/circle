@@ -108,6 +108,8 @@ export const AUTOMATION_CHANGED_EVENT = 'circle:automation-changed';
  * project_template). A tela que o exibe recarrega; o bootstrap não é refeito.
  */
 export const CATALOG_CHANGED_EVENT = 'circle:catalog-changed';
+/** Time mudou (`detail.id` = `detail.teamId` = time): ex. fila de solicitações de entrada (#58). */
+export const TEAM_CHANGED_EVENT = 'circle:team-changed';
 /** Job de import do usuário mudou de estado (`detail.id` = job): a tela relê o job. */
 export const IMPORT_JOB_EVENT = 'circle:import-job';
 
@@ -274,6 +276,7 @@ export function useLiveSync(): void {
                   );
                return;
             case 'team':
+               if (id) dispatch(TEAM_CHANGED_EVENT, { id, teamId: id });
                if (!id) scheduleHydrate('workspace');
                else if (deleted) ws.removeTeamLocal(id);
                // Time fora do escopo (convidado) responde 404: nada a aplicar.

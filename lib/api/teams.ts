@@ -22,7 +22,7 @@ import { sendEmail } from './integrations/mailer';
 import { ctaEmailHtml } from './integrations/email-templates';
 import { escapeHtml } from './notify';
 import { ApiError } from './errors';
-import { publish } from './events';
+import { publish, publishInternal } from './events';
 import { listTeamMemberDtos, type MemberDto } from './members';
 
 type TeamRow = typeof teamT.$inferSelect;
@@ -334,6 +334,8 @@ export async function requestToJoin(
          set: { status: 'pending', createdAt: new Date(), decidedAt: null, decidedBy: null },
       });
    publish({ entity: 'member', action: 'updated', id: user.id });
+   // #58: a fila de solicitações (tela de membros do time, admin) recarrega ao vivo.
+   publishInternal({ entity: 'team', action: 'updated', id: teamId, teamId });
    notifyAdminsOfJoinRequest(t[0].name, user.name).catch(() => {});
    return { status: 'pending' };
 }
@@ -396,6 +398,7 @@ export async function decideJoinRequest(
       .set({ status: decision, decidedAt: new Date(), decidedBy: deciderId })
       .where(eq(teamJoinRequest.id, requestId));
    publish({ entity: 'member', action: 'updated', id: rows[0].userId });
+   publishInternal({ entity: 'team', action: 'updated', id: teamId, teamId });
    const [requests, members] = await Promise.all([
       listJoinRequests(db, teamId),
       listTeamMembers(db, teamId),

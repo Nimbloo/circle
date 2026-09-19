@@ -8,6 +8,7 @@ import type { JoinRequestDto } from '@/lib/api/teams';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Check, X } from 'lucide-react';
 import { useParams } from 'next/navigation';
+import { TEAM_CHANGED_EVENT, useLiveReload } from '@/lib/use-live-sync';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -44,6 +45,8 @@ export default function TeamMembers() {
    useEffect(() => {
       void refreshRequests();
    }, [refreshRequests]);
+   // #58: pedido novo (ou decidido por outro admin) chega ao vivo.
+   useLiveReload(TEAM_CHANGED_EVENT, { teamId }, refreshRequests);
 
    const decide = async (id: string, decision: 'approved' | 'denied') => {
       setBusy(true);

@@ -100,7 +100,7 @@ export async function createFolder(
    await db
       .insert(documentFolder)
       .values({ id, teamId: input.teamId, name: input.name, icon: input.icon ?? null });
-   publish({ entity: 'document', action: 'created', id });
+   publish({ entity: 'document', action: 'created', id, teamId: input.teamId });
    return { id, teamId: input.teamId, name: input.name, icon: input.icon ?? null, documents: [] };
 }
 
@@ -138,7 +138,13 @@ export async function createDocument(
       createdAt: now,
       updatedAt: now,
    });
-   publish({ entity: 'document', action: 'created', id, actorEmail: creatorEmail });
+   publish({
+      entity: 'document',
+      action: 'created',
+      id,
+      actorEmail: creatorEmail,
+      teamId: input.teamId,
+   });
    return {
       id,
       folderId: input.folderId,
@@ -157,18 +163,22 @@ export async function createDocument(
    };
 }
 
-/** Só o criador do documento (ou um admin) pode alterá-lo/removê-lo (403). */
-async function assertDocumentOwner(db: Db, id: string, actorEmail: string): Promise<boolean> {
+/**
+ * Só o criador do documento (ou um admin) pode alterá-lo/removê-lo (403). Devolve o time
+ * do documento (vai no evento, #58) ou null se não existir.
+ */
+async function assertDocumentOwner(db: Db, id: string, actorEmail: string): Promise<string | null> {
    const rows = await db
-      .select({ creatorId: teamDocument.creatorId })
+      .select({ creatorId: teamDocument.creatorId, teamId: documentFolder.teamId })
       .from(teamDocument)
+      .innerJoin(documentFolder, eq(documentFolder.id, teamDocument.folderId))
       .where(eq(teamDocument.id, id))
       .limit(1);
-   if (rows.length === 0) return false;
+   if (rows.length === 0) return null;
    const me = await getOrCreateUser(db, actorEmail);
    if (rows[0].creatorId !== me.id && !(await isAdmin(actorEmail, db)))
       throw new ApiError(403, 'Apenas o criador do documento pode alterá-lo');
-   return true;
+   return rows[0].teamId;
 }
 
 export async function updateDocument(
@@ -177,7 +187,8 @@ export async function updateDocument(
    patch: { name?: string; icon?: string | null; pinned?: boolean },
    actorEmail: string
 ): Promise<boolean> {
-   if (!(await assertDocumentOwner(db, id, actorEmail))) return false;
+   const teamId = await assertDocumentOwner(db, id, actorEmail);
+   if (!teamId) return false;
    const set: Record<string, unknown> = { updatedAt: new Date() };
    if (patch.name !== undefined) set.name = patch.name;
    if (patch.icon !== undefined) set.icon = patch.icon;
@@ -187,16 +198,17 @@ export async function updateDocument(
       .set(set)
       .where(eq(teamDocument.id, id))
       .returning({ id: teamDocument.id });
-   if (res.length > 0) publish({ entity: 'document', action: 'updated', id, actorEmail });
+   if (res.length > 0) publish({ entity: 'document', action: 'updated', id, actorEmail, teamId });
    return res.length > 0;
 }
 
 export async function deleteDocument(db: Db, id: string, actorEmail: string): Promise<boolean> {
-   if (!(await assertDocumentOwner(db, id, actorEmail))) return false;
+   const teamId = await assertDocumentOwner(db, id, actorEmail);
+   if (!teamId) return false;
    const res = await db
       .delete(teamDocument)
       .where(eq(teamDocument.id, id))
       .returning({ id: teamDocument.id });
-   if (res.length > 0) publish({ entity: 'document', action: 'deleted', id, actorEmail });
+   if (res.length > 0) publish({ entity: 'document', action: 'deleted', id, actorEmail, teamId });
    return res.length > 0;
 }
