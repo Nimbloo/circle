@@ -70,7 +70,10 @@ export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) 
    const completed = issues.filter((issue) => issue.status.category === 'completed').length;
 
    return (
-      <aside className="absolute top-10 right-2 bottom-2 w-[400px] max-w-[calc(100%-1rem)] z-40 flex flex-col gap-2 overflow-y-auto">
+      <aside
+         className="animate-in fade-in slide-in-from-right-2 absolute top-10 right-2 bottom-2 z-40 flex w-[400px] max-w-[calc(100%-1rem)] flex-col gap-2 overflow-y-auto duration-[var(--dur-content,150ms)] ease-[var(--ease-out,cubic-bezier(0.16,1,0.3,1))]"
+         data-testid="project-peek-panel"
+      >
          {/* Header */}
          <Card className="flex items-center gap-2 py-3">
             <span className="inline-flex size-6 bg-muted/50 items-center justify-center rounded shrink-0">

@@ -223,4 +223,12 @@ describe('peek do projeto editável (pl#2)', () => {
          expect(apiMocks.update).toHaveBeenCalledWith('p1', { statusId: 'in-progress' })
       );
    });
+
+   it('entra com fade + slide, não aparece seco (pl#16)', () => {
+      render(<ProjectPeekPanel projectId="p1" onClose={() => {}} />);
+      const panel = screen.getByTestId('project-peek-panel');
+      expect(panel.className).toContain('animate-in');
+      expect(panel.className).toContain('fade-in');
+      expect(panel.className).toContain('slide-in-from-right');
+   });
 });
