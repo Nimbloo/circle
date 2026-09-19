@@ -33,6 +33,7 @@ import { AlertTriangle, Compass, Route } from 'lucide-react';
 import { EmptyState } from '@/components/common/empty-state';
 import { InitiativeGlyph } from '@/components/common/initiatives/initiative-glyph';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { healthColor } from '@/components/common/projects/progress-colors';
 
 /** Grupo já resolvido para a tela: a initiative (ou "No initiative") e seus projetos. */
@@ -103,6 +104,7 @@ function RoadmapBar({
    blockedBy,
    showMilestones,
    onReschedule,
+   onOpen,
 }: {
    project: Project;
    monthWidth: number;
@@ -111,6 +113,8 @@ function RoadmapBar({
    blockedBy: { name: string; reason: 'overlap' | 'overdue' | null }[];
    showMilestones: boolean;
    onReschedule: (project: Project, next: DateRange) => void;
+   /** Abre o projeto (pl#10): clique sem arraste, nunca junto com um reagendamento. */
+   onOpen: (projectId: string) => void;
 }) {
    const reschedulable = isValidProjectDate(project.targetDate);
    const base: DateRange = {
@@ -126,6 +130,8 @@ function RoadmapBar({
    };
    const dragRef = useRef<ActiveDrag | null>(null);
    const wrapperRef = useRef<HTMLDivElement>(null);
+   /** Um arraste termina com um `click` nativo: não abrir o projeto nesse caso. */
+   const suppressClickRef = useRef(false);
 
    const range = draft ?? base;
    const left = offsetFor(range.startDate, monthWidth);
@@ -157,6 +163,13 @@ function RoadmapBar({
       const next = draftRef.current;
       setDraft(null);
       if (commit && drag.moved && next && !sameRange(next, base)) onReschedule(project, next);
+      // Clique (ponteiro parado): a captura no wrapper desvia o `click` do botão, então
+      // é aqui que o projeto abre (pl#10). O `click` que ainda possa chegar é descartado.
+      if (commit && !drag.moved) onOpen(project.id);
+      suppressClickRef.current = true;
+      setTimeout(() => {
+         suppressClickRef.current = false;
+      }, 0);
    };
 
    // Teclado: rascunho + 1 commit (#39).
@@ -167,6 +180,14 @@ function RoadmapBar({
       setDraft,
       onCommit: (next) => onReschedule(project, next),
    });
+
+   const onClick = () => {
+      if (suppressClickRef.current) {
+         suppressClickRef.current = false;
+         return;
+      }
+      onOpen(project.id);
+   };
 
    const blockedLabel =
       blockedBy.length === 0
@@ -185,6 +206,7 @@ function RoadmapBar({
          <button
             ref={keyboard.ref}
             type="button"
+            onClick={onClick}
             onPointerDown={beginDrag('move')}
             onKeyDown={keyboard.onKeyDown}
             onBlur={keyboard.onBlur}
@@ -386,6 +408,8 @@ export default function RoadmapTimeline({
    const initiatives = useWorkspaceStore((s) => s.initiatives);
    const [todayIso, setTodayIso] = useState<string | null>(null);
    const scrollRef = useRef<HTMLDivElement>(null);
+   const router = useRouter();
+   const { orgId } = useParams<{ orgId: string }>();
 
    const monthWidth = monthWidthOf(zoom);
    const totalWidth = totalWidthOf(monthWidth);
@@ -393,6 +417,21 @@ export default function RoadmapTimeline({
    const todayOffset = todayIso !== null ? offsetFor(todayIso, monthWidth) : null;
    const todayLabel = todayIso !== null ? format(parseISO(todayIso), 'MMM d').toUpperCase() : null;
    const scaleDates = zoom === 'year' ? BIWEEKLY_DATES : WEEKLY_DATES;
+
+   const openProject = useCallback(
+      (projectId: string) => router.push(`/${orgId}/project/${projectId}/overview`),
+      [router, orgId]
+   );
+   /** "Week" mostra o ano em todo mês, não só em janeiro (pl#10) — sem contexto de
+    * ano ao rolar por semanas, um mês qualquer vira ambíguo. */
+   const monthLabel = useCallback(
+      (month: (typeof MONTHS)[number]) => {
+         if (zoom !== 'week') return month.label;
+         const year = month.key.slice(0, 4);
+         return month.label.includes(year) ? month.label : `${month.label} ${year}`;
+      },
+      [zoom]
+   );
 
    const { rows, height } = useMemo(() => layoutOf(groups), [groups]);
    const projectsById = useMemo(() => {
@@ -447,6 +486,28 @@ export default function RoadmapTimeline({
       // eslint-disable-next-line react-hooks/exhaustive-deps
    }, []);
 
+   // Mudar o zoom mantém a data do MEIO do viewport ancorada (pl#10) — sem isso "hoje"
+   // saía da tela toda vez que o zoom mudava. Mesma matemática da timeline de projetos.
+   const prevMonthWidthRef = useRef(monthWidth);
+   useEffect(() => {
+      const element = scrollRef.current;
+      const previousWidth = prevMonthWidthRef.current;
+      if (element && previousWidth !== monthWidth) {
+         const previousTotal = totalWidthOf(previousWidth);
+         const nextTotal = totalWidthOf(monthWidth);
+         const anchor = (element.scrollLeft + element.clientWidth / 2) / previousTotal;
+         element.scrollLeft = anchor * nextTotal - element.clientWidth / 2;
+      }
+      prevMonthWidthRef.current = monthWidth;
+   }, [monthWidth]);
+
+   const scrollToToday = useCallback(() => {
+      if (scrollRef.current && todayOffset !== null) {
+         const anchor = Math.max(scrollRef.current.clientWidth / 2, listOffset + 80);
+         scrollRef.current.scrollTo({ left: Math.max(0, todayOffset - anchor), behavior: 'smooth' });
+      }
+   }, [todayOffset, listOffset]);
+
    const reschedule = useCallback(
       (project: Project, next: DateRange) => {
          // O store já fez rollback + toast; a rejeição re-lançada não tem mais o que tratar.
@@ -469,160 +530,175 @@ export default function RoadmapTimeline({
 
    return (
       <TooltipProvider delayDuration={200}>
-         <p id={RESCHEDULE_HINT_ID} className="sr-only">
-            Drag the bar to move the project, drag its edges to change one date. With the bar
-            focused, use the arrow keys to move by one day and Shift + arrow keys by one week.
-         </p>
-         <div ref={scrollRef} className="h-full w-full overflow-auto">
-            <div style={{ width: totalWidth }} className="relative min-h-full">
-               {/* Régua: meses, ticks semanais e rótulos de data */}
-               <div className="sticky top-0 z-20 select-none bg-container">
-                  <div className="relative flex h-4">
+         <div className="relative h-full w-full">
+            {/* "Today" flutuante (pl#10), no padrão da timeline de projetos. */}
+            <div className="absolute top-[5px] right-[10px] z-30 flex items-center gap-1">
+               <button
+                  type="button"
+                  onClick={scrollToToday}
+                  className="h-6 px-2 rounded-full border border-transparent bg-secondary text-xs font-medium hover:bg-accent transition-colors"
+               >
+                  Today
+               </button>
+            </div>
+            <p id={RESCHEDULE_HINT_ID} className="sr-only">
+               Drag the bar to move the project, drag its edges to change one date. With the bar
+               focused, use the arrow keys to move by one day and Shift + arrow keys by one week.
+            </p>
+            <div ref={scrollRef} className="h-full w-full overflow-auto">
+               <div style={{ width: totalWidth }} className="relative min-h-full">
+                  {/* Régua: meses, ticks semanais e rótulos de data */}
+                  <div className="sticky top-0 z-20 select-none bg-container">
+                     <div className="relative flex h-4">
+                        {MONTHS.map((month) => (
+                           <div
+                              key={month.key}
+                              style={{ width: month.days * dayWidthOf(monthWidth) }}
+                              className="h-4 shrink-0 overflow-hidden whitespace-nowrap text-xs font-medium uppercase leading-4 text-muted-foreground"
+                           >
+                              {monthLabel(month)}
+                           </div>
+                        ))}
+                        <div className="pointer-events-none absolute inset-x-0 bottom-0">
+                           {WEEKLY_DATES.map((date) => (
+                              <span
+                                 key={date.time}
+                                 className="absolute bottom-0 h-1 w-px bg-muted-foreground/30"
+                                 style={{ left: offsetForTime(date.time, monthWidth) }}
+                              />
+                           ))}
+                        </div>
+                     </div>
+                     <div className="relative h-4">
+                        {scaleDates.map((date) => {
+                           const left = offsetForTime(date.time, monthWidth);
+                           if (todayOffset !== null && Math.abs(left - todayOffset) < 30) return null;
+                           return (
+                              <span
+                                 key={date.time}
+                                 className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-[10px] text-muted-foreground/80"
+                                 style={{ left }}
+                              >
+                                 {date.day}
+                              </span>
+                           );
+                        })}
+                        {todayOffset !== null && (
+                           <span
+                              className="pointer-events-none absolute -top-0.5 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-primary px-1.5 py-px text-[10px] font-semibold uppercase text-primary-foreground"
+                              style={{ left: todayOffset }}
+                           >
+                              {todayLabel}
+                           </span>
+                        )}
+                     </div>
+                  </div>
+
+                  {/* Linhas de mês */}
+                  <div className="pointer-events-none absolute inset-0 top-8 flex">
                      {MONTHS.map((month) => (
                         <div
                            key={month.key}
                            style={{ width: month.days * dayWidthOf(monthWidth) }}
-                           className="h-4 shrink-0 overflow-hidden whitespace-nowrap text-xs font-medium uppercase leading-4 text-muted-foreground"
-                        >
-                           {month.label}
-                        </div>
+                           className="h-full shrink-0 border-r border-border/25"
+                        />
                      ))}
-                     <div className="pointer-events-none absolute inset-x-0 bottom-0">
-                        {WEEKLY_DATES.map((date) => (
-                           <span
-                              key={date.time}
-                              className="absolute bottom-0 h-1 w-px bg-muted-foreground/30"
-                              style={{ left: offsetForTime(date.time, monthWidth) }}
-                           />
-                        ))}
-                     </div>
                   </div>
-                  <div className="relative h-4">
-                     {scaleDates.map((date) => {
-                        const left = offsetForTime(date.time, monthWidth);
-                        if (todayOffset !== null && Math.abs(left - todayOffset) < 30) return null;
-                        return (
-                           <span
-                              key={date.time}
-                              className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-[10px] text-muted-foreground/80"
-                              style={{ left }}
-                           >
-                              {date.day}
-                           </span>
-                        );
-                     })}
-                     {todayOffset !== null && (
-                        <span
-                           className="pointer-events-none absolute -top-0.5 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-primary px-1.5 py-px text-[10px] font-semibold uppercase text-primary-foreground"
-                           style={{ left: todayOffset }}
-                        >
-                           {todayLabel}
-                        </span>
-                     )}
-                  </div>
-               </div>
 
-               {/* Linhas de mês */}
-               <div className="pointer-events-none absolute inset-0 top-8 flex">
-                  {MONTHS.map((month) => (
+                  {/* Marcador de hoje */}
+                  {todayOffset !== null && (
                      <div
-                        key={month.key}
-                        style={{ width: month.days * dayWidthOf(monthWidth) }}
-                        className="h-full shrink-0 border-r border-border/25"
-                     />
-                  ))}
-               </div>
-
-               {/* Marcador de hoje */}
-               {todayOffset !== null && (
-                  <div
-                     className="absolute bottom-0 top-8 z-10 w-px bg-primary"
-                     style={{ left: todayOffset }}
-                  />
-               )}
-
-               {/* Grupos e barras */}
-               <div className="relative z-[5] pb-8" style={{ minHeight: height }}>
-                  {showDependencies && (
-                     <DependencyArrows
-                        dependencies={dependencies}
-                        boundsById={boundsById}
-                        topById={topById}
-                        width={totalWidth}
-                        height={height}
+                        className="absolute bottom-0 top-8 z-10 w-px bg-primary"
+                        style={{ left: todayOffset }}
                      />
                   )}
-                  {groups.map((group) => (
-                     <div key={group.id}>
-                        <div
-                           className="sticky left-0 flex w-screen max-w-full items-center gap-2 border-y border-border/40 bg-[color-mix(in_oklab,var(--accent)_30%,var(--container))] px-4 text-sm font-medium"
-                           style={{
-                              height: GROUP_HEADER_HEIGHT,
-                              paddingLeft: 16 + group.depth * 16,
-                           }}
-                        >
-                           {group.icon ? (
-                              <InitiativeGlyph
-                                 icon={group.icon}
-                                 color={initiatives.find((i) => i.id === group.id)?.iconColor}
-                                 className="size-3.5"
-                              />
-                           ) : (
-                              <Compass className="size-3.5 text-muted-foreground" />
-                           )}
-                           <span className="truncate">{group.name}</span>
-                           <span className="text-xs text-muted-foreground">
-                              {group.completedProjectCount}/{group.projectCount}
-                           </span>
-                           <CapacityRing value={group.percentComplete} color="var(--primary)" />
-                           <span className="text-xs text-muted-foreground">
-                              {group.percentComplete}%
-                           </span>
-                        </div>
-                        {group.projects.map((project) => (
+
+                  {/* Grupos e barras */}
+                  <div className="relative z-[5] pb-8" style={{ minHeight: height }}>
+                     {showDependencies && (
+                        <DependencyArrows
+                           dependencies={dependencies}
+                           boundsById={boundsById}
+                           topById={topById}
+                           width={totalWidth}
+                           height={height}
+                        />
+                     )}
+                     {groups.map((group) => (
+                        <div key={group.id}>
                            <div
-                              key={project.id}
-                              className="relative flex items-center"
-                              style={{ height: ROW_HEIGHT }}
+                              className="sticky left-0 flex w-screen max-w-full items-center gap-2 border-y border-border/40 bg-[color-mix(in_oklab,var(--accent)_30%,var(--container))] px-4 text-sm font-medium"
+                              style={{
+                                 height: GROUP_HEADER_HEIGHT,
+                                 paddingLeft: 16 + group.depth * 16,
+                              }}
                            >
-                              {isValidProjectDate(project.startDate) && (
-                                 <RoadmapBar
-                                    project={project}
-                                    monthWidth={monthWidth}
-                                    milestones={milestonesByProject.get(project.id) ?? []}
-                                    blockedBy={blockedByProject.get(project.id) ?? []}
-                                    showMilestones={showMilestones}
-                                    onReschedule={reschedule}
+                              {group.icon ? (
+                                 <InitiativeGlyph
+                                    icon={group.icon}
+                                    color={initiatives.find((i) => i.id === group.id)?.iconColor}
+                                    className="size-3.5"
                                  />
+                              ) : (
+                                 <Compass className="size-3.5 text-muted-foreground" />
                               )}
-                              {showProjectList && (
-                                 <div
-                                    className="sticky left-0 z-10 flex h-full shrink-0 items-center gap-1 border-r border-border/40 bg-container/95 px-[13px] pr-[10px] text-[13px] font-medium leading-4 backdrop-blur-sm"
-                                    style={{ width: LIST_WIDTH }}
-                                 >
-                                    <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-md">
-                                       <project.icon className="size-4" />
-                                    </span>
-                                    <span className="flex-1 truncate">{project.name}</span>
-                                    <span
-                                       className="size-2 shrink-0 rounded-full"
-                                       style={{ backgroundColor: healthColor(project.health.id) }}
-                                    />
-                                    {project.lead && (
-                                       <Avatar className="size-4 shrink-0">
-                                          <AvatarImage
-                                             src={project.lead.avatarUrl || undefined}
-                                             alt={project.lead.name}
-                                          />
-                                          <AvatarFallback>{project.lead.name[0]}</AvatarFallback>
-                                       </Avatar>
-                                    )}
-                                 </div>
-                              )}
+                              <span className="truncate">{group.name}</span>
+                              <span className="text-xs text-muted-foreground">
+                                 {group.completedProjectCount}/{group.projectCount}
+                              </span>
+                              <CapacityRing value={group.percentComplete} color="var(--primary)" />
+                              <span className="text-xs text-muted-foreground">
+                                 {group.percentComplete}%
+                              </span>
                            </div>
-                        ))}
-                     </div>
-                  ))}
+                           {group.projects.map((project) => (
+                              <div
+                                 key={project.id}
+                                 className="relative flex items-center"
+                                 style={{ height: ROW_HEIGHT }}
+                              >
+                                 {isValidProjectDate(project.startDate) && (
+                                    <RoadmapBar
+                                       project={project}
+                                       monthWidth={monthWidth}
+                                       milestones={milestonesByProject.get(project.id) ?? []}
+                                       blockedBy={blockedByProject.get(project.id) ?? []}
+                                       showMilestones={showMilestones}
+                                       onReschedule={reschedule}
+                                       onOpen={openProject}
+                                    />
+                                 )}
+                                 {showProjectList && (
+                                    <button
+                                       type="button"
+                                       onClick={() => openProject(project.id)}
+                                       className="sticky left-0 z-10 flex h-full shrink-0 items-center gap-1 border-r border-border/40 bg-container/95 px-[13px] pr-[10px] text-left text-[13px] font-medium leading-4 backdrop-blur-sm transition-colors hover:bg-accent/50"
+                                       style={{ width: LIST_WIDTH }}
+                                    >
+                                       <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-md">
+                                          <project.icon className="size-4" />
+                                       </span>
+                                       <span className="flex-1 truncate">{project.name}</span>
+                                       <span
+                                          className="size-2 shrink-0 rounded-full"
+                                          style={{ backgroundColor: healthColor(project.health.id) }}
+                                       />
+                                       {project.lead && (
+                                          <Avatar className="size-4 shrink-0">
+                                             <AvatarImage
+                                                src={project.lead.avatarUrl || undefined}
+                                                alt={project.lead.name}
+                                             />
+                                             <AvatarFallback>{project.lead.name[0]}</AvatarFallback>
+                                          </Avatar>
+                                       )}
+                                    </button>
+                                 )}
+                              </div>
+                           ))}
+                        </div>
+                     ))}
+                  </div>
                </div>
             </div>
          </div>

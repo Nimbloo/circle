@@ -22,8 +22,11 @@ vi.mock('@/lib/client', () => ({
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
+const push = vi.hoisted(() => vi.fn());
+
 vi.mock('next/navigation', () => ({
    useParams: () => ({ orgId: 'nimbloo' }),
+   useRouter: () => ({ push }),
 }));
 
 const MOTHER = makeProject({ id: 'p-mother', name: 'Design system' });
@@ -115,6 +118,7 @@ const RENDER_GROUPS: RoadmapRenderGroup[] = [
 
 beforeEach(() => {
    apiMocks.roadmap.mockReset();
+   push.mockClear();
    useWorkspaceStore.setState({ projects: [MOTHER, CHILD, LOOSE], loaded: true });
    useRoadmapDisplayStore.setState({
       zoom: 'quarter',
@@ -209,6 +213,50 @@ describe('Roadmap — marcos, setas e alerta de dependência (#102)', () => {
    it('sem grupos mostra o vazio honesto', () => {
       renderTimeline({ groups: [], milestones: [], dependencies: [] });
       expect(screen.getByText(/No projects to plot/i)).toBeTruthy();
+   });
+});
+
+describe('Roadmap — abrir o projeto e navegação (pl#10)', () => {
+   const renderTimeline = (props: Partial<React.ComponentProps<typeof RoadmapTimeline>> = {}) =>
+      render(
+         <RoadmapTimeline
+            groups={RENDER_GROUPS}
+            milestones={[]}
+            dependencies={[]}
+            zoom="quarter"
+            showDependencies
+            showMilestones
+            showProjectList
+            {...props}
+         />
+      );
+
+   it('clicar na barra (sem arrastar) navega para o projeto', () => {
+      renderTimeline();
+      fireEvent.pointerDown(screen.getByTestId('roadmap-bar-p-mother'), { pointerId: 1, button: 0 });
+      fireEvent.pointerUp(screen.getByTestId('roadmap-bar-p-mother'), { pointerId: 1, button: 0 });
+      expect(push).toHaveBeenCalledWith('/nimbloo/project/p-mother/overview');
+   });
+
+   it('clicar no nome na lista fixa também navega para o projeto', () => {
+      renderTimeline();
+      const button = screen
+         .getAllByText('Icon set')
+         .map((el) => el.closest('button'))
+         .find((el) => el && !el.dataset.testid?.startsWith('roadmap-bar-'));
+      fireEvent.click(button!);
+      expect(push).toHaveBeenCalledWith('/nimbloo/project/p-child/overview');
+   });
+
+   it('o botão "Today" existe e rola até hoje', () => {
+      renderTimeline();
+      expect(screen.getByRole('button', { name: 'Today' })).toBeTruthy();
+   });
+
+   it('zoom "week" mostra o ano em todo mês, não só em janeiro', () => {
+      renderTimeline({ zoom: 'week' });
+      // Fevereiro de 2026 aparece com o ano ao lado (não só "fev.").
+      expect(screen.getAllByText(/fev\.?\s*2026/i).length).toBeGreaterThan(0);
    });
 });
 
