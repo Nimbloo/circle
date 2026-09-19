@@ -290,7 +290,11 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
       setEditingTitle(false);
       if (!next || next === displayTitle) return;
       if (inStore) {
-         useIssuesStore.getState().updateIssue(issue.id, { title: next });
+         // Store reverte + toast no erro; sem rejeição solta (Is#13).
+         void useIssuesStore
+            .getState()
+            .updateIssue(issue.id, { title: next })
+            .catch(() => undefined);
       } else {
          setLocalTitle(next);
          try {
