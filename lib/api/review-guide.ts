@@ -180,6 +180,9 @@ export function parseGuideResponse(text: string, files: GuideFile[]): GuideSecti
    return sections;
 }
 
+/** Gerações em curso por review (processo). */
+const inFlight = new Map<string, Promise<ReviewGuideDto>>();
+
 /**
  * Gera e persiste o guia do review. 404 sem review; 409 sem arquivos ingeridos (não há
  * diff para narrar); 502 resposta inutilizável; 503 Bedrock indisponível/não configurado.
@@ -197,9 +200,6 @@ export async function generateReviewGuide(
    inFlight.set(id, run);
    return run;
 }
-
-/** Gerações em curso por review (processo). */
-const inFlight = new Map<string, Promise<ReviewGuideDto>>();
 
 async function generate(db: Db, id: string, opts: GenerateGuideOptions): Promise<ReviewGuideDto> {
    const [row] = await db.select().from(review).where(eq(review.id, id)).limit(1);

@@ -2,6 +2,11 @@ import type { DiffLine } from '@/data/reviews';
 
 const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 
+const EMPTY: DiffLine[] = [];
+/** Teto de patches memoizados (FIFO): cobre alguns PRs grandes abertos na sessão. */
+const CACHE_LIMIT = 500;
+const cache = new Map<string, DiffLine[]>();
+
 /**
  * Converte o `patch` unified que o GitHub devolve por arquivo (só hunks, sem cabeçalho
  * `---/+++`) nas linhas que o `DiffView` renderiza. Entre hunks entra uma linha `skip`
@@ -20,11 +25,6 @@ export function patchToLines(patch: string | null | undefined): DiffLine[] {
    cache.set(patch, lines);
    return lines;
 }
-
-const EMPTY: DiffLine[] = [];
-/** Teto de patches memoizados (FIFO): cobre alguns PRs grandes abertos na sessão. */
-const CACHE_LIMIT = 500;
-const cache = new Map<string, DiffLine[]>();
 
 function parse(patch: string): DiffLine[] {
    const out: DiffLine[] = [];
