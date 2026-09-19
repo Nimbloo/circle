@@ -38,7 +38,7 @@ import {
    X,
 } from 'lucide-react';
 import type { ComponentType, CSSProperties } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 import { persistNewProject, type CreateProgress } from './create-project-persist';
 import { toast } from 'sonner';
 
@@ -52,19 +52,30 @@ interface DraftMilestone {
    targetDate: string;
 }
 
-/** Chip clicável (mesma linguagem visual dos chips do New Issue / inline initiative). */
-function Chip({ active, children }: { active?: boolean; children: React.ReactNode }) {
+/**
+ * Chip clicável (mesma linguagem visual dos chips do New Issue / inline initiative).
+ * `button` com ref e props repassados: o `PopoverTrigger asChild` precisa deles para
+ * abrir, e o Tab passa a percorrer as propriedades.
+ */
+const Chip = forwardRef<
+   HTMLButtonElement,
+   { active?: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>
+>(function Chip({ active, className, children, ...props }, ref) {
    return (
-      <span
+      <button
+         ref={ref}
+         type="button"
+         {...props}
          className={cn(
-            'inline-flex items-center gap-1.5 h-7 px-2 rounded-md border text-xs transition-colors cursor-pointer hover:bg-accent/50',
-            active ? 'text-foreground' : 'text-muted-foreground'
+            'inline-flex items-center gap-1.5 h-7 px-2 rounded-md border text-xs transition-colors cursor-pointer hover:bg-accent/50 outline-none focus-visible:ring-1 focus-visible:ring-ring',
+            active ? 'text-foreground' : 'text-muted-foreground',
+            className
          )}
       >
          {children}
-      </span>
+      </button>
    );
-}
+});
 
 /**
  * Modal de criação de projeto no padrão Linear: breadcrumb de time + título grande
