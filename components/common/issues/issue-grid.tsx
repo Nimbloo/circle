@@ -2,13 +2,12 @@
 
 import { Issue } from '@/data/issues';
 import { useDisplaySetting } from '@/store/display-settings-store';
-import { useIssuesStore } from '@/store/issues-store';
 import { format } from 'date-fns';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { motion } from 'motion/react';
 import { memo, useEffect, useRef } from 'react';
-import { DragSourceMonitor, useDrag, useDragLayer, useDrop } from 'react-dnd';
+import { DragSourceMonitor, useDrag, useDragLayer } from 'react-dnd';
 import { getEmptyImage } from 'react-dnd-html5-backend';
 import { AssigneeUser } from './assignee-user';
 import { LabelBadge } from './label-badge';
@@ -20,15 +19,15 @@ import { ParentIssueChip } from './parent-issue-chip';
 import { SlaBadge } from './sla-badge';
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { IssueContextMenu } from './issue-context-menu';
+import type { IssueGroupContext } from './group-issues';
+import { IssueDragType, useIssueDropTarget } from './use-issue-drop-target';
 
-export const IssueDragType = 'ISSUE';
-/** Resultado retornado pelo drop do card → o container (GroupIssues) lê `didDrop()`. */
-type IssueDropResult = { handled: true };
+export { IssueDragType };
 type IssueGridProps = {
    issue: Issue;
-   /** Lê as issues do grupo na ordem de exibição (asc rank) — vizinhos no reorder. Getter
-    *  estável (não o array), para o drop não re-registrar a cada mudança do grupo. */
-   getOrderedIssues: () => Issue[];
+   /** Grupo do card e suas issues — lido no drop (reorder/move). Getter estável (não o
+    *  array), para o drop não re-registrar a cada mudança do grupo. */
+   getGroup: () => IssueGroupContext;
    /** Animação de layout do motion (layoutId). Desligada na coluna virtualizada
     *  (o mount/unmount da virtualização brigaria com a animação de layout). */
    layout?: boolean;
@@ -92,12 +91,10 @@ export function CustomDragLayer() {
    );
 }
 
-function IssueGridComponent({ issue, getOrderedIssues, layout = true }: IssueGridProps) {
+function IssueGridComponent({ issue, getGroup, layout = true }: IssueGridProps) {
    const ref = useRef<HTMLDivElement>(null);
    const { orgId } = useParams<{ orgId: string }>();
    const displayProperties = useDisplaySetting('displayProperties');
-   const reorderIssue = useIssuesStore((s) => s.reorderIssue);
-   const updateIssueStatus = useIssuesStore((s) => s.updateIssueStatus);
 
    // Set up drag functionality.
    // Deps [issue]: sem elas o item arrastado ficava congelado na 1ª versão da issue.
@@ -117,40 +114,9 @@ function IssueGridComponent({ issue, getOrderedIssues, layout = true }: IssueGri
       preview(getEmptyImage(), { captureDraggingState: true });
    }, [preview]);
 
-   // Drop sobre um card: reordena (mesmo grupo) ou muda status (grupo diferente).
-   // Retornar um resultado sinaliza `monitor.didDrop()` ao container, que só aplica
-   // status quando o drop caiu na área vazia do grupo (nenhum card tratou).
-   const [, drop] = useDrop<Issue, IssueDropResult, unknown>(
-      () => ({
-         accept: IssueDragType,
-         drop(item, monitor): IssueDropResult | undefined {
-            if (item.id === issue.id) return { handled: true };
-
-            // Grupo diferente: adota o status do card-alvo (equivale ao drop no grupo).
-            if (item.status.id !== issue.status.id) {
-               updateIssueStatus(item.id, issue.status);
-               return { handled: true };
-            }
-
-            // Mesmo grupo: reordena por rank entre os vizinhos do alvo (exclui o arrastado).
-            const list = getOrderedIssues().filter((i) => i.id !== item.id);
-            const targetIdx = list.findIndex((i) => i.id === issue.id);
-            if (targetIdx === -1) return { handled: true };
-
-            const rect = ref.current?.getBoundingClientRect();
-            const pointerY = monitor.getClientOffset()?.y ?? 0;
-            const dropAbove = rect ? pointerY < rect.top + rect.height / 2 : false;
-
-            // asc(rank): index menor = rank menor = acima. beforeId = vizinho de rank menor,
-            // afterId = vizinho de rank maior (rankBetween grava um rank entre os dois).
-            const beforeId = dropAbove ? (list[targetIdx - 1]?.id ?? null) : issue.id;
-            const afterId = dropAbove ? issue.id : (list[targetIdx + 1]?.id ?? null);
-            reorderIssue(item.id, beforeId, afterId);
-            return { handled: true };
-         },
-      }),
-      [issue, getOrderedIssues, reorderIssue, updateIssueStatus]
-   );
+   // Drop sobre o card: reorder no grupo ou campo do agrupamento (R2). O resultado
+   // sinaliza `didDrop()` ao container, que então não trata de novo.
+   const drop = useIssueDropTarget(issue.id, getGroup, ref);
 
    // Connect drag and drop to the element.
    drag(drop(ref));
@@ -233,5 +199,5 @@ function IssueGridComponent({ issue, getOrderedIssues, layout = true }: IssueGri
 }
 
 /** Memoizado: um evento de outra issue não re-renderiza os cards montados (#2). As props
- *  são estáveis — a issue inalterada mantém a referência e `getOrderedIssues` é getter. */
+ *  são estáveis — a issue inalterada mantém a referência e `getGroup` é getter. */
 export const IssueGrid = memo(IssueGridComponent);

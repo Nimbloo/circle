@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { IssueLine } from '@/components/common/issues/issue-line';
+import type { IssueGroupContext } from '@/components/common/issues/group-issues';
 import type { Issue } from '@/data/issues';
 import { labels } from '@/data/labels';
 import { priorities } from '@/data/priorities';
@@ -78,10 +79,10 @@ const makeIssue = (over: Partial<Issue> & { id: string }): Issue => ({
 });
 
 /** A linha lê a issue do store — como as listas reais (re-render após a mutação). */
-function Row({ id, getOrderedIssues }: { id: string; getOrderedIssues?: () => Issue[] }) {
+function Row({ id, getGroup }: { id: string; getGroup?: () => IssueGroupContext }) {
    const issue = useIssuesStore((s) => s.issues.find((i) => i.id === id));
    if (!issue) return null;
-   return <IssueLine issue={issue} getOrderedIssues={getOrderedIssues} />;
+   return <IssueLine issue={issue} getGroup={getGroup} />;
 }
 
 const storeIssue = (id: string) => useIssuesStore.getState().getIssueById(id)!;
@@ -192,12 +193,20 @@ describe('IssueLine — drag-and-drop no modo lista', () => {
       useWorkspaceStore.setState({ users: [], projects: [], cycles: [] });
    });
 
+   // Agrupado por status (como a lista real): cada linha lê o grupo do próprio status.
    function Harness() {
       const issues = useIssuesStore((s) => s.issues);
+      const groupOf = (statusId: string): IssueGroupContext => {
+         const st = status.find((x) => x.id === statusId)!;
+         return {
+            group: { id: st.id, name: st.name, icon: null, drop: { field: 'status', status: st } },
+            issues: issues.filter((i) => i.status.id === statusId),
+         };
+      };
       return (
          <DndProvider backend={HTML5Backend}>
             {issues.map((issue) => (
-               <Row key={issue.id} id={issue.id} getOrderedIssues={() => issues} />
+               <Row key={issue.id} id={issue.id} getGroup={() => groupOf(issue.status.id)} />
             ))}
          </DndProvider>
       );

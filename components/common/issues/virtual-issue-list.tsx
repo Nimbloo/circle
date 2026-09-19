@@ -3,21 +3,53 @@
 import { useCallback, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { Issue } from '@/data/issues';
+import { cn } from '@/lib/utils';
 import { IssueLine } from './issue-line';
-import type { IssueGroupDescriptor } from './group-issues';
+import type { IssueGroupContext, IssueGroupDescriptor } from './group-issues';
+import { useGroupDropTarget } from './use-issue-drop-target';
 
 interface Entry {
    group: IssueGroupDescriptor;
    issues: Issue[];
 }
 
+type GroupGetter = () => IssueGroupContext;
+
 /** Linha virtual: um header de grupo OU uma issue. */
 type Row =
-   | { kind: 'header'; group: IssueGroupDescriptor; count: number }
-   | { kind: 'issue'; groupId: string; issue: Issue; getOrderedIssues: () => Issue[] };
+   | { kind: 'header'; group: IssueGroupDescriptor; count: number; getGroup: GroupGetter }
+   | { kind: 'issue'; groupId: string; issue: Issue; getGroup: GroupGetter };
 
 export const ISSUE_GROUP_HEADER_HEIGHT = 36;
 export const ISSUE_ROW_HEIGHT = 44;
+
+/** Header do grupo: também é alvo de drop — grupo vazio (show empty groups) aceita issue. */
+function GroupHeader({
+   group,
+   count,
+   getGroup,
+}: {
+   group: IssueGroupDescriptor;
+   count: number;
+   getGroup: GroupGetter;
+}) {
+   const ref = useRef<HTMLDivElement>(null);
+   const [{ isOver }, drop] = useGroupDropTarget(getGroup);
+   drop(ref);
+   return (
+      <div
+         ref={ref}
+         className={cn(
+            'mx-2 flex h-9 items-center gap-2 rounded-lg bg-muted px-2',
+            isOver && 'ring-1 ring-primary'
+         )}
+      >
+         {group.icon}
+         <span className="text-[13px] font-medium">{group.name}</span>
+         <span className="text-xs tabular-nums text-muted-foreground">{count}</span>
+      </div>
+   );
+}
 
 /**
  * List view VIRTUALIZADA (estilo Linear): achata [header, ...rows, header, ...] numa
@@ -28,14 +60,18 @@ export const ISSUE_ROW_HEIGHT = 44;
  */
 export function VirtualIssueList({ entries }: { entries: Entry[] }) {
    const parentRef = useRef<HTMLDivElement>(null);
-   // Getter ESTÁVEL por grupo (lê a ordem atual no drop): passar o array do grupo mudava
-   // a prop de todas as linhas a cada evento e derrubava o `memo` da `IssueLine`.
-   const issuesByGroup = useRef(new Map<string, Issue[]>());
-   const getters = useRef(new Map<string, () => Issue[]>());
+   // Getter ESTÁVEL por grupo (lê grupo e ordem atuais no drop): passar o array do grupo
+   // mudava a prop de todas as linhas a cada evento e derrubava o `memo` da `IssueLine`.
+   const groupsById = useRef(new Map<string, IssueGroupContext>());
+   const getters = useRef(new Map<string, GroupGetter>());
    const getterFor = useCallback((groupId: string) => {
       let getter = getters.current.get(groupId);
       if (!getter) {
-         getter = () => issuesByGroup.current.get(groupId) ?? [];
+         getter = () =>
+            groupsById.current.get(groupId) ?? {
+               group: { id: groupId, name: '', icon: null },
+               issues: [],
+            };
          getters.current.set(groupId, getter);
       }
       return getter;
@@ -43,12 +79,12 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
 
    const rows = useMemo<Row[]>(() => {
       const out: Row[] = [];
-      issuesByGroup.current = new Map(entries.map((e) => [e.group.id, e.issues]));
+      groupsById.current = new Map(entries.map((e) => [e.group.id, e]));
       for (const e of entries) {
-         out.push({ kind: 'header', group: e.group, count: e.issues.length });
-         const getOrderedIssues = getterFor(e.group.id);
+         const getGroup = getterFor(e.group.id);
+         out.push({ kind: 'header', group: e.group, count: e.issues.length, getGroup });
          for (const issue of e.issues)
-            out.push({ kind: 'issue', groupId: e.group.id, issue, getOrderedIssues });
+            out.push({ kind: 'issue', groupId: e.group.id, issue, getGroup });
       }
       return out;
    }, [entries, getterFor]);
@@ -88,21 +124,11 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
                      }}
                   >
                      {row.kind === 'header' ? (
-                        <div className="mx-2 flex h-9 items-center gap-2 rounded-lg bg-muted px-2">
-                           {row.group.icon}
-                           <span className="text-[13px] font-medium">{row.group.name}</span>
-                           <span className="text-xs tabular-nums text-muted-foreground">
-                              {row.count}
-                           </span>
-                        </div>
+                        <GroupHeader group={row.group} count={row.count} getGroup={row.getGroup} />
                      ) : (
                         // layoutId=false: sem animação de layout do framer-motion (brigaria
                         // com o mount/unmount da virtualização).
-                        <IssueLine
-                           issue={row.issue}
-                           getOrderedIssues={row.getOrderedIssues}
-                           layoutId={false}
-                        />
+                        <IssueLine issue={row.issue} getGroup={row.getGroup} layoutId={false} />
                      )}
                   </div>
                );

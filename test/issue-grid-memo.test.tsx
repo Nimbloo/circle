@@ -53,16 +53,14 @@ function Column() {
    const issues = useIssuesStore((s) => s.issues);
    const latest = React.useRef(issues);
    latest.current = issues;
-   const getOrderedIssues = React.useCallback(() => latest.current, []);
+   const getGroup = React.useCallback(
+      () => ({ group: { id: 'g', name: 'G', icon: null }, issues: latest.current }),
+      []
+   );
    return (
       <>
          {issues.map((issue) => (
-            <IssueGrid
-               key={issue.id}
-               issue={issue}
-               getOrderedIssues={getOrderedIssues}
-               layout={false}
-            />
+            <IssueGrid key={issue.id} issue={issue} getGroup={getGroup} layout={false} />
          ))}
       </>
    );

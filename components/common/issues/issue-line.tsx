@@ -19,7 +19,8 @@ import { StatusSelector } from './status-selector';
 import { SubIssueProgress } from './sub-issue-progress';
 import { ParentIssueChip } from './parent-issue-chip';
 import { SlaBadge } from './sla-badge';
-import { IssueDragType } from './issue-grid';
+import type { IssueGroupContext } from './group-issues';
+import { IssueDragType, useIssueDropTarget } from './use-issue-drop-target';
 import { LabelSelector } from '@/components/layout/sidebar/create-new-issue/label-selector';
 import { ProjectSelector } from '@/components/layout/sidebar/create-new-issue/project-selector';
 import { EstimateSelector } from '@/components/layout/sidebar/create-new-issue/estimate-selector';
@@ -27,7 +28,7 @@ import { DueDateSelector } from '@/components/layout/sidebar/create-new-issue/du
 import { estimateLabel, normalizeScale } from '@/data/estimate-scales';
 import { motion } from 'motion/react';
 import { memo, useEffect, useRef, type Ref } from 'react';
-import { DragSourceMonitor, useDrag, useDrop } from 'react-dnd';
+import { DragSourceMonitor, useDrag } from 'react-dnd';
 import { getEmptyImage } from 'react-dnd-html5-backend';
 
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
@@ -37,15 +38,13 @@ interface IssueLineProps {
    issue: Issue;
    layoutId?: boolean;
    /**
-    * Lê as issues do grupo na ordem de exibição — liga o drag-and-drop da linha (reordenar
-    * no grupo; soltar em outro grupo de status muda o status). Ausente (busca, listas fora
-    * de um `DndProvider`): linha estática. É um getter ESTÁVEL (não o array): o array muda
-    * a cada evento e derrubaria o `memo` de todas as linhas do grupo.
+    * Grupo da linha e suas issues — liga o drag-and-drop (reordenar no grupo; soltar em
+    * outro grupo aplica o campo do agrupamento). Ausente (busca, listas fora de um
+    * `DndProvider`): linha estática. É um getter ESTÁVEL (não o array): o array muda a
+    * cada evento e derrubaria o `memo` de todas as linhas do grupo.
     */
-   getOrderedIssues?: () => Issue[];
+   getGroup?: () => IssueGroupContext;
 }
-
-type IssueDropResult = { handled: true };
 
 /** Chip de propriedade clicável (padrão Linear): mesmo visual do badge, abre o seletor. */
 const propertyChipClass =
@@ -244,21 +243,19 @@ function IssueRow({
 
 /**
  * Linha arrastável (mesmo protocolo do card do board, `issue-grid.tsx`): soltar sobre
- * outra linha reordena por rank entre os vizinhos; soltar sobre linha de outro status
- * adota o status dela. Exige um `DndProvider` acima (grouped-issues-view).
+ * outra linha do grupo reordena por rank; sobre linha de outro grupo aplica o campo do
+ * agrupamento (`useIssueDropTarget`). Exige um `DndProvider` acima (grouped-issues-view).
  */
 function DraggableIssueRow({
    issue,
    layoutId,
-   getOrderedIssues,
+   getGroup,
 }: {
    issue: Issue;
    layoutId?: boolean;
-   getOrderedIssues: () => Issue[];
+   getGroup: () => IssueGroupContext;
 }) {
    const ref = useRef<HTMLDivElement>(null);
-   const reorderIssue = useIssuesStore((s) => s.reorderIssue);
-   const updateIssueStatus = useIssuesStore((s) => s.updateIssueStatus);
 
    const [{ isDragging }, drag, preview] = useDrag(
       () => ({
@@ -274,45 +271,15 @@ function DraggableIssueRow({
       preview(getEmptyImage(), { captureDraggingState: true });
    }, [preview]);
 
-   const [, drop] = useDrop<Issue, IssueDropResult, unknown>(
-      () => ({
-         accept: IssueDragType,
-         drop(item, monitor): IssueDropResult | undefined {
-            if (item.id === issue.id) return { handled: true };
-
-            // Grupo diferente: adota o status da linha-alvo.
-            if (item.status.id !== issue.status.id) {
-               void updateIssueStatus(item.id, issue.status).catch(() => undefined);
-               return { handled: true };
-            }
-
-            // Mesmo grupo: reordena por rank entre os vizinhos do alvo (exclui o arrastado).
-            const list = getOrderedIssues().filter((i) => i.id !== item.id);
-            const targetIdx = list.findIndex((i) => i.id === issue.id);
-            if (targetIdx === -1) return { handled: true };
-
-            const rect = ref.current?.getBoundingClientRect();
-            const pointerY = monitor.getClientOffset()?.y ?? 0;
-            const dropAbove = rect ? pointerY < rect.top + rect.height / 2 : false;
-
-            // asc(rank): index menor = rank menor = acima.
-            const beforeId = dropAbove ? (list[targetIdx - 1]?.id ?? null) : issue.id;
-            const afterId = dropAbove ? issue.id : (list[targetIdx + 1]?.id ?? null);
-            reorderIssue(item.id, beforeId, afterId);
-            return { handled: true };
-         },
-      }),
-      [issue, getOrderedIssues, reorderIssue, updateIssueStatus]
-   );
-
+   const drop = useIssueDropTarget(issue.id, getGroup, ref);
    drag(drop(ref));
 
    return <IssueRow ref={ref} issue={issue} layoutId={layoutId} dragging={isDragging} />;
 }
 
-function IssueLineComponent({ issue, layoutId = false, getOrderedIssues }: IssueLineProps) {
-   return getOrderedIssues ? (
-      <DraggableIssueRow issue={issue} layoutId={layoutId} getOrderedIssues={getOrderedIssues} />
+function IssueLineComponent({ issue, layoutId = false, getGroup }: IssueLineProps) {
+   return getGroup ? (
+      <DraggableIssueRow issue={issue} layoutId={layoutId} getGroup={getGroup} />
    ) : (
       <IssueRow issue={issue} layoutId={layoutId} />
    );

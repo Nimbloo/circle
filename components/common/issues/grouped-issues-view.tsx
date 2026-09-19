@@ -273,6 +273,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                            ) : (
                               <User className="size-4 text-muted-foreground" />
                            ),
+                           drop: { field: 'assignee', assignee: assignee ?? null },
                         },
                         issues: visible.get(key) ?? [],
                         total: totalGroup.length,
@@ -285,6 +286,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                      id: priority.id,
                      name: priority.name,
                      icon: <priority.icon className="size-4 text-muted-foreground" />,
+                     drop: { field: 'priority', priority },
                   },
                   issues: visibleIssues.filter((issue) => issue.priority.id === priority.id),
                   total: scopeIssues.filter((issue) => issue.priority.id === priority.id).length,
@@ -304,6 +306,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                            id: key,
                            name: project?.name ?? 'No project',
                            icon: <Icon className="size-4 text-muted-foreground" />,
+                           drop: { field: 'project', project },
                         },
                         issues: visible.get(key) ?? [],
                         total: totalGroup.length,
@@ -361,6 +364,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                      name: statusItem.name,
                      icon: <statusItem.icon />,
                      status: statusItem,
+                     drop: { field: 'status', status: statusItem },
                   },
                   issues: visibleIssues.filter((issue) => issue.status.id === statusItem.id),
                   total: scopeIssues.filter((issue) => issue.status.id === statusItem.id).length,
