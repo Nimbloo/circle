@@ -38,7 +38,8 @@ import {
    X,
 } from 'lucide-react';
 import type { ComponentType, CSSProperties } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { persistNewProject, type CreateProgress } from './create-project-persist';
 import { toast } from 'sonner';
 
 /** Status icons são uma união (Lucide | Remixicon); o cast expõe className/style. */
@@ -84,6 +85,8 @@ export function CreateProjectButton() {
 
    const [open, setOpen] = useState(false);
    const [busy, setBusy] = useState(false);
+   // Criação que falhou no meio sem conseguir compensar: o retry retoma daqui.
+   const progress = useRef<CreateProgress | null>(null);
 
    const [name, setName] = useState('');
    const [summary, setSummary] = useState('');
@@ -144,6 +147,7 @@ export function CreateProjectButton() {
    };
 
    const reset = () => {
+      progress.current = null;
       setName('');
       setSummary('');
       setDescriptionDoc(null);
@@ -181,33 +185,33 @@ export function CreateProjectButton() {
       }
       setBusy(true);
       try {
-         const project = await api.projects.create({
-            name: name.trim(),
-            teamId,
-            statusId,
-            priorityId,
-            healthId,
-            leadId,
-            startDate: startDate || null,
-            targetDate: targetDate || null,
-            initiativeId,
-            labelIds,
-         });
-         // Conteúdo editorial (summary + description) e milestones em chamadas dedicadas.
+         // Conteúdo editorial (summary + description) e milestones em chamadas dedicadas,
+         // com compensação: falha no meio não deixa projeto duplicado no retry (#42).
          // O servidor deriva a projeção em blocos do doc (e zera quando o doc está vazio).
-         if (summary.trim() || descriptionDoc) {
-            await api.projects.updateDetail(project.id, {
-               summary: summary.trim() || null,
-               descriptionDoc: descriptionDoc ?? null,
-            });
-         }
-         for (const m of milestones) {
-            if (m.name.trim())
-               await api.projects.addMilestone(project.id, {
-                  name: m.name.trim(),
-                  targetDate: m.targetDate || null,
-               });
-         }
+         const project = await persistNewProject(
+            {
+               input: {
+                  name: name.trim(),
+                  teamId,
+                  statusId,
+                  priorityId,
+                  healthId,
+                  leadId,
+                  startDate: startDate || null,
+                  targetDate: targetDate || null,
+                  initiativeId,
+                  labelIds,
+               },
+               detail:
+                  summary.trim() || descriptionDoc
+                     ? { summary: summary.trim() || null, descriptionDoc: descriptionDoc ?? null }
+                     : null,
+               milestones: milestones
+                  .filter((m) => m.name.trim())
+                  .map((m) => ({ name: m.name.trim(), targetDate: m.targetDate || null })),
+            },
+            progress
+         );
          applyProject(project);
          // Fecha PRIMEIRO (o reset durante a animação de fechamento evita o flash
          // do formulário limpo antes do modal sumir).
