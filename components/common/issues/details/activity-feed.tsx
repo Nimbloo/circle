@@ -1,7 +1,17 @@
 'use client';
 
+import {
+   AlertDialog,
+   AlertDialogAction,
+   AlertDialogCancel,
+   AlertDialogContent,
+   AlertDialogDescription,
+   AlertDialogFooter,
+   AlertDialogHeader,
+   AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
    DropdownMenu,
    DropdownMenuContent,
@@ -11,7 +21,7 @@ import {
 import { ActivityItem, CommentReaction } from '@/data/issue-details';
 import type { User } from '@/data/users';
 import { api } from '@/lib/client';
-import { textToBlocks } from '@/lib/text-blocks';
+import { blocksToMarkdown, textToBlocks } from '@/lib/text-blocks';
 import { cn } from '@/lib/utils';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -98,7 +108,7 @@ function EventRow({ item }: { item: Extract<ActivityItem, { kind: 'event' }> }) 
 
 /** Patch otimista de um comentário (reação, edição, resolve) aplicado pelo dono do estado. */
 export type CommentPatch = Partial<
-   Pick<CommentItem, 'reactions' | 'body' | 'updatedAt' | 'resolvedAt' | 'resolvedBy'>
+   Pick<CommentItem, 'reactions' | 'body' | 'source' | 'updatedAt' | 'resolvedAt' | 'resolvedBy'>
 >;
 
 /** Reações depois de ligar/desligar `emoji` pelo usuário atual (espelha o servidor). */
@@ -119,12 +129,26 @@ function toggleReaction(
    return [...list, { emoji, count: 1, reactedByMe: true }];
 }
 
-/** Junta os parágrafos de um comentário em texto plano (para edição). */
-function blocksToText(blocks: CommentItem['body']): string {
-   return blocks
-      .map((b) => (b.type === 'paragraph' ? b.text : ''))
-      .filter(Boolean)
-      .join('\n\n');
+/**
+ * Texto (markdown) editável do comentário. Parte do original quando o DTO o trouxe; senão
+ * serializa TODOS os blocos — antes só os parágrafos voltavam e salvar apagava listas,
+ * código e citações (is#2).
+ */
+function commentText(item: CommentItem): string {
+   return item.source ?? blocksToMarkdown(item.body);
+}
+
+/** Primeira linha legível do comentário (resumo da thread resolvida). */
+function previewText(item: CommentItem): string {
+   for (const b of item.body) {
+      if ('text' in b && b.text) return b.text;
+      if ('items' in b && b.items.length > 0) {
+         const it = b.items[0];
+         return typeof it === 'string' ? it : it.text;
+      }
+      if (b.type === 'code') return b.code.split('\n')[0];
+   }
+   return '';
 }
 
 function CommentCard({
@@ -170,6 +194,7 @@ function CommentCard({
    const [busy, setBusy] = useState(false);
    const [picking, setPicking] = useState(false);
    const [replying, setReplying] = useState(false);
+   const [confirmingDelete, setConfirmingDelete] = useState(false);
    // Respostas: colapsadas por padrão quando > 2 (ou quando a thread está resolvida).
    const [expanded, setExpanded] = useState(false);
    const customEmojis = useCustomEmojis();
@@ -207,18 +232,22 @@ function CommentCard({
    };
 
    const startEdit = () => {
-      setDraft(blocksToText(item.body));
+      setDraft(commentText(item));
       setEditing(true);
    };
 
    const save = async () => {
       const text = draft.trim();
       if (!text || busy) return;
-      const prev = { body: item.body, updatedAt: item.updatedAt };
+      const prev = { body: item.body, source: item.source, updatedAt: item.updatedAt };
       if (onPatch) {
          // Otimista: o texto novo aparece na hora; falha volta o anterior e reabre a edição.
          onOwnAction?.();
-         onPatch(item.id, { body: textToBlocks(text), updatedAt: new Date().toISOString() });
+         onPatch(item.id, {
+            body: textToBlocks(text),
+            source: text,
+            updatedAt: new Date().toISOString(),
+         });
          setEditing(false);
       }
       setBusy(true);
@@ -279,7 +308,7 @@ function CommentCard({
     */
    const convertToSubIssue = async () => {
       if (!issueId || !issueContext?.teamId || busy) return;
-      const text = blocksToText(item.body);
+      const text = commentText(item);
       const [firstLine, ...rest] = text.split('\n');
       const title = firstLine.trim().slice(0, 255);
       if (!title) return;
@@ -340,7 +369,7 @@ function CommentCard({
       !expanded && (resolved ? replies.length > 0 : replies.length > COLLAPSE_REPLIES_ABOVE);
 
    return (
-      <div className={cn(!isReply && 'my-2')}>
+      <div className={cn(!isReply && 'my-2')} data-comment-id={item.id}>
          {resolved && !isReply && !expanded ? (
             // Raiz resolvida: linha compacta com check verde; clicar expande a thread.
             <button
@@ -352,7 +381,7 @@ function CommentCard({
                <CheckCircle2 className="size-4 shrink-0 text-green-500" />
                <span className="font-medium">{item.actor.name}</span>
                <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                  {blocksToText(item.body).split('\n')[0]}
+                  {previewText(item)}
                </span>
                <span className="shrink-0 text-xs text-muted-foreground">
                   Resolved{item.resolvedBy ? ` by ${item.resolvedBy.name}` : ''}
@@ -412,7 +441,7 @@ function CommentCard({
                               </button>
                               <button
                                  type="button"
-                                 onClick={() => void remove()}
+                                 onClick={() => setConfirmingDelete(true)}
                                  disabled={busy}
                                  aria-label="Delete comment"
                                  className="text-muted-foreground hover:text-destructive disabled:opacity-40"
@@ -462,9 +491,22 @@ function CommentCard({
                {editing ? (
                   <div className="flex flex-col gap-2">
                      <textarea
+                        aria-label="Edit comment"
+                        autoFocus
                         value={draft}
                         onChange={(e) => setDraft(e.target.value)}
-                        rows={2}
+                        onKeyDown={(e) => {
+                           // is#22: mesmos atalhos do composer — Ctrl/⌘+Enter salva, Esc cancela.
+                           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                              e.preventDefault();
+                              void save();
+                           } else if (e.key === 'Escape') {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setEditing(false);
+                           }
+                        }}
+                        rows={Math.min(12, Math.max(2, draft.split('\n').length))}
                         disabled={busy}
                         className="w-full resize-none rounded-md border bg-transparent p-2 text-sm outline-none focus:ring-1 focus:ring-accent disabled:opacity-60"
                      />
@@ -656,6 +698,31 @@ function CommentCard({
                )}
             </div>
          )}
+
+         {/* is#3: excluir pede confirmação — na raiz, as respostas vão junto. */}
+         <AlertDialog open={confirmingDelete} onOpenChange={setConfirmingDelete}>
+            <AlertDialogContent>
+               <AlertDialogHeader>
+                  <AlertDialogTitle>Delete comment?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                     {!isReply && replies.length > 0
+                        ? `This comment and its ${replies.length} ${
+                             replies.length === 1 ? 'reply' : 'replies'
+                          } will be permanently deleted.`
+                        : 'This comment will be permanently deleted.'}
+                  </AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                     className={buttonVariants({ variant: 'destructive' })}
+                     onClick={() => void remove()}
+                  >
+                     Delete
+                  </AlertDialogAction>
+               </AlertDialogFooter>
+            </AlertDialogContent>
+         </AlertDialog>
       </div>
    );
 }

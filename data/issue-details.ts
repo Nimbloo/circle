@@ -58,6 +58,8 @@ export type ActivityItem =
         actor: User;
         timeAgo: string;
         body: ContentBlock[];
+        /** Texto (markdown) original do comentário — a edição parte dele (is#2). */
+        source?: string;
         /** Comentário-pai (threading). undefined/null = raiz. */
         parentId?: string | null;
         /** Última edição (ISO); a UI mostra "edited" quando existe. */
