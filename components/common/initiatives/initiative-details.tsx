@@ -47,6 +47,7 @@ import { InitiativeIconPicker } from './initiative-icon-picker';
 import { InitiativePropertiesPanel } from './initiative-properties-panel';
 import { useInitiativePatch } from './use-initiative-patch';
 import { DetailSidePanel, DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
+import { healthColor } from '@/components/common/projects/progress-colors';
 
 const TABS = ['overview', 'activity', 'projects'] as const;
 const formatDay = (iso: string) => format(parseISO(iso), 'MMM d, yyyy');
@@ -517,9 +518,9 @@ function ActivityFeed({ initiativeId }: { initiativeId: string }) {
 /* ------------------------------- activity tab ----------------------------- */
 
 const UPDATE_HEALTHS = [
-   { id: 'on-track', label: 'On track', color: 'var(--chart-2)' },
-   { id: 'at-risk', label: 'At risk', color: 'var(--chart-4)' },
-   { id: 'off-track', label: 'Off track', color: 'var(--destructive)' },
+   { id: 'on-track', label: 'On track', color: healthColor('on-track') },
+   { id: 'at-risk', label: 'At risk', color: healthColor('at-risk') },
+   { id: 'off-track', label: 'Off track', color: healthColor('off-track') },
 ] as const;
 
 /** Activity da initiative: composer de update (health + texto) + feed. O health do

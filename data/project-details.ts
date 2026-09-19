@@ -22,9 +22,9 @@ export const projectUpdateHealthLabel: Record<ProjectUpdateHealth, string> = {
 };
 
 export const projectUpdateHealthColor: Record<ProjectUpdateHealth, string> = {
-   'on-track': '#4cb782',
-   'at-risk': '#f2c94c',
-   'off-track': '#eb5757',
+   'on-track': 'var(--health-on-track)',
+   'at-risk': 'var(--health-at-risk)',
+   'off-track': 'var(--health-off-track)',
 };
 
 /** A posted project update (the "Activity" tab timeline). */

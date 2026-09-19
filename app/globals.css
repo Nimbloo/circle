@@ -751,3 +751,17 @@ html[data-underline-links='true'] a[href]:not([role='button']):not(.no-underline
    height: 100%;
    border: 0;
 }
+
+/* Progresso (pl#12, frente P): Scope / Started / Completed com uma cor só em todo
+   gráfico e legenda de planejamento. Derivam de tokens do tema, então seguem light,
+   dark e as variantes. Health usa os `--health-*` já declarados acima. */
+:root {
+   --progress-scope: var(--muted-foreground);
+   --progress-started: var(--cycle-started);
+   --progress-completed: var(--primary);
+}
+@theme inline {
+   --color-progress-scope: var(--progress-scope);
+   --color-progress-started: var(--progress-started);
+   --color-progress-completed: var(--progress-completed);
+}

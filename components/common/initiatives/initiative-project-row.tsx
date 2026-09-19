@@ -3,6 +3,7 @@ import type { Project } from '@/data/projects';
 import { CalendarRange, X } from 'lucide-react';
 import Link from 'next/link';
 import React from 'react';
+import { healthColor } from '@/components/common/projects/progress-colors';
 
 interface InitiativeProjectRowProps {
    project: Project;
@@ -41,7 +42,7 @@ export function InitiativeProjectRow({ project, orgId, onRemove }: InitiativePro
             <span className="hidden w-16 shrink-0 sm:block">
                <span
                   className="inline-block size-2.5 rounded-full"
-                  style={{ backgroundColor: project.health.color }}
+                  style={{ backgroundColor: healthColor(project.health.id) }}
                />
             </span>
             <span className="hidden w-16 shrink-0 sm:block">

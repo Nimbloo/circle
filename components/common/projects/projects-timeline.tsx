@@ -48,6 +48,7 @@ import {
 } from 'react';
 import { ProjectPeekPanel } from './project-peek-panel';
 import { ProjectGroup } from './projects';
+import { healthColor } from './progress-colors';
 
 interface ProjectsTimelineProps {
    groups: ProjectGroup[];
@@ -467,7 +468,7 @@ const TimelineRow = memo(function TimelineRow({
                {displayProperties.health && (
                   <span
                      className="size-2 rounded-full shrink-0"
-                     style={{ backgroundColor: project.health.color }}
+                     style={{ backgroundColor: healthColor(project.health.id) }}
                   />
                )}
                {displayProperties.status && (
