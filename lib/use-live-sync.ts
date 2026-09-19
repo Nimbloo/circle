@@ -97,6 +97,8 @@ export const INITIATIVE_CHANGED_EVENT = 'circle:initiative-changed';
 export const DOCUMENT_CHANGED_EVENT = 'circle:document-changed';
 /** Configuração de workflow do time (SLA/automações/catálogo) mudou. */
 export const AUTOMATION_CHANGED_EVENT = 'circle:automation-changed';
+/** Job de import do usuário mudou de estado (`detail.id` = job): a tela relê o job. */
+export const IMPORT_JOB_EVENT = 'circle:import-job';
 
 function dispatch(name: string, detail: LiveEventDetail): void {
    window.dispatchEvent(new CustomEvent(name, { detail }));
@@ -293,6 +295,10 @@ export function useLiveSync(): void {
                scheduleHydrate('notifications');
                return;
             }
+            case 'import':
+               // Endereçado ao dono (`recipientId`); só a tela de import escuta.
+               dispatch(IMPORT_JOB_EVENT, { id });
+               return;
             case 'review_comment':
             case 'review':
                // Sem store de reviews: quem escuta é a tela — o detalhe aberto recarrega

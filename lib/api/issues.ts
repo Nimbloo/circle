@@ -78,6 +78,12 @@ export interface IssueMutationOptions {
     * evento coarse no fim, em vez de um por linha (cada evento custa um GET por cliente).
     */
    silent?: boolean;
+   /**
+    * Lote em background (import, #10): além do `silent`, não dispara efeitos POR LINHA —
+    * Slack, notificações de atribuição, automações do time e triagem por IA. Webhooks
+    * seguem por issue (contrato externo).
+    */
+   bulk?: boolean;
 }
 
 /**
@@ -793,7 +799,7 @@ export async function createIssue(
    });
 
    // Automações do time (#97): issue que nasce em Triage.
-   if (startCat === 'triage') {
+   if (startCat === 'triage' && !opts.bulk) {
       await runAutomations(db, 'issue.created_in_triage', id, {
          actorId: actor.id,
          actorEmail,
@@ -821,12 +827,13 @@ export async function createIssue(
    }
    const created = (await getIssue(db, id))!;
    // Notificação Slack (best-effort, fire-and-forget — não acopla latência à request).
-   void notifySlackEvent(db, {
-      type: 'issue.created',
-      identifier: created.identifier,
-      title: created.title,
-      actor: actor.name,
-   });
+   if (!opts.bulk)
+      void notifySlackEvent(db, {
+         type: 'issue.created',
+         identifier: created.identifier,
+         title: created.title,
+         actor: actor.name,
+      });
    return created;
 }
 
@@ -1173,7 +1180,7 @@ export async function updateIssue(
    };
 
    // Notificação de CADA novo responsável (in-app + Slack/Email) — exceto o próprio ator.
-   for (const uid of addedAssigneeIds) {
+   for (const uid of opts.bulk ? [] : addedAssigneeIds) {
       if (uid === actor.id) continue;
       // Fire-and-forget: notificação (Slack/SES) não bloqueia a resposta do PATCH.
       // `dispatchNotification` captura os próprios erros (loga, não lança).
@@ -1207,7 +1214,7 @@ export async function updateIssue(
    }
 
    // Automações do time (#97): status trocado (a categoria de destino filtra as regras).
-   if (statusChanged)
+   if (statusChanged && !opts.bulk)
       await effect('automations', () =>
          runAutomations(db, 'issue.status_changed', id, {
             actorId: actor.id,
@@ -1218,12 +1225,12 @@ export async function updateIssue(
 
    // Sugestão de triagem (#94): a issue ENTROU na fila agora. Assíncrona (import
    // dinâmico: `triage.ts` alcança `agent.ts`, que importa ESTE módulo).
-   if (nextCategory === 'triage' && prevCategory !== 'triage')
+   if (nextCategory === 'triage' && prevCategory !== 'triage' && !opts.bulk)
       void import('./triage').then((m) => m.scheduleTriageSuggestion(db, id)).catch(() => {});
 
    const dto = await getIssue(db, id);
    // Feed do canal Slack (best-effort, fire-and-forget). Gated pelo slack_config admin.
-   if (dto) {
+   if (dto && !opts.bulk) {
       if (enteredCompleted)
          void notifySlackEvent(db, {
             type: 'issue.completed',

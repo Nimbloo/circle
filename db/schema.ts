@@ -1092,6 +1092,41 @@ export const issueImport = pgTable(
    ]
 );
 
+// ── Import em background (#10, frente F4) ──
+/**
+ * Job de import de CSV: `POST /import/commit` grava a linha e devolve o id na hora; o
+ * processamento roda no servidor atualizando `processed`/contadores, e o dono consulta em
+ * `GET /import/jobs/:id`. `updated_at` é o batimento: job `running` sem batimento há
+ * minutos foi interrompido (pod reiniciou) e é reportado como falho.
+ */
+export const importJob = pgTable(
+   'import_job',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      ownerId: varchar('owner_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      teamId: varchar('team_id', { length: 16 })
+         .notNull()
+         .references(() => team.id, { onDelete: 'cascade' }),
+      source: varchar('source', { length: 32 }).notNull(), // csv|linear|jira
+      status: varchar('status', { length: 16 }).notNull(), // queued|running|succeeded|failed
+      total: integer('total').notNull().default(0),
+      processed: integer('processed').notNull().default(0),
+      created: integer('created').notNull().default(0),
+      updated: integer('updated').notNull().default(0),
+      skipped: integer('skipped').notNull().default(0),
+      /** Erros por linha `{ row, message }[]` (limitado), sem abortar o lote. */
+      errors: jsonb('errors').notNull().default([]),
+      /** Falha do job inteiro (não de uma linha). */
+      error: text('error'),
+      createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+      updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+      finishedAt: timestamp('finished_at', { withTimezone: true }),
+   },
+   (t) => [index('idx_import_job_owner').on(t.ownerId, t.createdAt)]
+);
+
 // ── Roadmap: dependências entre projetos e histórico de progresso (#102) ──
 /**
  * "Depends on": `projectId` depende de `dependsOnId`. A guarda de ciclo é app-level

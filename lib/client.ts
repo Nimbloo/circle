@@ -67,12 +67,7 @@ import type {
 } from '@/lib/api/automations';
 import type { SearchEntityType, SearchGroup, SearchItem, SearchResult } from '@/lib/api/search';
 import type { AcceptTriageInput, TriageSuggestionDto } from '@/lib/api/triage';
-import type {
-   ImportMapping,
-   ImportPreviewDto,
-   ImportResultDto,
-   ImportSource,
-} from '@/lib/api/import';
+import type { ImportJobDto, ImportMapping, ImportPreviewDto, ImportSource } from '@/lib/api/import';
 import type { WebhookDeliveryDto, WebhookDto, WebhookEvent } from '@/lib/api/webhooks';
 import type {
    RoadmapDto,
@@ -622,14 +617,19 @@ export const api = {
          if (mapping) form.set('mapping', JSON.stringify(mapping));
          return postForm<ImportPreviewDto>('/import/preview', form);
       },
-      /** Cria (ou atualiza, em re-import) as issues com o mapeamento confirmado. */
+      /**
+       * Dispara o import em background (#10): devolve o `jobId` na hora; o progresso e o
+       * resumo vêm de `job(jobId)`.
+       */
       commit: (input: {
          source: ImportSource;
          csv: string;
          teamId: string;
          mapping: ImportMapping;
          createMissingLabels?: boolean;
-      }) => post<ImportResultDto>('/import/commit', input),
+      }) => post<{ jobId: string }>('/import/commit', input),
+      /** Progresso/resultado do job de import (só o dono). */
+      job: (id: string) => get<ImportJobDto>(`/import/jobs/${encodeURIComponent(id)}`),
    },
 
    /** Webhooks de saída (#101). O segredo só vem no `create`. */
