@@ -702,6 +702,7 @@ export async function createIssue(
    const principalId = assigneeIds[0] ?? null;
 
    // Atômico: incremento do contador + issue + content + labels + evento.
+   let newSubscriberIds: string[] = [];
    await db.transaction(async (tx) => {
       // identifier: incremento atômico do contador do time
       const seqRes = await tx
@@ -782,10 +783,13 @@ export async function createIssue(
 
       // auto-subscribe (Linear-style): criador + todos os responsáveis iniciais
       const subscribers = new Set<string>([actor.id, ...assigneeIds]);
-      await tx
-         .insert(issueSubscription)
-         .values([...subscribers].map((userId) => ({ issueId: id, userId })))
-         .onConflictDoNothing();
+      newSubscriberIds = (
+         await tx
+            .insert(issueSubscription)
+            .values([...subscribers].map((userId) => ({ issueId: id, userId })))
+            .onConflictDoNothing()
+            .returning({ userId: issueSubscription.userId })
+      ).map((r) => r.userId);
    });
 
    // Automações do time (#97): issue que nasce em Triage.
@@ -801,6 +805,7 @@ export async function createIssue(
 
    if (!opts.silent) {
       publish({ entity: 'issue', action: 'created', id, actorEmail, teamId });
+      publishAutoSubscriptions(id, newSubscriberIds, actorEmail);
       // O rollup do pai mudou (nova filha) → o board atualiza a linha dele.
       if (parent)
          publish({
@@ -1072,6 +1077,7 @@ export async function updateIssue(
    // Atômico (#10): a issue, a junção de responsáveis, o histórico e o auto-subscribe
    // dos novos responsáveis entram juntos — antes o histórico era gravado DEPOIS do
    // commit, e uma falha ali devolvia erro de uma mutação já aplicada (e sem evento).
+   let newSubscriberIds: string[] = [];
    await db.transaction(async (tx) => {
       await tx.update(issue).set(set).where(eq(issue.id, id));
       if (removedAssigneeIds.length) {
@@ -1093,10 +1099,13 @@ export async function updateIssue(
             )
             .onConflictDoNothing();
          // Auto-subscribe (Linear-style; inclui auto-atribuição) de CADA novo responsável.
-         await tx
-            .insert(issueSubscription)
-            .values(addedAssigneeIds.map((userId) => ({ issueId: id, userId })))
-            .onConflictDoNothing();
+         newSubscriberIds = (
+            await tx
+               .insert(issueSubscription)
+               .values(addedAssigneeIds.map((userId) => ({ issueId: id, userId })))
+               .onConflictDoNothing()
+               .returning({ userId: issueSubscription.userId })
+         ).map((r) => r.userId);
       }
       if (events.length) {
          const now = new Date();
@@ -1116,6 +1125,7 @@ export async function updateIssue(
    // ── Depois do commit: primeiro o evento, depois os efeitos colaterais. ──
    if (!opts.silent) {
       publish({ entity: 'issue', action: 'updated', id, actorEmail, teamId: prev.teamId });
+      publishAutoSubscriptions(id, newSubscriberIds, actorEmail);
       // Rollup dos pais (antigo e novo) mudou quando a issue trocou de pai ou de status.
       const parentsToRefresh = new Set<string>();
       if (set.parentId !== undefined) {
@@ -1424,6 +1434,18 @@ function publishSubscriptionChanged(issueId: string, userId: string, actorEmail?
       issueId,
       actorEmail,
    });
+}
+
+/**
+ * Auto-assinatura (criar/atribuir/import, #22): avisa a aba de CADA usuário que passou a
+ * seguir a issue. Chamar DEPOIS do commit, só com quem foi realmente inserido.
+ */
+export function publishAutoSubscriptions(
+   issueId: string,
+   userIds: readonly string[],
+   actorEmail?: string
+): void {
+   for (const uid of new Set(userIds)) publishSubscriptionChanged(issueId, uid, actorEmail);
 }
 
 /** Cancela a assinatura de uma issue. */
