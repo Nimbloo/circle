@@ -496,3 +496,15 @@ export function openCommandMenu(page?: string) {
 export function openShortcutsHelp() {
    window.dispatchEvent(new CustomEvent(OPEN_SHORTCUTS_EVENT));
 }
+
+const MENU_SELECTOR = '[role="menu"][data-state="open"], [data-radix-popper-content-wrapper]';
+
+/**
+ * Fecha o menu/popover aberto antes de abrir o ⌘K por cima (co#9). O Radix dispensa a
+ * camada do topo num Escape escutado no `document`; sem bolha, não chega aos ouvintes
+ * de Escape da janela (ex. o peek do projeto).
+ */
+export function closeOpenMenus(doc: Document = document) {
+   if (!doc.querySelector(MENU_SELECTOR)) return;
+   doc.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', cancelable: true }));
+}

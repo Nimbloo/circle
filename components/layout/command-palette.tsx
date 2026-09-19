@@ -36,6 +36,7 @@ import {
    FileText,
    GitBranch,
    Inbox,
+   Keyboard,
    Layers,
    Link2,
    SquarePen,
@@ -47,11 +48,19 @@ import {
    UserRound,
    UserRoundMinus,
    UserRoundPlus,
+   type LucideIcon,
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { labelColor } from '@/components/common/palette';
+import {
+   closeOpenMenus,
+   OPEN_COMMAND_EVENT,
+   openShortcutsHelp,
+   shortcutTokens,
+} from '@/lib/shortcuts';
+import { issueBranchName, issueUrl as buildIssueUrl, useContextIssue } from './context-issue';
 
 type PaletteRoute =
    | 'root'
@@ -64,8 +73,36 @@ type PaletteRoute =
    | 'team'
    | 'due-date';
 
+/** Destinos do "Go to"; a dica de tecla vem da tabela única. */
+const GO_TO: { label: string; path: string; icon: LucideIcon; shortcut?: string }[] = [
+   { label: 'Inbox', path: '/inbox', icon: Inbox, shortcut: 'nav.inbox' },
+   { label: 'My issues', path: '/my-issues', icon: ClipboardList, shortcut: 'nav.my-issues' },
+   { label: 'Reviews', path: '/reviews', icon: GitBranch, shortcut: 'nav.reviews' },
+   { label: 'Initiatives', path: '/initiatives', icon: Compass },
+   { label: 'Projects', path: '/projects', icon: Box, shortcut: 'nav.projects' },
+   { label: 'Views', path: '/views', icon: Layers, shortcut: 'nav.views' },
+   { label: 'Teams', path: '/teams', icon: ContactRound, shortcut: 'nav.teams' },
+   { label: 'Members', path: '/members', icon: UserRound },
+   { label: 'Settings', path: '/settings', icon: FileText, shortcut: 'nav.settings' },
+];
+
+const PALETTE_ROUTES: readonly PaletteRoute[] = [
+   'root',
+   'assign',
+   'status',
+   'priority',
+   'labels',
+   'project',
+   'cycle',
+   'team',
+   'due-date',
+];
+
 /** Small keyboard hint chips on the right of a command row. */
-function Keys({ keys }: { keys: string[] }) {
+function Keys({ keys, id }: { keys?: string[]; id?: string }) {
+   // Dica vinda da tabela única (`lib/shortcuts.ts`): a paleta só anuncia o que a tecla faz.
+   if (id) keys = shortcutTokens(id);
+   if (!keys?.length) return null;
    return (
       <span className="ml-auto flex items-center gap-1">
          {keys.map((key, index) => (
@@ -88,22 +125,35 @@ function Keys({ keys }: { keys: string[] }) {
  */
 export function CommandPalette() {
    const [open, setOpen] = useState(false);
+   /** Sub-página inicial (fallback das teclas da issue, ex. `S` → "Change status…"). */
+   const [initialRoute, setInitialRoute] = useState<PaletteRoute>('root');
 
    // ⌘K / Ctrl+K
    useEffect(() => {
       const onKeyDown = (event: KeyboardEvent) => {
          if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
             event.preventDefault();
+            // Menu aberto por baixo fecha antes (co#9): senão ficava aberto sob a paleta.
+            closeOpenMenus();
+            setInitialRoute('root');
             setOpen((value) => !value);
          }
       };
       window.addEventListener('keydown', onKeyDown);
-      // Abertura via UI (ex.: botão "Search" da sidebar) — mesmo palette.
-      const onOpen = () => setOpen(true);
-      window.addEventListener('circle:open-command', onOpen);
+      // Abertura via UI (ex.: botão "Search" da sidebar) — mesmo palette. `detail.page`
+      // abre direto numa sub-página.
+      const onOpen = (event: Event) => {
+         const page = (event as CustomEvent<{ page?: string } | undefined>).detail?.page;
+         closeOpenMenus();
+         setInitialRoute(
+            PALETTE_ROUTES.includes(page as PaletteRoute) ? (page as PaletteRoute) : 'root'
+         );
+         setOpen(true);
+      };
+      window.addEventListener(OPEN_COMMAND_EVENT, onOpen);
       return () => {
          window.removeEventListener('keydown', onKeyDown);
-         window.removeEventListener('circle:open-command', onOpen);
+         window.removeEventListener(OPEN_COMMAND_EVENT, onOpen);
       };
    }, []);
 
@@ -112,14 +162,20 @@ export function CommandPalette() {
    return (
       <>
          <RecentsRecorder />
-         {open && <CommandPaletteBody onClose={close} />}
+         {open && <CommandPaletteBody onClose={close} initialRoute={initialRoute} />}
       </>
    );
 }
 
 /** Corpo da paleta: montado só enquanto aberta (estado de rota/busca nasce limpo). */
-function CommandPaletteBody({ onClose }: { onClose: () => void }) {
-   const [route, setRoute] = useState<PaletteRoute>('root');
+function CommandPaletteBody({
+   onClose,
+   initialRoute = 'root',
+}: {
+   onClose: () => void;
+   initialRoute?: PaletteRoute;
+}) {
+   const [route, setRoute] = useState<PaletteRoute>(initialRoute);
    const [query, setQuery] = useState('');
    /** When true, the issue context chip was dismissed with ⌫. */
    const [contextCleared, setContextCleared] = useState(false);
@@ -259,11 +315,8 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
          searchResults.documents.length >
       0;
 
-   const contextIssue = useMemo<Issue | undefined>(() => {
-      const match = pathname.match(/^\/[^/]+\/issue\/([^/]+)/);
-      if (!match) return undefined;
-      return issues.find((issue) => issue.identifier === match[1]);
-   }, [pathname, issues]);
+   // Issue do detalhe OU a da notificação aberta no inbox (mesma regra dos atalhos).
+   const contextIssue: Issue | undefined = useContextIssue(pathname);
 
    const issue = contextCleared ? undefined : contextIssue;
 
@@ -298,18 +351,12 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
       [close]
    );
 
-   const issueUrl = issue
-      ? `${typeof window !== 'undefined' ? window.location.origin : ''}/${orgId}/issue/${issue.identifier}`
-      : '';
+   const issueUrl = issue ? buildIssueUrl(orgId, issue.identifier) : '';
    // Branch no formato do Linear: `<usuário atual>/<id>-<título>` (antes usava o id do
    // PRIMEIRO usuário do workspace, não o de quem copia).
-   const branchName = issue
-      ? `${me?.githubLogin || me?.slug || 'me'}/${issue.identifier.toLowerCase()}-${issue.title
-           .toLowerCase()
-           .replace(/[^a-z0-9]+/g, '-')
-           .replace(/^-|-$/g, '')
-           .slice(0, 40)}`
-      : '';
+   const branchName = issue ? issueBranchName(issue, me) : '';
+   const meUser = users.find((u) => u.id === me?.id);
+   const assignedToMe = !!issue && !!meUser && issue.assignee?.id === meUser.id;
 
    const go = (path: string) => {
       router.push(`/${orgId}${path}`);
@@ -321,15 +368,11 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
          <CommandInput
             autoFocus
             placeholder="Digite um comando ou pesquise…"
+            // Espaço da dica "Perguntar ao Agent · Tab" (co#8): o texto não passa por baixo.
+            className={route === 'root' ? 'pr-40' : undefined}
             value={query}
             onValueChange={setQuery}
             onKeyDown={(event) => {
-               if (event.key === 'Escape' && route !== 'root') {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setRoute('root');
-                  setQuery('');
-               }
                if (event.key === 'Backspace' && query === '' && route !== 'root') {
                   setRoute('root');
                }
@@ -360,6 +403,14 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
          <DialogContent
             showCloseButton={false}
             className="top-[22%] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-[640px]"
+            // Esc numa sub-página volta à raiz (co#12): o Radix escuta o Esc na captura do
+            // document, então o stopPropagation no input não impedia o fechamento.
+            onEscapeKeyDown={(event) => {
+               if (route === 'root') return;
+               event.preventDefault();
+               setRoute('root');
+               setQuery('');
+            }}
          >
             <DialogTitle className="sr-only">Menu de comandos</DialogTitle>
             <DialogDescription className="sr-only">Digite um comando ou pesquise</DialogDescription>
@@ -394,19 +445,28 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
                               }}
                            >
                               <UserRoundPlus className="text-muted-foreground" />
-                              Assign to…
-                              <Keys keys={['A']} />
+                              <span>Assign to…</span>
+                              <Keys id="issue.assignee" />
                            </CommandItem>
-                           <CommandItem
-                              onSelect={() => {
-                                 withToast(updateIssueAssignee(issue.id, null), 'Un-assigned');
-                                 close();
-                              }}
-                           >
-                              <UserRoundMinus className="text-muted-foreground" />
-                              Un-assign from me
-                              <Keys keys={['I']} />
-                           </CommandItem>
+                           {meUser && (
+                              <CommandItem
+                                 onSelect={() => {
+                                    withToast(
+                                       updateIssueAssignee(issue.id, assignedToMe ? null : meUser),
+                                       assignedToMe ? 'Un-assigned' : 'Assigned to you'
+                                    );
+                                    close();
+                                 }}
+                              >
+                                 {assignedToMe ? (
+                                    <UserRoundMinus className="text-muted-foreground" />
+                                 ) : (
+                                    <UserRoundPlus className="text-muted-foreground" />
+                                 )}
+                                 <span>{assignedToMe ? 'Unassign from me' : 'Assign to me'}</span>
+                                 <Keys id="issue.assign-me" />
+                              </CommandItem>
+                           )}
                            <CommandItem
                               onSelect={() => {
                                  setRoute('status');
@@ -414,8 +474,8 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
                               }}
                            >
                               <CircleDot className="text-muted-foreground" />
-                              Change status…
-                              <Keys keys={['S']} />
+                              <span>Change status…</span>
+                              <Keys id="issue.status" />
                            </CommandItem>
                            <CommandItem
                               onSelect={() => {
@@ -424,8 +484,8 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
                               }}
                            >
                               <Layers className="text-muted-foreground" />
-                              Set priority…
-                              <Keys keys={['P']} />
+                              <span>Set priority…</span>
+                              <Keys id="issue.priority" />
                            </CommandItem>
                            <CommandItem
                               onSelect={() => {
@@ -434,8 +494,8 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
                               }}
                            >
                               <Box className="text-muted-foreground" />
-                              Move to project…
-                              <Keys keys={['⇧', 'P']} />
+                              <span>Move to project…</span>
+                              <Keys id="issue.project" />
                            </CommandItem>
                            <CommandItem
                               onSelect={() => {
@@ -444,8 +504,8 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
                               }}
                            >
                               <Tags className="text-muted-foreground" />
-                              Change or add labels…
-                              <Keys keys={['L']} />
+                              <span>Change or add labels…</span>
+                              <Keys id="issue.labels" />
                            </CommandItem>
                            <CommandItem
                               onSelect={() => {
@@ -454,8 +514,8 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
                               }}
                            >
                               <CircleDot className="text-muted-foreground" />
-                              Move to cycle…
-                              <Keys keys={['⇧', 'C']} />
+                              <span>Move to cycle…</span>
+                              <Keys id="issue.cycle" />
                            </CommandItem>
                            {/* "Move to a different team" removido: era falso-sucesso (toast
                                sem persistir; mover de time troca o identifier, não suportado). */}
@@ -466,25 +526,24 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
                               }}
                            >
                               <CalendarPlus className="text-muted-foreground" />
-                              Set due date…
-                              <Keys keys={['⇧', 'D']} />
+                              <span>Set due date…</span>
+                              <Keys id="issue.due-date" />
                            </CommandItem>
                         </CommandGroup>
                         <CommandGroup heading="Copy">
                            <CommandItem onSelect={() => copy('Issue ID', issue.identifier)}>
                               <Clipboard className="text-muted-foreground" />
-                              Copy issue ID
-                              <Keys keys={['⌘', '.']} />
+                              <span>Copy issue ID</span>
+                              <Keys id="copy.id" />
                            </CommandItem>
                            <CommandItem onSelect={() => copy('Issue URL', issueUrl)}>
                               <Link2 className="text-muted-foreground" />
-                              Copy issue URL
-                              <Keys keys={['⌘', '⇧', ',']} />
+                              <span>Copy issue URL</span>
+                              <Keys id="copy.url" />
                            </CommandItem>
                            <CommandItem onSelect={() => copy('Issue title', issue.title)}>
                               <Type className="text-muted-foreground" />
-                              Copy issue title
-                              <Keys keys={['⌘', '⇧', "'"]} />
+                              <span>Copy issue title</span>
                            </CommandItem>
                            <CommandItem
                               onSelect={() =>
@@ -495,14 +554,13 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
                               }
                            >
                               <Link2 className="text-muted-foreground" />
-                              Copy title as link
-                              <Keys keys={['⌘', 'C']} />
+                              <span>Copy title as link</span>
                            </CommandItem>
                            <CommandItem
                               onSelect={() => copy('Description', issue.description || issue.title)}
                            >
                               <FileText className="text-muted-foreground" />
-                              Copy issue description as Markdown
+                              <span>Copy issue description as Markdown</span>
                            </CommandItem>
                            <CommandItem
                               onSelect={() =>
@@ -513,13 +571,12 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
                               }
                            >
                               <ClipboardType className="text-muted-foreground" />
-                              Copy issue content as Markdown
-                              <Keys keys={['⌘', '⌥', 'C']} />
+                              <span>Copy issue content as Markdown</span>
                            </CommandItem>
                            <CommandItem onSelect={() => copy('Branch name', branchName)}>
                               <GitBranch className="text-muted-foreground" />
-                              Copy git branch name
-                              <Keys keys={['⌘', '⇧', '.']} />
+                              <span>Copy git branch name</span>
+                              <Keys id="copy.branch" />
                            </CommandItem>
                            <CommandItem
                               onSelect={() =>
@@ -530,16 +587,17 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
                               }
                            >
                               <ClipboardList className="text-muted-foreground" />
-                              Copy as prompt
-                              <Keys keys={['⌘', '⌥', 'P']} />
+                              <span>Copy as prompt</span>
                            </CommandItem>
                         </CommandGroup>
                      </>
                   )}
 
-                  {route === 'root' && !issue && (
+                  {/* Busca e navegação também com issue em contexto (co#4): antes o ⌘K numa
+                      página de issue só oferecia as ações dela. */}
+                  {route === 'root' && (
                      <>
-                        {!query.trim() && recents.length > 0 && (
+                        {!issue && !query.trim() && recents.length > 0 && (
                            <CommandGroup heading="Recently viewed">
                               {recents.map((r) => (
                                  <CommandItem
@@ -666,8 +724,19 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
                               }}
                            >
                               <SquarePen className="text-muted-foreground" />
-                              Create new issue
-                              <Keys keys={['C']} />
+                              <span>Create new issue</span>
+                              <Keys id="issue.create" />
+                           </CommandItem>
+                           <CommandItem
+                              value="keyboard shortcuts atalhos help ajuda"
+                              onSelect={() => {
+                                 close();
+                                 openShortcutsHelp();
+                              }}
+                           >
+                              <Keyboard className="text-muted-foreground" />
+                              <span>Keyboard shortcuts</span>
+                              <Keys id="help.shortcuts" />
                            </CommandItem>
                            <CommandItem
                               value="theme dark tema escuro"
@@ -697,37 +766,13 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
                            </CommandItem>
                         </CommandGroup>
                         <CommandGroup heading="Go to">
-                           <CommandItem onSelect={() => go('/inbox')}>
-                              <Inbox className="text-muted-foreground" /> Inbox
-                              <Keys keys={['G', 'I']} />
-                           </CommandItem>
-                           <CommandItem onSelect={() => go('/my-issues')}>
-                              <ClipboardList className="text-muted-foreground" /> My issues
-                              <Keys keys={['G', 'M']} />
-                           </CommandItem>
-                           <CommandItem onSelect={() => go('/reviews')}>
-                              <GitBranch className="text-muted-foreground" /> Reviews
-                           </CommandItem>
-                           <CommandItem onSelect={() => go('/initiatives')}>
-                              <Compass className="text-muted-foreground" /> Initiatives
-                           </CommandItem>
-                           <CommandItem onSelect={() => go('/projects')}>
-                              <Box className="text-muted-foreground" /> Projects
-                              <Keys keys={['G', 'P']} />
-                           </CommandItem>
-                           <CommandItem onSelect={() => go('/views')}>
-                              <Layers className="text-muted-foreground" /> Views
-                           </CommandItem>
-                           <CommandItem onSelect={() => go('/teams')}>
-                              <ContactRound className="text-muted-foreground" /> Teams
-                           </CommandItem>
-                           <CommandItem onSelect={() => go('/members')}>
-                              <UserRound className="text-muted-foreground" /> Members
-                           </CommandItem>
-                           <CommandItem onSelect={() => go('/settings')}>
-                              <FileText className="text-muted-foreground" /> Settings
-                              <Keys keys={['G', 'S']} />
-                           </CommandItem>
+                           {GO_TO.map((item) => (
+                              <CommandItem key={item.path} onSelect={() => go(item.path)}>
+                                 <item.icon className="text-muted-foreground" />
+                                 <span>{item.label}</span>
+                                 {item.shortcut && <Keys id={item.shortcut} />}
+                              </CommandItem>
+                           ))}
                         </CommandGroup>
                         {teams.length > 0 && (
                            <CommandGroup heading="Teams">
