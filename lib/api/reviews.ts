@@ -77,6 +77,8 @@ function toDto(r: Omit<ReviewRow, 'guide'>): ReviewDto {
 
 export interface ListReviewsOptions {
    status?: string;
+   /** Conjunto de status (filtro da lista no servidor); combinado com `status`, se vier. */
+   statuses?: string[];
    limit?: number;
    offset?: number;
    /**
@@ -113,6 +115,7 @@ export async function listReviews(db: Db, opts: ListReviewsOptions = {}): Promis
    const login = opts.viewerLogin?.trim();
    const clauses = [];
    if (opts.status) clauses.push(eq(review.status, opts.status));
+   if (opts.statuses?.length) clauses.push(inArray(review.status, opts.statuses));
    if (opts.list === 'created') {
       // Sem handle configurado, a clausula falsa devolve lista vazia — honesto. Antes as
       // duas abas mostravam o mesmo conjunto e ninguém percebia que não filtravam.
@@ -126,26 +129,18 @@ export async function listReviews(db: Db, opts: ListReviewsOptions = {}): Promis
             : sql`false`
       );
    }
+   // `where(undefined)` = sem filtro: uma query só, sem o ternário duplicado.
    const where = clauses.length ? and(...clauses) : undefined;
-
-   const rows = where
-      ? await db
-           .select(listColumns)
-           .from(review)
-           .where(where)
-           .orderBy(desc(review.createdAt))
-           .limit(limit)
-           .offset(offset)
-      : await db
-           .select(listColumns)
-           .from(review)
-           .orderBy(desc(review.createdAt))
-           .limit(limit)
-           .offset(offset);
-
-   const countRows = where
-      ? await db.select({ c: count() }).from(review).where(where)
-      : await db.select({ c: count() }).from(review);
+   const [rows, countRows] = await Promise.all([
+      db
+         .select(listColumns)
+         .from(review)
+         .where(where)
+         .orderBy(desc(review.createdAt))
+         .limit(limit)
+         .offset(offset),
+      db.select({ c: count() }).from(review).where(where),
+   ]);
    const total = Number(countRows[0]?.c ?? 0);
 
    return { items: rows.map(toDto), total };

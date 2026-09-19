@@ -6,6 +6,7 @@ import type { GuideSection } from '@/data/reviews';
 import { ApiError } from './errors';
 import { invokeText, MODEL_ID } from './agent';
 import type { ReviewGuideDto } from './reviews';
+import { publish } from './events';
 
 /**
  * Guia de review gerado a partir do diff do PR (Bedrock, mesmo client/modelo do agent).
@@ -188,6 +189,19 @@ export async function generateReviewGuide(
    id: string,
    opts: GenerateGuideOptions = {}
 ): Promise<ReviewGuideDto> {
+   // Dedupe: cliques repetidos (ou duas abas) no mesmo review compartilham a geração em
+   // curso — cada uma custava uma chamada ao modelo.
+   const pending = inFlight.get(id);
+   if (pending) return pending;
+   const run = generate(db, id, opts).finally(() => inFlight.delete(id));
+   inFlight.set(id, run);
+   return run;
+}
+
+/** Gerações em curso por review (processo). */
+const inFlight = new Map<string, Promise<ReviewGuideDto>>();
+
+async function generate(db: Db, id: string, opts: GenerateGuideOptions): Promise<ReviewGuideDto> {
    const [row] = await db.select().from(review).where(eq(review.id, id)).limit(1);
    if (!row) throw new ApiError(404, `Review '${id}' não encontrado`);
    const files: GuideFile[] = await db
@@ -229,5 +243,7 @@ export async function generateReviewGuide(
       .update(review)
       .set({ guide: JSON.stringify(guide) })
       .where(eq(review.id, id));
+   // Quem está com o review aberto (outra aba/pessoa) vê o guia novo.
+   publish({ entity: 'review', action: 'updated', id });
    return guide;
 }
