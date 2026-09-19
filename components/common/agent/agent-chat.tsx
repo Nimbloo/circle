@@ -194,7 +194,6 @@ export default function AgentChat() {
    // outros chats); ações têm referência fixa.
    const activeChat = useAgentChatStore((s) => s.chats.find((chat) => chat.id === s.activeChatId));
    const activeChatId = useAgentChatStore((s) => s.activeChatId);
-   const sendMessage = useAgentChatStore((s) => s.sendMessage);
    const resolveMessage = useAgentChatStore((s) => s.resolveMessage);
    const failMessage = useAgentChatStore((s) => s.failMessage);
    const hydrate = useAgentChatStore((s) => s.hydrate);
@@ -235,7 +234,8 @@ export default function AgentChat() {
       if (isStreaming) return;
       // Chat ainda não gravado (novo, ou cuja 1ª resposta falhou): o servidor cria.
       const persisted = activeChat?.persisted ?? false;
-      const { chatId, assistantMessageId } = sendMessage(input);
+      // Ação que devolve os ids criados: lida no handler, não assinada no render.
+      const { chatId, assistantMessageId } = useAgentChatStore.getState().sendMessage(input);
       try {
          // Persiste no servidor (cria o chat se for novo) e devolve a resposta.
          const res = await api.agent.send(persisted ? chatId : null, input);

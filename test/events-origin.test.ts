@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const onCircleEvent = vi.hoisted(() => vi.fn(async () => {}));
 const execute = vi.hoisted(() => vi.fn(async () => {}));
-vi.mock('@/lib/api/webhooks', () => ({ onCircleEvent }));
+vi.mock('@/lib/api/webhooks', () => ({ onCircleEvent, startWebhookSweepTimer: vi.fn() }));
 vi.mock('@/db', () => ({ db: { execute } }));
 
 const { publish, publishInternal, subscribe, runWithEventOrigin, CLIENT_ID_HEADER } = await import(

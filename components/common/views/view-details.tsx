@@ -56,6 +56,11 @@ function IssueViewBody({ view }: { view: View }) {
       setSearchError(false);
    }
    const hasResult = rankedIds !== null;
+   // Assinatura (não o array): muda só quando alguma issue muda de fato, não a cada
+   // re-hidratação ou update otimista que recria o array com o mesmo conteúdo.
+   const issuesSignature = useIssuesStore((s) =>
+      s.issues.map((i) => `${i.id}:${i.updatedAt ?? ''}`).join('|')
+   );
    useEffect(() => {
       if (!q) {
          setRankedIds(null);
@@ -85,9 +90,9 @@ function IssueViewBody({ view }: { view: View }) {
          active = false;
          clearTimeout(timer);
       };
-      // `liveIssues`: evento remoto/local mudou as issues → o ranking pode ter mudado.
+      // `issuesSignature`: evento remoto/local mudou as issues → o ranking pode ter mudado.
       // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [q, view.teamId, attempt, liveIssues]);
+   }, [q, view.teamId, attempt, issuesSignature]);
 
    const issues = useMemo(() => {
       if (!q) return filtered;
