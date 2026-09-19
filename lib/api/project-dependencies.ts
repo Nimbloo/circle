@@ -6,7 +6,7 @@
  * inteiras e resolve em memória, como `lib/api/hierarchy.ts` faz com times e
  * initiatives. Ciclo → 400 (a UI não deve conseguir criar um).
  */
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { project as projectT, projectDependency } from '@/db/schema';
 import { ApiError } from './errors';
@@ -44,7 +44,7 @@ function reaches(edges: Edge[], from: string, to: string): boolean {
    return false;
 }
 
-async function allEdges(db: Db): Promise<Edge[]> {
+async function allEdges(db: Pick<Db, 'select'>): Promise<Edge[]> {
    return db
       .select({
          projectId: projectDependency.projectId,
@@ -109,15 +109,19 @@ export async function setDependencies(
       if (unknown) throw new ApiError(400, `Project '${unknown}' não existe`);
    }
 
-   // Ciclo: o grafo resultante não pode ter caminho de volta de um alvo até este projeto.
-   const others = (await allEdges(db)).filter((e) => e.projectId !== projectId);
-   for (const target of targets) {
-      if (target === projectId || reaches(others, target, projectId)) {
-         throw new ApiError(400, `Ciclo de dependências: '${target}' já depende de '${projectId}'`);
-      }
-   }
-
    await db.transaction(async (tx) => {
+      // Checagem de ciclo DENTRO da transação, com lock do grafo: duas gravações
+      // concorrentes (a→b e b→a) não passam juntas pela checagem (Pl baixa).
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('project_dependency'))`);
+      const others = (await allEdges(tx)).filter((e) => e.projectId !== projectId);
+      for (const target of targets) {
+         if (target === projectId || reaches(others, target, projectId)) {
+            throw new ApiError(
+               400,
+               `Ciclo de dependências: '${target}' já depende de '${projectId}'`
+            );
+         }
+      }
       await tx.delete(projectDependency).where(eq(projectDependency.projectId, projectId));
       if (targets.length) {
          await tx
