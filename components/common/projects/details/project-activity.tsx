@@ -12,11 +12,8 @@ import {
    DropdownMenuItem,
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { adaptProjectDetail, emptyProjectDetail } from '@/lib/adapters-project-detail';
 import { api } from '@/lib/client';
-import { PROJECT_CHANGED_EVENT, useLiveReload } from '@/lib/use-live-sync';
 import {
-   ProjectDetail,
    ProjectUpdate,
    ProjectUpdateHealth,
    projectUpdateHealthColor,
@@ -26,9 +23,10 @@ import { useIssuesStore } from '@/store/issues-store';
 import { useProjectUpdatesStore } from '@/store/project-updates-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { ProjectSidePanel } from './project-side-panel';
+import { useSharedProjectDetail } from './use-project-detail';
 
 interface ProjectActivityProps {
    projectId: string;
@@ -83,44 +81,10 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
    const [text, setText] = useState('');
    const [posting, setPosting] = useState(false);
 
-   const [detail, setDetail] = useState<ProjectDetail>(() => emptyProjectDetail(projectId));
-   // Estado da PRIMEIRA carga do feed: sem ele, a lista inicial vazia (e a falha)
-   // apareciam como "No updates yet". O `reload` pós-mutation segue silencioso.
-   const [feed, setFeed] = useState<'loading' | 'ready' | 'error'>('loading');
-   const reload = useCallback(async () => {
-      try {
-         setDetail(adaptProjectDetail(await api.projects.detail(projectId)));
-      } catch {
-         setDetail(emptyProjectDetail(projectId));
-      }
-   }, [projectId]);
-   useEffect(() => {
-      let active = true;
-      setFeed('loading');
-      api.projects
-         .detail(projectId)
-         .then((dto) => {
-            if (!active) return;
-            setDetail(adaptProjectDetail(dto));
-            setFeed('ready');
-         })
-         .catch(() => {
-            if (!active) return;
-            setDetail(emptyProjectDetail(projectId));
-            setFeed('error');
-         });
-      return () => {
-         active = false;
-      };
-   }, [projectId]);
-
-   // Update/mudança de OUTRO usuário: recarrega o feed em silêncio (falha mantém o atual).
-   useLiveReload(PROJECT_CHANGED_EVENT, { id: projectId }, () =>
-      api.projects
-         .detail(projectId)
-         .then((dto) => setDetail(adaptProjectDetail(dto)))
-         .catch(() => {})
-   );
+   // Detalhe compartilhado pelas abas (layout da rota, #45): `status` é o estado da
+   // PRIMEIRA carga (vazio só depois de uma resposta real); refetch e live reload são
+   // silenciosos e preservam o feed na falha.
+   const { status: feed, detail, reload } = useSharedProjectDetail(projectId);
 
    const updates = useMemo<ProjectUpdate[]>(
       () => [...(postedUpdates[projectId] ?? []), ...detail.updates],
