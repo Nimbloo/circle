@@ -21,6 +21,7 @@ import { ctaEmailHtml } from './integrations/email-templates';
 import { escapeHtml } from './notify';
 import { ApiError } from './errors';
 import { publish } from './events';
+import { listTeamMemberDtos, type MemberDto } from './members';
 
 type TeamRow = typeof teamT.$inferSelect;
 
@@ -157,19 +158,9 @@ export async function getTeam(db: Db, id: string, meId?: string): Promise<TeamDt
    return toDto(rows[0], counts, joined, new Set(requested));
 }
 
-export async function listTeamMembers(db: Db, teamId: string) {
-   return db
-      .select({
-         id: appUser.id,
-         slug: appUser.slug,
-         name: appUser.name,
-         email: appUser.email,
-         avatarUrl: appUser.avatarUrl,
-         role: appUser.role,
-      })
-      .from(teamMember)
-      .innerJoin(appUser, eq(teamMember.userId, appUser.id))
-      .where(eq(teamMember.teamId, teamId));
+/** Membros do time com `MemberDto` completo (#7) — ver `listTeamMemberDtos`. */
+export async function listTeamMembers(db: Db, teamId: string): Promise<MemberDto[]> {
+   return listTeamMemberDtos(db, teamId);
 }
 
 export interface CreateTeamInput {
@@ -383,7 +374,7 @@ export async function decideJoinRequest(
    deciderId: string
 ): Promise<{
    requests: JoinRequestDto[];
-   members: Awaited<ReturnType<typeof listTeamMembers>>;
+   members: MemberDto[];
 }> {
    const rows = await db
       .select()
