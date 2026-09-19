@@ -143,7 +143,7 @@ export function ReviewDetail({
 
    return (
       <div className="content-enter h-full flex flex-col overflow-hidden">
-         <div className="flex items-center gap-2 px-4 h-10 border-b shrink-0 min-w-0">
+         <div className="flex items-center gap-2 px-4 h-11 border-b shrink-0 min-w-0">
             {/* Só linka pra issue quando o PR resolve uma (título com [ABC-123]);
                 senão o link ia pra /issue/ (morto). */}
             {review.resolves.identifier && (

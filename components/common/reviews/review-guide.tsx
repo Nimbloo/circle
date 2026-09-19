@@ -193,7 +193,7 @@ export function ReviewGuide({ review }: { review: Review }) {
 
          <div className="sticky bottom-4 flex justify-center pointer-events-none">
             <span className="pointer-events-auto inline-flex items-center gap-2 rounded-full border bg-container shadow-sm px-4 py-1.5 text-xs text-muted-foreground">
-               {review.files.length} files changed
+               {review.files.length} {review.files.length === 1 ? 'file' : 'files'} changed
                <DiffStat additions={review.additions} deletions={review.deletions} />
             </span>
          </div>
