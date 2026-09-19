@@ -71,3 +71,32 @@ Toast de sucesso antes da API no menu de contexto; promises sem catch (Is#13) ·
 - **#10** Import: virar job em background com progresso muda o contrato de `/import/commit`.
 - **#15** Settings por seção (merge no servidor) muda o contrato de `/settings`.
 - **#1** Rank: trocar a estratégia (fractional-indexing com ponto médio real + coluna `text`) exige migration de dados dos ranks existentes.
+
+As quatro decisões foram tomadas em 2026-09-18 (ver o plano `2026-09-18-sanity-audit-3.md`).
+
+## Remedição após as correções (2026-09-18)
+
+Mesmo ambiente da medição original: build de produção local, banco `circle_perf` (3.011 issues,
+300 notificações, ENG-1 com mais de 100 itens de atividade), mesmos scripts Playwright.
+
+| Cenário                                    | Antes                                                  | Depois                                                    |
+| ------------------------------------------ | ------------------------------------------------------ | --------------------------------------------------------- |
+| **Board com 20 edições remotas**           | 16 long tasks, ~1 s bloqueado (máx 92 ms)              | **0 long tasks**, p95 6 ms ✅                             |
+| Board: scroll de coluna / horizontal       | p95 24 ms / 6 ms                                       | p95 6 ms / 6 ms ✅                                        |
+| **10 comentários ao vivo no detalhe**      | 20 requisições (detail + activity por comentário)      | **1 requisição** (só o feed, rajada coalescida) ✅        |
+| Detalhe ENG-1: abrir                       | 1,3 s, 1 long task 107 ms, CLS 0,027                   | 1,1–1,4 s, 1 long task 70–152 ms, CLS 0,026 (variação) ⚠️ |
+| Inbox com 300 notificações: abrir 10       | p95 18 ms, 0 long tasks                                | p95 6 ms, 0 long tasks ✅                                 |
+| Rajada de 100 edições na lista             | 0 long tasks                                           | 0 long tasks ✅                                           |
+| Timeline de projetos / digitação no editor | 0 long tasks / p95 6 ms                                | 0 long tasks / p95 6 ms ✅                                |
+| Command palette: digitar 13 caracteres     | 1 request                                              | 1 request ✅                                              |
+| Memória: 3 voltas por 8 rotas              | 17,5 → 19,2 MB                                         | 20,6 → 24,1 MB (estável entre voltas) ✅                  |
+| Erros de página                            | 0                                                      | 0 ✅                                                      |
+| **Rank**                                   | estouro de `varchar(64)` por volta da criação nº 2.216 | coluna `text` + rebalanceamento ≤ 32 caracteres ✅        |
+
+**Migration 0050 no Postgres real (`circle_perf`):** ranks de até 46 caracteres passaram a 10 e a
+ordem das 3.011 issues ficou idêntica (comparação linha a linha antes e depois). Continua 1 cycle
+`current` por time. Também há teste com PGlite partindo da 0049 com dados
+(`test/migration-0050-data.test.ts`).
+
+**Verificação final:** `pnpm test` com 308 arquivos e 1.581 testes, exit 0, sem erros não tratados;
+`pnpm typecheck`, `pnpm lint` e `pnpm build` limpos.

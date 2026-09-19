@@ -16,8 +16,18 @@
 - **Crash (2026-09-18 ~22h):** a sessão caiu com F1–F4 e F5b em andamento; elas foram relançadas retomando dos commits de cada worktree. O agente da F4 parou de novo, por limite de uso, e o restante da F4 foi relançado no worktree `s3-f4`, avançado até `978560c`:
    - #24, Ad#5, Ad#22, Ad#25–28, Ad#30, Ad#32–38 e Ad#40;
    - `labelColor` em members/settings/views.
-- **Última verificação:** 2026-09-18, Claude: testes de cada frente verdes após cada merge; typecheck e lint limpos. Suíte completa em andamento.
-- **Próximo passo:** suíte completa → merge do restante da F4 → `pnpm build` → remedição → PR.
+- **Restante da F4 integrado** (`5afd7bf`). Correções da integração:
+   - guardas estáticas e mocks alinhados (`61f83db`, `3d21e76`);
+   - comentário remoto recarrega só o feed do detalhe (`2c5f220`; 20 → 1 requisição).
+- **Última verificação:** 2026-09-18, Claude:
+   - `pnpm test` com 308 arquivos e 1.581 testes, exit 0; `pnpm typecheck`, `pnpm lint` e `pnpm build` limpos;
+   - remedição no build de produção (spec, seção "Remedição"): board com 20 edições caiu de 16 long tasks para 0;
+   - migration 0050 validada no Postgres real (`circle_perf`): ranks de 46 para 10 caracteres, ordem idêntica.
+- **Próximo passo:** PR empilhado sobre `danilo/sanity-audit-2` (#170); após o merge do #170, rebasear para `develop`.
+- **Pendências adicionais:**
+   - Ad#40 `/api/metrics`: alcançável só pela VPN; fechar no VirtualService do chart, se desejado;
+   - Ad#34: sem índice único no nome de label (criação concorrente ainda passa);
+   - abrir o detalhe ENG-1 ainda gera 1 long task (70–152 ms).
 - **Pendências registradas:**
    - busca em comentários sem índice trigram (Co);
    - "hoje" do servidor fixo em `America/Sao_Paulo` via `CIRCLE_TIME_ZONE` (não há fuso por workspace);
