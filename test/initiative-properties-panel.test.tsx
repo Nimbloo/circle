@@ -147,4 +147,31 @@ describe('painel de propriedades da initiative (#5, #46)', () => {
       // A resposta intermediária não apaga a seleção otimista ainda pendente.
       expect(current().labels.map((l) => l.id)).toEqual(['growth', 'platform']);
    });
+
+   it('re-selecionar o valor atual não dispara PATCH (Pl#22)', async () => {
+      // id próprio: a fila de PATCH do teste anterior segue pendente para init-1.
+      const other = { ...INIT, id: 'init-2' };
+      useWorkspaceStore.setState({ initiatives: [other] });
+      update.mockResolvedValue(dto({ id: 'init-2' }));
+      render(<InitiativePropertiesPanel initiative={other} />);
+
+      fireEvent.click(screen.getByRole('button', { name: /Planned/ }));
+      const options = await screen.findAllByRole('button', { name: /Planned/ });
+      fireEvent.click(options[options.length - 1]);
+
+      const priorityTrigger = screen.getAllByRole('button', {
+         name: new RegExp(priorities[0].name),
+      })[0];
+      fireEvent.click(priorityTrigger);
+      const priorityOptions = await screen.findAllByRole('button', {
+         name: new RegExp(priorities[0].name),
+      });
+      fireEvent.click(priorityOptions[priorityOptions.length - 1]);
+
+      fireEvent.click(screen.getAllByRole('button', { name: /No parent/ })[0]);
+      fireEvent.click(await screen.findByRole('option', { name: 'No parent' }));
+
+      await act(async () => {});
+      expect(update).not.toHaveBeenCalled();
+   });
 });

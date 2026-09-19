@@ -79,6 +79,7 @@ export function InitiativeStatusPicker({ initiative }: { initiative: Initiative 
                   type="button"
                   onClick={() => {
                      setOpen(false);
+                     if (s === initiative.status) return;
                      void patch(
                         { status: s },
                         { status: s },
@@ -115,6 +116,7 @@ export function InitiativePriorityPicker({ initiative }: { initiative: Initiativ
                   type="button"
                   onClick={() => {
                      setOpen(false);
+                     if (p.id === initiative.priority.id) return;
                      void patch(
                         { priority: p },
                         { priorityId: p.id },
@@ -138,6 +140,7 @@ export function InitiativeOwnerPicker({ initiative }: { initiative: Initiative }
    const [open, setOpen] = useState(false);
    const choose = (ownerId: string | null) => {
       setOpen(false);
+      if (ownerId === (initiative.owner?.id ?? null)) return;
       const owner = ownerId ? users.find((u) => u.id === ownerId) : undefined;
       void patch(
          { owner },
@@ -215,6 +218,7 @@ export function ParentInitiativePicker({ initiative }: { initiative: Initiative 
 
    const setParent = (parentId: string | null) => {
       setOpen(false);
+      if (parentId === (initiative.parentId ?? null)) return;
       void patch(
          { parentId },
          { parentId },
