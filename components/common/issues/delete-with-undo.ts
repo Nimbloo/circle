@@ -37,13 +37,13 @@ export function deleteIssuesWithUndo(ids: readonly string[]): void {
    }));
 
    let settled = false;
-   let timer: ReturnType<typeof setTimeout> | undefined;
+   const pending: { timer?: ReturnType<typeof setTimeout> } = {};
    // Envia o DELETE de verdade. Falhou: a issue volta para a lista (o store já avisa o
    // erro; sem isto ela sumia da tela sem ter sido excluída).
    const commit = () => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      clearTimeout(pending.timer);
       window.removeEventListener('pagehide', commit);
       for (const issue of removed) {
          void useIssuesStore
@@ -52,7 +52,7 @@ export function deleteIssuesWithUndo(ids: readonly string[]): void {
             .catch(() => restore([issue]));
       }
    };
-   timer = setTimeout(commit, DELETE_UNDO_MS);
+   pending.timer = setTimeout(commit, DELETE_UNDO_MS);
    // Saiu da página dentro da janela: exclui já, senão o "deleted" do toast seria mentira.
    window.addEventListener('pagehide', commit);
 
@@ -67,7 +67,7 @@ export function deleteIssuesWithUndo(ids: readonly string[]): void {
             onClick: () => {
                if (settled) return;
                settled = true;
-               clearTimeout(timer);
+               clearTimeout(pending.timer);
                window.removeEventListener('pagehide', commit);
                restore(removed);
             },
