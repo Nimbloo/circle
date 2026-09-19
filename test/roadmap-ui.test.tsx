@@ -2,7 +2,7 @@
 
 import './setup-dom';
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RoadmapDto } from '@/lib/client';
 import Roadmap from '@/components/common/roadmap/roadmap';
@@ -251,6 +251,39 @@ describe('Gráfico de progresso no tempo (#102)', () => {
       expect(xs[0]).toBe(0);
       expect(xs[1]).toBeCloseTo(10, 5);
       expect(xs[2]).toBe(100);
+   });
+
+   it('pontos são uma parada de Tab só; setas, Home e End movem o foco (Pl#22)', () => {
+      render(
+         <ProjectSnapshotChart
+            points={[
+               { date: '2026-03-01', scope: 10, started: 2, completed: 1 },
+               { date: '2026-03-02', scope: 10, started: 3, completed: 4 },
+               { date: '2026-03-03', scope: 12, started: 1, completed: 8 },
+            ]}
+         />
+      );
+      const point = (day: string) => screen.getByTestId(`snapshot-point-2026-03-0${day}`);
+
+      // Roving tabindex: só o último ponto (o mais recente) entra no Tab.
+      expect(point('1').tabIndex).toBe(-1);
+      expect(point('2').tabIndex).toBe(-1);
+      expect(point('3').tabIndex).toBe(0);
+
+      act(() => point('3').focus());
+      expect(screen.getByRole('tooltip').textContent).toContain('Mar 3');
+
+      fireEvent.keyDown(point('3'), { key: 'ArrowLeft' });
+      expect(document.activeElement).toBe(point('2'));
+      expect(point('2').tabIndex).toBe(0);
+      expect(screen.getByRole('tooltip').textContent).toContain('Mar 2');
+
+      fireEvent.keyDown(point('2'), { key: 'Home' });
+      expect(document.activeElement).toBe(point('1'));
+      fireEvent.keyDown(point('1'), { key: 'ArrowLeft' });
+      expect(document.activeElement).toBe(point('1'));
+      fireEvent.keyDown(point('1'), { key: 'End' });
+      expect(document.activeElement).toBe(point('3'));
    });
 
    it('com menos de 2 pontos não inventa tendência', () => {
