@@ -29,6 +29,30 @@ const eslintConfig = [
       },
    },
    {
+      /**
+       * #54 / R6: componente não importa VALOR de `lib/api/*` (código de servidor). O caso
+       * real: `ApiError` do servidor no cliente — o `instanceof` nunca casava com o erro que
+       * `lib/client.ts` lança, e o convite escondia a mensagem do 409. Tipos seguem livres;
+       * `webhook-events` é um módulo puro feito para o cliente.
+       */
+      files: ['components/**/*.{ts,tsx}', 'hooks/**/*.{ts,tsx}'],
+      rules: {
+         '@typescript-eslint/no-restricted-imports': [
+            'error',
+            {
+               patterns: [
+                  {
+                     group: ['@/lib/api/*', '!@/lib/api/webhook-events'],
+                     allowTypeImports: true,
+                     message:
+                        'Componente não importa valor de lib/api (servidor). Use lib/client (ex.: ApiError) ou import type.',
+                  },
+               ],
+            },
+         ],
+      },
+   },
+   {
       // Vendored bazza/ui data-table-filter (kept close to upstream for easy updates)
       // Vendored: data-table-filter (bazza/ui) e os primitivos shadcn de components/ui.
       files: ['components/data-table-filter/**/*.{ts,tsx}', 'components/ui/**/*.{ts,tsx}'],
