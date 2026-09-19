@@ -57,6 +57,7 @@ import { InitiativeContextMenu } from './initiative-context-menu';
 import { InitiativeGlyph } from './initiative-glyph';
 import { useInlineInitiativeStore } from '@/store/inline-initiative-store';
 import { HEALTH_COLORS } from '@/components/common/palette';
+import { healthColor } from '@/components/common/projects/progress-colors';
 
 export const INITIATIVE_TABS = ['active', 'planned', 'all'] as const;
 
@@ -455,7 +456,7 @@ function InitiativeRow({
                      )}
                      style={
                         initiative.health.id !== 'no-update'
-                           ? { borderColor: initiative.health.color }
+                           ? { borderColor: healthColor(initiative.health.id) }
                            : undefined
                      }
                   />

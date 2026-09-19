@@ -19,8 +19,13 @@ import type {
    UpdateMilestoneInput,
    AddResourceInput,
    PostUpdateInput,
+   EditUpdateInput,
 } from '@/lib/api/project-detail';
-import type { InitiativeUpdateDto, PostInitiativeUpdateInput } from '@/lib/api/initiative-detail';
+import type {
+   EditInitiativeUpdateInput,
+   InitiativeUpdateDto,
+   PostInitiativeUpdateInput,
+} from '@/lib/api/initiative-detail';
 import type { TeamDto, CreateTeamInput, JoinRequestDto, TeamDeletionImpact } from '@/lib/api/teams';
 import type { MemberDto } from '@/lib/api/members';
 import {
@@ -479,6 +484,11 @@ export const api = {
          ),
       postUpdate: (id: string, body: PostUpdateInput) =>
          post<ProjectUpdateDto>(`/projects/${id}/updates`, body),
+      /** Edita um update já postado (pl#11). */
+      updateUpdate: (id: string, updateId: string, body: EditUpdateInput) =>
+         patch<ProjectUpdateDto>(`/projects/${id}/updates/${updateId}`, body),
+      removeUpdate: (id: string, updateId: string) =>
+         del<{ deleted: boolean }>(`/projects/${id}/updates/${updateId}`),
       resources: (id: string) => get<ProjectResourceDto[]>(`/projects/${id}/resources`),
       addResource: (id: string, body: AddResourceInput) =>
          post<ProjectResourceDto>(`/projects/${id}/resources`, body),
@@ -516,6 +526,15 @@ export const api = {
          patch<InitiativeDto>(`/initiatives/${id}`, body),
       remove: (id: string) => del<{ deleted: boolean }>(`/initiatives/${id}`),
       updates: (id: string) => get<InitiativeUpdateDto[]>(`/initiatives/${id}/updates`),
+      /** Edita um update da initiative; devolve o update e a initiative (pl#11). */
+      updateUpdate: (id: string, updateId: string, body: EditInitiativeUpdateInput) =>
+         patch<{ update: InitiativeUpdateDto; initiative: InitiativeDto }>(
+            `/initiatives/${id}/updates/${updateId}`,
+            body
+         ),
+      /** Exclui um update da initiative; devolve a initiative com o health recalculado. */
+      removeUpdate: (id: string, updateId: string) =>
+         del<InitiativeDto>(`/initiatives/${id}/updates/${updateId}`),
       /** Posta um update; devolve o update e a initiative já com o health propagado. */
       postUpdate: (id: string, body: PostInitiativeUpdateInput) =>
          post<{ update: InitiativeUpdateDto; initiative: InitiativeDto }>(

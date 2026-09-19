@@ -8,16 +8,16 @@ import { Button } from '@/components/ui/button';
 import { ErrorState } from '@/components/common/error-state';
 import { api, ApiError } from '@/lib/client';
 import { blocksToDoc, docHeadings, type EditorDoc } from '@/lib/editor-doc';
-import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { ChevronDown, PenLine } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { projectUpdateHealthColor, projectUpdateHealthLabel } from '@/data/project-details';
+import { formatPlanDay } from '../format-day';
 import { DocumentOutline, type OutlineItem } from './document-outline';
 import { ProjectResources } from './project-resources';
-import { ProjectSidePanel } from './project-side-panel';
 import { useSharedProjectDetail } from './use-project-detail';
 import { LoadingArea, useEnterFade } from '@/components/common/loading-area';
 
@@ -31,7 +31,6 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    const fade = useEnterFade('project-tab');
    const project = useWorkspaceStore((s) => s.getProjectById(projectId));
    const loaded = useWorkspaceStore((s) => s.loaded);
-   const allIssues = useIssuesStore((s) => s.issues);
    const { orgId } = useParams<{ orgId: string }>();
    const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -61,11 +60,6 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
       }
    };
 
-   const issues = useMemo(
-      () => allIssues.filter((issue) => issue.project?.id === projectId),
-      [allIssues, projectId]
-   );
-
    // Descrição: doc do servidor ou conversão da projeção em blocos. `liveDoc` acompanha o
    // que está no editor (antes do save) para o outline reagir enquanto se digita.
    const doc = useMemo(
@@ -73,6 +67,7 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
       [detail.descriptionDoc, detail.description]
    );
    const [liveDoc, setLiveDoc] = useState<EditorDoc | null>(null);
+   const lastUpdate = detail.updates[0];
    const outlineItems = useMemo<OutlineItem[]>(
       () =>
          docHeadings(liveDoc ?? doc).map((h, index) => ({
@@ -157,9 +152,9 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    }
 
    return (
-      <div className={cn(fade && 'content-enter', 'relative w-full h-full flex overflow-hidden')}>
-         {/* Main column */}
-         <div className="flex-1 min-w-0 h-full relative">
+      <div className={cn(fade && 'content-enter', 'relative h-full w-full overflow-hidden')}>
+         {/* Main column (o sidecar vem do layout do projeto, pl#6) */}
+         <div className="relative h-full min-w-0">
             <DocumentOutline items={outlineItems} scrollRef={scrollRef} />
             <div ref={scrollRef} className="h-full overflow-y-auto">
                <div className="mx-auto max-w-[869px] px-8 pt-16 pb-10">
@@ -209,13 +204,33 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                      />
                   </div>
 
-                  {/* Update CTA */}
+                  {/* Update CTA — com o health do ÚLTIMO update (pl#11) */}
                   <Link
                      href={`/${orgId}/project/${project.id}/activity`}
                      className="-mx-4 mt-4 flex h-[66px] items-center justify-center gap-2 rounded-[10px] border text-sm text-muted-foreground transition-colors hover:bg-accent/30 hover:text-foreground"
                   >
-                     <PenLine className="size-4" />
-                     Write {detail.updates.length === 0 ? 'first ' : ''}project update
+                     {lastUpdate ? (
+                        <>
+                           <span className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium">
+                              <span
+                                 className="size-2 rounded-full"
+                                 style={{
+                                    backgroundColor: projectUpdateHealthColor[lastUpdate.health],
+                                 }}
+                              />
+                              {projectUpdateHealthLabel[lastUpdate.health]}
+                           </span>
+                           <span className="truncate">
+                              Last update on {formatPlanDay(lastUpdate.date)} by{' '}
+                              {lastUpdate.author.name}
+                           </span>
+                        </>
+                     ) : (
+                        <>
+                           <PenLine className="size-4" />
+                           Write first project update
+                        </>
+                     )}
                   </Link>
 
                   {/* Description */}
@@ -240,15 +255,6 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                </div>
             </div>
          </div>
-
-         {/* Side panel */}
-         <ProjectSidePanel
-            project={project}
-            detail={detail}
-            issues={issues}
-            projectId={projectId}
-            onChanged={reload}
-         />
       </div>
    );
 }

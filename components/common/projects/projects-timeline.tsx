@@ -49,6 +49,7 @@ import {
 import { ProjectPeekPanel } from './project-peek-panel';
 import { ProjectGroup } from './projects';
 import { useEnterFade } from '@/components/common/loading-area';
+import { healthColor } from './progress-colors';
 
 interface ProjectsTimelineProps {
    groups: ProjectGroup[];
@@ -165,7 +166,11 @@ function TodayMarker({ todayOffset, listOffset }: { todayOffset: number; listOff
    );
    if (overlapsList) return null;
    return (
-      <div className="absolute top-8 bottom-0 w-px bg-primary z-10" style={{ left: todayOffset }} />
+      // z abaixo das barras (z-[5]): a linha de hoje não corta mais o texto (pl#17).
+      <div
+         className="absolute top-8 bottom-0 w-px bg-primary z-[2]"
+         style={{ left: todayOffset }}
+      />
    );
 }
 
@@ -220,7 +225,11 @@ function TimelineBar({
    const range = draft ?? base;
    const left = offsetFor(range.startDate, monthWidth);
    const right = offsetFor(range.targetDate, monthWidth);
-   const width = Math.max(right - left, 130);
+   // A barra respeita a duração real; 130px de mínimo distorciam as datas (pl#17). Barra
+   // curta mostra o nome FORA dela, à direita.
+   const span = right - left;
+   const width = Math.max(span, 14);
+   const narrow = span < 120;
    const dayWidth = dayWidthOf(monthWidth);
    const rangeLabel = projectDateRangeLabel(range.startDate, range.targetDate) ?? range.startDate;
 
@@ -245,10 +254,18 @@ function TimelineBar({
       if (!drag || drag.pointerId !== event.pointerId) return;
       dragRef.current = null;
       wrapperRef.current?.releasePointerCapture?.(event.pointerId);
-      suppressClickRef.current = drag.moved;
       const next = draftRef.current;
       setDraft(null);
       if (commit && drag.moved && next && !sameRange(next, base)) onReschedule(project, next);
+      // Clique (ponteiro parado): a captura no wrapper desvia o `click` do botão, então
+      // é aqui que o peek abre (pl#1). O `click` que ainda possa chegar é descartado.
+      if (commit && !drag.moved) onSelect(project.id);
+      suppressClickRef.current = true;
+      // O `click` do mesmo gesto vem antes de qualquer timer; depois disso a supressão
+      // não pode sobrar para o próximo clique (nem para o Enter no botão focado).
+      setTimeout(() => {
+         suppressClickRef.current = false;
+      }, 0);
    };
 
    // Teclado: rascunho + 1 commit (#39).
@@ -272,7 +289,7 @@ function TimelineBar({
       <div className="absolute inset-0">
          <div
             ref={wrapperRef}
-            className={cn('group absolute top-5 h-8', draft !== null && 'select-none')}
+            className={cn('group absolute top-3 h-8', draft !== null && 'select-none')}
             style={{ left, width }}
             onPointerMove={onPointerMove}
             onPointerUp={(event) => endDrag(event, true)}
@@ -300,8 +317,8 @@ function TimelineBar({
                   draft !== null && 'border-primary/60 bg-accent'
                )}
             >
-               <span className="truncate font-medium">{project.name}</span>
-               {displayProperties.lead && project.lead && (
+               {!narrow && <span className="truncate font-medium">{project.name}</span>}
+               {!narrow && displayProperties.lead && project.lead && (
                   <Avatar className="size-4 shrink-0">
                      <AvatarImage
                         src={project.lead.avatarUrl || undefined}
@@ -310,10 +327,18 @@ function TimelineBar({
                      <AvatarFallback>{project.lead.name[0]}</AvatarFallback>
                   </Avatar>
                )}
-               {displayProperties.status && (
+               {!narrow && displayProperties.status && (
                   <span className="text-muted-foreground shrink-0">{project.percentComplete}%</span>
                )}
             </button>
+            {narrow && (
+               <span className="pointer-events-none absolute inset-y-0 left-full ml-2 flex items-center gap-1.5 whitespace-nowrap text-xs">
+                  <span className="font-medium">{project.name}</span>
+                  {displayProperties.status && (
+                     <span className="text-muted-foreground">{project.percentComplete}%</span>
+                  )}
+               </span>
+            )}
             {reschedulable && (
                <>
                   <span
@@ -449,7 +474,7 @@ const TimelineRow = memo(function TimelineRow({
    const displayProperties = useProjectsDisplayStore((s) => s.displayProperties);
    const hasStart = isValidProjectDate(project.startDate);
    return (
-      <div className="relative h-[72px] flex items-center">
+      <div className="relative h-14 flex items-center">
          {hasStart && (
             <TimelineBar
                project={project}
@@ -460,7 +485,7 @@ const TimelineRow = memo(function TimelineRow({
             />
          )}
          {showProjectList && (
-            <div className="sticky left-0 z-10 flex h-[72px] w-[312px] shrink-0 items-center gap-1 px-[13px] pr-[10px] bg-container/95 backdrop-blur-sm text-[13px] leading-4 font-medium border-r border-border/40">
+            <div className="sticky left-0 z-10 flex h-14 w-[312px] shrink-0 items-center gap-1 px-[13px] pr-[10px] bg-container/95 backdrop-blur-sm text-[13px] leading-4 font-medium border-r border-border/40">
                <span className="inline-flex size-7 items-center justify-center rounded-md shrink-0">
                   <project.icon className="size-4" />
                </span>
@@ -468,7 +493,7 @@ const TimelineRow = memo(function TimelineRow({
                {displayProperties.health && (
                   <span
                      className="size-2 rounded-full shrink-0"
-                     style={{ backgroundColor: project.health.color }}
+                     style={{ backgroundColor: healthColor(project.health.id) }}
                   />
                )}
                {displayProperties.status && (
@@ -581,6 +606,8 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
    useEffect(() => {
       const onKeyDown = (event: KeyboardEvent) => {
          if (event.metaKey || event.ctrlKey || event.altKey) return;
+         // Com dialog/palette aberto a tecla é da camada de cima, não do zoom (pl#19).
+         if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
          const target = event.target as HTMLElement | null;
          if (
             target &&

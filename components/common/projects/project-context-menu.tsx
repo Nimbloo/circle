@@ -34,6 +34,8 @@ import { useParams } from 'next/navigation';
 import type { ComponentType, CSSProperties } from 'react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { healthColor } from './progress-colors';
+import { InitiativeGlyph } from '@/components/common/initiatives/initiative-glyph';
 
 /** Status/priority icons são uma união (Lucide | Remixicon); o cast expõe className/style. */
 type IconCmp = ComponentType<{ className?: string; style?: CSSProperties }>;
@@ -153,7 +155,7 @@ export function ProjectContextMenu({
                   <ContextMenuSubTrigger>
                      <span
                         className="size-2.5 rounded-full"
-                        style={{ backgroundColor: project.health.color }}
+                        style={{ backgroundColor: healthColor(project.health.id) }}
                      />
                      Health
                   </ContextMenuSubTrigger>
@@ -165,7 +167,7 @@ export function ProjectContextMenu({
                         >
                            <span
                               className="size-2.5 rounded-full"
-                              style={{ backgroundColor: h.color }}
+                              style={{ backgroundColor: healthColor(h.id) }}
                            />
                            {h.name}
                            {project.health.id === h.id && (
@@ -225,7 +227,11 @@ export function ProjectContextMenu({
                               void patch({ initiativeId: i.id }, `Initiative → ${i.name}`)
                            }
                         >
-                           <span className="text-sm">{i.icon}</span>
+                           <InitiativeGlyph
+                              icon={i.icon}
+                              color={i.iconColor}
+                              className="size-3.5"
+                           />
                            {i.name}
                            {project.initiative === i.id && (
                               <CheckIcon className="ml-auto size-3.5" />

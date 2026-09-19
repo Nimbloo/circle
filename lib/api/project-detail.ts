@@ -582,6 +582,119 @@ export async function deleteResource(
    return true;
 }
 
+/**
+ * Um update precisa dizer alguma coisa (pl#11): bloco nenhum, ou só espaço em branco,
+ * é update vazio — recusado no post e na edição.
+ */
+export function updateHasContent(blocks: ContentBlock[] | undefined): boolean {
+   return (blocks ?? []).some((block) => {
+      if ('text' in block && typeof block.text === 'string') return block.text.trim() !== '';
+      if ('items' in block && Array.isArray(block.items))
+         return block.items.some((item) =>
+            typeof item === 'string' ? item.trim() !== '' : item.text.trim() !== ''
+         );
+      if (block.type === 'code') return block.code.trim() !== '';
+      return block.type !== 'divider';
+   });
+}
+
+/**
+ * Health do projeto = health do ÚLTIMO update (paridade Linear). Recalculado depois de
+ * editar ou excluir um update; sem update nenhum volta para `no-update`.
+ */
+async function syncProjectHealthFromUpdates(tx: Db, projectId: string): Promise<void> {
+   const [latest] = await tx
+      .select({ health: projectUpdate.health, createdAt: projectUpdate.createdAt })
+      .from(projectUpdate)
+      .where(eq(projectUpdate.projectId, projectId))
+      .orderBy(desc(projectUpdate.createdAt))
+      .limit(1);
+   await tx
+      .update(projectT)
+      .set({
+         healthId: latest ? latest.health : 'no-update',
+         healthUpdatedAt: latest ? latest.createdAt : null,
+      })
+      .where(eq(projectT.id, projectId));
+}
+
+export interface EditUpdateInput {
+   health?: ProjectUpdateHealth;
+   blocks?: ContentBlock[];
+}
+
+/** Edita um update do projeto e repropaga o health quando ele é o mais recente. */
+export async function editProjectUpdate(
+   db: Db,
+   projectId: string,
+   updateId: string,
+   input: EditUpdateInput,
+   actorEmail?: string
+): Promise<ProjectUpdateDto> {
+   if (actorEmail) await assertCanWriteProject(db, actorEmail, projectId);
+   const [row] = await db
+      .select()
+      .from(projectUpdate)
+      .where(eq(projectUpdate.id, updateId))
+      .limit(1);
+   if (!row || row.projectId !== projectId)
+      throw new ApiError(404, `Update '${updateId}' não encontrado`);
+   if (input.health && !UPDATE_HEALTHS.includes(input.health))
+      throw new ApiError(400, 'health inválido');
+   const blocks = input.blocks ?? parseBlocks(row.blocks);
+   if (!updateHasContent(blocks)) throw new ApiError(400, 'update sem conteúdo');
+   const health = input.health ?? (row.health as ProjectUpdateHealth);
+
+   await db.transaction(async (tx) => {
+      await tx
+         .update(projectUpdate)
+         .set({ health, blocks: JSON.stringify(blocks) })
+         .where(eq(projectUpdate.id, updateId));
+      await syncProjectHealthFromUpdates(tx as unknown as Db, projectId);
+   });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id: projectId,
+      teamId: await projectTeamId(db, projectId),
+   });
+   const users = await loadUsers(db, [row.authorId]);
+   return {
+      id: row.id,
+      author: userRef(users.get(row.authorId)),
+      health,
+      blocks,
+      createdAt: iso(row.createdAt),
+   };
+}
+
+/** Exclui um update do projeto; o health volta ao do update anterior (ou `no-update`). */
+export async function deleteProjectUpdate(
+   db: Db,
+   projectId: string,
+   updateId: string,
+   actorEmail?: string
+): Promise<boolean> {
+   if (actorEmail) await assertCanWriteProject(db, actorEmail, projectId);
+   const [row] = await db
+      .select({ id: projectUpdate.id, projectId: projectUpdate.projectId })
+      .from(projectUpdate)
+      .where(eq(projectUpdate.id, updateId))
+      .limit(1);
+   if (!row || row.projectId !== projectId) return false;
+   await db.transaction(async (tx) => {
+      await tx.delete(projectUpdate).where(eq(projectUpdate.id, updateId));
+      await syncProjectHealthFromUpdates(tx as unknown as Db, projectId);
+   });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id: projectId,
+      teamId: await projectTeamId(db, projectId),
+   });
+   return true;
+}
+
 export interface PostUpdateInput {
    health: ProjectUpdateHealth;
    blocks: ContentBlock[];
@@ -598,6 +711,7 @@ export async function postProjectUpdate(
    await assertProject(db, projectId);
    if (actorEmail) await assertCanWriteProject(db, actorEmail, projectId);
    if (!UPDATE_HEALTHS.includes(input.health)) throw new ApiError(400, 'health inválido');
+   if (!updateHasContent(input.blocks)) throw new ApiError(400, 'update sem conteúdo');
    const id = randomUUID();
    const now = new Date();
    // Paridade Linear: o health do projeto vem do ÚLTIMO update. Os valores do update

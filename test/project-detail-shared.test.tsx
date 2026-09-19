@@ -30,7 +30,7 @@ vi.mock('@/lib/client', () => {
       ApiError,
       api: {
          projects: { detail, updateDetail: vi.fn() },
-         projectSnapshots: { forProject: vi.fn(async () => []) },
+         projectSnapshots: { list: vi.fn(async () => []), forProject: vi.fn(async () => []) },
          projectDependencies: { list: vi.fn(async () => []) },
       },
    };

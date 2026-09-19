@@ -7,7 +7,7 @@ import { Hourglass } from 'lucide-react';
 import { EmptyState } from '@/components/common/empty-state';
 import { LoadingArea } from '@/components/common/loading-area';
 import { useParams } from 'next/navigation';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import CycleLine, { CyclePlayIcon } from './cycle-line';
 import dynamic from 'next/dynamic';
 import { CycleProgressLegend } from './cycle-progress-legend';
@@ -38,6 +38,19 @@ export default function Cycles() {
       const teamCycles = teamId ? allCycles.filter((cycle) => cycle.teamId === teamId) : allCycles;
       return [...teamCycles].sort((a, b) => b.startDate.localeCompare(a.startDate));
    }, [allCycles, teamId]);
+
+   // O upcoming que a rota `/cycle/upcoming` mostra é o de menor startDate (pl#4).
+   const nextUpcomingId = useMemo(
+      () =>
+         cycles
+            .filter((c) => c.status === 'upcoming')
+            .reduce<
+               string | null
+            >((best, c) => (best === null || c.startDate < (cycles.find((x) => x.id === best)?.startDate ?? '') ? c.id : best), null),
+      [cycles]
+   );
+   // Ciclo sem rota própria abre os detalhes aqui mesmo.
+   const [expandedId, setExpandedId] = useState<string | null>(null);
 
    // Cool-down (#24): sem cycle current entre o último completed e o próximo upcoming.
    // A linha entra na timeline (newest first) logo antes do primeiro cycle já encerrado.
@@ -96,9 +109,16 @@ export default function Cycles() {
                   </div>
 
                   <div className="min-w-0 flex-1 border-b border-border/60">
-                     <CycleLine cycle={cycle} />
+                     <CycleLine
+                        cycle={cycle}
+                        isNextUpcoming={cycle.id === nextUpcomingId}
+                        expanded={expandedId === cycle.id}
+                        onToggle={() =>
+                           setExpandedId((current) => (current === cycle.id ? null : cycle.id))
+                        }
+                     />
 
-                     {cycle.status === 'current' && (
+                     {(cycle.status === 'current' || expandedId === cycle.id) && (
                         <div className="-mt-4 mb-4 flex h-[216px] items-stretch gap-5 px-2.5 xl:pr-[60px]">
                            <div className="min-w-0 flex-1">
                               {cycle.burnup?.length ? (

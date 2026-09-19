@@ -319,6 +319,8 @@ export interface UpdateProjectInput {
    initiativeId?: string | null;
    /** Move o projeto para outro time (as issues do projeto NÃO mudam de time). */
    teamId?: string;
+   /** Substitui o conjunto de labels do projeto (pl#2). */
+   labelIds?: string[];
 }
 
 /** Rótulos legíveis dos campos, para o feed de atividade do projeto. */
@@ -332,6 +334,7 @@ const PROJECT_FIELD_LABELS: Partial<Record<keyof UpdateProjectInput, string>> = 
    targetDate: 'target date',
    initiativeId: 'initiative',
    teamId: 'team',
+   labelIds: 'labels',
 };
 
 export async function updateProject(
@@ -377,6 +380,15 @@ export async function updateProject(
       }
    }
 
+   const labelIds = patch.labelIds ? [...new Set(patch.labelIds)] : undefined;
+   if (labelIds?.length) {
+      const found = await db
+         .select({ id: labelT.id })
+         .from(labelT)
+         .where(inArray(labelT.id, labelIds));
+      if (found.length !== labelIds.length) throw new ApiError(400, 'label inválida');
+   }
+
    // Resolvido ANTES da transação: o ator exige consulta própria, e consultar `db` de
    // dentro da `tx` trava quando a conexão é única (é o caso do PGlite nos testes).
    const changed = (Object.keys(patch) as (keyof UpdateProjectInput)[])
@@ -405,6 +417,14 @@ export async function updateProject(
       set.healthUpdatedAt = new Date();
    await db.transaction(async (tx) => {
       await tx.update(projectT).set(set).where(eq(projectT.id, id));
+      if (labelIds) {
+         await tx.delete(projectLabel).where(eq(projectLabel.projectId, id));
+         if (labelIds.length) {
+            await tx
+               .insert(projectLabel)
+               .values(labelIds.map((labelId) => ({ projectId: id, labelId })));
+         }
+      }
       // Reconciliação initiative↔project: substitui o vínculo antigo pelo novo.
       if (patch.initiativeId !== undefined) {
          await tx.delete(initiativeProject).where(eq(initiativeProject.projectId, id));

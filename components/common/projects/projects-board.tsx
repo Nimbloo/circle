@@ -18,6 +18,7 @@ import { ProjectGroup } from './projects';
 import { ProjectContextMenu } from './project-context-menu';
 import { labelColor } from '@/components/common/palette';
 import { useEnterFade } from '@/components/common/loading-area';
+import { healthColor } from './progress-colors';
 
 export const ProjectDragType = 'PROJECT';
 /** Instrução de DnD lida por leitores de tela (aria-describedby dos cards). */
@@ -66,7 +67,7 @@ function ProjectCard({ project }: { project: Project }) {
                <div className="flex h-7 items-center gap-1.5 text-xs text-muted-foreground">
                   <span
                      className="size-2 rounded-full shrink-0"
-                     style={{ backgroundColor: project.health.color }}
+                     style={{ backgroundColor: healthColor(project.health.id) }}
                   />
                   {project.health.name}
                   {project.healthUpdatedAgoDays !== undefined && (

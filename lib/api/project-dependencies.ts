@@ -90,7 +90,7 @@ export async function setDependencies(
    dependsOn: readonly string[]
 ): Promise<string[]> {
    const exists = await db
-      .select({ id: projectT.id })
+      .select({ id: projectT.id, teamId: projectT.teamId })
       .from(projectT)
       .where(eq(projectT.id, projectId))
       .limit(1);
@@ -130,6 +130,6 @@ export async function setDependencies(
             .onConflictDoNothing();
       }
    });
-   publish({ entity: 'project', action: 'updated', id: projectId });
+   publish({ entity: 'project', action: 'updated', id: projectId, teamId: exists[0].teamId });
    return listDependencies(db, projectId);
 }

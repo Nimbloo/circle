@@ -5,13 +5,14 @@ import {
    useCallback,
    useContext,
    useEffect,
+   useMemo,
    useRef,
    useState,
    type ReactNode,
 } from 'react';
 import type { ProjectDetail } from '@/data/project-details';
 import { adaptProjectDetail, emptyProjectDetail } from '@/lib/adapters-project-detail';
-import { api } from '@/lib/client';
+import { api, type ProjectSnapshotPoint } from '@/lib/client';
 import { PROJECT_CHANGED_EVENT, useLiveReload } from '@/lib/use-live-sync';
 
 export type ProjectDetailStatus = 'loading' | 'ready' | 'error';
@@ -98,19 +99,106 @@ export function useProjectDetail(projectId: string | null): ProjectDetailState {
       []
    );
 
-   return {
-      status: state.id === projectId ? state.status : 'loading',
-      detail: state.detail,
-      descriptionVersion: state.descriptionVersion,
-      reload: load,
-      setDetail,
-      setDescriptionVersion,
-   };
+   const status = state.id === projectId ? state.status : 'loading';
+   return useMemo(
+      () => ({
+         status,
+         detail: state.detail,
+         descriptionVersion: state.descriptionVersion,
+         reload: load,
+         setDetail,
+         setDescriptionVersion,
+      }),
+      [status, state.detail, state.descriptionVersion, load, setDetail, setDescriptionVersion]
+   );
 }
 
-const ProjectDetailContext = createContext<{ projectId: string; state: ProjectDetailState } | null>(
-   null
-);
+/* ----------------------- dependências e snapshots (pl#6) ---------------------- */
+
+export interface ProjectDependenciesState {
+   /** `null` enquanto a 1ª carga não respondeu — a UI não afirma "No dependencies". */
+   ids: string[] | null;
+   setIds: (ids: string[]) => void;
+}
+
+/**
+ * "Depends on" do projeto: carrega uma vez e recarrega no evento remoto do projeto
+ * (`setDependencies` publica `project updated`), então a lista fica ao vivo (pl#8).
+ */
+export function useProjectDependencies(projectId: string | null): ProjectDependenciesState {
+   const [state, setState] = useState<{ id: string | null; ids: string[] | null }>({
+      id: projectId,
+      ids: null,
+   });
+   const seq = useRef(0);
+   const load = useCallback(async () => {
+      if (!projectId) return;
+      const mine = ++seq.current;
+      try {
+         const ids = await api.projectDependencies.list(projectId);
+         if (mine === seq.current) setState({ id: projectId, ids });
+      } catch {
+         // Falha mantém o que já estava; na 1ª carga vira lista vazia.
+         if (mine === seq.current)
+            setState((prev) =>
+               prev.id === projectId && prev.ids ? prev : { id: projectId, ids: [] }
+            );
+      }
+   }, [projectId]);
+   useEffect(() => {
+      if (!projectId) return;
+      setState({ id: projectId, ids: null });
+      void load();
+      return () => {
+         seq.current += 1;
+      };
+   }, [projectId, load]);
+   useLiveReload(PROJECT_CHANGED_EVENT, { id: projectId ?? undefined }, () => {
+      if (projectId) void load();
+   });
+   const setIds = useCallback(
+      (ids: string[]) => {
+         seq.current += 1; // a gravação local vence uma leitura em voo
+         setState({ id: projectId, ids });
+      },
+      [projectId]
+   );
+   const ids = state.id === projectId ? state.ids : null;
+   return useMemo(() => ({ ids, setIds }), [ids, setIds]);
+}
+
+/** Série "Progress over time" do projeto; `null` enquanto carrega. */
+export function useProjectSnapshots(projectId: string | null): ProjectSnapshotPoint[] | null {
+   const [state, setState] = useState<{ id: string | null; points: ProjectSnapshotPoint[] | null }>(
+      { id: projectId, points: null }
+   );
+   useEffect(() => {
+      if (!projectId) return;
+      let active = true;
+      setState({ id: projectId, points: null });
+      api.projectSnapshots
+         .list(projectId)
+         .then((points) => {
+            if (active) setState({ id: projectId, points });
+         })
+         .catch(() => {
+            if (active) setState({ id: projectId, points: [] });
+         });
+      return () => {
+         active = false;
+      };
+   }, [projectId]);
+   return state.id === projectId ? state.points : null;
+}
+
+interface ProjectContextValue {
+   projectId: string;
+   state: ProjectDetailState;
+   dependencies: ProjectDependenciesState;
+   snapshots: ProjectSnapshotPoint[] | null;
+}
+
+const ProjectDetailContext = createContext<ProjectContextValue | null>(null);
 
 /**
  * Um fetch do detalhe por projeto, compartilhado pelas abas (overview/issues/activity) —
@@ -124,11 +212,13 @@ export function ProjectDetailProvider({
    children: ReactNode;
 }) {
    const state = useProjectDetail(projectId);
-   return (
-      <ProjectDetailContext.Provider value={{ projectId, state }}>
-         {children}
-      </ProjectDetailContext.Provider>
+   const dependencies = useProjectDependencies(projectId);
+   const snapshots = useProjectSnapshots(projectId);
+   const value = useMemo(
+      () => ({ projectId, state, dependencies, snapshots }),
+      [projectId, state, dependencies, snapshots]
    );
+   return <ProjectDetailContext.Provider value={value}>{children}</ProjectDetailContext.Provider>;
 }
 
 /** Detalhe do projeto: o do provider da rota quando houver, senão carrega sozinho (peek). */
@@ -137,4 +227,20 @@ export function useSharedProjectDetail(projectId: string): ProjectDetailState {
    const shared = ctx?.projectId === projectId ? ctx.state : null;
    const own = useProjectDetail(shared ? null : projectId);
    return shared ?? own;
+}
+
+/** Dependências do provider da rota quando houver; senão carrega sozinho (peek). */
+export function useSharedProjectDependencies(projectId: string): ProjectDependenciesState {
+   const ctx = useContext(ProjectDetailContext);
+   const shared = ctx?.projectId === projectId ? ctx.dependencies : null;
+   const own = useProjectDependencies(shared ? null : projectId);
+   return shared ?? own;
+}
+
+/** Snapshots do provider da rota quando houver; senão carrega sozinho. */
+export function useSharedProjectSnapshots(projectId: string): ProjectSnapshotPoint[] | null {
+   const ctx = useContext(ProjectDetailContext);
+   const shared = ctx?.projectId === projectId ? ctx : null;
+   const own = useProjectSnapshots(shared ? null : projectId);
+   return shared ? shared.snapshots : own;
 }

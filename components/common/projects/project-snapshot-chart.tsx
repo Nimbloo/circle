@@ -2,6 +2,7 @@
 
 import type { ProjectSnapshotPoint } from '@/lib/client';
 import { useRef, useState } from 'react';
+import { PROGRESS_COLORS } from './progress-colors';
 
 interface ProjectSnapshotChartProps {
    points: ProjectSnapshotPoint[];
@@ -12,9 +13,9 @@ interface ProjectSnapshotChartProps {
 }
 
 const SERIES = [
-   { key: 'scope', label: 'Scope', color: 'var(--muted-foreground)' },
-   { key: 'started', label: 'Started', color: 'var(--chart-4)' },
-   { key: 'completed', label: 'Completed', color: 'var(--primary)' },
+   { key: 'scope', label: 'Scope', color: PROGRESS_COLORS.scope },
+   { key: 'started', label: 'Started', color: PROGRESS_COLORS.started },
+   { key: 'completed', label: 'Completed', color: PROGRESS_COLORS.completed },
 ] as const;
 
 /** `YYYY-MM-DD` → `Mar 5` (sem date-fns: a entrada já é ISO, não há fuso envolvido). */
