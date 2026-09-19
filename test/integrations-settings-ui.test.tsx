@@ -157,6 +157,28 @@ describe('Settings → Webhooks (#101)', () => {
       await waitFor(() => expect(toastMocks.error).toHaveBeenCalled());
       expect(toggle.getAttribute('data-state')).toBe('checked');
    });
+
+   it('erro ao carregar as entregas mostra erro com retry, não skeleton eterno (Ad#26)', async () => {
+      const user = userEvent.setup();
+      apiMocks.hooksList.mockResolvedValue([
+         {
+            id: 'w1',
+            url: 'https://exemplo.com/circle',
+            events: ['issue.created'],
+            enabled: true,
+            createdAt: '2026-09-01T00:00:00.000Z',
+            createdByName: 'Owner',
+         },
+      ]);
+      apiMocks.hooksDeliveries.mockRejectedValueOnce(new Error('boom'));
+
+      mount(<WebhooksSettings />);
+      await user.click(await screen.findByRole('button', { name: 'Entregas' }));
+      const retry = await screen.findByRole('button', { name: 'Tentar novamente' });
+      await user.click(retry);
+      expect(await screen.findByText('Nenhuma entrega ainda')).toBeTruthy();
+      expect(apiMocks.hooksDeliveries).toHaveBeenCalledTimes(2);
+   });
 });
 
 describe('Settings → Import/Export (#101)', () => {
