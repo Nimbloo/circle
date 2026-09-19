@@ -11,7 +11,12 @@ describe('labels CRUD', () => {
       const db = await makeTestDb();
 
       const created = await createLabel(db, { name: 'Tech Debt', color: 'orange' });
-      expect(created).toEqual({ id: 'tech-debt', name: 'Tech Debt', color: 'orange' });
+      expect(created).toEqual({
+         id: 'tech-debt',
+         name: 'Tech Debt',
+         color: 'orange',
+         groupId: null,
+      });
 
       const list = await listLabels(db);
       expect(list.some((l) => l.id === 'tech-debt')).toBe(true);
@@ -34,11 +39,11 @@ describe('labels CRUD', () => {
       await createLabel(db, { id: 'x', name: 'Antigo', color: 'gray' });
 
       const patched = await updateLabel(db, 'x', { name: 'Novo', color: 'green' });
-      expect(patched).toEqual({ id: 'x', name: 'Novo', color: 'green' });
+      expect(patched).toEqual({ id: 'x', name: 'Novo', color: 'green', groupId: null });
 
       // patch parcial (só color)
       const onlyColor = await updateLabel(db, 'x', { color: 'red' });
-      expect(onlyColor).toEqual({ id: 'x', name: 'Novo', color: 'red' });
+      expect(onlyColor).toEqual({ id: 'x', name: 'Novo', color: 'red', groupId: null });
 
       expect(await updateLabel(db, 'inexistente', { name: 'z' })).toBeNull();
    });

@@ -9,6 +9,7 @@ import {
    listHealthStates,
 } from './catalogs';
 import { listTeams, type TeamDto } from './teams';
+import { listLabelGroups, type LabelGroupDto } from './labels';
 import { listProjects, type ProjectDto } from './projects';
 import { listMembers, type MemberDto } from './members';
 import { listInitiatives, type InitiativeDto } from './initiatives';
@@ -30,6 +31,8 @@ export interface WorkspaceBootstrap {
    projectStatuses: Awaited<ReturnType<typeof listProjectStatuses>>;
    priorities: Awaited<ReturnType<typeof listPriorities>>;
    labels: Awaited<ReturnType<typeof listLabels>>;
+   /** Grupos de label (aditivo): cada label aponta pelo `groupId`. */
+   labelGroups: LabelGroupDto[];
    healthStates: Awaited<ReturnType<typeof listHealthStates>>;
    teams: TeamFull[];
    projects: ProjectDto[];
@@ -79,6 +82,7 @@ export async function bootstrapWorkspace(
       projectStatuses,
       priorities,
       labels,
+      labelGroups,
       healthStates,
       teams,
       projects,
@@ -90,6 +94,7 @@ export async function bootstrapWorkspace(
       listProjectStatuses(db),
       listPriorities(db),
       listLabels(db),
+      listLabelGroups(db),
       listHealthStates(db),
       listTeams(db, { teamIds: scopedTeamIds }, me.id),
       listProjects(db, { teamIds: scopedTeamIds }),
@@ -167,6 +172,7 @@ export async function bootstrapWorkspace(
       projectStatuses,
       priorities,
       labels,
+      labelGroups,
       healthStates,
       teams: teamsFull,
       projects,

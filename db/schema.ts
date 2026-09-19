@@ -42,6 +42,16 @@ export const label = pgTable('label', {
    groupId: varchar('group_id', { length: 64 }),
 });
 
+// Grupo de labels (paridade Linear): cadastro do `label.group_id` (antes só uma chave
+// solta). Sem FK no `label.group_id` — excluir o grupo solta as labels (app-level,
+// `deleteLabelGroup`), como os outros vínculos soltos do catálogo.
+export const labelGroup = pgTable('label_group', {
+   id: varchar('id', { length: 64 }).primaryKey(),
+   name: varchar('name', { length: 128 }).notNull(),
+   color: varchar('color', { length: 32 }).notNull().default('gray'),
+   position: integer('position').notNull().default(0),
+});
+
 export const health = pgTable('health', {
    id: varchar('id', { length: 64 }).primaryKey(),
    name: varchar('name', { length: 128 }).notNull(),
@@ -932,6 +942,9 @@ export const teamDocument = pgTable('team_document', {
       .notNull()
       .references(() => appUser.id),
    pinned: boolean('pinned').notNull().default(false),
+   // Corpo do documento: JSON do ProseMirror do editor de blocos (igual à descrição da
+   // issue/projeto). NULL = documento sem corpo.
+   descriptionDoc: jsonb('description_doc').$type<Record<string, unknown>>(),
    createdAt: timestamp('created_at').notNull().defaultNow(),
    updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
