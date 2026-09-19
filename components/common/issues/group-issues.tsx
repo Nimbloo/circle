@@ -78,6 +78,8 @@ const IssueGridList: FC<{ issues: Issue[]; status?: Status }> = ({ issues, statu
       getScrollElement: () => ref.current,
       estimateSize: () => 132, // altura típica do card (título + labels + footer)
       overscan: 8,
+      // Medição e card presos à issue, não ao índice (reordenar não troca a altura/estado).
+      getItemKey: (i) => issues[i].id,
    });
 
    return (

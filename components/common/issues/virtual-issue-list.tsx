@@ -14,7 +14,7 @@ interface Entry {
 /** Linha virtual: um header de grupo OU uma issue. */
 type Row =
    | { kind: 'header'; group: IssueGroupDescriptor; count: number }
-   | { kind: 'issue'; issue: Issue; getOrderedIssues: () => Issue[] };
+   | { kind: 'issue'; groupId: string; issue: Issue; getOrderedIssues: () => Issue[] };
 
 export const ISSUE_GROUP_HEADER_HEIGHT = 36;
 export const ISSUE_ROW_HEIGHT = 44;
@@ -47,7 +47,8 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
       for (const e of entries) {
          out.push({ kind: 'header', group: e.group, count: e.issues.length });
          const getOrderedIssues = getterFor(e.group.id);
-         for (const issue of e.issues) out.push({ kind: 'issue', issue, getOrderedIssues });
+         for (const issue of e.issues)
+            out.push({ kind: 'issue', groupId: e.group.id, issue, getOrderedIssues });
       }
       return out;
    }, [entries, getterFor]);
@@ -57,6 +58,15 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
       getScrollElement: () => parentRef.current,
       estimateSize: (i) =>
          rows[i].kind === 'header' ? ISSUE_GROUP_HEADER_HEIGHT : ISSUE_ROW_HEIGHT,
+      // Chave pela issue (não pelo índice): ao reordenar, a linha montada — e um popover
+      // aberto nela — continua ligada à mesma issue. O grupo entra na chave porque, por
+      // label, a mesma issue aparece em mais de um grupo.
+      getItemKey: (i) => {
+         const row = rows[i];
+         return row.kind === 'header'
+            ? `header:${row.group.id}`
+            : `issue:${row.groupId}:${row.issue.id}`;
+      },
       overscan: 14,
    });
 
