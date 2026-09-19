@@ -258,22 +258,23 @@ export async function addTeamMember(db: Db, teamId: string, email: string): Prom
    // E-mail (best-effort): só em inserção nova e com remetente configurado. Acesso ao
    // Circle já é via SSO Keycloak (grupo `app-circle`) — aqui é só o aviso de que
    // entrou no time, sem link de senha/convite nativo (retirado).
+   // Fire-and-forget: o SES não segura a resposta de quem adicionou (Ad#21–40).
    if (inserted.length && process.env.CIRCLE_MAIL_FROM) {
-      try {
-         const teamName = t[0].name;
-         await sendEmail(
-            user.email,
-            `Você entrou no time ${teamName}`,
-            ctaEmailHtml({
-               title: `Você foi adicionado ao time ${teamName}`,
-               intro: `Agora você faz parte do time ${teamName} no Circle.`,
-               buttonLabel: 'Abrir o Circle',
-               buttonUrl: 'https://circle.nimbloo.ai',
-            })
-         );
-      } catch (err) {
-         console.error('[circle] notificação de time por e-mail falhou:', err);
-      }
+      const teamName = t[0].name;
+      void Promise.resolve()
+         .then(() =>
+            sendEmail(
+               user.email,
+               `Você entrou no time ${teamName}`,
+               ctaEmailHtml({
+                  title: `Você foi adicionado ao time ${teamName}`,
+                  intro: `Agora você faz parte do time ${teamName} no Circle.`,
+                  buttonLabel: 'Abrir o Circle',
+                  buttonUrl: 'https://circle.nimbloo.ai',
+               })
+            )
+         )
+         .catch((err) => console.error('[circle] notificação de time por e-mail falhou:', err));
    }
 }
 

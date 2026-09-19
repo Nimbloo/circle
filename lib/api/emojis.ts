@@ -75,14 +75,29 @@ export async function createEmoji(db: Db, input: CreateEmojiInput): Promise<Emoj
    const id = randomUUID();
    const key = `emojis/${id}.${ext}`;
    const url = await putAsset(key, buf, ct);
-   await db.insert(emojiT).values({
-      id,
-      shortcode: code,
-      s3Key: key,
-      url,
-      contentType: ct,
-      createdBy: input.createdBy ?? null,
-   });
+   // O upload vem antes da linha (a linha guarda a URL). Se o insert falhar — corrida no
+   // shortcode (unique) ou banco fora —, o arquivo do S3 ficaria órfão: apaga e responde
+   // 409 na corrida em vez de 500.
+   const inserted = await db
+      .insert(emojiT)
+      .values({
+         id,
+         shortcode: code,
+         s3Key: key,
+         url,
+         contentType: ct,
+         createdBy: input.createdBy ?? null,
+      })
+      .onConflictDoNothing({ target: emojiT.shortcode })
+      .returning({ id: emojiT.id })
+      .catch(async (e: unknown) => {
+         await deleteAsset(key).catch(() => undefined);
+         throw e;
+      });
+   if (inserted.length === 0) {
+      await deleteAsset(key).catch(() => undefined);
+      throw new ApiError(409, `Emoji :${code}: já existe`);
+   }
    const [row] = await db.select().from(emojiT).where(eq(emojiT.id, id)).limit(1);
    publish({ entity: 'catalog', action: 'created', id, kind: 'emoji' });
    return toDto(row);
