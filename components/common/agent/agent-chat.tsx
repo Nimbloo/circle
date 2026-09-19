@@ -318,7 +318,7 @@ export default function AgentChat() {
          >
             <div className="max-w-2xl mx-auto px-6 py-8 flex flex-col gap-6">
                {activeChat.messages.length === 0 && activeChat.loadState === 'loading' && (
-                  <LoadingArea rows={3} />
+                  <LoadingArea rows={3} label="Carregando conversa…" />
                )}
                {activeChat.messages.length === 0 && activeChat.loadState === 'error' && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
