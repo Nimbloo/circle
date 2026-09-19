@@ -2,7 +2,11 @@
 
 import { useEffect, useRef } from 'react';
 import { useIssuesStore } from '@/store/issues-store';
-import { useNotificationsStore } from '@/store/notifications-store';
+import {
+   isNotificationPatch,
+   useNotificationsStore,
+   type NotificationEvent,
+} from '@/store/notifications-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useCatalogStore } from '@/store/catalog-store';
 import { api } from '@/lib/client';
@@ -290,6 +294,12 @@ export function useLiveSync(): void {
             case 'notification': {
                const me = useWorkspaceStore.getState().me?.id;
                if (parsed.recipientId && me && parsed.recipientId !== me) return;
+               // Evento com o estado novo (`read`/`snoozedUntil`) vira patch local (#19).
+               const notificationEvent = parsed as NotificationEvent;
+               if (isNotificationPatch(notificationEvent)) {
+                  useNotificationsStore.getState().applyNotificationPatch(notificationEvent);
+                  return;
+               }
                scheduleHydrate('notifications');
                return;
             }
