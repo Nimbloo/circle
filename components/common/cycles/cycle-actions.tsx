@@ -73,12 +73,26 @@ function EditCycleDialog({
       setCapacity(String(c.capacity));
    }, [open]);
 
+   // Guarda por ref: vários Enter seguidos chegam antes do `busy` re-renderizar (pl#18).
+   const savingRef = useRef(false);
+
    const save = async () => {
-      if (!name.trim() || busy) return;
+      if (!name.trim() || savingRef.current) return;
       if (startDate > endDate) {
          toast.error('Start date must be before end date');
          return;
       }
+      // Campo vazio = não mexer na capacidade (antes virava 0 em silêncio).
+      const typed = capacity.trim();
+      const capacityValue = typed === '' ? undefined : Number(typed);
+      if (
+         capacityValue !== undefined &&
+         (!Number.isInteger(capacityValue) || capacityValue < 0 || capacityValue > 1000)
+      ) {
+         toast.error('Capacity must be a whole number of 0 or more');
+         return;
+      }
+      savingRef.current = true;
       setBusy(true);
       try {
          const dto = await api.cycles.update(cycle.id, {
@@ -86,7 +100,7 @@ function EditCycleDialog({
             status,
             startDate,
             endDate,
-            capacity: Number(capacity) || 0,
+            ...(capacityValue === undefined ? {} : { capacity: capacityValue }),
          });
          applyCycle(dto);
          onOpenChange(false);
@@ -95,6 +109,7 @@ function EditCycleDialog({
          // 409 (outro ciclo em andamento, #35) traz a explicação do servidor.
          toast.error(e instanceof ApiError ? e.message : 'Could not update the cycle');
       } finally {
+         savingRef.current = false;
          setBusy(false);
       }
    };
@@ -139,10 +154,12 @@ function EditCycleDialog({
                   </div>
                   <div className="flex flex-col gap-1.5">
                      <Label htmlFor="edit-cycle-capacity">Capacity (%)</Label>
+                     {/* Sem `min`/`step` no HTML: a recusa é nossa, com mensagem
+                         legível, em vez do balão nativo do navegador (pl#18). */}
                      <Input
                         id="edit-cycle-capacity"
                         type="number"
-                        min={0}
+                        inputMode="numeric"
                         value={capacity}
                         onChange={(e) => setCapacity(e.target.value)}
                      />

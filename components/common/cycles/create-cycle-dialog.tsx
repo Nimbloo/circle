@@ -22,7 +22,7 @@ import {
 import { api, ApiError } from '@/lib/client';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Plus } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 /**
@@ -44,12 +44,16 @@ export function CreateCycleButton({ defaultTeamId }: { defaultTeamId?: string })
       if (open && !teamId) setTeamId(defaultTeamId ?? teams[0]?.id ?? '');
    }, [open, teamId, defaultTeamId, teams]);
 
+   // Guarda por ref: Enter repetido chega antes de `busy` re-renderizar (pl#18).
+   const creatingRef = useRef(false);
+
    const create = async () => {
-      if (!name.trim() || !teamId || !startDate || !endDate || busy) return;
+      if (!name.trim() || !teamId || !startDate || !endDate || creatingRef.current) return;
       if (startDate > endDate) {
          toast.error('Start date must be before end date');
          return;
       }
+      creatingRef.current = true;
       setBusy(true);
       try {
          applyCycle(
@@ -63,6 +67,7 @@ export function CreateCycleButton({ defaultTeamId }: { defaultTeamId?: string })
       } catch (e) {
          toast.error(e instanceof ApiError ? e.message : 'Could not create the cycle');
       } finally {
+         creatingRef.current = false;
          setBusy(false);
       }
    };
