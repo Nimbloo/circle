@@ -129,8 +129,14 @@ export async function listMembers(db: Db, opts: ListMembersOptions = {}): Promis
 export async function getMember(db: Db, id: string): Promise<MemberDto | null> {
    const rows = await db.select().from(appUser).where(eq(appUser.id, id)).limit(1);
    if (rows.length === 0) return null;
-   const memberships = await teamMemberships(db);
-   return toDto(rows[0], memberships.get(id) ?? []);
+   const teams = await db
+      .select({ teamId: teamMember.teamId })
+      .from(teamMember)
+      .where(eq(teamMember.userId, id));
+   return toDto(
+      rows[0],
+      teams.map((t) => t.teamId)
+   );
 }
 
 /**
