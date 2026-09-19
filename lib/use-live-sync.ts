@@ -9,6 +9,7 @@ import {
 } from '@/store/notifications-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useCatalogStore } from '@/store/catalog-store';
+import { useFavoritesStore } from '@/store/favorites-store';
 import { api } from '@/lib/client';
 import type { CircleEntity } from '@/lib/api/events';
 
@@ -194,7 +195,16 @@ export function useLiveSync(): void {
 
          // NÃO pulamos por "ator sou eu": outras abas/dispositivos do mesmo usuário
          // não receberam o update otimista → precisam reconciliar com o servidor.
+         // Favorito renomeado/apagado: a sidebar acompanha (só se a entidade é favorita).
+         if (id && (entity === 'issue' || entity === 'project' || entity === 'view'))
+            useFavoritesStore.getState().onEntityChanged(entity, id);
+
          switch (entity) {
+            case 'favorite':
+               // Favorito mudou em outra aba/dispositivo do próprio usuário.
+               if (parsed.recipientId && parsed.recipientId !== ws.me?.id) return;
+               void useFavoritesStore.getState().refresh();
+               return;
             case 'issue':
                if (!id) scheduleHydrate('issues');
                else if (deleted) useIssuesStore.getState().removeRemote(id);
