@@ -126,13 +126,26 @@ export async function listMembers(db: Db, opts: ListMembersOptions = {}): Promis
    return dtos;
 }
 
-export async function getMember(db: Db, id: string): Promise<MemberDto | null> {
+/**
+ * Um membro. Com `scope` (Guest, #100) só os times visíveis entram no DTO — os de fora
+ * não vazam por `teamIds`/`teamCount` (Ad#27). `null` = sem restrição.
+ */
+export async function getMember(
+   db: Db,
+   id: string,
+   scope: string[] | null = null
+): Promise<MemberDto | null> {
    const rows = await db.select().from(appUser).where(eq(appUser.id, id)).limit(1);
    if (rows.length === 0) return null;
+   const predicates = [eq(teamMember.userId, id)];
+   if (scope !== null) {
+      if (scope.length === 0) return toDto(rows[0], []);
+      predicates.push(inArray(teamMember.teamId, scope));
+   }
    const teams = await db
       .select({ teamId: teamMember.teamId })
       .from(teamMember)
-      .where(eq(teamMember.userId, id));
+      .where(and(...predicates));
    return toDto(
       rows[0],
       teams.map((t) => t.teamId)
