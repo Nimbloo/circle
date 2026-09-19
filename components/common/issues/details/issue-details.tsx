@@ -99,6 +99,8 @@ export function IssueDetailView(props: IssueDetailViewProps) {
 
 /** Janela em que uma mudança remota desta issue é tratada como eco da própria ação. */
 const OWN_ECHO_MS = 2000;
+/** Janela que junta uma rajada de comentários remotos numa única recarga do feed. */
+const ACTIVITY_COALESCE_MS = 150;
 
 function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps) {
    const { orgId } = useParams<{ orgId: string }>();
@@ -202,12 +204,14 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
    // (um evento de outra pessoa no mesmo intervalo não se perde).
    const ownActionUntil = useRef(0);
    const echoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+   const activityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
    const markOwnAction = useCallback(() => {
       ownActionUntil.current = Date.now() + OWN_ECHO_MS;
    }, []);
    useEffect(
       () => () => {
          if (echoTimer.current) clearTimeout(echoTimer.current);
+         if (activityTimer.current) clearTimeout(activityTimer.current);
       },
       []
    );
@@ -216,7 +220,8 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
    // OUTRO usuário), refaz o fetch do detail/feed. Sem isso, o painel aberto fica stale.
    useEffect(() => {
       const onChanged = (e: Event) => {
-         const d = (e as CustomEvent<{ id?: string; own?: boolean }>).detail ?? {};
+         const d =
+            (e as CustomEvent<{ id?: string; own?: boolean; scope?: 'activity' }>).detail ?? {};
          if (d.id && d.id !== detailIssueId) return;
          const remaining = ownActionUntil.current - Date.now();
          if (remaining > 0) {
@@ -225,6 +230,14 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
                echoTimer.current = null;
                reloadActivityRef.current();
             }, remaining);
+            return;
+         }
+         // Comentário/reação de outra pessoa: só o feed mudou (#27).
+         if (d.scope === 'activity') {
+            activityTimer.current ??= setTimeout(() => {
+               activityTimer.current = null;
+               reloadActivityRef.current();
+            }, ACTIVITY_COALESCE_MS);
             return;
          }
          setReloadKey((k) => k + 1);

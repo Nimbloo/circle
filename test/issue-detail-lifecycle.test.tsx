@@ -158,6 +158,25 @@ describe('detalhe da issue', () => {
       }
    });
 
+   it('#27: rajada de comentários de outra pessoa recarrega só o feed, uma vez', async () => {
+      const { IssueDetailView } = await import('@/components/common/issues/details/issue-details');
+      apiMocks.issues.detail.mockResolvedValue(dto('CORE-1'));
+      render(<IssueDetailView issue={make('a', 'CORE-1')} />);
+      await waitFor(() => expect(apiMocks.issues.detail).toHaveBeenCalledTimes(1));
+      apiMocks.issues.activity.mockClear();
+
+      act(() => {
+         for (let i = 0; i < 5; i++)
+            window.dispatchEvent(
+               new CustomEvent(ISSUE_CHANGED_EVENT, { detail: { id: 'a', scope: 'activity' } })
+            );
+      });
+      await waitFor(() => expect(apiMocks.issues.activity).toHaveBeenCalledTimes(1));
+      await new Promise((r) => setTimeout(r, 300));
+      expect(apiMocks.issues.activity).toHaveBeenCalledTimes(1);
+      expect(apiMocks.issues.detail).toHaveBeenCalledTimes(1);
+   });
+
    it('evento de outra pessoa (sem ação própria) recarrega', async () => {
       const { IssueDetailView } = await import('@/components/common/issues/details/issue-details');
       apiMocks.issues.detail.mockResolvedValue(dto('CORE-1'));

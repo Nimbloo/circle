@@ -112,6 +112,8 @@ export interface LiveEventDetail {
    own?: boolean;
    /** Subtipo do `catalog` (#53): template, project_template, sla, emoji. */
    kind?: string;
+   /** `activity`: só o feed da issue mudou (comentário/reação, #27), não o detalhe. */
+   scope?: 'activity';
 }
 
 /** Todos os eventos de janela: um resync avisa todas as telas com cache local. */
@@ -356,10 +358,13 @@ export function useLiveSync(): void {
                // Comentário/reação NÃO mexem na lista do board — só no detalhe aberto.
                // Com `issueId` no payload recarrega só aquele detalhe; sem ele (servidor
                // antigo), qualquer detalhe aberto recarrega (o id do evento é o do
-               // COMENTÁRIO, inútil para o guard do painel).
+               // COMENTÁRIO, inútil para o guard do painel). `scope: 'activity'`: só o feed
+               // mudou — o detalhe recarrega a atividade, não o DTO inteiro (#27).
                dispatch(
                   ISSUE_CHANGED_EVENT,
-                  own ? { id: parsed.issueId, own } : { id: parsed.issueId }
+                  own
+                     ? { id: parsed.issueId, scope: 'activity', own }
+                     : { id: parsed.issueId, scope: 'activity' }
                );
                return;
             case 'project':

@@ -221,7 +221,10 @@ describe('useLiveSync — eventos de janela com id (#19, #28)', () => {
       es.emit({ entity: 'comment', action: 'created', id: 'cm1', issueId: 'i1' });
       es.emit({ entity: 'comment', action: 'created', id: 'cm2' });
       window.removeEventListener(ISSUE_CHANGED_EVENT, on);
-      expect(seen).toEqual([{ id: 'i1' }, { id: undefined }]);
+      expect(seen).toEqual([
+         { id: 'i1', scope: 'activity' },
+         { id: undefined, scope: 'activity' },
+      ]);
    });
 
    it('project com id dispara PROJECT_CHANGED com o id', async () => {
