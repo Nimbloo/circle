@@ -160,7 +160,12 @@ export interface ReviewsPage {
  * já adaptados pra `Review`, mais o total do conjunto (pra o load-more/"X de Y").
  */
 export async function fetchReviews(
-   opts: { limit?: number; offset?: number; list?: 'created' | 'for-you' } = {}
+   opts: {
+      limit?: number;
+      offset?: number;
+      list?: 'created' | 'for-you';
+      statuses?: ReviewStatus[];
+   } = {}
 ): Promise<ReviewsPage> {
    const { items, total, limit, offset } = await api.reviews.list(opts);
    return { reviews: adaptReviews(items), total, limit, offset };

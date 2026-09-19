@@ -8,6 +8,7 @@ import {
    SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { fetchReviews } from '@/lib/adapters-reviews';
+import { REVIEW_CHANGED_EVENT } from '@/lib/use-live-sync';
 import { inboxItems } from '@/data/side-bar-nav';
 import { useNotificationsStore } from '@/store/notifications-store';
 import { usePreferencesStore } from '@/store/preferences-store';
@@ -39,18 +40,33 @@ export function NavInbox() {
    const [reviewCount, setReviewCount] = useState(0);
    useEffect(() => setMounted(true), []);
 
+   // Reviews PENDENTES (abertos, pedidos a mim) — antes contava todos os PRs já
+   // sincronizados e nunca atualizava. Recontado (coalescido) a cada evento de review.
    useEffect(() => {
       let active = true;
-      fetchReviews({ limit: 1 })
-         .then((page) => {
-            if (active) setReviewCount(page.total);
-         })
-         .catch((e) => {
-            // Badge best-effort: não quebra a navegação, mas não engolir em silêncio.
-            console.warn('[nav-inbox] falha ao buscar review count', e);
-         });
+      let seq = 0;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const load = () => {
+         const mine = ++seq;
+         fetchReviews({ limit: 1, list: 'for-you', statuses: ['open'] })
+            .then((page) => {
+               if (active && mine === seq) setReviewCount(page.total);
+            })
+            .catch((e) => {
+               // Badge best-effort: não quebra a navegação, mas não engolir em silêncio.
+               console.warn('[nav-inbox] falha ao buscar review count', e);
+            });
+      };
+      load();
+      const onChanged = () => {
+         if (timer) clearTimeout(timer);
+         timer = setTimeout(load, 1000);
+      };
+      window.addEventListener(REVIEW_CHANGED_EVENT, onChanged);
       return () => {
          active = false;
+         if (timer) clearTimeout(timer);
+         window.removeEventListener(REVIEW_CHANGED_EVENT, onChanged);
       };
    }, []);
 
@@ -73,6 +89,9 @@ export function NavInbox() {
       return isSidebarItemVisible(visibility[key], badge);
    });
 
+   const badgeFor = (name: string) =>
+      name === 'Inbox' ? unread : name === 'Reviews' ? reviewCount : 0;
+
    return (
       <SidebarGroup className="group-data-[collapsible=icon]:hidden">
          <SidebarMenu>
@@ -87,13 +106,13 @@ export function NavInbox() {
                            <span>{item.name}</span>
                         </Link>
                      </SidebarMenuButton>
-                     {mounted && item.name === 'Inbox' && unread > 0 && (
+                     {mounted && badgeFor(item.name) > 0 && (
                         <SidebarMenuBadge className="text-muted-foreground">
                            {badgeStyle === 'count' ? (
-                              unread > 99 ? (
+                              badgeFor(item.name) > 99 ? (
                                  '99+'
                               ) : (
-                                 unread
+                                 badgeFor(item.name)
                               )
                            ) : (
                               <span className="size-1.5 rounded-full bg-muted-foreground inline-block" />

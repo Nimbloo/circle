@@ -59,20 +59,31 @@ const REVIEW_STATUSES = Object.keys(GROUP_LABELS) as ReviewStatus[];
 
 /** Tamanho de página do load-more (alinhado ao default do backend). */
 const PAGE_SIZE = 50;
+/** Teto de `limit` aceito pelo `GET /reviews`. */
+const MAX_LIMIT = 200;
+/** Janela de coalescência dos eventos de review (sync do GitHub publica em rajada). */
+const RELOAD_DEBOUNCE_MS = 400;
+
+/** Sufixo que mantém a aba da lista na URL do detalhe (`?list=created`). */
+export function listQuery(listTab: ReviewList): string {
+   return listTab === 'created' ? '?list=created' : '';
+}
 
 function ReviewRow({
    review,
    orgId,
    selected,
+   listTab,
 }: {
    review: Review;
    orgId: string;
    selected: boolean;
+   listTab: ReviewList;
 }) {
    return (
       <Link
          // id = `repo/name#n`: sem encode, `/` vira segmento e `#` vira fragment → 404.
-         href={`/${orgId}/review/${encodeURIComponent(review.id)}`}
+         href={`/${orgId}/review/${encodeURIComponent(review.id)}${listQuery(listTab)}`}
          className={cn(
             'h-11 px-[18px] text-[13px] flex items-center gap-2 transition-colors',
             selected ? 'bg-accent/60' : 'hover:bg-accent/40'
@@ -186,31 +197,59 @@ export default function Reviews({
    const [reloadKey, setReloadKey] = useState(0);
 
    // Tempo real: sync do GitHub ou webhook de PR/check mudou algum review. O refetch é
-   // silencioso (o skeleton só aparece na primeira carga), então a lista se atualiza sem
-   // piscar — e sem o "aperta F5" que era o único jeito de ver PR novo.
+   // silencioso (o skeleton só aparece na primeira carga) e coalescido: o sync publica
+   // em rajada e cada evento virava um GET da lista (#48).
    useEffect(() => {
-      const onChanged = () => setReloadKey((k) => k + 1);
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const onChanged = () => {
+         if (timer) clearTimeout(timer);
+         timer = setTimeout(() => setReloadKey((k) => k + 1), RELOAD_DEBOUNCE_MS);
+      };
       window.addEventListener(REVIEW_CHANGED_EVENT, onChanged);
-      return () => window.removeEventListener(REVIEW_CHANGED_EVENT, onChanged);
+      return () => {
+         if (timer) clearTimeout(timer);
+         window.removeEventListener(REVIEW_CHANGED_EVENT, onChanged);
+      };
    }, []);
    const [visibleStatuses, setVisibleStatuses] = useState<Set<ReviewStatus>>(
       () => new Set(REVIEW_STATUSES)
    );
    const [groupByStatus, setGroupByStatus] = useState(true);
+   // Filtro de status no SERVIDOR (baixa Co): filtrar só a página carregada escondia PRs
+   // e deixava o "X de Y" errado. Todos marcados = sem filtro.
+   const statuses = REVIEW_STATUSES.filter((status) => visibleStatuses.has(status));
+   const statusFilter = statuses.length === REVIEW_STATUSES.length ? undefined : statuses;
+   const statusKey = statuses.join(',');
+   const queryKey = `${listTab}|${statusKey}`;
 
-   // Skeleton só na PRIMEIRA carga; o refetch do reloadKey (pós-sync) é silencioso —
-   // a lista atual permanece na tela até a nova chegar (padrão stale-while-revalidate,
-   // mesmo do issue-details). Falha de refetch também não derruba dados já exibidos.
+   // Skeleton só na PRIMEIRA carga; o refetch (tempo real, troca de aba/filtro) é
+   // silencioso — a lista atual permanece até a nova chegar (stale-while-revalidate).
+   // Falha de refetch também não derruba dados já exibidos.
    const loadedOnceRef = useRef(false);
+   const loadedCountRef = useRef(0);
+   loadedCountRef.current = reviews.length;
+   const lastQueryRef = useRef(queryKey);
    useEffect(() => {
       let active = true;
+      // Mesma consulta (recarga por evento): refaz o que já está carregado, sem apagar
+      // o "carregar mais" (#48). Consulta nova (aba/filtro): volta à primeira página.
+      const sameQuery = loadedOnceRef.current && lastQueryRef.current === queryKey;
+      lastQueryRef.current = queryKey;
+      const loaded = sameQuery ? loadedCountRef.current : 0;
+      const limit = Math.min(MAX_LIMIT, Math.max(PAGE_SIZE, loaded));
       if (!loadedOnceRef.current) setLoading(true);
       setError(false);
-      fetchReviews({ limit: PAGE_SIZE, offset: 0, list: listTab })
+      fetchReviews({ limit, offset: 0, list: listTab, statuses: statusFilter })
          .then((page) => {
             if (active) {
                loadedOnceRef.current = true;
-               setReviews(page.reviews);
+               const fresh = new Set(page.reviews.map((r) => r.id));
+               // Acima do teto do servidor, o que passou dele fica como estava.
+               setReviews((prev) =>
+                  loaded > limit
+                     ? [...page.reviews, ...prev.slice(limit).filter((r) => !fresh.has(r.id))]
+                     : page.reviews
+               );
                setTotal(page.total);
             }
          })
@@ -227,9 +266,10 @@ export default function Reviews({
       return () => {
          active = false;
       };
-      // `listTab` entra nas deps: o recorte agora é feito no servidor, então trocar
-      // de aba precisa refazer a busca — antes as duas abas liam o mesmo conjunto.
-   }, [reloadKey, listTab]);
+      // `listTab`/status entram nas deps: o recorte é feito no servidor, então trocar
+      // de aba ou de filtro refaz a busca. `statusFilter` é derivado de `statusKey`.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [reloadKey, listTab, statusKey]);
 
    async function handleLoadMore() {
       setLoadingMore(true);
@@ -238,6 +278,7 @@ export default function Reviews({
             limit: PAGE_SIZE,
             offset: reviews.length,
             list: listTab,
+            statuses: statusFilter,
          });
          setReviews((prev) => [...prev, ...page.reviews]);
          setTotal(page.total);
@@ -415,6 +456,7 @@ export default function Reviews({
                               review={review}
                               orgId={orgId}
                               selected={review.id === selectedReviewId}
+                              listTab={listTab}
                            />
                         ))}
                      </ReviewGroup>
@@ -426,6 +468,7 @@ export default function Reviews({
                         review={review}
                         orgId={orgId}
                         selected={review.id === selectedReviewId}
+                        listTab={listTab}
                      />
                   ))
                )}
@@ -449,7 +492,7 @@ export default function Reviews({
             {selectedReviewId ? (
                <div className="flex h-full flex-col">
                   <Link
-                     href={`/${orgId}/reviews`}
+                     href={`/${orgId}/reviews${listTab === 'created' ? '/created' : ''}`}
                      aria-label="Back to reviews"
                      className="flex h-11 shrink-0 items-center gap-1 border-b border-border px-4 text-[13px] text-muted-foreground transition-colors hover:text-foreground md:hidden"
                   >
@@ -457,7 +500,12 @@ export default function Reviews({
                      Reviews
                   </Link>
                   <div className="min-h-0 flex-1">
-                     <ReviewDetail reviewId={selectedReviewId} section={section} />
+                     <ReviewDetail
+                        key={selectedReviewId}
+                        reviewId={selectedReviewId}
+                        section={section}
+                        listTab={listTab}
+                     />
                   </div>
                </div>
             ) : !loading && !error && total === 0 ? (
