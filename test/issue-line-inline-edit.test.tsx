@@ -251,3 +251,21 @@ describe('IssueLine — drag-and-drop no modo lista', () => {
       expect(useIssuesStore.getState().issues.map((i) => i.id)).toEqual(['b', 'c', 'a']);
    });
 });
+
+describe('Is#17 issue otimista (ainda sem identifier)', () => {
+   it('a linha não linka para um identifier inexistente', () => {
+      useIssuesStore.setState({
+         issues: [makeIssue({ id: 'tmp', identifier: '', title: 'Nova' })],
+      });
+      render(<Row id="tmp" />);
+      expect(screen.getByText('Nova').closest('a')).toBeNull();
+   });
+
+   it('com identifier real, a linha linka para a issue', () => {
+      useIssuesStore.setState({ issues: [makeIssue({ id: 'a', title: 'Alpha issue' })] });
+      render(<Row id="a" />);
+      expect(screen.getByText('Alpha issue').closest('a')?.getAttribute('href')).toBe(
+         '/nimbloo/issue/ENG-a'
+      );
+   });
+});

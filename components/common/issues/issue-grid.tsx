@@ -3,7 +3,7 @@
 import { Issue } from '@/data/issues';
 import { useDisplaySetting } from '@/store/display-settings-store';
 import { format } from 'date-fns';
-import Link from 'next/link';
+import { MaybeLink } from './maybe-link';
 import { useParams } from 'next/navigation';
 import { motion } from 'motion/react';
 import { memo, useEffect, useRef } from 'react';
@@ -131,7 +131,7 @@ function IssueGridComponent({ issue, getGroup, layout = true }: IssueGridProps) 
          ref={ref}
          data-issue-id={issue.id}
          className="w-full cursor-default rounded-lg bg-card p-2 shadow-[var(--card-shadow)]"
-         {...(layout && { layoutId: `issue-grid-${issue.identifier}` })}
+         {...(layout && { layoutId: `issue-grid-${issue.identifier || issue.id}` })}
          style={{
             opacity: isDragging ? 0.5 : 1,
             cursor: isDragging ? 'grabbing' : 'default',
@@ -151,8 +151,10 @@ function IssueGridComponent({ issue, getGroup, layout = true }: IssueGridProps) 
                   {displayProperties.status && (
                      <StatusSelector compact status={issue.status} issueId={issue.id} />
                   )}
-                  <Link
-                     href={`/${orgId ?? 'nimbloo'}/issue/${issue.identifier}`}
+                  <MaybeLink
+                     href={
+                        issue.identifier ? `/${orgId ?? 'nimbloo'}/issue/${issue.identifier}` : null
+                     }
                      className="min-w-0"
                   >
                      <h3 className="line-clamp-2 text-[13px] font-medium leading-4">
@@ -161,7 +163,7 @@ function IssueGridComponent({ issue, getGroup, layout = true }: IssueGridProps) 
                         )}
                         {issue.title}
                      </h3>
-                  </Link>
+                  </MaybeLink>
                </div>
             </div>
             {displayProperties.assignee && (

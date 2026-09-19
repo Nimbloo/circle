@@ -9,7 +9,7 @@ import { useIssuesStore } from '@/store/issues-store';
 import { cn } from '@/lib/utils';
 import { Check } from 'lucide-react';
 import { format } from 'date-fns';
-import Link from 'next/link';
+import { MaybeLink } from './maybe-link';
 import { useParams } from 'next/navigation';
 import { AssigneeUser } from './assignee-user';
 import { CycleSelector } from './cycle-selector';
@@ -100,7 +100,7 @@ function IssueRow({
       <Row
          ref={ref}
          data-issue-id={issue.id}
-         {...(layoutId && { layoutId: `issue-line-${issue.identifier}` })}
+         {...(layoutId && { layoutId: `issue-line-${issue.identifier || issue.id}` })}
          className={cn(
             'group/line flex h-11 w-full items-center justify-start px-3 hover:bg-accent/40 focus-within:bg-accent/40',
             selected && 'bg-primary/5'
@@ -135,13 +135,14 @@ function IssueRow({
                <StatusSelector status={issue.status} issueId={issue.id} />
             )}
          </div>
-         <Link
-            href={`/${orgId ?? 'nimbloo'}/issue/${issue.identifier}`}
+         {/* Issue otimista ainda sem identifier (Is#17): sem link até o servidor responder. */}
+         <MaybeLink
+            href={issue.identifier ? `/${orgId ?? 'nimbloo'}/issue/${issue.identifier}` : null}
             className="min-w-0 flex items-center justify-start mr-1 ml-0.5"
          >
             {issue.parentIdentifier && <ParentIssueChip identifier={issue.parentIdentifier} />}
             <span className="truncate text-[13px] font-medium">{issue.title}</span>
-         </Link>
+         </MaybeLink>
          <div className="flex items-center justify-end gap-2 ml-auto sm:w-fit">
             <div className="w-3 shrink-0"></div>
             <div className="-space-x-5 hover:space-x-1 lg:space-x-1 items-center justify-end hidden sm:flex">
