@@ -31,6 +31,7 @@ import { formatDistanceToNowStrict } from 'date-fns';
 import { parseAsString, useQueryState } from 'nuqs';
 import { useEffect, useMemo, useState } from 'react';
 import { RoleControl } from './role-control';
+import { labelColor } from '@/components/common/palette';
 
 const presenceLabel: Record<User['status'], string> = {
    online: 'Online now',
@@ -186,7 +187,7 @@ export default function MemberProfile({ member }: { member: User }) {
             leading: (
                <span
                   className="size-2.5 rounded-full shrink-0"
-                  style={{ backgroundColor: label.color }}
+                  style={{ backgroundColor: labelColor(label.color) }}
                />
             ),
             count: counts.get(label.id) ?? 0,
