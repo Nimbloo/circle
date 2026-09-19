@@ -10,7 +10,7 @@
  * duplicá-la — é o que torna seguro reimportar depois de corrigir o CSV.
  */
 import { randomUUID } from 'node:crypto';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    appUser,
@@ -745,7 +745,7 @@ export interface ImportJobDto {
 /** Job `running` sem batimento há este tempo foi interrompido (pod reiniciou). */
 export const IMPORT_JOB_STALE_MS = 5 * 60_000;
 /** Intervalo mínimo entre gravações de progresso. */
-const PROGRESS_WRITE_MS = 1_000;
+const PROGRESS_WRITE_MS = 500;
 /** Teto de erros por linha guardados no job. */
 const MAX_JOB_ERRORS = 200;
 
@@ -867,4 +867,25 @@ export async function getImportJob(
       createdAt: row.createdAt.toISOString(),
       finishedAt: row.finishedAt ? row.finishedAt.toISOString() : null,
    };
+}
+
+/**
+ * Job de import ATIVO do dono (queued/running com batimento recente), do mais novo para
+ * o mais velho. É o que devolve a tela de import ao progresso depois de sair dela (ad#5).
+ */
+export async function getActiveImportJob(db: Db, ownerId: string): Promise<ImportJobDto | null> {
+   const rows = await db
+      .select({ id: importJob.id })
+      .from(importJob)
+      .where(
+         and(
+            eq(importJob.ownerId, ownerId),
+            inArray(importJob.status, ['queued', 'running']),
+            gt(importJob.updatedAt, new Date(Date.now() - IMPORT_JOB_STALE_MS))
+         )!
+      )
+      .orderBy(desc(importJob.createdAt))
+      .limit(1);
+   if (rows.length === 0) return null;
+   return getImportJob(db, rows[0].id, ownerId);
 }

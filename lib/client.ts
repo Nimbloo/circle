@@ -698,6 +698,8 @@ export const api = {
       }) => post<{ jobId: string }>('/import/commit', input),
       /** Progresso/resultado do job de import (só o dono). */
       job: (id: string) => get<ImportJobDto>(`/import/jobs/${encodeURIComponent(id)}`),
+      /** Job de import ainda rodando do próprio usuário (ou null) — ad#5. */
+      activeJob: () => get<ImportJobDto | null>('/import/jobs'),
    },
 
    /** Webhooks de saída (#101). O segredo só vem no `create`. */
