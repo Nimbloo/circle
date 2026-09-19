@@ -69,12 +69,7 @@ export default function AuditLogSettings() {
          });
    }, []);
 
-   useEffect(() => {
-      load();
-      return () => {
-         seq.current++;
-      };
-   }, [load]);
+   useEffect(load, [load]);
 
    return (
       <SettingsShell
