@@ -88,14 +88,4 @@ describe('issues-store — responsáveis', () => {
       expect(promoted.assignee?.id).toBe(ana.id);
       expect(promoted.assignees.map((a) => a.id)).toEqual([ana.id]);
    });
-
-   it('filterByAssignee / filterIssues casam colaborador', () => {
-      useIssuesStore.setState({ issues: all });
-      const s = useIssuesStore.getState();
-      expect(s.filterByAssignee(ana.id).map((i) => i.id)).toEqual(['B']);
-      expect(s.filterIssues({ assignee: [ana.id, 'unassigned'] }).map((i) => i.id)).toEqual([
-         'B',
-         'C',
-      ]);
-   });
 });

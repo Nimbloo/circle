@@ -298,6 +298,14 @@ export const api = {
    issues: {
       list: (opts?: IssueListOptions) => get<IssueDto[]>(`/issues${issueQuery(opts)}`),
       get: (id: string) => get<IssueDto>(`/issues/${id}`),
+      /** Resync incremental (#14): o que mudou desde `since` + ids vivos (lápides por ausência). */
+      changes: (since: string) =>
+         requestEnvelope<IssueDto[]>(
+            `/issues?updatedSince=${encodeURIComponent(since)}`
+         ) as Promise<{
+            data: IssueDto[];
+            meta?: { ids?: string[]; truncated?: boolean };
+         }>,
       create: (input: CreateIssueClientInput) => post<IssueDto>('/issues', input),
       update: (id: string, patchInput: UpdateIssueInput) =>
          patch<IssueDto>(`/issues/${id}`, patchInput),

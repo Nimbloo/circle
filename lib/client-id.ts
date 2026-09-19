@@ -24,3 +24,35 @@ export function getClientId(): string {
    if (!tabClientId) tabClientId = randomId();
    return tabClientId;
 }
+
+/**
+ * Mutações desta aba cujo resultado já foi (ou será) aplicado a partir da RESPOSTA
+ * (If#16). O eco SSE da mesma aba para essa entidade é ignorado enquanto a marca vale —
+ * sem o GET redundante. Só vale para eventos com o `clientId` desta aba: mudança de
+ * outra aba/usuário na mesma entidade nunca é engolida.
+ */
+const OWN_ECHO_TTL_MS = 10_000;
+const ownMarks = new Map<string, number>();
+
+export function markOwnMutation(entity: string, id: string): void {
+   ownMarks.set(`${entity}:${id}`, Date.now() + OWN_ECHO_TTL_MS);
+}
+
+/** O evento é o eco de uma mutação desta aba já tratada pela resposta. */
+export function isOwnEcho(event: { entity?: string; id?: string; clientId?: string }): boolean {
+   if (!event.clientId || event.clientId !== getClientId() || !event.entity || !event.id)
+      return false;
+   const key = `${event.entity}:${event.id}`;
+   const until = ownMarks.get(key);
+   if (until === undefined) return false;
+   if (until < Date.now()) {
+      ownMarks.delete(key);
+      return false;
+   }
+   return true;
+}
+
+/** Evento originado nesta aba (tenha ou não marca): telas podem ignorar o próprio eco. */
+export function isFromThisTab(event: { clientId?: string }): boolean {
+   return !!event.clientId && event.clientId === getClientId();
+}
