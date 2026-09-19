@@ -23,14 +23,15 @@ describe('loading/entrada de rota', () => {
       expect(existsSync(join(root, 'app/[orgId]/loading.tsx'))).toBe(false);
    });
 
-   it('o template só envolve os filhos com a classe de entrada', () => {
+   // A primeira montagem não anima (carga fria não cruza com nada): a classe de entrada é
+   // da troca de seção, coberta em `org-template.test.tsx`.
+   it('o template só envolve os filhos', () => {
       const { container } = render(
          <OrgTemplate>
             <p>page</p>
          </OrgTemplate>
       );
       const wrapper = container.firstElementChild as HTMLElement;
-      expect(wrapper.className).toContain('route-enter');
       expect(wrapper.className).toContain('h-full');
       expect(wrapper.textContent).toBe('page');
    });

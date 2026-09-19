@@ -289,47 +289,49 @@ export default function ProjectTemplatesSettings() {
                   className="py-10"
                />
             ) : (
-               templates.map((tmpl) => (
-                  <div
-                     key={tmpl.id}
-                     className="content-enter flex items-center gap-3 px-4 py-3 border-b last:border-b-0 border-border/50"
-                  >
-                     <FolderKanban className="size-4 text-muted-foreground shrink-0" />
-                     <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium truncate">{tmpl.name}</div>
-                        {tmpl.projectName && (
-                           <div className="text-xs text-muted-foreground truncate">
-                              {tmpl.projectName}
+               <div className="content-enter">
+                  {templates.map((tmpl) => (
+                     <div
+                        key={tmpl.id}
+                        className="flex items-center gap-3 px-4 py-3 border-b last:border-b-0 border-border/50"
+                     >
+                        <FolderKanban className="size-4 text-muted-foreground shrink-0" />
+                        <div className="min-w-0 flex-1">
+                           <div className="text-sm font-medium truncate">{tmpl.name}</div>
+                           {tmpl.projectName && (
+                              <div className="text-xs text-muted-foreground truncate">
+                                 {tmpl.projectName}
+                              </div>
+                           )}
+                        </div>
+                        {isAdmin && (
+                           <div className="flex items-center gap-1 shrink-0">
+                              <Button
+                                 size="icon"
+                                 variant="ghost"
+                                 className="size-7"
+                                 aria-label="Editar template"
+                                 onClick={() => {
+                                    setEditing(tmpl);
+                                    setDialogOpen(true);
+                                 }}
+                              >
+                                 <Pencil className="size-3.5" />
+                              </Button>
+                              <Button
+                                 size="icon"
+                                 variant="ghost"
+                                 className="size-7 text-destructive hover:text-destructive"
+                                 aria-label="Excluir template"
+                                 onClick={() => setToDelete(tmpl)}
+                              >
+                                 <Trash2 className="size-3.5" />
+                              </Button>
                            </div>
                         )}
                      </div>
-                     {isAdmin && (
-                        <div className="flex items-center gap-1 shrink-0">
-                           <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-7"
-                              aria-label="Editar template"
-                              onClick={() => {
-                                 setEditing(tmpl);
-                                 setDialogOpen(true);
-                              }}
-                           >
-                              <Pencil className="size-3.5" />
-                           </Button>
-                           <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-7 text-destructive hover:text-destructive"
-                              aria-label="Excluir template"
-                              onClick={() => setToDelete(tmpl)}
-                           >
-                              <Trash2 className="size-3.5" />
-                           </Button>
-                        </div>
-                     )}
-                  </div>
-               ))
+                  ))}
+               </div>
             )}
          </div>
 

@@ -1,9 +1,10 @@
 'use client';
 
 import { DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
+import { cn } from '@/lib/utils';
 import { ContentBlocks } from '@/components/common/issues/details/content-blocks';
 import { EmptyState } from '@/components/common/empty-state';
-import { LoadingArea } from '@/components/common/loading-area';
+import { LoadingArea, useEnterFade } from '@/components/common/loading-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -69,6 +70,8 @@ function UpdateCard({ update }: { update: ProjectUpdate }) {
 
 /** Project "Activity" tab: update composer + monthly timeline. */
 export default function ProjectActivity({ projectId }: ProjectActivityProps) {
+   // Troca de irmão (aba, item, layout) não pisca: só a primeira chegada de conteúdo.
+   const fade = useEnterFade('project-tab');
    const project = useWorkspaceStore((s) => s.getProjectById(projectId));
    const loaded = useWorkspaceStore((s) => s.loaded);
    const allIssues = useIssuesStore((s) => s.issues);
@@ -131,7 +134,7 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
    }
 
    return (
-      <div className="content-enter relative w-full h-full flex overflow-hidden">
+      <div className={cn(fade && 'content-enter', 'relative w-full h-full flex overflow-hidden')}>
          <div className="flex-1 min-w-0 h-full overflow-y-auto">
             <div className="max-w-3xl mx-auto px-6 lg:px-10 py-8">
                <div className="mb-3 flex justify-end xl:hidden">

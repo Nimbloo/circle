@@ -1,15 +1,19 @@
 'use client';
 
 import { useProjectsDisplayStore } from '@/store/projects-display-store';
+import { cn } from '@/lib/utils';
 import ProjectLine from './project-line';
 import { ProjectGroup } from './projects';
+import { useEnterFade } from '@/components/common/loading-area';
 
 /** Projects "List" view: compact table with optional team sections. */
 export default function ProjectsList({ groups }: { groups: ProjectGroup[] }) {
+   // Troca de irmão (aba, item, layout) não pisca: só a primeira chegada de conteúdo.
+   const fade = useEnterFade('projects-view');
    const { grouping, displayProperties } = useProjectsDisplayStore();
 
    return (
-      <div className="content-enter h-full w-full overflow-y-auto">
+      <div className={cn(fade && 'content-enter', 'h-full w-full overflow-y-auto')}>
          <div className="sticky top-0 z-10 flex h-8 items-center bg-container text-xs font-[450] leading-[15px] text-[var(--table-header-foreground)]">
             <div className="w-[38px] shrink-0" />
             <div className="min-w-0 flex-1 px-1.5">Name</div>

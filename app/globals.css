@@ -567,7 +567,10 @@ html[data-underline-links='true'] a[href]:not([role='button']):not(.no-underline
    animation: route-enter var(--dur-content) var(--ease-std) backwards;
 }
 .route-enter .content-enter {
-   animation: none;
+   /* Delay negativo (e não `animation: none`): o conteúdo que nasce durante o fade da rota
+      entra junto com ele, já opaco, e quando o template tira a classe a animação continua
+      "terminada" — sem um segundo fade. Conteúdo que chega depois disso anima normalmente. */
+   animation-delay: -1s;
 }
 
 /* ── Motion: classes (documentação no bloco MOTION do topo) ─────────────────────────────

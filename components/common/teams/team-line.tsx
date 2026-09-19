@@ -30,7 +30,7 @@ export default function TeamLine({ team }: TeamLineProps) {
       <TeamContextMenu team={team}>
          <Link
             href={`/${orgId}/team/${team.id}/overview`}
-            className="content-enter h-12 pl-[18px] pr-[34px] flex w-full items-center text-[13px] hover:bg-accent/40"
+            className="h-12 pl-[18px] pr-[34px] flex w-full items-center text-[13px] hover:bg-accent/40"
          >
             {/* Name + identifier */}
             <div className="flex min-w-0 flex-1 items-center gap-2">

@@ -1,6 +1,41 @@
+'use client';
+
 import { cn } from '@/lib/utils';
 
 const LOGO_PX = { sm: 16, md: 24, lg: 32 } as const;
+
+/** Janela em que um loader novo conta como continuação do anterior (mesma área). */
+const CONTINUATION_MS = 400;
+let visibleLoaders = 0;
+let lastLoaderGoneAt = 0;
+
+/**
+ * Continuidade entre instâncias (vi#12): numa carga fria a mesma área troca de loader duas
+ * ou três vezes (fallback da rota → tela → componente). Cada instância recomeçaria o giro
+ * do zero e repetiria o fade de entrada — na tela, um loader piscando. Aqui o arco é
+ * alinhado ao relógio do documento (`startTime = 0`, mesma fase em qualquer instância) e o
+ * fade de entrada é pulado quando o loader anterior acabou de sair: uma instância só por
+ * área, do ponto de vista de quem olha. Efeito só no navegador — o jsdom não tem WAAPI.
+ */
+function trackLoader(node: HTMLElement | null) {
+   if (!node) return;
+   const continuing = visibleLoaders > 0 || performance.now() - lastLoaderGoneAt < CONTINUATION_MS;
+   visibleLoaders += 1;
+   if (typeof node.getAnimations === 'function') {
+      for (const animation of node.getAnimations({ subtree: true })) {
+         const name = (animation as CSSAnimation).animationName;
+         if (name === 'circle-loading-spin') animation.startTime = 0;
+         else if (name === 'circle-loading-in' && continuing) animation.finish();
+      }
+   }
+   return () => {
+      visibleLoaders -= 1;
+      if (visibleLoaders <= 0) {
+         visibleLoaders = 0;
+         lastLoaderGoneAt = performance.now();
+      }
+   };
+}
 
 /** Comprimento do anel (r = 9): o arco em destaque cobre ~1/4 dele. */
 const RING = 2 * Math.PI * 9;
@@ -68,6 +103,7 @@ export function CircleLoading({
    if (inline) {
       return (
          <span
+            ref={trackLoader}
             role="status"
             aria-live="polite"
             aria-label={label ?? 'Carregando'}
@@ -81,6 +117,7 @@ export function CircleLoading({
    }
    return (
       <div
+         ref={trackLoader}
          role="status"
          aria-live="polite"
          aria-label={label ?? 'Carregando'}

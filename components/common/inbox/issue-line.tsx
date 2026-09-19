@@ -79,10 +79,7 @@ function IssueLine<T extends InboxLineItem>({
       ? relativeTime(notification.sortAt, now)
       : (notification.timestamp ?? '');
    return (
-      <div
-         onClick={onOpen ? () => onOpen(notification) : undefined}
-         className="content-enter w-full pl-2.5"
-      >
+      <div onClick={onOpen ? () => onOpen(notification) : undefined} className="w-full pl-2.5">
          <div className="group/inbox-line relative flex h-[55px] w-full cursor-pointer items-center gap-3 rounded-lg px-2">
             {/* Realce que DISSIPA nas pontas (Linear): camada de fundo com máscara de
                 gradiente horizontal — o fill some suavemente nas bordas laterais. */}

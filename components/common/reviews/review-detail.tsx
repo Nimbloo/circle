@@ -2,7 +2,7 @@
 
 import { addReviewComment, fetchReview, latestVerdict } from '@/lib/adapters-reviews';
 import { EmptyState } from '@/components/common/empty-state';
-import { LoadingArea } from '@/components/common/loading-area';
+import { LoadingArea, useEnterFade } from '@/components/common/loading-area';
 import { Button } from '@/components/ui/button';
 import type { Review, ReviewComment, ReviewList, ReviewVerdictKind } from '@/data/reviews';
 import { REVIEW_CHANGED_EVENT } from '@/lib/use-live-sync';
@@ -55,6 +55,8 @@ export function ReviewDetail({
 }) {
    const { orgId } = useParams<{ orgId: string }>();
    const me = useWorkspaceStore((s) => s.me);
+   // Troca de irmão (aba, item, layout) não pisca: só a primeira chegada de conteúdo.
+   const fade = useEnterFade('review-detail');
    const [review, setReview] = useState<Review | null>(null);
    const [loading, setLoading] = useState(true);
    const [reloadKey, setReloadKey] = useState(0);
@@ -142,7 +144,7 @@ export function ReviewDetail({
    }
 
    return (
-      <div className="content-enter h-full flex flex-col overflow-hidden">
+      <div className={cn(fade && 'content-enter', 'h-full flex flex-col overflow-hidden')}>
          <div className="flex items-center gap-2 px-4 h-10 border-b shrink-0 min-w-0">
             {/* Só linka pra issue quando o PR resolve uma (título com [ABC-123]);
                 senão o link ia pra /issue/ (morto). */}

@@ -48,6 +48,7 @@ import {
 } from 'react';
 import { ProjectPeekPanel } from './project-peek-panel';
 import { ProjectGroup } from './projects';
+import { useEnterFade } from '@/components/common/loading-area';
 
 interface ProjectsTimelineProps {
    groups: ProjectGroup[];
@@ -506,6 +507,8 @@ const TimelineRow = memo(function TimelineRow({
  * (Year / Quarter / Month / Week, with Y/Q/M/W shortcuts) changes the zoom.
  */
 export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
+   // Troca de irmão (aba, item, layout) não pisca: só a primeira chegada de conteúdo.
+   const fade = useEnterFade('projects-view');
    const showProjectList = useProjectsDisplayStore((s) => s.showProjectList);
    const showWeekNumbers = useProjectsDisplayStore((s) => s.showWeekNumbers);
    const patchProject = useWorkspaceStore((s) => s.patchProject);
@@ -636,7 +639,7 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
 
    return (
       <ViewportContext.Provider value={viewportStore}>
-         <div className="content-enter relative w-full h-full">
+         <div className={cn(fade && 'content-enter', 'relative w-full h-full')}>
             {peekProjectId !== null && (
                <ProjectPeekPanel projectId={peekProjectId} onClose={() => setPeekProjectId(null)} />
             )}

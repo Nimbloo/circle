@@ -2,7 +2,7 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { EmptyState } from '@/components/common/empty-state';
-import { LoadingArea } from '@/components/common/loading-area';
+import { LoadingArea, useEnterFade } from '@/components/common/loading-area';
 import { cn } from '@/lib/utils';
 import { Issue, sortIssuesByPriority } from '@/data/issues';
 import { Status } from '@/data/status';
@@ -218,6 +218,8 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
    error,
    onRetry,
 }) => {
+   // Troca de irmão (aba, item, layout) não pisca: só a primeira chegada de conteúdo.
+   const fade = useEnterFade('issues-view');
    // Selectors individuais: re-render só quando a chave usada muda (não o store inteiro).
    const grouping = useDisplaySetting('grouping');
    const ordering = useDisplaySetting('ordering');
@@ -446,7 +448,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
          <DndProvider backend={HTML5Backend}>
             <CustomDragLayer />
             <BulkActionsBar />
-            <div className="content-enter h-full flex flex-col">
+            <div className={cn(fade && 'content-enter', 'h-full flex flex-col')}>
                <div className="flex-1 min-h-0 overflow-x-auto">
                   <IssueContextMenuHost>
                      <div className="flex h-full min-w-max gap-0 px-1">
@@ -482,7 +484,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
          {listGroups.length === 0 && !showFooter ? (
             <IssuesEmptyState loading={loading} error={error} onRetry={onRetry} />
          ) : (
-            <div className="content-enter h-full flex flex-col min-h-0">
+            <div className={cn(fade && 'content-enter', 'h-full flex flex-col min-h-0')}>
                {/* Lista VIRTUALIZADA: só as linhas visíveis vão pro DOM (fluido a 1000+). */}
                <div className="flex-1 min-h-0">
                   <IssueContextMenuHost>
