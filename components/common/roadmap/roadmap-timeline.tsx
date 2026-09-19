@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Project } from '@/data/projects';
 import type { RoadmapDependency, RoadmapMilestone } from '@/lib/client';
-import { isValidProjectDate, projectDateRangeLabel } from '@/lib/project-dates';
+import { isValidProjectDate, localTodayIso, projectDateRangeLabel } from '@/lib/project-dates';
 import {
    type DateRange,
    type RescheduleMode,
@@ -432,7 +432,7 @@ export default function RoadmapTimeline({
 
    // "Hoje" só no cliente (SSR safe) e centralizado no primeiro render.
    useEffect(() => {
-      const iso = new Date().toISOString().slice(0, 10);
+      const iso = localTodayIso();
       setTodayIso(iso);
       if (scrollRef.current) {
          const offset = offsetFor(iso, monthWidth);

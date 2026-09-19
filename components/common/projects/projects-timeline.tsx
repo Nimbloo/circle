@@ -10,7 +10,7 @@ import {
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { isValidProjectDate, projectDateRangeLabel } from '@/lib/project-dates';
+import { isValidProjectDate, localTodayIso, projectDateRangeLabel } from '@/lib/project-dates';
 import {
    type DateRange,
    type RescheduleMode,
@@ -538,7 +538,7 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
    }, [syncViewport]);
 
    useEffect(() => {
-      const iso = new Date().toISOString().slice(0, 10);
+      const iso = localTodayIso();
       setTodayIso(iso);
       // Bring today into view on mount (centered, but always
       // clear of the sticky project list so the line stays visible).
