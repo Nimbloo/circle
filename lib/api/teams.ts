@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { eq, count, and, inArray } from 'drizzle-orm';
+import { eq, count, and, inArray, ne, or } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    team as teamT,
@@ -15,6 +15,32 @@ import {
    teamAutomation,
    issueTemplate as issueTemplateT,
    projectTemplate as projectTemplateT,
+   teamDocument,
+   comment as commentT,
+   commentReaction,
+   attachment as attachmentT,
+   issueRelation,
+   issuePrLink,
+   notification as notificationT,
+   activityEvent,
+   issueLabel,
+   issueAssignee,
+   issueSubscription,
+   issueContent,
+   issueTriageSuggestion,
+   issueImport,
+   favorite,
+   initiativeProject,
+   projectLabel,
+   projectUpdate,
+   projectActivity,
+   projectMilestone,
+   projectResource,
+   projectDetail,
+   projectDependency,
+   projectSnapshot,
+   cycleSnapshot,
+   importJob,
 } from '@/db/schema';
 import { getOrCreateUser } from './users';
 import { assertTeamParent } from './hierarchy';
@@ -24,6 +50,8 @@ import { escapeHtml } from './notify';
 import { ApiError } from './errors';
 import { publish, publishInternal } from './events';
 import { listTeamMemberDtos, type MemberDto } from './members';
+import { removeAttachmentObjects } from './attachments';
+import { publishInitiativeRollups } from './initiatives';
 
 type TeamRow = typeof teamT.$inferSelect;
 
@@ -481,76 +509,251 @@ export async function updateTeam(
    return getTeam(db, id);
 }
 
+export interface TeamDeletionImpact {
+   /** Issues do time, sub-issues incluídas. */
+   issues: number;
+   projects: number;
+   cycles: number;
+   views: number;
+   /** Pastas de documentos. */
+   folders: number;
+   /** Documentos dentro das pastas. */
+   documents: number;
+}
+
 /**
- * Apaga um time. Escolha segura: recusa com 409 se o time tiver issues, projects,
- * cycles, saved views ou document folders (todos com FK RESTRICT — evita 500/órfãos).
- * Se estiver vazio, remove a CONFIGURAÇÃO do time (membros, join requests, SLA e
- * automações) e o team. Retorna false se o time não existir.
+ * O que `deleteTeam` apaga junto com o time: o diálogo de exclusão mostra estas
+ * contagens antes da confirmação. `null` = o time não existe.
+ */
+export async function getTeamDeletionImpact(
+   db: Db,
+   id: string
+): Promise<TeamDeletionImpact | null> {
+   const existing = await db.select({ id: teamT.id }).from(teamT).where(eq(teamT.id, id)).limit(1);
+   if (existing.length === 0) return null;
+   const n = (rows: { n: number }[]) => Number(rows[0]?.n ?? 0);
+   const [issues, projects, cycles, views, folders, documents] = await Promise.all([
+      db.select({ n: count() }).from(issueT).where(eq(issueT.teamId, id)),
+      db.select({ n: count() }).from(projectT).where(eq(projectT.teamId, id)),
+      db.select({ n: count() }).from(cycleT).where(eq(cycleT.teamId, id)),
+      db.select({ n: count() }).from(savedViewT).where(eq(savedViewT.teamId, id)),
+      db.select({ n: count() }).from(documentFolderT).where(eq(documentFolderT.teamId, id)),
+      db
+         .select({ n: count() })
+         .from(teamDocument)
+         .innerJoin(documentFolderT, eq(teamDocument.folderId, documentFolderT.id))
+         .where(eq(documentFolderT.teamId, id)),
+   ]);
+   return {
+      issues: n(issues),
+      projects: n(projects),
+      cycles: n(cycles),
+      views: n(views),
+      folders: n(folders),
+      documents: n(documents),
+   };
+}
+
+/**
+ * Apaga um time e TODO o conteúdo dele (paridade Linear): issues com todos os
+ * dependentes, projetos, ciclos, views, pastas com documentos, jobs de import e a
+ * configuração (membros, join requests, SLA, automações, templates). Retorna false se
+ * o time não existir.
+ *
+ * Tudo numa transação (#59): uma falha no meio desfaz a cascata inteira. O que é de
+ * OUTROS times só perde o vínculo: sub-issue cujo pai era daqui volta ao topo, issue
+ * ligada a projeto/ciclo/milestone daqui fica sem ele, relações somem e o projeto de
+ * outro time sai da dependência. Os deletes são em massa (subquery pelo time), sem N+1.
+ *
+ * Eventos só depois do commit: sinais coarse (issues e workspace) em vez de um por
+ * entidade, e o `team deleted`, o único que vai para os webhooks.
  */
 export async function deleteTeam(db: Db, id: string): Promise<boolean> {
-   // Tudo numa transação (#59): antes cada passo era um statement solto, e uma falha no
-   // meio (FK de template, por exemplo) deixava o time sem membros, sem SLA e sem
-   // automações — parcialmente destruído. O `FOR UPDATE` no time serializa com quem
-   // estiver criando conteúdo nele durante a checagem de "vazio".
-   const deleted = await db.transaction(async (tx) => {
+   const result = await db.transaction(async (tx) => {
+      // O `FOR UPDATE` serializa com quem estiver criando conteúdo no time agora.
       const existing = await tx
          .select({ id: teamT.id, parentId: teamT.parentId })
          .from(teamT)
          .where(eq(teamT.id, id))
          .for('update')
          .limit(1);
-      if (existing.length === 0) return false;
+      if (existing.length === 0) return null;
 
-      const [issues, projects, cycles, views, folders] = await Promise.all([
-         tx.select({ n: count() }).from(issueT).where(eq(issueT.teamId, id)),
-         tx.select({ n: count() }).from(projectT).where(eq(projectT.teamId, id)),
-         tx.select({ n: count() }).from(cycleT).where(eq(cycleT.teamId, id)),
-         tx.select({ n: count() }).from(savedViewT).where(eq(savedViewT.teamId, id)),
-         tx.select({ n: count() }).from(documentFolderT).where(eq(documentFolderT.teamId, id)),
-      ]);
-      // O que ainda está no time, contado e nomeado: a tela mostra esta mensagem, e
-      // "esvazie antes" sem dizer o quê deixava o admin sem saber o que mover.
-      const blocking = [
-         [Number(issues[0].n), 'issue', 'issues'],
-         [Number(projects[0].n), 'projeto', 'projetos'],
-         [Number(cycles[0].n), 'ciclo', 'ciclos'],
-         [Number(views[0].n), 'view', 'views'],
-         [Number(folders[0].n), 'pasta de documentos', 'pastas de documentos'],
-      ] as const;
-      const parts = blocking
-         .filter(([n]) => n > 0)
-         .map(([n, one, many]) => `${n} ${n === 1 ? one : many}`);
-      if (parts.length > 0)
-         throw new ApiError(
-            409,
-            `O time ainda tem ${parts.join(', ')}. Mova ou exclua esse conteúdo antes de excluir o time.`
+      // Subqueries pelo time, novas a cada uso.
+      const teamIssueIds = () =>
+         tx.select({ id: issueT.id }).from(issueT).where(eq(issueT.teamId, id));
+      const teamProjectIds = () =>
+         tx.select({ id: projectT.id }).from(projectT).where(eq(projectT.teamId, id));
+      const teamCycleIds = () =>
+         tx.select({ id: cycleT.id }).from(cycleT).where(eq(cycleT.teamId, id));
+      const teamViewIds = () =>
+         tx.select({ id: savedViewT.id }).from(savedViewT).where(eq(savedViewT.teamId, id));
+      const teamFolderIds = () =>
+         tx
+            .select({ id: documentFolderT.id })
+            .from(documentFolderT)
+            .where(eq(documentFolderT.teamId, id));
+      const teamCommentIds = () =>
+         tx
+            .select({ id: commentT.id })
+            .from(commentT)
+            .where(inArray(commentT.issueId, teamIssueIds()));
+      const otherTeams = ne(issueT.teamId, id);
+
+      // ── Outros times: desvincula, não apaga ──
+      const unlinkedParent = await tx
+         .update(issueT)
+         .set({ parentId: null })
+         .where(and(inArray(issueT.parentId, teamIssueIds()), otherTeams))
+         .returning({ teamId: issueT.teamId });
+      const unlinkedProject = await tx
+         .update(issueT)
+         .set({ projectId: null, milestoneId: null })
+         .where(and(inArray(issueT.projectId, teamProjectIds()), otherTeams))
+         .returning({ teamId: issueT.teamId });
+      const unlinkedCycle = await tx
+         .update(issueT)
+         .set({ cycleId: null })
+         .where(and(inArray(issueT.cycleId, teamCycleIds()), otherTeams))
+         .returning({ teamId: issueT.teamId });
+      const relations = await tx
+         .delete(issueRelation)
+         .where(
+            or(
+               inArray(issueRelation.issueId, teamIssueIds()),
+               inArray(issueRelation.relatedId, teamIssueIds())
+            )
+         )
+         .returning({ issueId: issueRelation.issueId, relatedId: issueRelation.relatedId });
+      const relatedIds = [...new Set(relations.flatMap((r) => [r.issueId, r.relatedId]))];
+      const relatedOther = relatedIds.length
+         ? await tx
+              .selectDistinct({ teamId: issueT.teamId })
+              .from(issueT)
+              .where(and(inArray(issueT.id, relatedIds), otherTeams))
+         : [];
+      const otherTeamIds = new Set(
+         [...unlinkedParent, ...unlinkedProject, ...unlinkedCycle, ...relatedOther].map(
+            (r) => r.teamId
+         )
+      );
+
+      // ── Issues do time e todos os dependentes ──
+      // URLs dos anexos (da issue e dos comentários): o objeto no storage sai depois do commit.
+      const attachmentUrls = (
+         await tx
+            .select({ url: attachmentT.url })
+            .from(attachmentT)
+            .where(inArray(attachmentT.issueId, teamIssueIds()))
+      ).map((r) => r.url);
+      await tx.delete(commentReaction).where(inArray(commentReaction.commentId, teamCommentIds()));
+      await tx.delete(attachmentT).where(inArray(attachmentT.issueId, teamIssueIds()));
+      await tx.delete(commentT).where(inArray(commentT.issueId, teamIssueIds()));
+      await tx.delete(issuePrLink).where(inArray(issuePrLink.issueId, teamIssueIds()));
+      const notifications = await tx
+         .delete(notificationT)
+         .where(inArray(notificationT.issueId, teamIssueIds()))
+         .returning({ recipientId: notificationT.recipientId });
+      await tx.delete(activityEvent).where(inArray(activityEvent.issueId, teamIssueIds()));
+      await tx.delete(issueLabel).where(inArray(issueLabel.issueId, teamIssueIds()));
+      await tx.delete(issueAssignee).where(inArray(issueAssignee.issueId, teamIssueIds()));
+      await tx.delete(issueSubscription).where(inArray(issueSubscription.issueId, teamIssueIds()));
+      await tx.delete(issueContent).where(inArray(issueContent.issueId, teamIssueIds()));
+      await tx
+         .delete(issueTriageSuggestion)
+         .where(inArray(issueTriageSuggestion.issueId, teamIssueIds()));
+      await tx.delete(issueImport).where(inArray(issueImport.issueId, teamIssueIds()));
+      // Favoritos são polimórficos (sem FK): limpa os que apontam para o conteúdo do time.
+      const favorites = await tx
+         .delete(favorite)
+         .where(
+            or(
+               and(eq(favorite.entityType, 'issue'), inArray(favorite.entityId, teamIssueIds())),
+               and(
+                  eq(favorite.entityType, 'project'),
+                  inArray(favorite.entityId, teamProjectIds())
+               ),
+               and(eq(favorite.entityType, 'view'), inArray(favorite.entityId, teamViewIds()))
+            )
+         )
+         .returning({ userId: favorite.userId });
+      // Um statement só: a FK `parent_id` entre issues do próprio time é checada no fim dele.
+      await tx.delete(issueT).where(eq(issueT.teamId, id));
+
+      // ── Projetos ──
+      const initiativeLinks = await tx
+         .delete(initiativeProject)
+         .where(inArray(initiativeProject.projectId, teamProjectIds()))
+         .returning({ initiativeId: initiativeProject.initiativeId });
+      await tx.delete(projectLabel).where(inArray(projectLabel.projectId, teamProjectIds()));
+      await tx.delete(projectUpdate).where(inArray(projectUpdate.projectId, teamProjectIds()));
+      await tx.delete(projectActivity).where(inArray(projectActivity.projectId, teamProjectIds()));
+      await tx
+         .delete(projectMilestone)
+         .where(inArray(projectMilestone.projectId, teamProjectIds()));
+      await tx.delete(projectResource).where(inArray(projectResource.projectId, teamProjectIds()));
+      await tx.delete(projectDetail).where(inArray(projectDetail.projectId, teamProjectIds()));
+      await tx
+         .delete(projectDependency)
+         .where(
+            or(
+               inArray(projectDependency.projectId, teamProjectIds()),
+               inArray(projectDependency.dependsOnId, teamProjectIds())
+            )
          );
+      await tx.delete(projectSnapshot).where(inArray(projectSnapshot.projectId, teamProjectIds()));
+      await tx.delete(projectT).where(eq(projectT.teamId, id));
 
-      // Sub-times (#100): reancora os filhos no avô antes de apagar. Sem isto o FK
-      // self-referente (team.parent_id) estoura 23503, e deixar `parent_id` apontando
-      // pra um time inexistente não é opção.
+      // ── Ciclos, views, documentos, imports ──
+      await tx.delete(cycleSnapshot).where(inArray(cycleSnapshot.cycleId, teamCycleIds()));
+      await tx.delete(cycleT).where(eq(cycleT.teamId, id));
+      await tx.delete(savedViewT).where(eq(savedViewT.teamId, id));
+      await tx.delete(teamDocument).where(inArray(teamDocument.folderId, teamFolderIds()));
+      await tx.delete(documentFolderT).where(eq(documentFolderT.teamId, id));
+      await tx.delete(importJob).where(eq(importJob.teamId, id));
+
+      // ── Configuração do time ──
+      // Sub-times (#100): reancora os filhos no avô (FK self-referente `team.parent_id`).
       await tx
          .update(teamT)
          .set({ parentId: existing[0].parentId ?? null })
          .where(eq(teamT.parentId, id));
-
-      // Solicitações de entrada (histórico) NÃO bloqueiam a deleção — limpa antes do time,
-      // senão o FK (team_join_request.team_id, sem onDelete) estoura 23503 → 404 enganoso.
       await tx.delete(teamJoinRequest).where(eq(teamJoinRequest.teamId, id));
-      // SLA, automações e templates (issue/projeto) são CONFIGURAÇÃO do time, não
-      // conteúdo: somem com ele. Sem isto o FK estourava 23503 → 404 enganoso, e como
-      // `ensureDefaultAutomations` semeia a regra padrão na primeira leitura, quase todo
-      // time ficava indelével.
       await tx.delete(teamSla).where(eq(teamSla.teamId, id));
       await tx.delete(teamAutomation).where(eq(teamAutomation.teamId, id));
       await tx.delete(issueTemplateT).where(eq(issueTemplateT.teamId, id));
       await tx.delete(projectTemplateT).where(eq(projectTemplateT.teamId, id));
       await tx.delete(teamMember).where(eq(teamMember.teamId, id));
       await tx.delete(teamT).where(eq(teamT.id, id));
-      return true;
+
+      return {
+         attachmentUrls,
+         otherTeamIds,
+         notifiedUserIds: new Set(notifications.map((r) => r.recipientId)),
+         favoriteUserIds: new Set(favorites.map((r) => r.userId)),
+         initiativeIds: [...new Set(initiativeLinks.map((r) => r.initiativeId))],
+      };
    });
-   if (deleted) publish({ entity: 'team', action: 'deleted', id, teamId: id });
-   return deleted;
+   if (!result) return false;
+
+   // Depois do commit (best-effort): objetos dos anexos no storage.
+   void removeAttachmentObjects(result.attachmentUrls);
+   // Coarse, só SSE: a lista de issues e o workspace (projetos, ciclos, views) recarregam
+   // uma vez. Nada de um `issue.deleted` por issue nos webhooks.
+   publishInternal({ entity: 'issue', action: 'updated', teamId: id });
+   publishInternal({ entity: 'project', action: 'updated', teamId: id });
+   // Issues de outros times perderam pai/projeto/ciclo/relação: um sinal por time.
+   for (const teamId of result.otherTeamIds)
+      publishInternal({ entity: 'issue', action: 'updated', teamId });
+   // Inbox e favoritos de quem tinha algo do time: um aviso por usuário, não por linha.
+   for (const recipientId of result.notifiedUserIds)
+      publishInternal({ entity: 'notification', action: 'deleted', recipientId });
+   for (const recipientId of result.favoriteUserIds)
+      publishInternal({ entity: 'favorite', action: 'deleted', recipientId });
+   publish({ entity: 'team', action: 'deleted', id, teamId: id });
+   // Initiatives que perderam projeto: o rollup delas mudou.
+   await publishInitiativeRollups(db, result.initiativeIds);
+   return true;
 }
 
 /**
