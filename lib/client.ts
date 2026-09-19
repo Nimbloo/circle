@@ -38,6 +38,7 @@ import type { CycleDto, CreateCycleInput, UpdateCycleInput } from '@/lib/api/cyc
 import type { TemplateDto, CreateTemplateInput, UpdateTemplateInput } from '@/lib/api/templates';
 import type { StatusDto, CreateStatusInput, UpdateStatusInput } from '@/lib/api/statuses';
 import type { EmojiDto } from '@/lib/api/emojis';
+import type { LabelDto, LabelGroupDto } from '@/lib/api/labels';
 import type { UploadDto, UploadInput } from '@/lib/api/uploads';
 import type {
    ProjectTemplateDto,
@@ -55,7 +56,12 @@ import type { WorkspaceBootstrap } from '@/lib/api/workspace';
 import type { NotificationDto } from '@/lib/api/notifications';
 import type { ReviewDetailDto, ReviewDto, ReviewGuideDto } from '@/lib/api/reviews';
 import type { AddReviewCommentInput, ReviewCommentDto } from '@/lib/api/review-comments';
-import type { FolderDto, DocumentDto } from '@/lib/api/documents';
+import type {
+   FolderDto,
+   DocumentDto,
+   DocumentDetailDto,
+   UpdateDocumentInput,
+} from '@/lib/api/documents';
 import type {
    IssueDetailDto,
    CommentDto,
@@ -296,12 +302,20 @@ export const api = {
    priorities: () =>
       get<{ id: string; name: string; position: number; sortRank: number }[]>('/priorities'),
    labels: {
-      list: () => get<{ id: string; name: string; color: string }[]>('/labels'),
-      create: (input: { id?: string; name: string; color: string }) =>
-         post<{ id: string; name: string; color: string }>('/labels', input),
-      update: (id: string, body: { name?: string; color?: string }) =>
-         patch<{ id: string; name: string; color: string }>(`/labels/${id}`, body),
+      list: () => get<LabelDto[]>('/labels'),
+      create: (input: { id?: string; name: string; color: string; groupId?: string | null }) =>
+         post<LabelDto>('/labels', input),
+      update: (id: string, body: { name?: string; color?: string; groupId?: string | null }) =>
+         patch<LabelDto>(`/labels/${id}`, body),
       remove: (id: string) => del<{ deleted: boolean }>(`/labels/${id}`),
+   },
+   labelGroups: {
+      list: () => get<LabelGroupDto[]>('/label-groups'),
+      create: (input: { name: string; color?: string }) =>
+         post<LabelGroupDto>('/label-groups', input),
+      update: (id: string, body: { name?: string; color?: string }) =>
+         patch<LabelGroupDto>(`/label-groups/${id}`, body),
+      remove: (id: string) => del<{ deleted: boolean }>(`/label-groups/${id}`),
    },
    healthStates: () =>
       get<{ id: string; name: string; color: string; description: string | null }[]>(
@@ -430,9 +444,14 @@ export const api = {
 
    /** Documentos (update/delete por id; escrita exige criador ou admin). */
    documents: {
-      update: (id: string, body: { name?: string; icon?: string | null; pinned?: boolean }) =>
-         patch<{ id: string }>(`/documents/${id}`, body),
+      /** Documento aberto: metadados + corpo (`descriptionDoc`) e `descriptionVersion`. */
+      get: (id: string) => get<DocumentDetailDto>(`/documents/${id}`),
+      update: (id: string, body: UpdateDocumentInput) =>
+         patch<DocumentDetailDto>(`/documents/${id}`, body),
       remove: (id: string) => del<{ deleted: boolean }>(`/documents/${id}`),
+      updateFolder: (id: string, body: { name?: string; icon?: string | null }) =>
+         patch<Omit<FolderDto, 'documents'>>(`/document-folders/${id}`, body),
+      removeFolder: (id: string) => del<{ deleted: boolean }>(`/document-folders/${id}`),
    },
 
    integrations: {
@@ -715,6 +734,8 @@ export const api = {
       }) => post<{ jobId: string }>('/import/commit', input),
       /** Progresso/resultado do job de import (só o dono). */
       job: (id: string) => get<ImportJobDto>(`/import/jobs/${encodeURIComponent(id)}`),
+      /** Job de import ainda rodando do próprio usuário (ou null) — ad#5. */
+      activeJob: () => get<ImportJobDto | null>('/import/jobs'),
    },
 
    /** Webhooks de saída (#101). O segredo só vem no `create`. */

@@ -149,6 +149,16 @@ describe('DeleteTeamDialog', () => {
       expect(nav.push).not.toHaveBeenCalled();
    });
 
+   it('time com nome em branco confirma pelo identificador, nunca com o campo vazio', async () => {
+      const user = userEvent.setup();
+      render(<DeleteTeamDialog team={{ id: 'DOOM', name: '   ' }} open onOpenChange={vi.fn()} />);
+      await screen.findByRole('list', { name: 'Conteúdo que será excluído' });
+      // Campo vazio NÃO libera (era o furo: nome " " batia com "" e soltava o botão).
+      expect((confirmButton() as HTMLButtonElement).disabled).toBe(true);
+      await user.type(screen.getByLabelText(/para confirmar/), 'DOOM');
+      expect((confirmButton() as HTMLButtonElement).disabled).toBe(false);
+   });
+
    it('erro da API vira toast com a mensagem e nada é podado', async () => {
       const user = userEvent.setup();
       apiMocks.remove.mockRejectedValue(new ApiError(403, 'Apenas admin'));

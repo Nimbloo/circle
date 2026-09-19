@@ -24,6 +24,7 @@ import type { ViewFilter } from '@/lib/api/views';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
+import { errorReason } from '@/lib/error-reason';
 import { toast } from 'sonner';
 import { ViewFilterEditor } from './view-filter-editor';
 
@@ -78,8 +79,8 @@ export function CreateViewButton({
          setFilter({});
          setOpen(false);
          toast.success('View created');
-      } catch {
-         toast.error('Could not create the view (slug já existe?)');
+      } catch (err) {
+         toast.error(errorReason(err, 'Could not create the view'));
       } finally {
          setBusy(false);
       }

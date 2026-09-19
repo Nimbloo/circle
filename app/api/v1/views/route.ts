@@ -32,7 +32,7 @@ const CreateSchema = z.object({
    type: z.enum(['issue', 'project']),
    filter: ViewFilterSchema,
    description: z.string().nullish(),
-   icon: z.string().nullish(),
+   icon: z.string().max(16).nullish(),
    teamId: z.string().nullish(),
 });
 

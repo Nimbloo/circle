@@ -29,7 +29,7 @@ const CreateSchema = z.discriminatedUnion('kind', [
          .trim()
          .min(1, 'name é obrigatório')
          .max(128, 'name deve ter no máximo 128 caracteres'),
-      icon: z.string().nullish(),
+      icon: z.string().max(16).nullish(),
       id: z.string().optional(),
    }),
    z.object({
@@ -43,7 +43,7 @@ const CreateSchema = z.discriminatedUnion('kind', [
                .trim()
                .min(1, 'name é obrigatório')
                .max(128, 'name deve ter no máximo 128 caracteres'),
-            icon: z.string().nullish(),
+            icon: z.string().max(16).nullish(),
          })
          .optional(),
       name: z
@@ -51,7 +51,7 @@ const CreateSchema = z.discriminatedUnion('kind', [
          .trim()
          .min(1, 'name é obrigatório')
          .max(128, 'name deve ter no máximo 128 caracteres'),
-      icon: z.string().nullish(),
+      icon: z.string().max(16).nullish(),
       pinned: z.boolean().optional(),
    }),
 ]);

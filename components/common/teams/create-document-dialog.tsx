@@ -12,6 +12,7 @@ import {
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { api } from '@/lib/client';
+import { errorReason } from '@/lib/error-reason';
 import { cn } from '@/lib/utils';
 import { CheckIcon, FolderPlus, Pin, Plus, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -101,8 +102,8 @@ export function CreateDocumentButton({
          setOpen(false);
          toast.success('Documento criado');
          reset();
-      } catch {
-         toast.error('Não foi possível criar o documento');
+      } catch (err) {
+         toast.error(errorReason(err, 'Não foi possível criar o documento'));
       } finally {
          setBusy(false);
       }
@@ -208,7 +209,7 @@ export function CreateDocumentButton({
                         <input
                            value={icon}
                            onChange={(e) => setIcon(e.target.value)}
-                           maxLength={2}
+                           maxLength={16}
                            placeholder="Emoji"
                            className="w-full bg-transparent text-center text-lg outline-none border rounded-md h-9"
                            aria-label="Icon"
@@ -242,17 +243,24 @@ export function CreateDocumentButton({
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t">
-               <Button size="sm" variant="ghost" onClick={() => setOpen(false)} disabled={busy}>
-                  Cancel
-               </Button>
-               <Button
-                  size="sm"
-                  onClick={() => void create()}
-                  disabled={busy || !name.trim() || !hasFolder}
-               >
-                  Create document
-               </Button>
+            <div className="flex items-center justify-between gap-2 border-t px-5 py-3">
+               {/* Sem pasta o Create fica desabilitado — antes sem dizer por quê (ad#6). */}
+               <span className="text-xs text-muted-foreground">
+                  {!hasFolder ? 'Escolha uma pasta (ou digite um nome novo) acima.' : ''}
+               </span>
+               <div className="flex items-center gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => setOpen(false)} disabled={busy}>
+                     Cancel
+                  </Button>
+                  <Button
+                     size="sm"
+                     onClick={() => void create()}
+                     disabled={busy || !name.trim() || !hasFolder}
+                     title={hasFolder ? undefined : 'Escolha uma pasta para o documento'}
+                  >
+                     Create document
+                  </Button>
+               </div>
             </div>
          </DialogContent>
       </Dialog>

@@ -7,7 +7,7 @@ import { LabelInterface } from '@/data/labels';
 import { Health } from '@/data/projects';
 import type { WorkspaceBootstrap } from '@/lib/api/workspace';
 import type { StatusDto } from '@/lib/api/statuses';
-import type { LabelDto } from '@/lib/api/labels';
+import type { LabelDto, LabelGroupDto } from '@/lib/api/labels';
 
 /**
  * Catálogos (status/priority/label/health) vindos da API (#16). Nascem VAZIOS, com
@@ -21,7 +21,9 @@ import type { LabelDto } from '@/lib/api/labels';
 type CatalogBootstrap = Pick<
    WorkspaceBootstrap,
    'statuses' | 'projectStatuses' | 'priorities' | 'labels' | 'healthStates'
->;
+> &
+   // Grupos de label (aditivo): bootstrap antigo sem o campo → lista vazia.
+   Partial<Pick<WorkspaceBootstrap, 'labelGroups'>>;
 
 const priorityIconById = new Map(priorityPresentation.map((p) => [p.id, p.icon]));
 
@@ -54,8 +56,15 @@ function toPriority(row: CatalogBootstrap['priorities'][number]): Priority {
    };
 }
 
-function toLabel(row: LabelDto & { groupId?: string | null }): LabelInterface {
-   return { id: row.id, name: row.name, color: row.color, groupId: row.groupId };
+type LabelLike = Omit<LabelDto, 'groupId'> & { groupId?: string | null };
+
+function toLabel(row: LabelLike): LabelInterface {
+   return { id: row.id, name: row.name, color: row.color, groupId: row.groupId ?? null };
+}
+
+/** `groupId` do DTO quando ele vem; senão o já carregado (cliente/servidor antigos). */
+function groupOf(dto: { groupId?: string | null }, prev: string | null | undefined) {
+   return dto.groupId !== undefined ? dto.groupId : prev;
 }
 
 function toHealth(row: CatalogBootstrap['healthStates'][number]): Health {
@@ -114,15 +123,20 @@ interface CatalogState {
    projectStatuses: Status[];
    priorities: Priority[];
    labels: LabelInterface[];
+   /** Grupos de label (paridade Linear) na ordem de exibição. */
+   labelGroups: LabelGroupDto[];
    healthStates: Health[];
    /** Substitui os catálogos seed pelos dados vivos do bootstrap do workspace. */
    setCatalogs: (data: CatalogBootstrap) => void;
    /** Splice de UM item a partir do DTO devolvido pela mutação, em vez de re-hidratar o
     * workspace inteiro. Cada um mexe SÓ na sua coleção. */
-   applyLabel: (dto: LabelDto) => void;
+   applyLabel: (dto: LabelLike) => void;
    removeLabel: (id: string) => void;
-   /** Lista inteira de labels (evento remoto): preserva o `groupId` já carregado. */
-   setLabels: (dtos: LabelDto[]) => void;
+   /** Lista inteira de labels (evento remoto): sem `groupId` no DTO, preserva o carregado. */
+   setLabels: (dtos: LabelLike[]) => void;
+   /** Splice de um grupo (retorno da mutação) e remoção local (solta as labels dele). */
+   applyLabelGroup: (dto: LabelGroupDto) => void;
+   removeLabelGroup: (id: string) => void;
    applyStatus: (dto: StatusDto) => void;
    /** Lista inteira já ordenada (retorno do reorder). */
    setStatuses: (dtos: StatusDto[]) => void;
@@ -141,6 +155,7 @@ export const useCatalogStore = create<CatalogState>((set) => ({
    projectStatuses: [],
    priorities: [],
    labels: [],
+   labelGroups: [],
    healthStates: [],
    setCatalogs: (data) =>
       set({
@@ -148,6 +163,7 @@ export const useCatalogStore = create<CatalogState>((set) => ({
          projectStatuses: toStatuses(data.projectStatuses),
          priorities: data.priorities.map(toPriority),
          labels: data.labels.map(toLabel),
+         labelGroups: data.labelGroups ?? [],
          healthStates: data.healthStates.map(toHealth),
          loaded: true,
       }),
@@ -156,14 +172,27 @@ export const useCatalogStore = create<CatalogState>((set) => ({
          // LabelDto não traz groupId: preserva o do item já carregado. A API lista por
          // nome, então o upsert re-ordena igual para o novo/renomeado cair no lugar certo.
          const prev = s.labels.find((l) => l.id === dto.id);
-         const next = toLabel({ ...dto, groupId: prev?.groupId });
+         const next = toLabel({ ...dto, groupId: groupOf(dto, prev?.groupId) });
          return { labels: upsert(s.labels, next).sort((a, b) => a.name.localeCompare(b.name)) };
       }),
    removeLabel: (id) => set((s) => ({ labels: s.labels.filter((l) => l.id !== id) })),
+   applyLabelGroup: (dto) =>
+      set((s) => ({
+         labelGroups: upsert(s.labelGroups, dto).sort(
+            (a, b) => a.position - b.position || a.name.localeCompare(b.name)
+         ),
+      })),
+   removeLabelGroup: (id) =>
+      set((s) => ({
+         labelGroups: s.labelGroups.filter((g) => g.id !== id),
+         labels: s.labels.map((l) => (l.groupId === id ? { ...l, groupId: null } : l)),
+      })),
    setLabels: (dtos) =>
       set((s) => {
          const groupById = new Map(s.labels.map((l) => [l.id, l.groupId]));
-         return { labels: dtos.map((d) => toLabel({ ...d, groupId: groupById.get(d.id) })) };
+         return {
+            labels: dtos.map((d) => toLabel({ ...d, groupId: groupOf(d, groupById.get(d.id)) })),
+         };
       }),
    // Status criado recebe a maior position (vai pro fim); editado fica na mesma casa.
    // Recalcula os ícones da lista toda: o "pie" dos started depende da posição.
@@ -180,6 +209,7 @@ export const useStatuses = (): Status[] => useCatalogStore((s) => s.statuses);
 export const useProjectStatuses = (): Status[] => useCatalogStore((s) => s.projectStatuses);
 export const usePriorities = (): Priority[] => useCatalogStore((s) => s.priorities);
 export const useLabels = (): LabelInterface[] => useCatalogStore((s) => s.labels);
+export const useLabelGroups = (): LabelGroupDto[] => useCatalogStore((s) => s.labelGroups);
 export const useHealthStates = (): Health[] => useCatalogStore((s) => s.healthStates);
 
 /** Status ordenados p/ exibição no board (colunas), a partir do catálogo hidratado. */

@@ -44,7 +44,7 @@ const CreateTeamSchema = z.object({
       .trim()
       .min(1, 'name é obrigatório')
       .max(128, 'name deve ter no máximo 128 caracteres'),
-   icon: z.string().nullish(),
+   icon: z.string().max(16).nullish(),
    color: z.string().nullish(),
    parentId: z.string().max(16).nullish(),
 });

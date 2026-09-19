@@ -19,6 +19,7 @@ const UpdateSchema = z.object({
       .max(128, 'name deve ter no máximo 128 caracteres')
       .optional(),
    color: z.string().min(1).optional(),
+   groupId: z.string().max(64).nullish(),
 });
 
 export async function PATCH(req: Request, { params }: Params) {

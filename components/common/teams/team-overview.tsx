@@ -71,7 +71,7 @@ export default function TeamOverview() {
    }
 
    const goToLinks = [
-      { label: 'Team settings', icon: Settings, href: `/${orgId}/settings` },
+      { label: 'Team settings', icon: Settings, href: `/${orgId}/settings/teams/${team.id}` },
       { label: 'Issues', icon: CopyMinus, href: `/${orgId}/team/${team.id}/all` },
       { label: 'Triage', icon: Inbox, href: `/${orgId}/team/${team.id}/triage` },
       { label: 'Cycles', icon: CyclePlayIcon, href: `/${orgId}/team/${team.id}/cycles` },
@@ -90,10 +90,6 @@ export default function TeamOverview() {
                <h1 className="text-2xl font-semibold leading-8">{team.name}</h1>
             </div>
 
-            <p className="mt-5 text-[15px] font-[450] leading-[23px] text-muted-foreground">
-               Add a description...
-            </p>
-
             <div className="mt-[34px]">
                <div className="flex h-7 items-center justify-between">
                   <h2 className="text-lg font-medium leading-[normal]">Team resources</h2>
@@ -108,7 +104,7 @@ export default function TeamOverview() {
                   {pinnedDocuments.map((doc) => (
                      <Link
                         key={doc.id}
-                        href={`/${orgId}/team/${team.id}/documents`}
+                        href={`/${orgId}/team/${team.id}/documents/${doc.id}`}
                         className="flex items-center gap-2 py-1.5 px-2 -mx-2 rounded-md hover:bg-sidebar/50 text-sm"
                      >
                         <span className="text-base leading-none">{doc.icon}</span>

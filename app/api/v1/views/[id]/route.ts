@@ -33,7 +33,7 @@ const UpdateSchema = z.object({
    // Compartilhamento: time que enxerga a view; `null` a torna pessoal.
    teamId: z.string().max(16).nullish(),
    description: z.string().nullish(),
-   icon: z.string().nullish(),
+   icon: z.string().max(16).nullish(),
    filter: ViewFilterSchema.optional(),
 });
 

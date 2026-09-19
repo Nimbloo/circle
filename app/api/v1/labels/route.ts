@@ -24,6 +24,7 @@ const CreateSchema = z.object({
       .min(1, 'name é obrigatório')
       .max(128, 'name deve ter no máximo 128 caracteres'),
    color: z.string().min(1),
+   groupId: z.string().max(64).nullish(),
 });
 
 export async function POST(req: Request) {

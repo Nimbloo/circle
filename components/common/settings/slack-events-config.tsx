@@ -50,7 +50,7 @@ export function SlackEventsConfig() {
    if (!cfg) return null;
 
    return (
-      <div className="rounded-lg border bg-container divide-y">
+      <div className="divide-y divide-border/60 overflow-hidden rounded-[10px] bg-card">
          <div className="px-4 py-2.5">
             <span className="text-sm font-medium">Notificações no canal</span>
             <p className="text-xs text-muted-foreground">

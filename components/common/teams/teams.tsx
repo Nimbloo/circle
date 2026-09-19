@@ -6,12 +6,54 @@ import { LoadingArea } from '@/components/common/loading-area';
 import { useTeamsFilterStore } from '@/store/team-filter-store';
 import { useTeamsDisplayStore } from '@/store/teams-display-store';
 import { Users } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { buildTeamTree, type TeamNode } from '@/lib/team-tree';
 import { Filter } from '@/components/layout/headers/teams/filter';
 import TeamLine from './team-line';
 import { TeamsDisplayOptions } from './teams-display-options';
 import { NewTeamButton } from './new-team-button';
 import { ViewBar } from '@/components/layout/header-primitives';
+
+/** Um time e, aninhados, os sub-times dele (recursivo). */
+function TeamTreeRows({
+   node,
+   depth,
+   collapsed,
+   toggle,
+}: {
+   node: TeamNode;
+   depth: number;
+   collapsed: Record<string, boolean>;
+   toggle: (id: string) => void;
+}) {
+   const hasChildren = node.children.length > 0;
+   const expanded = hasChildren && !collapsed[node.team.id];
+   const row = (
+      <TeamLine
+         team={node.team}
+         depth={depth}
+         hasChildren={hasChildren}
+         expanded={expanded}
+         onToggle={() => toggle(node.team.id)}
+      />
+   );
+   if (!hasChildren) return row;
+   return (
+      <div role="group" aria-label={node.team.name}>
+         {row}
+         {expanded &&
+            node.children.map((child) => (
+               <TeamTreeRows
+                  key={child.team.id}
+                  node={child}
+                  depth={depth + 1}
+                  collapsed={collapsed}
+                  toggle={toggle}
+               />
+            ))}
+      </div>
+   );
+}
 
 export default function Teams() {
    const allTeams = useWorkspaceStore((s) => s.teams);
@@ -19,6 +61,8 @@ export default function Teams() {
    const loaded = useWorkspaceStore((s) => s.loaded);
    const { filters } = useTeamsFilterStore();
    const { ordering, displayProperties } = useTeamsDisplayStore();
+   /** Sub-times escondidos por time (colapso local da tela). */
+   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
    const displayed = useMemo(() => {
       let list = allTeams.slice();
@@ -50,6 +94,19 @@ export default function Teams() {
       };
       return list.sort(compare);
    }, [allTeams, projects, filters, ordering]);
+
+   // Sub-times aninhados (paridade Linear): a árvore é montada sobre a lista já
+   // filtrada/ordenada; um sub-time cujo pai saiu no filtro sobe pro ancestral presente.
+   const tree = useMemo(() => {
+      const order = new Map(displayed.map((t, i) => [t.id, i]));
+      const nodes = buildTeamTree(displayed, allTeams);
+      const sortDeep = (list: TeamNode[]) => {
+         list.sort((a, b) => (order.get(a.team.id) ?? 0) - (order.get(b.team.id) ?? 0));
+         list.forEach((n) => sortDeep(n.children));
+      };
+      sortDeep(nodes);
+      return nodes;
+   }, [displayed, allTeams]);
 
    return (
       <div className="w-full">
@@ -107,8 +164,14 @@ export default function Teams() {
                )
             ) : (
                <div className="content-enter">
-                  {displayed.map((team) => (
-                     <TeamLine key={team.id} team={team} />
+                  {tree.map((node) => (
+                     <TeamTreeRows
+                        key={node.team.id}
+                        node={node}
+                        depth={0}
+                        collapsed={collapsed}
+                        toggle={(id) => setCollapsed((c) => ({ ...c, [id]: !c[id] }))}
+                     />
                   ))}
                </div>
             )}

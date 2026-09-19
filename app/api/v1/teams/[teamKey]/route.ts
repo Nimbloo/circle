@@ -35,7 +35,7 @@ const UpdateSchema = z.object({
       .min(1, 'name é obrigatório')
       .max(128, 'name deve ter no máximo 128 caracteres')
       .optional(),
-   icon: z.string().nullish(),
+   icon: z.string().max(16).nullish(),
    color: z.string().nullish(),
    estimateScale: z.enum(['fibonacci', 'exponential', 'linear', 'tshirt']).optional(),
    cycleCooldownDays: z.number().int().min(0).max(14).optional(),
