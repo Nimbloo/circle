@@ -1,6 +1,6 @@
 'use client';
 
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { adaptProject } from '@/lib/adapters-workspace';
 import { api, type RoadmapDto } from '@/lib/client';
 import { useRoadmapDisplayStore } from '@/store/roadmap-display-store';
@@ -141,7 +141,7 @@ export default function Roadmap() {
    if (!data) {
       return (
          <div className="p-6">
-            <ListSkeleton rows={8} />
+            <LoadingArea rows={8} />
          </div>
       );
    }

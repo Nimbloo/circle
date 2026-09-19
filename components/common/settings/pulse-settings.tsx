@@ -4,7 +4,7 @@ import { selectIssuesLoading, useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { SettingsShell } from './shared';
 
 interface Bucket {
@@ -147,14 +147,7 @@ export default function PulseSettings() {
                </Button>
             </div>
          ) : loading ? (
-            <div role="status" aria-label="Carregando o pulse" className="flex flex-col gap-3">
-               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                     <Skeleton key={i} className="h-[74px] rounded-lg" />
-                  ))}
-               </div>
-               <Skeleton className="h-40 rounded-lg" />
-            </div>
+            <LoadingArea rows={6} label="Carregando o pulse" />
          ) : (
             <PulseContent data={data} />
          )}

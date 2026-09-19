@@ -9,7 +9,7 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { useAgentChatStore, type AgentMessage } from '@/store/agent-chat-store';
 import { ArrowUp, Bot, CalendarClock, ListTodo, Sparkles, X } from 'lucide-react';
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 
 /** Prompts de exemplo — perguntas reais que o Agent responde consultando o workspace. */
 const agentExamples = [
@@ -318,11 +318,7 @@ export default function AgentChat() {
          >
             <div className="max-w-2xl mx-auto px-6 py-8 flex flex-col gap-6">
                {activeChat.messages.length === 0 && activeChat.loadState === 'loading' && (
-                  <div className="flex flex-col gap-3" aria-busy="true">
-                     <span className="sr-only">Carregando conversa…</span>
-                     <Skeleton className="h-9 w-2/3 self-end rounded-2xl" />
-                     <Skeleton className="h-16 w-full" />
-                  </div>
+                  <LoadingArea rows={3} />
                )}
                {activeChat.messages.length === 0 && activeChat.loadState === 'error' && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">

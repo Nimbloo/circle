@@ -18,7 +18,7 @@ import { DocumentOutline, type OutlineItem } from './document-outline';
 import { ProjectResources } from './project-resources';
 import { ProjectSidePanel } from './project-side-panel';
 import { useSharedProjectDetail } from './use-project-detail';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 
 interface ProjectOverviewProps {
    projectId: string;
@@ -142,28 +142,8 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    }
 
    if (!project) {
-      // Ainda carregando → skeleton; carregado sem projeto → not found.
-      if (!loaded) {
-         return (
-            <div className="flex h-full w-full overflow-hidden">
-               <div className="min-w-0 flex-1 overflow-hidden">
-                  <div className="mx-auto flex max-w-[869px] flex-col gap-5 px-8 pt-16 pb-10">
-                     <Skeleton className="size-8" />
-                     <Skeleton className="h-8 w-1/2" />
-                     <Skeleton className="h-4 w-3/4" />
-                  </div>
-               </div>
-               <DetailSidePanel kind="project" title="Project details" className="flex-col gap-2">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                     <div key={i} className="flex flex-col gap-2 rounded-[10px] border bg-card p-3">
-                        <Skeleton className="h-3 w-16" />
-                        <Skeleton className="h-6 w-32" />
-                     </div>
-                  ))}
-               </DetailSidePanel>
-            </div>
-         );
-      }
+      // Ainda carregando → loading; carregado sem projeto → not found.
+      if (!loaded) return <LoadingArea className="h-full" />;
       return (
          <EmptyState
             variant="search"
@@ -251,7 +231,7 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                            onReady={markHeadings}
                         />
                      ) : (
-                        <Skeleton className="h-4 w-2/3" />
+                        <LoadingArea rows={1} size="sm" className="justify-start" />
                      )}
                   </div>
                </div>

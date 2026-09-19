@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/common/empty-state';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import {
    Dialog,
    DialogContent,
@@ -214,7 +214,7 @@ export default function ProjectTemplatesSettings() {
    }, [teams, teamId]);
 
    // R4 (#57): seq por time — resposta atrasada do time anterior nunca aparece; troca
-   // de time mostra skeleton; reload do mesmo time é silencioso; falha vira erro, não vazio.
+   // de time mostra loading; reload do mesmo time é silencioso; falha vira erro, não vazio.
    const resource = useAsyncResource(teamId || null, (id) => api.teams.projectTemplates(id));
    const templates = resource.data ?? [];
    const loading = resource.loading;
@@ -269,7 +269,7 @@ export default function ProjectTemplatesSettings() {
 
          <div className="rounded-lg border bg-container overflow-hidden">
             {loading ? (
-               <ListSkeleton rows={4} />
+               <LoadingArea rows={4} />
             ) : resource.error ? (
                <div className="flex flex-col items-center gap-2 py-10 text-sm text-muted-foreground">
                   Não foi possível carregar os templates.

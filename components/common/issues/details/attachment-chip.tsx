@@ -9,10 +9,10 @@ import {
    FileSpreadsheet,
    FileText,
    FileVideo,
-   Loader2,
    X,
 } from 'lucide-react';
 import { useState } from 'react';
+import { CircleLoading } from '@/components/common/circle-loading';
 
 /** Item exibido como chip: anexo salvo (`url`) ou arquivo ainda subindo/pendente (sem `url`). */
 export interface AttachmentChipItem {
@@ -86,7 +86,7 @@ export function AttachmentChip({
                loading="lazy"
             />
          ) : item.uploading ? (
-            <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
+            <CircleLoading size="sm" inline className="shrink-0 text-muted-foreground" />
          ) : (
             <AttachmentIcon item={item} />
          )}

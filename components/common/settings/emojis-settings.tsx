@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/common/empty-state';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import {
    Dialog,
    DialogContent,
@@ -163,7 +163,7 @@ export default function EmojisSettings() {
    const [dialogOpen, setDialogOpen] = useState(false);
    const [query, setQuery] = useState('');
 
-   // Skeleton só na primeira carga; o reload pós-mutation (add/remove) é silencioso —
+   // Loading só na primeira carga; o reload pós-mutation (add/remove) é silencioso —
    // a grade atual fica na tela até a lista nova chegar, sem piscar.
    const loadedOnceRef = useRef(false);
    const load = useCallback(async () => {
@@ -223,7 +223,7 @@ export default function EmojisSettings() {
             </div>
 
             {loading ? (
-               <ListSkeleton rows={4} />
+               <LoadingArea rows={4} />
             ) : visibleEmojis.length === 0 ? (
                <div className="flex min-h-[360px] items-center justify-center">
                   {query ? (

@@ -2,7 +2,7 @@
 
 import ProjectsTimeline from '@/components/common/projects/projects-timeline';
 import { EmptyState } from '@/components/common/empty-state';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { ProjectGroup } from '@/components/common/projects/projects';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Initiative } from '@/data/initiatives';
@@ -483,7 +483,7 @@ function ActivityFeed({ initiativeId }: { initiativeId: string }) {
       <div className="flex flex-col gap-3">
          <span className="text-[13px] font-medium leading-4">Activity</span>
          {entries === null ? (
-            <ListSkeleton rows={3} />
+            <LoadingArea rows={3} />
          ) : entries.length === 0 ? (
             <p className="text-xs text-muted-foreground">No activity recorded yet.</p>
          ) : (
@@ -620,7 +620,7 @@ function Activity({ initiativeId }: { initiativeId: string }) {
          </div>
 
          {feed === 'loading' && updates.length === 0 ? (
-            <ListSkeleton rows={3} />
+            <LoadingArea rows={3} />
          ) : feed === 'error' && updates.length === 0 ? (
             <p className="text-sm text-muted-foreground">Não foi possível carregar os updates.</p>
          ) : updates.length === 0 ? (
@@ -697,11 +697,11 @@ export default function InitiativeDetails({ initiativeId }: { initiativeId: stri
    }, [initiative, allProjects]);
 
    if (!initiative) {
-      // Hidratando → skeleton; not-found só como estado final (fim do flash no deep-link frio).
+      // Hidratando → loading; not-found só como estado final (fim do flash no deep-link frio).
       if (!loaded) {
          return (
             <div className="p-8">
-               <ListSkeleton rows={6} />
+               <LoadingArea rows={6} />
             </div>
          );
       }

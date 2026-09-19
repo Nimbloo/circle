@@ -2,7 +2,7 @@
 
 import { use } from 'react';
 import { EmptyState } from '@/components/common/empty-state';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import MemberProfile from '@/components/common/members/member-profile';
 import Header from '@/components/layout/headers/profile/header';
 import MainLayout from '@/components/layout/main-layout';
@@ -32,7 +32,7 @@ export default function MemberProfilePage({ params }: MemberProfilePageProps) {
             />
          ) : (
             <div data-testid="profile-loading">
-               <ListSkeleton />
+               <LoadingArea />
             </div>
          )}
       </MainLayout>

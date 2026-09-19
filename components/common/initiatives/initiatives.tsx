@@ -3,7 +3,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/common/empty-state';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import {
    Command,
    CommandEmpty,
@@ -583,10 +583,10 @@ export default function Initiatives() {
             </AnimatePresence>
 
             {displayed.length === 0 && !creating && !loaded ? (
-               // Hidratando → skeleton; o empty state "No initiatives yet" só depois
+               // Hidratando → loading; o empty state "No initiatives yet" só depois
                // que o workspace chegou (fim do flash no deep-link frio).
                <div className="py-4">
-                  <ListSkeleton rows={5} />
+                  <LoadingArea rows={5} />
                </div>
             ) : displayed.length === 0 && !creating ? (
                allInitiatives.length === 0 ? (

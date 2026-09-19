@@ -8,7 +8,8 @@ import { Review, ReviewList, ReviewStatus } from '@/data/reviews';
 import { CheckIcon, ChevronLeft, ListFilter, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import { EmptyState } from '@/components/common/empty-state';
 import { ErrorState } from '@/components/common/error-state';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { CircleLoading } from '@/components/common/circle-loading';
+import { LoadingArea } from '@/components/common/loading-area';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ReactNode, useEffect, useRef, useState } from 'react';
@@ -200,7 +201,7 @@ export default function Reviews({
    const [reloadKey, setReloadKey] = useState(0);
 
    // Tempo real: sync do GitHub ou webhook de PR/check mudou algum review. O refetch é
-   // silencioso (o skeleton só aparece na primeira carga) e coalescido: o sync publica
+   // silencioso (o loading só aparece na primeira carga) e coalescido: o sync publica
    // em rajada e cada evento virava um GET da lista (#48).
    useEffect(() => {
       let timer: ReturnType<typeof setTimeout> | null = null;
@@ -225,7 +226,7 @@ export default function Reviews({
    const statusKey = statuses.join(',');
    const queryKey = `${listTab}|${statusKey}`;
 
-   // Skeleton só na PRIMEIRA carga; o refetch (tempo real, troca de aba/filtro) é
+   // Loading só na PRIMEIRA carga; o refetch (tempo real, troca de aba/filtro) é
    // silencioso — a lista atual permanece até a nova chegar (stale-while-revalidate).
    // Falha de refetch também não derruba dados já exibidos.
    const loadedOnceRef = useRef(false);
@@ -428,7 +429,7 @@ export default function Reviews({
             </div>
             <div className="flex-1 overflow-y-auto">
                {loading ? (
-                  <ListSkeleton rows={8} />
+                  <LoadingArea rows={8} />
                ) : error ? (
                   <ErrorState
                      title="Could not load reviews"
@@ -536,7 +537,11 @@ export default function Reviews({
                            disabled={syncing}
                            className="inline-flex h-7 self-start items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
                         >
-                           <RefreshCw className={cn('size-3.5', syncing && 'animate-spin')} />
+                           {syncing ? (
+                              <CircleLoading size="sm" inline />
+                           ) : (
+                              <RefreshCw className="size-3.5" />
+                           )}
                            {syncing ? 'Syncing…' : 'Sync from GitHub'}
                         </button>
                      )}
@@ -553,7 +558,11 @@ export default function Reviews({
                         disabled={syncing}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium hover:bg-accent/50 transition-colors disabled:opacity-60"
                      >
-                        <RefreshCw className={cn('size-3.5', syncing && 'animate-spin')} />
+                        {syncing ? (
+                           <CircleLoading size="sm" inline />
+                        ) : (
+                           <RefreshCw className="size-3.5" />
+                        )}
                         {syncing ? 'Syncing…' : 'Sync from GitHub'}
                      </button>
                   )}

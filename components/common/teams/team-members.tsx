@@ -3,7 +3,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/client';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import type { JoinRequestDto } from '@/lib/api/teams';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Check, X } from 'lucide-react';
@@ -63,11 +63,11 @@ export default function TeamMembers() {
    };
 
    if (!team) {
-      // Hidratando → skeleton; not-found só como estado final (fim do flash no deep-link frio).
+      // Hidratando → loading; not-found só como estado final (fim do flash no deep-link frio).
       if (!loaded) {
          return (
             <div className="p-6">
-               <ListSkeleton rows={5} />
+               <LoadingArea rows={5} />
             </div>
          );
       }

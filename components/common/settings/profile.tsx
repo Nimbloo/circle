@@ -1,7 +1,7 @@
 'use client';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/client';
@@ -134,14 +134,7 @@ export default function Profile() {
          <SettingsShell title="Profile">
             <SettingsSection>
                <SettingsCard>
-                  <div className="flex flex-col gap-4 p-4">
-                     {Array.from({ length: 3 }).map((_, i) => (
-                        <div key={i} className="flex items-center justify-between">
-                           <Skeleton className="h-4 w-24" />
-                           <Skeleton className="h-8 w-48" />
-                        </div>
-                     ))}
-                  </div>
+                  <LoadingArea rows={3} />
                </SettingsCard>
             </SettingsSection>
          </SettingsShell>

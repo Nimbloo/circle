@@ -23,7 +23,7 @@ import { AttachmentsSection } from './attachments-section';
 import { useAttachmentUploader } from './use-attachment-uploader';
 import { filesOf, isImageFile } from '@/lib/attachments-client';
 import { IssuePropertiesPanel } from './issue-properties-panel';
-import { IssueDetailSkeleton } from './issue-detail-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { IssuePicker } from './issue-picker';
 import { useParentCandidatesExclusion, useSetParent } from './parent-issue';
 import { SubIssueCreate } from './sub-issue-create';
@@ -138,7 +138,7 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
       if (!detailIssueId) return;
       let active = true;
       // Refetch silencioso (stale-while-revalidate): o conteúdo atual permanece na tela
-      // enquanto o novo detail chega — skeleton só na primeira carga (detail === null).
+      // enquanto o novo detail chega — loading só na primeira carga (detail === null).
       Promise.all([api.issues.detail(detailIssueId), api.issues.activity(detailIssueId)])
          .then(([detailDto, activity]) => {
             if (active) {
@@ -265,8 +265,8 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
       filesOf(list).filter((f) => !isImageFile(f));
 
    if (loading || !detail) {
-      // Loading → skeleton; erro real (não-loading, sem detail) → mensagem com retry.
-      if (loading) return <IssueDetailSkeleton />;
+      // Loading → CircleLoading; erro real (não-loading, sem detail) → mensagem com retry.
+      if (loading) return <LoadingArea className="h-full" />;
       return (
          <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
             <span>Could not load issue details.</span>
@@ -566,8 +566,8 @@ export default function IssueDetails() {
    }, [issueId, storeIssue]);
 
    if (!issue) {
-      // Ainda resolvendo o deep-link → skeleton (não "not found" prematuro).
-      if (resolvingIssue) return <IssueDetailSkeleton />;
+      // Ainda resolvendo o deep-link → loading (não "not found" prematuro).
+      if (resolvingIssue) return <LoadingArea className="h-full" />;
       return (
          <div className="flex flex-col items-center justify-center h-full gap-2 text-sm text-muted-foreground">
             <p>Issue {issueId} not found.</p>

@@ -2,7 +2,7 @@
 
 import { EmptyState } from '@/components/common/empty-state';
 import { GroupedIssuesView } from '@/components/common/issues/grouped-issues-view';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { applyIssueFilters } from '@/components/common/issues/issue-filter-columns';
 import { IssueFilterBar } from '@/components/common/issues/issue-filter-bar';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
@@ -45,7 +45,7 @@ export default function ProjectIssues({ projectId }: ProjectIssuesProps) {
    const displayedIssues = useMemo(() => applyIssueFilters(issues, filters), [issues, filters]);
 
    if (!project) {
-      if (!loaded) return <ListSkeleton rows={8} />;
+      if (!loaded) return <LoadingArea rows={8} />;
       return (
          <EmptyState
             variant="search"

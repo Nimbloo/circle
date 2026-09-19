@@ -70,6 +70,7 @@ export function CircleLoading({
          <span
             role="status"
             aria-live="polite"
+            aria-label={label ?? 'Carregando'}
             data-size={size}
             className={cn('circle-loading inline-flex items-center gap-1.5', className)}
          >
@@ -82,6 +83,7 @@ export function CircleLoading({
       <div
          role="status"
          aria-live="polite"
+         aria-label={label ?? 'Carregando'}
          data-size={size}
          className={cn(
             'circle-loading flex flex-col items-center justify-center gap-3 text-muted-foreground',

@@ -3,7 +3,7 @@
 import { CycleDetailsPanel } from '@/components/common/cycles/cycle-details-panel';
 import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
 import { EmptyState } from '@/components/common/empty-state';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
@@ -87,7 +87,7 @@ export default function CycleIssues({ cycleView }: CycleIssuesProps) {
 
    // Sem ciclo: antes da 1ª carga do workspace ainda não dá para afirmar que não existe.
    if (!cycle) {
-      if (!workspaceLoaded) return <ListSkeleton />;
+      if (!workspaceLoaded) return <LoadingArea />;
       return (
          <EmptyState
             icon={CyclePlayIcon}

@@ -2,7 +2,7 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { EmptyState } from '@/components/common/empty-state';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { cn } from '@/lib/utils';
 import { Issue, sortIssuesByPriority } from '@/data/issues';
 import { Status } from '@/data/status';
@@ -41,7 +41,7 @@ interface GroupedIssuesViewProps {
 /**
  * Estado exibido quando não há nenhum grupo/issue para mostrar. Distingue
  * carregando (hidratando) de falha (com retry) de vazio real. Ocupa a área toda:
- * o skeleton fica no topo (onde as linhas vão aparecer), erro e vazio centralizados.
+ * o loading fica no topo (onde as linhas vão aparecer), erro e vazio centralizados.
  */
 function IssuesEmptyState({
    loading,
@@ -71,7 +71,7 @@ function IssuesEmptyState({
    if (loading) {
       return (
          <div data-testid="issues-loading" className="h-full w-full pt-1">
-            <ListSkeleton rows={8} />
+            <LoadingArea rows={8} />
          </div>
       );
    }

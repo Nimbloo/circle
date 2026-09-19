@@ -2,7 +2,7 @@
 
 import { addReviewComment, fetchReview, latestVerdict } from '@/lib/adapters-reviews';
 import { EmptyState } from '@/components/common/empty-state';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { Button } from '@/components/ui/button';
 import type { Review, ReviewComment, ReviewList, ReviewVerdictKind } from '@/data/reviews';
 import { REVIEW_CHANGED_EVENT } from '@/lib/use-live-sync';
@@ -62,7 +62,7 @@ export function ReviewDetail({
 
    useEffect(() => {
       let active = true;
-      // Recarga por realtime não volta pro skeleton — só o 1º fetch (ou troca de review).
+      // Recarga por realtime não volta pro loading — só o 1º fetch (ou troca de review).
       if (reloadKey === 0) setLoading(true);
       fetchReview(reviewId)
          .then((data) => {
@@ -129,7 +129,7 @@ export function ReviewDetail({
       }
    };
 
-   if (loading) return <ListSkeleton rows={6} />;
+   if (loading) return <LoadingArea rows={6} />;
 
    if (!review) {
       return (

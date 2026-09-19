@@ -24,8 +24,8 @@ vi.mock('react-dnd-html5-backend', async () => {
 
 /**
  * #9: no board, toda coluna vazia ia para "Hidden columns" — sem issues, o board nunca
- * mostrava carregando/erro/vazio. #30: o carregando da lista era um retângulo 64×16
- * centralizado; agora é o `ListSkeleton` no topo.
+ * mostrava carregando/erro/vazio. O carregando (lista e board) é o loading padrão do
+ * Circle (`CircleLoading` via `LoadingArea`), com a altura reservada das linhas.
  */
 
 const view = (props: {
@@ -45,17 +45,17 @@ const view = (props: {
    />
 );
 
-const skeletons = () => document.querySelectorAll('[data-slot="skeleton"]');
+const loadingStatus = () => screen.getByRole('status', { name: 'Carregando' });
 
 describe('estados sem issues da lista e do board', () => {
    beforeEach(() => {
       useDisplaySettingsStore.setState({ byView: {} });
    });
 
-   it('board carregando mostra o skeleton, não "Hidden columns"', () => {
+   it('board carregando mostra o loading do Circle, não "Hidden columns"', () => {
       render(view({ grid: true, loading: true }));
       expect(screen.queryByText('Hidden columns')).toBeNull();
-      expect(skeletons().length).toBeGreaterThan(3);
+      expect(loadingStatus().querySelector('[data-part="arc"]')).not.toBeNull();
    });
 
    it('board com falha mostra o erro com retry', async () => {
@@ -73,12 +73,11 @@ describe('estados sem issues da lista e do board', () => {
       expect(screen.getByText('Nenhuma issue')).toBeTruthy();
    });
 
-   it('lista carregando usa o ListSkeleton alinhado ao topo', () => {
+   it('lista carregando reserva a altura das linhas no topo, com o loading do Circle', () => {
       render(view({ grid: false, loading: true }));
-      const rows = skeletons();
-      expect(rows.length).toBeGreaterThan(3);
-      const wrapper = rows[0].closest('[data-testid="issues-loading"]') as HTMLElement;
+      const wrapper = loadingStatus().closest('[data-testid="issues-loading"]') as HTMLElement;
       expect(wrapper).toBeTruthy();
       expect(wrapper.className).not.toContain('items-center');
+      expect((loadingStatus().parentElement as HTMLElement).style.minHeight).toBe('352px');
    });
 });

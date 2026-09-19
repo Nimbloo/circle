@@ -3,7 +3,7 @@
 import { DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 import { ContentBlocks } from '@/components/common/issues/details/content-blocks';
 import { EmptyState } from '@/components/common/empty-state';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -120,7 +120,7 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
    };
 
    if (!project) {
-      if (!loaded) return <ListSkeleton rows={6} />;
+      if (!loaded) return <LoadingArea rows={6} />;
       return (
          <EmptyState
             variant="search"
@@ -187,7 +187,7 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
                {/* Updates otimistas do próprio usuário aparecem mesmo durante a carga. */}
                {feed === 'loading' && updates.length === 0 ? (
                   <div className="mt-8">
-                     <ListSkeleton rows={3} />
+                     <LoadingArea rows={3} />
                   </div>
                ) : feed === 'error' && updates.length === 0 ? (
                   <p className="mt-10 text-center text-sm text-muted-foreground">

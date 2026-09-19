@@ -24,7 +24,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { EmptyState } from '@/components/common/empty-state';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { api } from '@/lib/client';
 import { WEBHOOK_EVENTS, type WebhookEvent } from '@/lib/api/webhook-events';
 import type { WebhookDeliveryDto, WebhookDto } from '@/lib/api/webhooks';
@@ -144,7 +144,7 @@ function Deliveries({ webhookId }: { webhookId: string }) {
       api.webhooks
          .deliveries(webhookId)
          .then(setItems)
-         // Sem isto a falha deixava o skeleton para sempre (Ad#26).
+         // Sem isto a falha deixava o loading para sempre (Ad#26).
          .catch(() => setFailed(true));
    }, [webhookId]);
 
@@ -172,7 +172,7 @@ function Deliveries({ webhookId }: { webhookId: string }) {
             </Button>
          </div>
       );
-   if (!items) return <ListSkeleton rows={2} />;
+   if (!items) return <LoadingArea rows={2} />;
    if (items.length === 0)
       return (
          <EmptyState
@@ -276,7 +276,7 @@ export default function WebhooksSettings() {
          >
             <SettingsSection>
                {loading ? (
-                  <ListSkeleton rows={3} />
+                  <LoadingArea rows={3} />
                ) : hooks.length === 0 ? (
                   <SettingsCard>
                      <SettingsRow
