@@ -165,7 +165,8 @@ function TodayMarker({ todayOffset, listOffset }: { todayOffset: number; listOff
    );
    if (overlapsList) return null;
    return (
-      <div className="absolute top-8 bottom-0 w-px bg-primary z-10" style={{ left: todayOffset }} />
+      // z abaixo das barras (z-[5]): a linha de hoje não corta mais o texto (pl#17).
+      <div className="absolute top-8 bottom-0 w-px bg-primary z-[2]" style={{ left: todayOffset }} />
    );
 }
 
@@ -220,7 +221,11 @@ function TimelineBar({
    const range = draft ?? base;
    const left = offsetFor(range.startDate, monthWidth);
    const right = offsetFor(range.targetDate, monthWidth);
-   const width = Math.max(right - left, 130);
+   // A barra respeita a duração real; 130px de mínimo distorciam as datas (pl#17). Barra
+   // curta mostra o nome FORA dela, à direita.
+   const span = right - left;
+   const width = Math.max(span, 14);
+   const narrow = span < 120;
    const dayWidth = dayWidthOf(monthWidth);
    const rangeLabel = projectDateRangeLabel(range.startDate, range.targetDate) ?? range.startDate;
 
@@ -280,7 +285,7 @@ function TimelineBar({
       <div className="absolute inset-0">
          <div
             ref={wrapperRef}
-            className={cn('group absolute top-5 h-8', draft !== null && 'select-none')}
+            className={cn('group absolute top-3 h-8', draft !== null && 'select-none')}
             style={{ left, width }}
             onPointerMove={onPointerMove}
             onPointerUp={(event) => endDrag(event, true)}
@@ -308,8 +313,8 @@ function TimelineBar({
                   draft !== null && 'border-primary/60 bg-accent'
                )}
             >
-               <span className="truncate font-medium">{project.name}</span>
-               {displayProperties.lead && project.lead && (
+               {!narrow && <span className="truncate font-medium">{project.name}</span>}
+               {!narrow && displayProperties.lead && project.lead && (
                   <Avatar className="size-4 shrink-0">
                      <AvatarImage
                         src={project.lead.avatarUrl || undefined}
@@ -318,10 +323,18 @@ function TimelineBar({
                      <AvatarFallback>{project.lead.name[0]}</AvatarFallback>
                   </Avatar>
                )}
-               {displayProperties.status && (
+               {!narrow && displayProperties.status && (
                   <span className="text-muted-foreground shrink-0">{project.percentComplete}%</span>
                )}
             </button>
+            {narrow && (
+               <span className="pointer-events-none absolute inset-y-0 left-full ml-2 flex items-center gap-1.5 whitespace-nowrap text-xs">
+                  <span className="font-medium">{project.name}</span>
+                  {displayProperties.status && (
+                     <span className="text-muted-foreground">{project.percentComplete}%</span>
+                  )}
+               </span>
+            )}
             {reschedulable && (
                <>
                   <span
@@ -457,7 +470,7 @@ const TimelineRow = memo(function TimelineRow({
    const displayProperties = useProjectsDisplayStore((s) => s.displayProperties);
    const hasStart = isValidProjectDate(project.startDate);
    return (
-      <div className="relative h-[72px] flex items-center">
+      <div className="relative h-14 flex items-center">
          {hasStart && (
             <TimelineBar
                project={project}
@@ -468,7 +481,7 @@ const TimelineRow = memo(function TimelineRow({
             />
          )}
          {showProjectList && (
-            <div className="sticky left-0 z-10 flex h-[72px] w-[312px] shrink-0 items-center gap-1 px-[13px] pr-[10px] bg-container/95 backdrop-blur-sm text-[13px] leading-4 font-medium border-r border-border/40">
+            <div className="sticky left-0 z-10 flex h-14 w-[312px] shrink-0 items-center gap-1 px-[13px] pr-[10px] bg-container/95 backdrop-blur-sm text-[13px] leading-4 font-medium border-r border-border/40">
                <span className="inline-flex size-7 items-center justify-center rounded-md shrink-0">
                   <project.icon className="size-4" />
                </span>
