@@ -46,6 +46,11 @@ export type CircleEntity =
    | 'review'
    /** Regra de automação de um time (CRUD); `teamId` diz de qual time é a tela a recarregar. */
    | 'automation'
+   /**
+    * Preferências do próprio usuário (tema, preferences, layout), sempre com
+    * `recipientId`: as OUTRAS abas dele relêem `GET /settings` (ad#14).
+    */
+   | 'settings'
    /** Favorito do usuário (sempre com `recipientId`): as outras abas dele recarregam a lista. */
    | 'favorite'
    /**
