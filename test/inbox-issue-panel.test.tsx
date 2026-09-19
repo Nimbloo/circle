@@ -81,9 +81,9 @@ describe('painel de issue no Inbox', () => {
          </>
       );
 
-      expect(screen.getByRole('complementary', { name: 'Issue details' }).className).toContain(
-         'w-[400px] xl:flex'
-      );
+      const aside = screen.getByRole('complementary', { name: 'Issue details' });
+      expect(aside.className).toContain('xl:flex');
+      expect(aside.className).toContain('w-[400px]');
       expect(screen.getByRole('button', { name: 'Close Issue details' }).className).toContain(
          'xl:inline-flex'
       );

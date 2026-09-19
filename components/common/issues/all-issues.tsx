@@ -15,6 +15,7 @@ import { useMemo } from 'react';
 import { GroupedIssuesView } from './grouped-issues-view';
 import dynamic from 'next/dynamic';
 import { SearchIssues } from './search-issues';
+import { SidePanelSlot } from '@/components/common/detail-side-panel';
 
 // Code-split: o painel de insights (pesado, com gráficos) só renderiza quando aberto
 // (openPanel === 'insights'). dynamic() tira o chunk do bundle da página core.
@@ -102,11 +103,15 @@ export default function AllIssues({ categories }: AllIssuesProps) {
                />
             </div>
 
-            {openPanel === 'insights' && (
-               <aside className="hidden lg:flex w-[420px] shrink-0 border-l h-full overflow-hidden bg-container">
-                  <InsightsPanel issues={displayedIssues} />
-               </aside>
-            )}
+            <SidePanelSlot
+               open={openPanel === 'insights'}
+               width={420}
+               label="Insights"
+               className="hidden lg:flex"
+               panelClassName="border-l bg-container"
+            >
+               <InsightsPanel issues={displayedIssues} />
+            </SidePanelSlot>
          </div>
       </div>
    );

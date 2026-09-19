@@ -27,6 +27,7 @@ import { useViewStore } from '@/store/view-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useEffect, useMemo, useState } from 'react';
 import { scopeMyIssues, useMyIssuesTab } from './use-my-issues';
+import { SidePanelSlot } from '@/components/common/detail-side-panel';
 
 /**
  * "My issues" body — the exact same machinery as the team issue views
@@ -149,16 +150,24 @@ export default function MyIssues() {
                />
             </div>
 
-            {openPanel === 'insights' && (
-               <aside className="hidden lg:flex w-[420px] shrink-0 border-l h-full overflow-hidden bg-container">
-                  <InsightsPanel issues={displayedIssues} />
-               </aside>
-            )}
-            {openPanel === 'breakdown' && (
-               <aside className="hidden lg:flex w-80 shrink-0 border-l h-full overflow-hidden bg-container">
-                  <BreakdownPanel issues={displayedIssues} />
-               </aside>
-            )}
+            <SidePanelSlot
+               open={openPanel === 'insights'}
+               width={420}
+               label="Insights"
+               className="hidden lg:flex"
+               panelClassName="border-l bg-container"
+            >
+               <InsightsPanel issues={displayedIssues} />
+            </SidePanelSlot>
+            <SidePanelSlot
+               open={openPanel === 'breakdown'}
+               width={320}
+               label="Breakdown"
+               className="hidden lg:flex"
+               panelClassName="border-l bg-container"
+            >
+               <BreakdownPanel issues={displayedIssues} />
+            </SidePanelSlot>
          </div>
       </div>
    );

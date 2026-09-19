@@ -26,6 +26,7 @@ const InsightsPanel = dynamic(
    { ssr: false }
 );
 import { SearchIssues } from './search-issues';
+import { SidePanelSlot } from '@/components/common/detail-side-panel';
 
 export type CycleView = 'active' | 'upcoming';
 
@@ -117,16 +118,24 @@ export default function CycleIssues({ cycleView }: CycleIssuesProps) {
                />
             </div>
 
-            {openPanel === 'insights' && (
-               <aside className="hidden lg:flex w-[420px] shrink-0 border-l h-full overflow-hidden bg-container">
-                  <InsightsPanel issues={displayedIssues} />
-               </aside>
-            )}
-            {openPanel === 'cycle-details' && (
-               <aside className="hidden lg:flex w-[420px] shrink-0 border-l h-full overflow-hidden bg-container">
-                  <CycleDetailsPanel cycle={cycle} issues={cycleIssues} />
-               </aside>
-            )}
+            <SidePanelSlot
+               open={openPanel === 'insights'}
+               width={420}
+               label="Insights"
+               className="hidden lg:flex"
+               panelClassName="border-l bg-container"
+            >
+               <InsightsPanel issues={displayedIssues} />
+            </SidePanelSlot>
+            <SidePanelSlot
+               open={openPanel === 'cycle-details'}
+               width={420}
+               label="Cycle details"
+               className="hidden lg:flex"
+               panelClassName="border-l bg-container"
+            >
+               <CycleDetailsPanel cycle={cycle} issues={cycleIssues} />
+            </SidePanelSlot>
          </div>
       </div>
    );
