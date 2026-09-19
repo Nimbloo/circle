@@ -390,6 +390,15 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
       showSubIssues,
    ]);
 
+   // Seleção em lote segue o que está na tela (#30): issue apagada, filtrada ou escondida
+   // (done/sub-issues) sai da seleção — a barra nunca age sobre o que o usuário não vê.
+   const retainSelection = useBulkSelectionStore((s) => s.retain);
+   useEffect(() => {
+      const visible = new Set<string>();
+      for (const entry of groups) for (const issue of entry.issues) visible.add(issue.id);
+      retainSelection(visible);
+   }, [groups, retainSelection]);
+
    const hiddenCount = Math.max(0, totalIssues.length - issues.length);
    const showFooter = hasActiveFilters && hiddenCount > 0;
 

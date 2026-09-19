@@ -101,6 +101,9 @@ function safeRankBetween(before: string | null, after: string | null): string | 
    }
 }
 
+/** Id do toast de erro de mutação de issue: falhas em rajada (lote) viram UM toast. */
+export const ISSUE_MUTATION_TOAST = 'issue-mutation-error';
+
 /** Token da hidratação corrente: uma hidratação que termina depois de outra mais nova é descartada. */
 let hydrateSeq = 0;
 
@@ -356,7 +359,7 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          .update(id, toUpdateInput(updatedIssue))
          .catch((e) => {
             if (prev) set((state) => revertFields(state, id, prev, keys));
-            toast.error('Falha ao atualizar a issue');
+            toast.error('Falha ao atualizar a issue', { id: ISSUE_MUTATION_TOAST });
             throw e;
          })
          .then(() => {
@@ -377,7 +380,7 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
                      ? {}
                      : { issues: sortByRank([...state.issues, removed]) }
                );
-            toast.error('Falha ao excluir a issue');
+            toast.error('Falha ao excluir a issue', { id: ISSUE_MUTATION_TOAST });
             throw e;
          })
          .then(() => {});
