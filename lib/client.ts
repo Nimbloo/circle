@@ -51,7 +51,12 @@ import type { WorkspaceBootstrap } from '@/lib/api/workspace';
 import type { NotificationDto } from '@/lib/api/notifications';
 import type { ReviewDetailDto, ReviewDto, ReviewGuideDto } from '@/lib/api/reviews';
 import type { AddReviewCommentInput, ReviewCommentDto } from '@/lib/api/review-comments';
-import type { FolderDto, DocumentDto } from '@/lib/api/documents';
+import type {
+   FolderDto,
+   DocumentDto,
+   DocumentDetailDto,
+   UpdateDocumentInput,
+} from '@/lib/api/documents';
 import type {
    IssueDetailDto,
    CommentDto,
@@ -434,9 +439,14 @@ export const api = {
 
    /** Documentos (update/delete por id; escrita exige criador ou admin). */
    documents: {
-      update: (id: string, body: { name?: string; icon?: string | null; pinned?: boolean }) =>
-         patch<{ id: string }>(`/documents/${id}`, body),
+      /** Documento aberto: metadados + corpo (`descriptionDoc`) e `descriptionVersion`. */
+      get: (id: string) => get<DocumentDetailDto>(`/documents/${id}`),
+      update: (id: string, body: UpdateDocumentInput) =>
+         patch<DocumentDetailDto>(`/documents/${id}`, body),
       remove: (id: string) => del<{ deleted: boolean }>(`/documents/${id}`),
+      updateFolder: (id: string, body: { name?: string; icon?: string | null }) =>
+         patch<Omit<FolderDto, 'documents'>>(`/document-folders/${id}`, body),
+      removeFolder: (id: string) => del<{ deleted: boolean }>(`/document-folders/${id}`),
    },
 
    integrations: {
