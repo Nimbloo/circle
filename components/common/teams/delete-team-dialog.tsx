@@ -79,7 +79,10 @@ export function DeleteTeamDialog({
       if (open) setConfirmName('');
    }, [open]);
 
-   const canDelete = !busy && !!impact.data && confirmName === team.name;
+   // Time com nome em branco (dado legado) confirma pelo IDENTIFICADOR: comparar com um
+   // nome vazio soltava o botão com o campo vazio (ad#2).
+   const expectedName = team.name.trim() || team.id;
+   const canDelete = !busy && !!impact.data && confirmName.trim() === expectedName;
 
    const remove = async () => {
       if (!canDelete) return;
@@ -144,7 +147,7 @@ export function DeleteTeamDialog({
 
             <div className="flex flex-col gap-1.5">
                <label htmlFor="delete-team-confirm" className="text-xs text-muted-foreground">
-                  Digite <span className="font-medium text-foreground">{team.name}</span> para
+                  Digite <span className="font-medium text-foreground">{expectedName}</span> para
                   confirmar
                </label>
                <Input
@@ -157,7 +160,7 @@ export function DeleteTeamDialog({
                         void remove();
                      }
                   }}
-                  placeholder={team.name}
+                  placeholder={expectedName}
                   autoComplete="off"
                   autoFocus
                />
