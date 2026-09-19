@@ -11,6 +11,7 @@ import { useRightPanelStore } from '@/store/right-panel-store';
 import { User, X } from 'lucide-react';
 import { useMemo } from 'react';
 import { CapacityRing } from './capacity-ring';
+import { bucketIssues } from '@/lib/issue-breakdown';
 import dynamic from 'next/dynamic';
 
 /** Mesmo motivo de `cycles.tsx`: recharts só entra quando há gráfico para desenhar. */
@@ -39,19 +40,10 @@ const isCompleted = (issue: Issue) => issue.status.category === 'completed';
 
 function buildBreakdown<T>(
    issues: Issue[],
-   getKey: (issue: Issue) => T | undefined,
+   getKey: (issue: Issue) => T | readonly T[] | undefined,
    describe: (key: T) => Omit<BreakdownRow, 'total' | 'completedPercent'>
 ): BreakdownRow[] {
-   const buckets = new Map<T, Issue[]>();
-   for (const issue of issues) {
-      const key = getKey(issue);
-      if (key === undefined) continue;
-      const bucket = buckets.get(key) ?? [];
-      bucket.push(issue);
-      buckets.set(key, bucket);
-   }
-
-   return [...buckets.entries()]
+   return [...bucketIssues(issues, getKey).entries()]
       .map(([key, bucket]) => ({
          ...describe(key),
          total: bucket.length,
@@ -158,7 +150,7 @@ export function CycleDetailsPanel({ cycle, issues }: CycleDetailsPanelProps) {
       () =>
          buildBreakdown(
             issues,
-            (issue) => issue.labels[0]?.id,
+            (issue) => issue.labels.map((label) => label.id),
             (key) => {
                const label = issues
                   .flatMap((issue) => issue.labels)
