@@ -43,6 +43,7 @@ import type { InitiativeActivityDto } from '@/lib/api/initiatives';
 import { ProgressHistory } from '@/components/common/projects/progress-history';
 import { InitiativeProgressPanel } from './initiative-progress-panel';
 import { InitiativeProjectRow } from './initiative-project-row';
+import { groupInitiativeProjects } from './initiative-project-groups';
 import { InitiativeIconPicker } from './initiative-icon-picker';
 import { InitiativePropertiesPanel } from './initiative-properties-panel';
 import { useInitiativePatch } from './use-initiative-patch';
@@ -54,17 +55,6 @@ const formatDay = (iso: string) => format(parseISO(iso), 'MMM d, yyyy');
 
 /* ------------------------------ projects table ---------------------------- */
 
-const GROUP_ORDER: { key: string; label: string; match: (project: Project) => boolean }[] = [
-   { key: 'in-progress', label: 'In Progress', match: (p) => p.status.category === 'started' },
-   { key: 'planned', label: 'Planned', match: (p) => p.status.category === 'unstarted' },
-   {
-      key: 'backlog',
-      label: 'Backlog',
-      match: (p) => p.status.category === 'backlog' || p.status.category === 'triage',
-   },
-   { key: 'completed', label: 'Completed', match: (p) => p.status.category === 'completed' },
-];
-
 function ProjectsSection({ initiative }: { initiative: Initiative }) {
    const { orgId } = useParams<{ orgId: string }>();
    const allProjects = useWorkspaceStore((s) => s.projects);
@@ -74,10 +64,7 @@ function ProjectsSection({ initiative }: { initiative: Initiative }) {
       const linked = new Set(initiative.projectIds);
       const projects = allProjects.filter((p) => linked.has(p.id));
       return {
-         groups: GROUP_ORDER.map((group) => ({
-            ...group,
-            projects: projects.filter(group.match),
-         })).filter((group) => group.projects.length > 0),
+         groups: groupInitiativeProjects(projects),
          available: allProjects.filter((p) => !linked.has(p.id)),
       };
    }, [allProjects, initiative.projectIds]);

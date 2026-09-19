@@ -245,10 +245,18 @@ function TimelineBar({
       if (!drag || drag.pointerId !== event.pointerId) return;
       dragRef.current = null;
       wrapperRef.current?.releasePointerCapture?.(event.pointerId);
-      suppressClickRef.current = drag.moved;
       const next = draftRef.current;
       setDraft(null);
       if (commit && drag.moved && next && !sameRange(next, base)) onReschedule(project, next);
+      // Clique (ponteiro parado): a captura no wrapper desvia o `click` do botão, então
+      // é aqui que o peek abre (pl#1). O `click` que ainda possa chegar é descartado.
+      if (commit && !drag.moved) onSelect(project.id);
+      suppressClickRef.current = true;
+      // O `click` do mesmo gesto vem antes de qualquer timer; depois disso a supressão
+      // não pode sobrar para o próximo clique (nem para o Enter no botão focado).
+      setTimeout(() => {
+         suppressClickRef.current = false;
+      }, 0);
    };
 
    // Teclado: rascunho + 1 commit (#39).
@@ -579,6 +587,8 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
    useEffect(() => {
       const onKeyDown = (event: KeyboardEvent) => {
          if (event.metaKey || event.ctrlKey || event.altKey) return;
+         // Com dialog/palette aberto a tecla é da camada de cima, não do zoom (pl#19).
+         if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
          const target = event.target as HTMLElement | null;
          if (
             target &&
