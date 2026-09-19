@@ -14,7 +14,7 @@ import {
    appUser,
 } from '@/db/schema';
 import { getOrCreateUser } from './users';
-import { dispatchNotification } from './notify';
+import { dispatchNotifications, type NotifyInput } from './notify';
 import { ApiError } from './errors';
 import { publish } from './events';
 import { isAdmin } from './auth';
@@ -620,27 +620,23 @@ export async function addComment(
       .values([author.id, ...mentionedIds].map((userId) => ({ issueId, userId })))
       .onConflictDoNothing();
 
-   const notifications: Promise<void>[] = [...mentionedIds].map((recipientId) =>
-      dispatchNotification(db, {
-         type: 'mention',
-         issueId,
-         recipientId,
-         actorId: author.id,
-         content: `${author.name} mencionou você em um comentário`,
-      })
-   );
+   const notifications: NotifyInput[] = [...mentionedIds].map((recipientId) => ({
+      type: 'mention',
+      issueId,
+      recipientId,
+      actorId: author.id,
+      content: `${author.name} mencionou você em um comentário`,
+   }));
 
    // Notifica o responsável (se não for o próprio autor nem já mencionado acima)
    if (iss.assigneeId && iss.assigneeId !== author.id && !mentionedIds.has(iss.assigneeId)) {
-      notifications.push(
-         dispatchNotification(db, {
-            type: 'comment',
-            issueId,
-            recipientId: iss.assigneeId,
-            actorId: author.id,
-            content: `${author.name} comentou nesta issue`,
-         })
-      );
+      notifications.push({
+         type: 'comment',
+         issueId,
+         recipientId: iss.assigneeId,
+         actorId: author.id,
+         content: `${author.name} comentou nesta issue`,
+      });
    }
    // Resposta: notifica o autor da raiz e quem já participa da thread — uma vez cada,
    // sem o próprio ator e sem quem já foi notificado acima (assignee/mencionado).
@@ -650,25 +646,26 @@ export async function addComment(
       for (const recipientId of participantIds) {
          if (already.has(recipientId)) continue;
          already.add(recipientId);
-         notifications.push(
-            dispatchNotification(db, {
-               type: 'comment',
-               issueId,
-               recipientId,
-               actorId: author.id,
-               content:
-                  recipientId === rootAuthorId
-                     ? `${author.name} respondeu ao seu comentário`
-                     : `${author.name} respondeu em uma conversa que você participa`,
-               contextText: rootBody,
-            })
-         );
+         notifications.push({
+            type: 'comment',
+            issueId,
+            recipientId,
+            actorId: author.id,
+            content:
+               recipientId === rootAuthorId
+                  ? `${author.name} respondeu ao seu comentário`
+                  : `${author.name} respondeu em uma conversa que você participa`,
+            contextText: rootBody,
+         });
       }
    }
    // Fire-and-forget: as notificações (Slack/SES) não bloqueiam a resposta do comentário.
-   void Promise.all(notifications).catch((e) =>
-      console.error('[circle] notificações de comentário falharam:', e)
-   );
+   // Slack (canal compartilhado): um post neutro por comentário, não um por destinatário (#49).
+   void dispatchNotifications(db, notifications, {
+      slackSummary: rootParentId
+         ? `${author.name} respondeu a um comentário`
+         : `${author.name} comentou`,
+   }).catch((e) => console.error('[circle] notificações de comentário falharam:', e));
 
    publish({ entity: 'comment', action: 'created', id, actorEmail, issueId, teamId: iss.teamId });
    return {

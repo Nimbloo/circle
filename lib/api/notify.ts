@@ -28,10 +28,54 @@ export interface NotifyInput {
 }
 
 /**
- * Cria a notificação in-app e dispara os canais externos (Slack + Email), best-effort.
+ * Cria a notificação in-app e o e-mail de UM destinatário, best-effort. Sem Slack: o
+ * Slack é um canal compartilhado — ver `dispatchNotifications` (#49).
  * Nunca lança — a notificação é secundária ao request principal.
  */
 export async function dispatchNotification(db: Db, input: NotifyInput): Promise<void> {
+   await deliver(db, input);
+}
+
+export interface DispatchOptions {
+   /**
+    * Resumo neutro do EVENTO para o canal do Slack (ex.: "Ana comentou"). Vai uma vez por
+    * evento — não por destinatário — e só se algum destinatário tiver o Slack ligado (#49).
+    */
+   slackSummary?: string;
+}
+
+/**
+ * Notifica vários destinatários de um mesmo evento: in-app + e-mail por destinatário e,
+ * no Slack (webhook de canal), UMA mensagem neutra. Nunca lança.
+ */
+export async function dispatchNotifications(
+   db: Db,
+   inputs: NotifyInput[],
+   opts: DispatchOptions = {}
+): Promise<void> {
+   const results = await Promise.all(inputs.map((input) => deliver(db, input)));
+   const first = results.find((r) => r.issue);
+   if (!opts.slackSummary || !first?.issue || !results.some((r) => r.slackEnabled)) return;
+   try {
+      await sendSlack(
+         `[Circle] ${slackEscape(first.issue.identifier)}: ${slackEscape(opts.slackSummary)}\n${slackEscape(first.issue.title)}`
+      );
+   } catch (err) {
+      console.error('[circle] Slack de notificação falhou:', err);
+   }
+}
+
+/** Escapa & < > do mrkdwn do Slack (título `<!channel>` não vira menção real). */
+function slackEscape(s: string): string {
+   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+interface Delivered {
+   issue: { identifier: string; title: string } | null;
+   slackEnabled: boolean;
+}
+
+async function deliver(db: Db, input: NotifyInput): Promise<Delivered> {
    try {
       await createNotification(db, input);
    } catch (err) {
@@ -49,7 +93,7 @@ export async function dispatchNotification(db: Db, input: NotifyInput): Promise<
          .from(issueT)
          .where(eq(issueT.id, input.issueId))
          .limit(1);
-      if (!iss) return;
+      if (!iss) return { issue: null, slackEnabled: false };
 
       const rawContent = input.content ?? input.type;
       const summary = `[Circle] ${iss.identifier}: ${rawContent}`;
@@ -65,18 +109,17 @@ export async function dispatchNotification(db: Db, input: NotifyInput): Promise<
       // erro ao ler settings → canal habilitado (não silenciar notificação por acidente).
       const [emailEnabled, slackEnabled] = await channelPrefs(db, input.recipientId);
 
+      if (recipient?.email && emailEnabled) {
+         await sendEmail(recipient.email, summary, html).catch((err) =>
+            console.error('[circle] e-mail de notificação falhou:', err)
+         );
+      }
       // Slack de 'assignment' é coberto pelo feed do canal (notifySlackEvent, gated pelo
-      // slack_config admin) — não duplicar aqui. Comment/mention/etc seguem no Slack.
-      const slackForType = slackEnabled && input.type !== 'assignment';
-
-      await Promise.allSettled([
-         slackForType ? sendSlack(`${summary}\n${iss.title}`) : Promise.resolve({ sent: false }),
-         recipient?.email && emailEnabled
-            ? sendEmail(recipient.email, summary, html)
-            : Promise.resolve({ sent: false }),
-      ]);
+      // slack_config admin) — não conta para o post do evento.
+      return { issue: iss, slackEnabled: slackEnabled && input.type !== 'assignment' };
    } catch (err) {
       console.error('[circle] dispatch de notificação falhou:', err);
+      return { issue: null, slackEnabled: false };
    }
 }
 
