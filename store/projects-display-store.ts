@@ -74,6 +74,38 @@ const DEFAULTS = {
    displayProperties: DEFAULT_PROPERTIES,
 };
 
+/**
+ * Display na configuração padrão (esconde o Reset). Compara TODOS os campos que o Reset
+ * restaura — antes `showProjectList`/`showWeekNumbers` ficavam de fora e o Reset sumia.
+ */
+export function isProjectsDisplayDefault(
+   state: Pick<
+      ProjectsDisplayState,
+      | 'viewTypes'
+      | 'grouping'
+      | 'ordering'
+      | 'closedProjects'
+      | 'showEmptyGroups'
+      | 'showProjectList'
+      | 'showWeekNumbers'
+      | 'displayProperties'
+   >,
+   tab: ProjectsTab
+): boolean {
+   return (
+      state.viewTypes[tab] === DEFAULTS.viewTypes[tab] &&
+      state.grouping === DEFAULTS.grouping &&
+      state.ordering === DEFAULTS.ordering &&
+      state.closedProjects === DEFAULTS.closedProjects &&
+      state.showEmptyGroups === DEFAULTS.showEmptyGroups &&
+      state.showProjectList === DEFAULTS.showProjectList &&
+      state.showWeekNumbers === DEFAULTS.showWeekNumbers &&
+      PROJECT_DISPLAY_PROPERTIES.every(
+         ({ key }) => Boolean(state.displayProperties[key]) === DEFAULT_PROPERTIES[key]
+      )
+   );
+}
+
 export const useProjectsDisplayStore = create<ProjectsDisplayState>()(
    persist(
       (set) => ({

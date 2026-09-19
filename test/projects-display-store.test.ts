@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 let useProjectsDisplayStore: typeof import('@/store/projects-display-store').useProjectsDisplayStore;
 let PROJECT_DISPLAY_PROPERTIES: typeof import('@/store/projects-display-store').PROJECT_DISPLAY_PROPERTIES;
+let isProjectsDisplayDefault: typeof import('@/store/projects-display-store').isProjectsDisplayDefault;
 
 beforeAll(async () => {
    const values = new Map<string, string>();
@@ -15,9 +16,8 @@ beforeAll(async () => {
          return values.size;
       },
    });
-   ({ useProjectsDisplayStore, PROJECT_DISPLAY_PROPERTIES } = await import(
-      '@/store/projects-display-store'
-   ));
+   ({ useProjectsDisplayStore, PROJECT_DISPLAY_PROPERTIES, isProjectsDisplayDefault } =
+      await import('@/store/projects-display-store'));
 });
 
 afterAll(() => vi.unstubAllGlobals());
@@ -47,5 +47,21 @@ describe('projects display store', () => {
       expect(Object.keys(useProjectsDisplayStore.getState().displayProperties).sort()).toEqual(
          [...keys].sort()
       );
+   });
+
+   it('Reset aparece para qualquer campo fora do padrão, inclusive os da timeline', () => {
+      const store = useProjectsDisplayStore;
+      expect(isProjectsDisplayDefault(store.getState(), 'all')).toBe(true);
+
+      store.getState().setShowProjectList(false);
+      expect(isProjectsDisplayDefault(store.getState(), 'all')).toBe(false);
+      store.getState().resetDisplaySettings();
+
+      store.getState().setShowWeekNumbers(true);
+      expect(isProjectsDisplayDefault(store.getState(), 'all')).toBe(false);
+      store.getState().resetDisplaySettings();
+
+      store.getState().setViewType('active', 'list');
+      expect(isProjectsDisplayDefault(store.getState(), 'active')).toBe(false);
    });
 });
