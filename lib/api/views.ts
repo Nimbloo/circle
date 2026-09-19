@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import { and, eq, isNotNull, or } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { savedView, team as teamT } from '@/db/schema';
@@ -11,29 +12,29 @@ import { ApiError } from './errors';
 import { publish } from './events';
 import { assertCanWriteTeam } from './scope';
 
-export interface ViewFilter {
-   statusCategories?: string[];
-   statusIds?: string[];
-   labelIds?: string[];
-   priorityIds?: string[];
-   hasProject?: boolean;
-   unassigned?: boolean;
+/**
+ * Schema ÚNICO do filtro de view (#6/R6): POST e PATCH das rotas validam por ele e o
+ * tipo `ViewFilter` deriva dele. Antes cada rota tinha a sua cópia sem
+ * `assigneeIds`/`projectIds` e o zod descartava os campos em silêncio.
+ */
+export const ViewFilterSchema = z.object({
+   statusCategories: z.array(z.string()).optional(),
+   statusIds: z.array(z.string()).optional(),
+   labelIds: z.array(z.string()).optional(),
+   priorityIds: z.array(z.string()).optional(),
+   hasProject: z.boolean().optional(),
+   unassigned: z.boolean().optional(),
    /**
-    * Responsáveis e projetos ESPECÍFICOS. Antes a view só tinha os booleanos acima
-    * (`unassigned`/`hasProject`), então não dava para salvar as duas perguntas mais
-    * comuns do dia a dia: "o que está com a Ana" e "o que é do Projeto X".
-    *
-    * Convivem com os booleanos: `unassigned` + `assigneeIds` significa "sem responsável
-    * OU com um destes", que é como o Linear trata a mesma combinação.
+    * Responsáveis e projetos ESPECÍFICOS. Convivem com os booleanos: `unassigned` +
+    * `assigneeIds` significa "sem responsável OU com um destes", como no Linear.
     */
-   assigneeIds?: string[];
-   projectIds?: string[];
-   /**
-    * Saved search (#99): termo full-text. A view resolve pelo MESMO motor da busca
-    * (`lib/api/search.ts`), então o resultado salvo é idêntico ao que a tela mostrou.
-    */
-   q?: string;
-}
+   assigneeIds: z.array(z.string()).optional(),
+   projectIds: z.array(z.string()).optional(),
+   /** Saved search (#99): termo full-text resolvido por `lib/api/search.ts`. */
+   q: z.string().max(200).optional(),
+});
+
+export type ViewFilter = z.infer<typeof ViewFilterSchema>;
 
 type ViewRow = typeof savedView.$inferSelect;
 

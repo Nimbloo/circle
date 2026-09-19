@@ -3,7 +3,7 @@ import { db } from '@/db';
 import { ok } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
 import { getOrCreateUser } from '@/lib/api/users';
-import { listViews, createView } from '@/lib/api/views';
+import { listViews, createView, ViewFilterSchema } from '@/lib/api/views';
 import { visibleTeamIds } from '@/lib/api/scope';
 
 export const runtime = 'nodejs';
@@ -22,22 +22,11 @@ export async function GET(req: Request) {
    }, req);
 }
 
-const FilterSchema = z.object({
-   statusCategories: z.array(z.string()).optional(),
-   statusIds: z.array(z.string()).optional(),
-   labelIds: z.array(z.string()).optional(),
-   priorityIds: z.array(z.string()).optional(),
-   hasProject: z.boolean().optional(),
-   unassigned: z.boolean().optional(),
-   // Saved search (#99): termo full-text resolvido por `lib/api/search.ts`.
-   q: z.string().max(200).optional(),
-});
-
 const CreateSchema = z.object({
    slug: z.string().min(1),
    name: z.string().min(1),
    type: z.enum(['issue', 'project']),
-   filter: FilterSchema,
+   filter: ViewFilterSchema,
    description: z.string().nullish(),
    icon: z.string().nullish(),
    teamId: z.string().nullish(),
