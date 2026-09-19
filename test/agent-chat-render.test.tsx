@@ -2,8 +2,8 @@
 
 import './setup-dom';
 import React from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentChat from '@/components/common/agent/agent-chat';
 import { useAgentChatStore } from '@/store/agent-chat-store';
 
@@ -50,7 +50,6 @@ describe('AgentChat — render ao chegar a resposta', () => {
          ],
       });
    });
-   afterEach(() => vi.useRealTimers());
 
    it('resposta que chega não re-renderiza as mensagens anteriores', () => {
       render(<AgentChat />);
