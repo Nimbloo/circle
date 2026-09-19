@@ -50,6 +50,11 @@ interface IssuesState {
    /** Projeto/ciclo removido: limpa a referência nas issues (sem refetch). */
    detachProject: (projectId: string) => void;
    detachCycle: (cycleId: string) => void;
+   /**
+    * Time excluído (cascata): as issues dele saem do store; as de outros times perdem o
+    * pai, o projeto e o ciclo que eram do time (sem refetch).
+    */
+   dropTeam: (teamId: string, projectIds: readonly string[], cycleIds: readonly string[]) => void;
    /** Label renomeada/recolorida (evento remoto): reflete nas issues em memória, sem refetch. */
    patchLabel: (label: { id: string; name: string; color: string }) => void;
    /** Label apagada (evento remoto): sai das issues em memória. */
@@ -386,6 +391,32 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
               }
             : {}
       ),
+
+   dropTeam: (teamId, projectIds, cycleIds) =>
+      set((state) => {
+         const removed = new Set(state.issues.filter((i) => i.teamId === teamId).map((i) => i.id));
+         const projects = new Set(projectIds);
+         const cycles = new Set(cycleIds);
+         const orphanParent = (i: Issue) => !!i.parentId && removed.has(i.parentId);
+         const orphanProject = (i: Issue) => !!i.project && projects.has(i.project.id);
+         const orphanCycle = (i: Issue) => !!i.cycleId && cycles.has(i.cycleId);
+         const touched = (i: Issue) => orphanParent(i) || orphanProject(i) || orphanCycle(i);
+         if (removed.size === 0 && !state.issues.some(touched)) return {};
+         return {
+            issues: state.issues
+               .filter((i) => !removed.has(i.id))
+               .map((i) =>
+                  touched(i)
+                     ? {
+                          ...i,
+                          ...(orphanParent(i) ? { parentId: null, parentIdentifier: null } : {}),
+                          ...(orphanProject(i) ? { project: undefined } : {}),
+                          ...(orphanCycle(i) ? { cycleId: '' } : {}),
+                       }
+                     : i
+               ),
+         };
+      }),
 
    patchLabel: (label) =>
       set((state) =>
