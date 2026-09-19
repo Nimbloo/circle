@@ -52,7 +52,7 @@ function relativeTime(iso: string): string {
    return `${Math.floor(days / 7)}w`;
 }
 
-function adaptActivity(dtos: ActivityDto[]): ActivityItem[] {
+export function adaptActivity(dtos: ActivityDto[]): ActivityItem[] {
    return dtos.map((a) => {
       const actor = a.actor ? adaptUser(a.actor) : SYSTEM_USER;
       const timeAgo = relativeTime(a.createdAt);
