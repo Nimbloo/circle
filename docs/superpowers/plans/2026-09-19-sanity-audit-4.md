@@ -10,6 +10,9 @@
    - A exclusão de time explica a recusa.
    - Exclusão de time em cascata (`04f5a08`).
    - Levantamento E2E completo (5 relatórios + Codex), consolidado no spec.
+   - Frente I (Issues) completa: is#1–25 exceto is#20 (idioma, fora de escopo) e a
+     parte de barra de lote do is#21 (fica com a M). 21 commits em `danilo/s4-i`
+     (`39242b5`..`69276f8`); typecheck e lint (`pnpm lint`/`pnpm typecheck`) limpos.
 - **Ambiente de E2E:** worktree `.claude/worktrees/s4-e2e` com o bypass de login aplicado **só nele** e servidores nas portas 3101–3105 (bancos `circle_e2e_1..5`). Serve para a remedição, depois de refazer o build com o código integrado.
 - **Próximo passo:** frentes S (Codex), M, I, P, C e A em paralelo → integração S → M → I → P → C → A → suíte, typecheck, lint e build → remedição E2E dos achados → PR.
 - **Bloqueios:** nenhum. A extensão do Chrome não está conectada, então não houve comparação lado a lado com o Linear real.
@@ -111,10 +114,14 @@ Arquivos: `app/globals.css`, `components/ui/**` (exceto `sidebar.tsx` fora da fo
 
 Arquivos: `components/common/issues/**`, `components/layout/sidebar/create-new-issue/**`, `components/layout/headers/{issue,issues,my-issues}/**`, `components/common/my-issues/**`, `lib/api/{issues,issue-detail,triage}.ts` (hunks pequenos), `lib/adapters-issue-detail.ts`.
 
-- [ ] is#1 a is#25: todos, exceto is#20 (idioma) e is#21 na parte da barra de lote (fica com a M). O drag ganha o fantasma da própria linha e uma linha de inserção de 2 px.
-- [ ] Painel de propriedades da issue no padrão da linha de propriedade, com a linha Project sempre presente e editável.
-- [ ] Atalho de excluir (⌘⌫) + toast com Undo (soft delete no cliente com adiamento do DELETE, ou restore na API; registre).
-- [ ] Contrato com a C: o painel de propriedades escuta o evento de janela `circle:issue-shortcut` `{ action: 'status'|'priority'|'assignee'|'labels'|'project'|'cycle'|'estimate'|'dueDate' }` e abre o seletor correspondente.
+- [x] is#1 a is#25: todos, exceto is#20 (idioma) e is#21 na parte da barra de lote (fica com a M). O drag ganha o fantasma da própria linha e uma linha de inserção de 2 px.
+   - Pendência aceita: is#19 só corrigiu a ORDEM do seletor de status (workflow); a
+     parte de "contagens globais" ficou de fora — escopar por time exigiria threading
+     de `teamId` por ~6 call sites de `StatusSelector`, desproporcional para um
+     achado BAIXA.
+- [x] Painel de propriedades da issue no padrão da linha de propriedade, com a linha Project sempre presente e editável.
+- [x] Atalho de excluir (⌘⌫) + toast com Undo (soft delete no cliente com adiamento do DELETE, ou restore na API; registre).
+- [x] Contrato com a C: o painel de propriedades escuta o evento de janela `circle:issue-shortcut` `{ action: 'status'|'priority'|'assignee'|'labels'|'project'|'cycle'|'estimate'|'dueDate' }` e abre o seletor correspondente.
 
 ### P — Planejamento (Claude) · `.claude/worktrees/s4-p`
 
