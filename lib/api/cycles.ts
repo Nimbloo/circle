@@ -10,6 +10,7 @@ import {
 } from '@/db/schema';
 import { ApiError } from './errors';
 import { publish } from './events';
+import { workspaceDay } from '@/lib/workspace-day';
 
 type CycleRow = typeof cycleT.$inferSelect;
 type SnapshotRow = typeof snapshotT.$inferSelect;
@@ -182,7 +183,7 @@ function buildBurnup(
       });
    }
 
-   const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
+   const iso = (d: Date | null) => (d ? workspaceDay(d) : null);
    return days.map((date, idx) => {
       let started = 0;
       let completed = 0;
@@ -316,7 +317,7 @@ export async function snapshotCurrentCycles(
    await upsertSnapshots(
       db,
       ids.map((cycleId) => ({ cycleId, agg: aggs.get(cycleId) ?? EMPTY_AGG() })),
-      isoDay(now)
+      workspaceDay(now)
    );
 }
 
@@ -336,7 +337,7 @@ async function toDtos(
       aggregatesByCycle(db, ids, burnupIds),
       snapshotsByCycle(db, ids, burnupIds),
    ]);
-   const today = isoDay(now);
+   const today = workspaceDay(now);
    const withBurnup = new Set(burnupIds);
    return rows.map((r) => {
       const dto = toDto(r, aggs.get(r.id) ?? EMPTY_AGG(), snaps.get(r.id) ?? [], today);
@@ -362,7 +363,7 @@ export async function rolloverCyclesForTeam(
    teamId: string,
    now: Date = new Date()
 ): Promise<void> {
-   const today = isoDay(now);
+   const today = workspaceDay(now);
    // O que mudou, para publicar DEPOIS do commit (#20): antes o rollover era silencioso
    // (issues trocavam de ciclo sem evento) e o `cycle/created` saía de dentro da transação.
    const touched = { created: null as string | null, updated: new Set<string>(), movedIssues: 0 };

@@ -3,6 +3,7 @@ import { makeTestDb } from './helpers/db';
 import { seedTeam } from './helpers/fixtures';
 import { cycle, issue } from '@/db/schema';
 import { rolloverCyclesForTeam } from '@/lib/api/cycles';
+import { workspaceDay } from '@/lib/workspace-day';
 import { subscribe, type CircleEvent } from '@/lib/api/events';
 
 /**
@@ -10,11 +11,9 @@ import { subscribe, type CircleEvent } from '@/lib/api/events';
  * `cycle/created` do próximo saía DE DENTRO da transação — antes do commit. Agora tudo
  * é publicado depois do commit: ciclos tocados + sinal de issues do time.
  */
-const iso = (d: Date) => d.toISOString().slice(0, 10);
+/** Dias relativos ao "hoje" do workspace (o mesmo fuso do rollover). */
 function daysFromNow(n: number): string {
-   const d = new Date();
-   d.setDate(d.getDate() + n);
-   return iso(d);
+   return workspaceDay(new Date(Date.now() + n * 86_400_000));
 }
 
 let parar: (() => void) | null = null;
