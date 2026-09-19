@@ -29,6 +29,7 @@ import {
    AlertDialogFooter,
    AlertDialogHeader,
    AlertDialogTitle,
+   useLatchedTarget,
 } from '@/components/ui/alert-dialog';
 import { api } from '@/lib/client';
 import type { TemplateDto } from '@/lib/api/templates';
@@ -188,6 +189,8 @@ export default function IssueTemplatesSettings() {
    const [dialogOpen, setDialogOpen] = useState(false);
    const [editing, setEditing] = useState<TemplateDto | null>(null);
    const [toDelete, setToDelete] = useState<TemplateDto | null>(null);
+   // O alvo fica travado até o diálogo fechar: senão o título esvazia na animação de saída.
+   const deleteTarget = useLatchedTarget(toDelete);
 
    // Time default = primeiro do usuário.
    useEffect(() => {
@@ -329,7 +332,7 @@ export default function IssueTemplatesSettings() {
          <AlertDialog open={!!toDelete} onOpenChange={(v) => !v && setToDelete(null)}>
             <AlertDialogContent>
                <AlertDialogHeader>
-                  <AlertDialogTitle>Excluir “{toDelete?.name}”?</AlertDialogTitle>
+                  <AlertDialogTitle>Excluir “{deleteTarget?.name}”?</AlertDialogTitle>
                   <AlertDialogDescription>
                      O template será removido. Issues já criadas não são afetadas.
                   </AlertDialogDescription>

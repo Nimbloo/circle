@@ -29,6 +29,7 @@ import {
    AlertDialogFooter,
    AlertDialogHeader,
    AlertDialogTitle,
+   useLatchedTarget,
 } from '@/components/ui/alert-dialog';
 import { adaptFolders } from '@/lib/adapters-documents';
 import { api } from '@/lib/client';
@@ -67,6 +68,8 @@ export default function TeamDocuments() {
    const [busy, setBusy] = useState(false);
    /** Documento aguardando confirmação de exclusão (Ad#21–40: excluía no 1º clique). */
    const [toDelete, setToDelete] = useState<{ id: string; name: string } | null>(null);
+   // O alvo fica travado até o diálogo fechar: senão o título esvazia na animação de saída.
+   const deleteTarget = useLatchedTarget(toDelete);
 
    const reload = useCallback(() => {
       if (!teamId) return;
@@ -263,7 +266,7 @@ export default function TeamDocuments() {
          <AlertDialog open={toDelete !== null} onOpenChange={(o) => !o && setToDelete(null)}>
             <AlertDialogContent>
                <AlertDialogHeader>
-                  <AlertDialogTitle>Excluir “{toDelete?.name}”?</AlertDialogTitle>
+                  <AlertDialogTitle>Excluir “{deleteTarget?.name}”?</AlertDialogTitle>
                   <AlertDialogDescription>
                      O documento será removido do time. Esta ação não pode ser desfeita.
                   </AlertDialogDescription>

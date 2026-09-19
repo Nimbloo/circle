@@ -6,6 +6,27 @@ import * as AlertDialogPrimitive from '@radix-ui/react-alert-dialog';
 import { cn } from '@/lib/utils';
 import { buttonVariants } from '@/components/ui/button';
 
+/**
+ * Alvo travado: guarda o último alvo não nulo enquanto o diálogo fecha.
+ *
+ * O padrão da casa é `open={alvo !== null}` com o texto lido do próprio alvo. Ao confirmar
+ * ou cancelar, o alvo vira `null` e o diálogo ainda está saindo — o título esvaziava na
+ * animação (`Delete label “”?`, ad#4). Com o alvo travado, o texto permanece até o fim da
+ * saída e volta a acompanhar o alvo na próxima abertura:
+ *
+ * ```tsx
+ * const [deleting, setDeleting] = useState<Label | null>(null);
+ * const target = useLatchedTarget(deleting);
+ * <AlertDialog open={deleting !== null} onOpenChange={(o) => !o && setDeleting(null)}>
+ *    <AlertDialogTitle>Delete label “{target?.name}”?</AlertDialogTitle>
+ * ```
+ */
+function useLatchedTarget<T>(target: T | null | undefined): T | null | undefined {
+   const [latched, setLatched] = React.useState(target);
+   if (target != null && target !== latched) setLatched(target);
+   return target ?? latched;
+}
+
 function AlertDialog({ ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {
    return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />;
 }
@@ -118,6 +139,7 @@ function AlertDialogCancel({
 }
 
 export {
+   useLatchedTarget,
    AlertDialog,
    AlertDialogPortal,
    AlertDialogOverlay,

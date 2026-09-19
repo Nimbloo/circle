@@ -9,6 +9,7 @@ import {
    AlertDialogFooter,
    AlertDialogHeader,
    AlertDialogTitle,
+   useLatchedTarget,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import {
@@ -172,6 +173,8 @@ export default function IssueLabelsSettings() {
    const [dialogOpen, setDialogOpen] = useState(false);
    const [editing, setEditing] = useState<LabelInterface | null>(null);
    const [deleting, setDeleting] = useState<LabelInterface | null>(null);
+   // O alvo fica travado até o diálogo fechar: senão o título esvazia na animação de saída.
+   const deleteTarget = useLatchedTarget(deleting);
    const [deleteBusy, setDeleteBusy] = useState(false);
 
    const rows = useMemo(() => {
@@ -325,7 +328,7 @@ export default function IssueLabelsSettings() {
          <AlertDialog open={deleting !== null} onOpenChange={(o) => !o && setDeleting(null)}>
             <AlertDialogContent>
                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete label “{deleting?.name}”?</AlertDialogTitle>
+                  <AlertDialogTitle>Delete label “{deleteTarget?.name}”?</AlertDialogTitle>
                   <AlertDialogDescription>
                      This removes the label from every issue and project it is applied to. This
                      action cannot be undone.
