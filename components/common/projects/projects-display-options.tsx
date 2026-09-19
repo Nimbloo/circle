@@ -48,12 +48,10 @@ const ORDERINGS: { value: ProjectsOrdering; label: string }[] = [
 ];
 
 const DEFAULT_PROPERTY_VALUES: Record<ProjectDisplayPropertyKey, boolean> = {
-   milestones: false,
    priority: true,
    status: true,
    health: true,
    lead: true,
-   members: false,
    targetDate: true,
    issues: true,
    labels: false,

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 let useProjectsDisplayStore: typeof import('@/store/projects-display-store').useProjectsDisplayStore;
+let PROJECT_DISPLAY_PROPERTIES: typeof import('@/store/projects-display-store').PROJECT_DISPLAY_PROPERTIES;
 
 beforeAll(async () => {
    const values = new Map<string, string>();
@@ -14,7 +15,9 @@ beforeAll(async () => {
          return values.size;
       },
    });
-   ({ useProjectsDisplayStore } = await import('@/store/projects-display-store'));
+   ({ useProjectsDisplayStore, PROJECT_DISPLAY_PROPERTIES } = await import(
+      '@/store/projects-display-store'
+   ));
 });
 
 afterAll(() => vi.unstubAllGlobals());
@@ -34,5 +37,15 @@ describe('projects display store', () => {
       useProjectsDisplayStore.getState().setViewType('all', 'board');
 
       expect(useProjectsDisplayStore.getState().showEmptyGroups).toBe(false);
+   });
+
+   it('só oferece propriedades que alguma visão desenha (sem toggles mortos)', () => {
+      const keys = PROJECT_DISPLAY_PROPERTIES.map((property) => property.key);
+      // milestones e members não têm dado na lista nem consumidor em list/board/timeline.
+      expect(keys).not.toContain('milestones');
+      expect(keys).not.toContain('members');
+      expect(Object.keys(useProjectsDisplayStore.getState().displayProperties).sort()).toEqual(
+         [...keys].sort()
+      );
    });
 });

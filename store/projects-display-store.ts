@@ -10,35 +10,29 @@ export type ProjectsOrdering = 'start-date' | 'target-date' | 'title';
 export type ClosedProjectsFilter = 'all' | 'hide';
 
 export type ProjectDisplayPropertyKey =
-   | 'milestones'
    | 'priority'
    | 'status'
    | 'health'
    | 'lead'
-   | 'members'
    | 'targetDate'
    | 'issues'
    | 'labels';
 
 export const PROJECT_DISPLAY_PROPERTIES: { key: ProjectDisplayPropertyKey; label: string }[] = [
-   { key: 'milestones', label: 'Milestones' },
    { key: 'priority', label: 'Priority' },
    { key: 'status', label: 'Status' },
    { key: 'health', label: 'Health' },
    { key: 'lead', label: 'Lead' },
-   { key: 'members', label: 'Members' },
    { key: 'targetDate', label: 'Target date' },
    { key: 'issues', label: 'Issues' },
    { key: 'labels', label: 'Labels' },
 ];
 
 const DEFAULT_PROPERTIES: Record<ProjectDisplayPropertyKey, boolean> = {
-   milestones: false,
    priority: true,
    status: true,
    health: true,
    lead: true,
-   members: false,
    targetDate: true,
    issues: true,
    labels: false,
