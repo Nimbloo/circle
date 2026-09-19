@@ -163,7 +163,13 @@ export async function createView(
       createdAt: now,
       updatedAt: now,
    });
-   publish({ entity: 'view', action: 'created', id, actorEmail: ownerEmail });
+   publish({
+      entity: 'view',
+      action: 'created',
+      id,
+      actorEmail: ownerEmail,
+      ...viewAudience(input.teamId ?? null, owner.id),
+   });
    return (await getView(db, id))!;
 }
 
@@ -179,18 +185,34 @@ export interface UpdateViewInput {
    filter?: ViewFilter;
 }
 
-/** Verifica se o ator é dono da view (ou admin); 404 se não existir, 403 se não autorizado. */
-async function assertViewOwner(db: Db, id: string, actorEmail: string): Promise<boolean> {
+/**
+ * Quem recebe o evento da view (Ad#21–40): pessoal → só o dono (`recipientId`); de time →
+ * `teamId` (convidado de outro time não recebe). Antes todo cliente recebia o evento de
+ * toda view pessoal e fazia um GET que dava 404.
+ */
+function viewAudience(
+   teamId: string | null,
+   ownerId: string
+): { teamId: string } | { recipientId: string } {
+   return teamId ? { teamId } : { recipientId: ownerId };
+}
+
+/** Verifica se o ator é dono da view (ou admin); null se não existir, 403 se não autorizado. */
+async function assertViewOwner(
+   db: Db,
+   id: string,
+   actorEmail: string
+): Promise<{ ownerId: string; teamId: string | null } | null> {
    const existing = await db
-      .select({ ownerId: savedView.ownerId })
+      .select({ ownerId: savedView.ownerId, teamId: savedView.teamId })
       .from(savedView)
       .where(eq(savedView.id, id))
       .limit(1);
-   if (existing.length === 0) return false;
+   if (existing.length === 0) return null;
    const me = await getOrCreateUser(db, actorEmail);
    if (existing[0].ownerId !== me.id && !(await isAdmin(actorEmail, db)))
       throw new ApiError(403, 'Apenas o dono da view (ou admin)');
-   return true;
+   return existing[0];
 }
 
 export async function updateView(
@@ -199,7 +221,8 @@ export async function updateView(
    patch: UpdateViewInput,
    actorEmail: string
 ): Promise<ViewDto | null> {
-   if (!(await assertViewOwner(db, id, actorEmail))) return null;
+   const prev = await assertViewOwner(db, id, actorEmail);
+   if (!prev) return null;
    const set: Record<string, unknown> = { updatedAt: new Date() };
    if (patch.name !== undefined) set.name = patch.name;
    if (patch.description !== undefined) set.description = patch.description;
@@ -215,14 +238,34 @@ export async function updateView(
       set.teamId = patch.teamId;
    }
    await db.update(savedView).set(set).where(eq(savedView.id, id));
-   publish({ entity: 'view', action: 'updated', id, actorEmail });
+   // Estava compartilhada: quem a via (o time antigo) precisa do evento mesmo que ela
+   // vire pessoal ou mude de time — o GET dá 404 e o cliente a remove.
+   const nextTeamId = patch.teamId !== undefined ? patch.teamId : prev.teamId;
+   publish({
+      entity: 'view',
+      action: 'updated',
+      id,
+      actorEmail,
+      ...(prev.teamId && prev.teamId !== nextTeamId
+         ? nextTeamId
+            ? {} // mudou de time: os dois times precisam saber
+            : { teamId: prev.teamId }
+         : viewAudience(nextTeamId, prev.ownerId)),
+   });
    return getView(db, id);
 }
 
 export async function deleteView(db: Db, id: string, actorEmail: string): Promise<boolean> {
-   if (!(await assertViewOwner(db, id, actorEmail))) return false;
+   const prev = await assertViewOwner(db, id, actorEmail);
+   if (!prev) return false;
    await db.delete(savedView).where(eq(savedView.id, id));
-   publish({ entity: 'view', action: 'deleted', id, actorEmail });
+   publish({
+      entity: 'view',
+      action: 'deleted',
+      id,
+      actorEmail,
+      ...viewAudience(prev.teamId, prev.ownerId),
+   });
    return true;
 }
 

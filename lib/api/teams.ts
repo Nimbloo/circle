@@ -184,6 +184,15 @@ export async function createTeam(
    input: CreateTeamInput,
    creatorEmail?: string
 ): Promise<TeamDto> {
+   // Convidado só enxerga os times de que participa; criar time é papel de membro.
+   if (creatorEmail) {
+      const creator = await db
+         .select({ role: appUser.role })
+         .from(appUser)
+         .where(eq(appUser.email, creatorEmail.trim().toLowerCase()))
+         .limit(1);
+      if (creator[0]?.role === 'Guest') throw new ApiError(403, 'Convidados não podem criar times');
+   }
    const id = input.id.trim().toUpperCase();
    if (!/^[A-Z][A-Z0-9]{1,15}$/.test(id))
       throw new ApiError(
