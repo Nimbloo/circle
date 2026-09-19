@@ -97,7 +97,9 @@ function DiffViewImpl({
                <FileCode2 className="size-4 text-muted-foreground shrink-0" />
             )}
             <span className="font-medium">{diff.name}</span>
-            <span className="text-xs text-muted-foreground truncate">{diff.path}/</span>
+            {diff.path && (
+               <span className="text-xs text-muted-foreground truncate">{diff.path}/</span>
+            )}
             <span className="flex-1" />
             <DiffStat additions={diff.additions} deletions={diff.deletions} />
             {commentable && (

@@ -147,6 +147,34 @@ export async function addFavorite(
    return { added: res.length > 0 };
 }
 
+/**
+ * Reordena os favoritos do usuario (co#16): `ids` na ordem desejada; os que ficaram de
+ * fora (ou nao sao do usuario) mantem a ordem atual, depois dos enviados.
+ */
+export async function reorderFavorites(
+   db: Db,
+   userEmail: string,
+   ids: string[]
+): Promise<{ reordered: number }> {
+   const user = await getOrCreateUser(db, userEmail);
+   const rows = await db
+      .select({ id: favorite.id })
+      .from(favorite)
+      .where(eq(favorite.userId, user.id))
+      .orderBy(asc(favorite.position), asc(favorite.createdAt));
+   const own = new Set(rows.map((r) => r.id));
+   const wanted = ids.filter((id) => own.has(id));
+   const order = [...wanted, ...rows.map((r) => r.id).filter((id) => !wanted.includes(id))];
+   await Promise.all(
+      order.map((id, index) =>
+         db.update(favorite).set({ position: index }).where(eq(favorite.id, id))
+      )
+   );
+   if (wanted.length > 0)
+      publish({ entity: 'favorite', action: 'updated', id: user.id, recipientId: user.id });
+   return { reordered: wanted.length };
+}
+
 export async function removeFavorite(
    db: Db,
    userEmail: string,

@@ -2,6 +2,7 @@
 
 import { addReviewComment, fetchReview, latestVerdict } from '@/lib/adapters-reviews';
 import { EmptyState } from '@/components/common/empty-state';
+import { ErrorState } from '@/components/common/error-state';
 import { LoadingArea, useEnterFade } from '@/components/common/loading-area';
 import { Button } from '@/components/ui/button';
 import type { Review, ReviewComment, ReviewList, ReviewVerdictKind } from '@/data/reviews';
@@ -58,6 +59,8 @@ export function ReviewDetail({
    // Troca de irmão (aba, item, layout) não pisca: só a primeira chegada de conteúdo.
    const fade = useEnterFade('review-detail');
    const [review, setReview] = useState<Review | null>(null);
+   /** Falha de CARGA (rede/500) — diferente de "não existe" (co#11). */
+   const [loadFailed, setLoadFailed] = useState(false);
    const [loading, setLoading] = useState(true);
    const [reloadKey, setReloadKey] = useState(0);
    const [verdictBusy, setVerdictBusy] = useState<ReviewVerdictKind | null>(null);
@@ -66,12 +69,21 @@ export function ReviewDetail({
       let active = true;
       // Recarga por realtime não volta pro loading — só o 1º fetch (ou troca de review).
       if (reloadKey === 0) setLoading(true);
+      setLoadFailed(false);
       fetchReview(reviewId)
          .then((data) => {
             if (active) setReview(data);
          })
-         .catch(() => {
-            if (active && reloadKey === 0) setReview(null);
+         .catch((error: unknown) => {
+            if (!active) return;
+            const notFound =
+               error instanceof Error &&
+               error.name === 'ApiError' &&
+               (error as { status?: number }).status === 404;
+            // Rede fora não é "review não existe": mostra erro com retry e preserva o
+            // que já estava na tela numa recarga.
+            if (!notFound) setLoadFailed(true);
+            else if (reloadKey === 0) setReview(null);
          })
          .finally(() => {
             if (active) setLoading(false);
@@ -134,7 +146,18 @@ export function ReviewDetail({
    if (loading) return <LoadingArea rows={6} />;
 
    if (!review) {
-      return (
+      return loadFailed ? (
+         <ErrorState
+            title="Could not load the review"
+            description="Something went wrong while loading this pull request."
+            className="min-h-0 px-4 py-10"
+            action={
+               <Button size="sm" onClick={() => setReloadKey((key) => key + 1)}>
+                  Try again
+               </Button>
+            }
+         />
+      ) : (
          <EmptyState
             variant="search"
             title="Review not found"
@@ -145,7 +168,7 @@ export function ReviewDetail({
 
    return (
       <div className={cn(fade && 'content-enter', 'h-full flex flex-col overflow-hidden')}>
-         <div className="flex items-center gap-2 px-4 h-10 border-b shrink-0 min-w-0">
+         <div className="flex items-center gap-2 px-4 h-11 border-b shrink-0 min-w-0">
             {/* Só linka pra issue quando o PR resolve uma (título com [ABC-123]);
                 senão o link ia pra /issue/ (morto). */}
             {review.resolves.identifier && (

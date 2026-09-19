@@ -25,7 +25,9 @@ function FilesPanel({ review }: { review: Review }) {
 
    return (
       <div className="flex flex-col gap-2">
-         <span className="text-sm font-medium">{review.files.length} files changed</span>
+         <span className="text-sm font-medium">
+            {review.files.length} {review.files.length === 1 ? 'file' : 'files'} changed
+         </span>
          {categories.map((group) => {
             const additions = group.files.reduce((acc, file) => acc + file.additions, 0);
             const deletions = group.files.reduce((acc, file) => acc + file.deletions, 0);
@@ -45,7 +47,9 @@ function FilesPanel({ review }: { review: Review }) {
                         <div key={file.name} className="flex items-center gap-1.5 text-xs pl-2">
                            <FileCode2 className="size-3.5 text-muted-foreground shrink-0" />
                            <span className="font-medium">{file.name}</span>
-                           <span className="text-muted-foreground truncate">{file.path}</span>
+                           {file.path && (
+                              <span className="text-muted-foreground truncate">{file.path}</span>
+                           )}
                         </div>
                      ))
                   ) : (
@@ -195,13 +199,19 @@ export function ReviewOverview({
                   <span className="text-sm font-medium">Resolves</span>
                   <Plus className="size-3.5 text-muted-foreground" />
                </div>
-               <Link
-                  href={`/${orgId}/issue/${review.resolves.identifier}`}
-                  className="flex items-center gap-1.5 text-sm hover:opacity-80 min-w-0"
-               >
-                  <IssueCheckIcon />
-                  <span className="truncate">{review.resolves.title}</span>
-               </Link>
+               {/* Sem issue no título do PR não há link (antes o href ia para `/issue/`,
+                   que dá 404 e ainda era pré-buscado). */}
+               {review.resolves.identifier ? (
+                  <Link
+                     href={`/${orgId}/issue/${review.resolves.identifier}`}
+                     className="flex items-center gap-1.5 text-sm hover:opacity-80 min-w-0"
+                  >
+                     <IssueCheckIcon />
+                     <span className="truncate">{review.resolves.title}</span>
+                  </Link>
+               ) : (
+                  <span className="text-sm text-muted-foreground">No linked issue</span>
+               )}
             </div>
             <div className="flex flex-col gap-2">
                <span className="text-sm font-medium">Reviewers</span>

@@ -175,7 +175,9 @@ export default function HeaderNav() {
                      aria-label={isFavorite ? 'Unfavorite issue' : 'Favorite issue'}
                      aria-pressed={isFavorite}
                   >
-                     <Star className={cn('size-4', isFavorite && 'fill-current text-primary')} />
+                     <Star
+                        className={cn('size-4', isFavorite && 'fill-amber-400 text-amber-400')}
+                     />
                   </Button>
                   <DropdownMenu>
                      <DropdownMenuTrigger asChild>
@@ -221,7 +223,12 @@ export default function HeaderNav() {
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onSelect={() => void toggleFavorite('issue', issue.id)}>
-                           <Star className={cn('size-4', isFavorite && 'fill-current')} />
+                           <Star
+                              className={cn(
+                                 'size-4',
+                                 isFavorite && 'fill-amber-400 text-amber-400'
+                              )}
+                           />
                            {isFavorite ? 'Remove from favorites' : 'Add to favorites'}
                         </DropdownMenuItem>
                      </DropdownMenuContent>

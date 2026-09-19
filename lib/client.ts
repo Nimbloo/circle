@@ -550,6 +550,21 @@ export const api = {
       snooze: (id: string, snoozedUntil: string | null) =>
          patch<{ id: string }>(`/notifications/${id}`, { snoozedUntil }),
       readAll: () => post<{ marked: number }>('/notifications/read-all'),
+      /** Página por cursor (co#3): `cursor` é o `nextCursor` da página anterior. */
+      page: async (opts: { cursor?: string | null; limit?: number; snoozed?: boolean } = {}) => {
+         const sp = new URLSearchParams();
+         if (opts.cursor) sp.set('cursor', opts.cursor);
+         if (opts.limit != null) sp.set('limit', String(opts.limit));
+         if (opts.snoozed) sp.set('snoozed', 'true');
+         const q = sp.toString();
+         const { data, meta } = await requestEnvelope<NotificationDto[]>(
+            `/inbox${q ? `?${q}` : ''}`
+         );
+         const nextCursor =
+            (meta as { nextCursor?: string | null } | undefined)?.nextCursor ?? null;
+         return { items: data, nextCursor };
+      },
+      remove: (id: string) => del<{ id: string; deleted: boolean }>(`/notifications/${id}`),
    },
 
    favorites: {
@@ -558,6 +573,8 @@ export const api = {
          post<{ added: boolean }>('/favorites', { entityType, entityId }),
       remove: (entityType: FavoriteEntityType, entityId: string) =>
          del<{ removed: boolean }>(`/favorites?entityType=${entityType}&entityId=${entityId}`),
+      /** Nova ordem (ids de favorito) da sidebar (co#16). */
+      reorder: (order: string[]) => patch<{ reordered: number }>('/favorites', { order }),
    },
 
    reviews: {

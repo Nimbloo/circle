@@ -8,6 +8,7 @@ import { renderStatusIcon } from '@/lib/status-utils';
 import { getNotificationIcon } from '@/lib/notification-utils';
 import { Clock, RotateCcw } from 'lucide-react';
 import { memo } from 'react';
+import { SNOOZE_OPTIONS, snoozeUntilIso } from './snooze-options';
 import {
    DropdownMenu,
    DropdownMenuContent,
@@ -41,19 +42,14 @@ interface IssueLineProps<T extends InboxLineItem> {
    isSelected?: boolean;
    /** Handlers ESTÁVEIS que recebem a própria notificação — mantêm o `memo` da linha. */
    onOpen?: (notification: T) => void;
-   onSnooze?: (id: string, hours: number) => void;
+   /** Adia até o instante ISO (opções de `snooze-options.ts`). */
+   onSnooze?: (id: string, until: string) => void;
    onUnsnooze?: (id: string) => void;
    showId?: boolean;
    showStatusIcon?: boolean;
+   /** Saindo da lista (adiada/excluída): colapsa a altura antes de sumir. */
+   leaving?: boolean;
 }
-
-/** Opções de adiamento (paridade Linear): rótulo + horas. */
-const SNOOZE_OPTIONS: { label: string; hours: number }[] = [
-   { label: 'Em 1 hora', hours: 1 },
-   { label: 'Em 4 horas', hours: 4 },
-   { label: 'Amanhã', hours: 24 },
-   { label: 'Próxima semana', hours: 168 },
-];
 
 /**
  * Linha de notificação — espelho do inbox do Linear: avatar 32px com badge do tipo
@@ -71,6 +67,7 @@ function IssueLine<T extends InboxLineItem>({
    onUnsnooze,
    showId = true,
    showStatusIcon = true,
+   leaving = false,
 }: IssueLineProps<T>) {
    // Status VIVO da issue com fallback pro snapshot da notificação — o ícone na linha
    // acompanha mudanças de status em tempo real (padrão Linear).
@@ -79,8 +76,33 @@ function IssueLine<T extends InboxLineItem>({
       ? relativeTime(notification.sortAt, now)
       : (notification.timestamp ?? '');
    return (
-      <div onClick={onOpen ? () => onOpen(notification) : undefined} className="w-full pl-2.5">
-         <div className="group/inbox-line relative flex h-[55px] w-full cursor-pointer items-center gap-3 rounded-lg px-2">
+      <div
+         onClick={onOpen ? () => onOpen(notification) : undefined}
+         aria-hidden={leaving || undefined}
+         // Saída da lista (co#9): a linha tem 55 px fixos, então colapsa a altura + opacity.
+         className={cn(
+            'h-[55px] w-full overflow-hidden pl-2.5 transition-[height,opacity] duration-150 ease-in motion-reduce:transition-none',
+            leaving && 'pointer-events-none h-0 opacity-0'
+         )}
+      >
+         <div
+            data-notification-id={notification.id}
+            // Focável e abrível pelo teclado (co#16); a seleção é anunciada.
+            tabIndex={onOpen ? 0 : -1}
+            aria-current={isSelected || undefined}
+            onKeyDown={
+               onOpen
+                  ? (e) => {
+                       if (e.target !== e.currentTarget) return;
+                       if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onOpen(notification);
+                       }
+                    }
+                  : undefined
+            }
+            className="group/inbox-line relative flex h-[55px] w-full cursor-pointer items-center gap-3 rounded-lg px-2 outline-none focus-visible:ring-1 focus-visible:ring-ring"
+         >
             {/* Realce que DISSIPA nas pontas (Linear): camada de fundo com máscara de
                 gradiente horizontal — o fill some suavemente nas bordas laterais. */}
             <div
@@ -157,10 +179,10 @@ function IssueLine<T extends InboxLineItem>({
                         <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                            {SNOOZE_OPTIONS.map((opt) => (
                               <DropdownMenuItem
-                                 key={opt.hours}
+                                 key={opt.label}
                                  onClick={(e) => {
                                     e.stopPropagation();
-                                    onSnooze(notification.id, opt.hours);
+                                    onSnooze(notification.id, snoozeUntilIso(opt));
                                  }}
                               >
                                  <Clock className="size-3.5 text-muted-foreground" />
