@@ -6,6 +6,7 @@ import { useNotificationsStore } from '@/store/notifications-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useCatalogStore } from '@/store/catalog-store';
 import { api } from '@/lib/client';
+import { isSessionEnded } from '@/lib/session-redirect';
 import type { CircleEntity } from '@/lib/api/events';
 
 /**
@@ -313,7 +314,8 @@ export function useLiveSync(): void {
       };
 
       const connect = () => {
-         if (closed || source) return;
+         // Sessão encerrada (#12): o cliente já foi para o login; não reconecta.
+         if (closed || source || isSessionEnded()) return;
          source = new EventSource('/api/v1/events');
          source.onopen = () => {
             tentativas = 0;
@@ -341,7 +343,13 @@ export function useLiveSync(): void {
                // de 1 em 1 segundo, em uníssono, é uma enxurrada no pod que subiu.
                const espera = Math.min(1000 * 2 ** tentativas, MAX_BACKOFF_MS);
                tentativas += 1;
-               setTimeout(connect, espera * (0.5 + Math.random() / 2));
+               // EventSource não expõe o status: um 401 do stream fecha a conexão igual a
+               // uma queda. Sonda a sessão (`/me`) antes — 401 encerra (#12) e o
+               // `connect` desiste; qualquer outro resultado reconecta.
+               setTimeout(
+                  () => void api.me().then(connect, connect),
+                  espera * (0.5 + Math.random() / 2)
+               );
             }
          };
       };

@@ -23,6 +23,12 @@ import type {
 import type { InitiativeUpdateDto, PostInitiativeUpdateInput } from '@/lib/api/initiative-detail';
 import type { TeamDto, CreateTeamInput, JoinRequestDto } from '@/lib/api/teams';
 import type { MemberDto } from '@/lib/api/members';
+import {
+   DEACTIVATED_LOGIN_URL,
+   DEACTIVATED_MESSAGE,
+   endSession,
+   loginRedirectUrl,
+} from '@/lib/session-redirect';
 import type { CycleDto, CreateCycleInput, UpdateCycleInput } from '@/lib/api/cycles';
 import type { TemplateDto, CreateTemplateInput, UpdateTemplateInput } from '@/lib/api/templates';
 import type { StatusDto, CreateStatusInput, UpdateStatusInput } from '@/lib/api/statuses';
@@ -113,40 +119,44 @@ export class ApiError extends Error {
    }
 }
 
+/**
+ * Parse ÚNICO da resposta da API (R5): envelope `{data, meta}` no sucesso, ProblemDetail
+ * (RFC 7807) no erro → `ApiError` com `detail`/`title`. Trata o fim de sessão (#12).
+ */
+async function parseResponse(res: Response): Promise<{ data: unknown; meta?: unknown }> {
+   const json = await res.json().catch(() => null);
+   if (!res.ok) {
+      const detail = String((json && (json.detail || json.title)) || res.statusText);
+      if (typeof window !== 'undefined') {
+         if (res.status === 401)
+            endSession(loginRedirectUrl(window.location.pathname, window.location.search));
+         else if (res.status === 403 && detail === DEACTIVATED_MESSAGE)
+            endSession(DEACTIVATED_LOGIN_URL);
+      }
+      throw new ApiError(res.status, detail, json);
+   }
+   return { data: json?.data ?? json, meta: json?.meta };
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
    const res = await fetch(`/api/v1${path}`, {
       method,
       headers: body !== undefined ? { 'content-type': 'application/json' } : undefined,
       body: body !== undefined ? JSON.stringify(body) : undefined,
    });
-   const json = await res.json().catch(() => null);
-   if (!res.ok) {
-      const detail = (json && (json.detail || json.title)) || res.statusText;
-      throw new ApiError(res.status, String(detail), json);
-   }
-   return (json?.data ?? json) as T;
+   return (await parseResponse(res)).data as T;
 }
 
 /** Como `request`, mas devolve o envelope inteiro {data, meta} (pra ler `meta.total`). */
 async function requestEnvelope<T>(path: string): Promise<{ data: T; meta?: unknown }> {
-   const res = await fetch(`/api/v1${path}`, { method: 'GET' });
-   const json = await res.json().catch(() => null);
-   if (!res.ok) {
-      const detail = (json && (json.detail || json.title)) || res.statusText;
-      throw new ApiError(res.status, String(detail), json);
-   }
-   return { data: (json?.data ?? json) as T, meta: json?.meta };
+   const { data, meta } = await parseResponse(await fetch(`/api/v1${path}`, { method: 'GET' }));
+   return { data: data as T, meta };
 }
 
 /** POST multipart (upload de arquivo): o navegador define o content-type com o boundary. */
 async function postForm<T>(path: string, form: FormData): Promise<T> {
    const res = await fetch(`/api/v1${path}`, { method: 'POST', body: form });
-   const json = await res.json().catch(() => null);
-   if (!res.ok) {
-      const detail = (json && (json.detail || json.title)) || res.statusText;
-      throw new ApiError(res.status, String(detail), json);
-   }
-   return (json?.data ?? json) as T;
+   return (await parseResponse(res)).data as T;
 }
 
 const get = <T>(p: string) => request<T>('GET', p);
