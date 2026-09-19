@@ -1,31 +1,9 @@
-import { Status, status } from './status';
-import {
-   Accessibility,
-   Bell,
-   Blocks,
-   Bomb,
-   BrickWall,
-   Cuboid,
-   FormInput,
-   Globe,
-   Grid2X2,
-   HelpCircle,
-   LayoutDashboard,
-   Loader,
-   Lock,
-   LucideIcon,
-   Play,
-   Settings,
-   Shapes,
-   Table,
-   TrafficCone,
-   Vault,
-   Wallpaper,
-} from 'lucide-react';
+import { Status } from './status';
+import type { LucideIcon } from 'lucide-react';
 import type { ComponentType } from 'react';
-import { User, users } from './users';
-import { LabelInterface, labels } from './labels';
-import { Priority, priorities } from './priorities';
+import { User } from './users';
+import { LabelInterface } from './labels';
+import { Priority } from './priorities';
 export interface Project {
    id: string;
    name: string;
@@ -49,11 +27,6 @@ export interface Project {
    /** Number of issues in the project (computed by the backend). */
    issueCount?: number;
 }
-
-type BaseProject = Omit<
-   Project,
-   'targetDate' | 'teamId' | 'labels' | 'initiative' | 'healthUpdatedAgoDays'
->;
 
 export interface Health {
    id: 'no-update' | 'off-track' | 'on-track' | 'at-risk';
@@ -89,50 +62,5 @@ export const health: Health[] = [
    },
 ];
 
-const baseProjects: BaseProject[] = [];
-
-/* -------------------------------------------------------------------------- */
-/*            Extended, Linear-style attributes (teams, dates, labels)        */
-/* -------------------------------------------------------------------------- */
-
-const TEAM_ROTATION = ['CORE', 'DESIGN', 'PERF', 'WEB', 'API', 'ANALYTICS'];
-
-const INITIATIVES = [
-   'Q3 — Ship the component platform',
-   'Q3 — Raise quality and accessibility',
-   'Q4 — Grow design system adoption',
-];
-
-const pad = (value: number) => String(value).padStart(2, '0');
-
-/** Deterministic date helper (no Date.now — SSR safe). */
-const isoDate = (year: number, month: number, day: number): string => {
-   const normalizedYear = year + Math.floor((month - 1) / 12);
-   const normalizedMonth = ((month - 1) % 12) + 1;
-   return `${normalizedYear}-${pad(normalizedMonth)}-${pad(Math.min(day, 28))}`;
-};
-
-export const projects: Project[] = baseProjects.map((project, index) => {
-   // Spread active work around mid-2026 so the timeline view reads well.
-   const startMonth = 2 + ((index * 5) % 10); // Feb → Nov 2026
-   const startDate = isoDate(2026, startMonth, 1 + ((index * 7) % 26));
-   const targetDate = isoDate(2026, startMonth + 2 + (index % 4), 1 + ((index * 11) % 26));
-
-   return {
-      ...project,
-      startDate,
-      targetDate,
-      teamId: TEAM_ROTATION[index % TEAM_ROTATION.length],
-      labels: [labels[index % labels.length]],
-      initiative: INITIATIVES[index % INITIATIVES.length],
-      healthUpdatedAgoDays: project.health.id === 'no-update' ? undefined : 1 + (index % 9),
-   };
-});
-
-export function getProjectById(id: string): Project | undefined {
-   return projects.find((project) => project.id === id);
-}
-
-export function getProjectsByTeam(teamId: string): Project[] {
-   return projects.filter((project) => project.teamId === teamId);
-}
+/** Projetos vêm da API (workspace-store); vazio de propósito (usado só pelo seed demo). */
+export const projects: Project[] = [];

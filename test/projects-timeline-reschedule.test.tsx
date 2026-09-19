@@ -100,17 +100,19 @@ describe('ProjectsTimeline — reschedule', () => {
       expect(alpha.getAttribute('aria-keyshortcuts')).toContain('ArrowRight');
 
       fireEvent.keyDown(alpha, { key: 'ArrowRight' });
+      // Rascunho: o rótulo já reflete o novo período; o PATCH sai ao soltar o foco.
+      expect(bar('Alpha, Sep 2 - Oct 1')).toBeTruthy();
+      fireEvent.blur(bar('Alpha, Sep 2 - Oct 1'));
       expect(apiMocks.update).toHaveBeenLastCalledWith('p1', {
          startDate: '2026-09-02',
          targetDate: '2026-10-01',
       });
-      // Otimista: o rótulo do intervalo já reflete o novo período.
-      expect(bar('Alpha, Sep 2 - Oct 1')).toBeTruthy();
 
       await waitFor(() =>
          expect(useWorkspaceStore.getState().projects[0].startDate).toBe('2026-09-02')
       );
       fireEvent.keyDown(bar('Alpha, Sep 2 - Oct 1'), { key: 'ArrowLeft', shiftKey: true });
+      fireEvent.blur(bar('Alpha, Aug 26 - Sep 24'));
       expect(apiMocks.update).toHaveBeenLastCalledWith('p1', {
          startDate: '2026-08-26',
          targetDate: '2026-09-24',
@@ -119,11 +121,34 @@ describe('ProjectsTimeline — reschedule', () => {
       expect(toast.success).not.toHaveBeenCalled();
    });
 
+   it('várias teclas seguidas viram UM PATCH (rascunho + 1 commit, #39)', () => {
+      vi.useFakeTimers();
+      try {
+         render(<Harness />);
+         const alpha = bar('Alpha, Sep 1 - Sep 30');
+         for (let i = 0; i < 5; i++) fireEvent.keyDown(alpha, { key: 'ArrowRight' });
+         expect(apiMocks.update).not.toHaveBeenCalled();
+         expect(bar('Alpha, Sep 6 - Oct 5')).toBeTruthy();
+
+         act(() => {
+            vi.advanceTimersByTime(1000);
+         });
+         expect(apiMocks.update).toHaveBeenCalledTimes(1);
+         expect(apiMocks.update).toHaveBeenLastCalledWith('p1', {
+            startDate: '2026-09-06',
+            targetDate: '2026-10-05',
+         });
+      } finally {
+         vi.useRealTimers();
+      }
+   });
+
    it('quando o PATCH falha, o intervalo volta ao original e avisa', async () => {
       apiMocks.update.mockRejectedValue(new Error('boom'));
       render(<Harness />);
 
       fireEvent.keyDown(bar('Alpha, Sep 1 - Sep 30'), { key: 'ArrowRight' });
+      fireEvent.blur(bar('Alpha, Sep 2 - Oct 1'));
       expect(bar('Alpha, Sep 2 - Oct 1')).toBeTruthy();
 
       await waitFor(() => expect(bar('Alpha, Sep 1 - Sep 30')).toBeTruthy());

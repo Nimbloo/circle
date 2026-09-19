@@ -1,15 +1,18 @@
 import React from 'react';
-import { status as allStatus } from '@/data/status';
+import { useCatalogStore } from '@/store/catalog-store';
 
-export function renderStatusIcon(statusId: string): React.ReactElement | null {
-   const selectedItem = allStatus.find((item) => item.id === statusId);
-   if (selectedItem) {
-      const Icon = selectedItem.icon;
-      return <Icon />;
-   }
-   return null;
+/** Status do catálogo vivo (issue ou projeto) pelo id; `undefined` se não existe. */
+export function getStatusById(statusId: string) {
+   const { statuses, projectStatuses } = useCatalogStore.getState();
+   return (
+      statuses.find((item) => item.id === statusId) ??
+      projectStatuses.find((item) => item.id === statusId)
+   );
 }
 
-export function getStatusById(statusId: string) {
-   return allStatus.find((item) => item.id === statusId);
+export function renderStatusIcon(statusId: string): React.ReactElement | null {
+   const selectedItem = getStatusById(statusId);
+   if (!selectedItem) return null;
+   const Icon = selectedItem.icon;
+   return <Icon />;
 }

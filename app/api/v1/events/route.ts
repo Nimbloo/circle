@@ -1,5 +1,5 @@
 import { db } from '@/db';
-import { emailFromRequest } from '@/lib/api/auth';
+import { emailFromRequest, withRequestCache } from '@/lib/api/auth';
 import { eventForViewer, subscribe, type CircleEvent } from '@/lib/api/events';
 import { problem } from '@/lib/api/response';
 import { scopeForEmail } from '@/lib/api/scope';
@@ -48,6 +48,11 @@ export async function GET(req: Request): Promise<Response> {
    // por evento. Ver `eventForViewer`.
    const { user, teamIds } = await scopeForEmail(db, email);
    const viewer = { userId: user.id, teamIds };
+   // Chave do escopo: papel + times. Mudou → o stream fecha (#13) e o cliente reconecta
+   // com o escopo novo (e, por ser uma RE-conexão, re-hidrata tudo).
+   const scopeKey = (s: { user: { role: string }; teamIds: string[] | null }) =>
+      `${s.user.role}|${s.teamIds ? [...s.teamIds].sort().join(',') : '*'}`;
+   const openedKey = scopeKey({ user, teamIds });
 
    const encoder = new TextEncoder();
    let unsubscribe: (() => void) | null = null;
@@ -83,7 +88,43 @@ export async function GET(req: Request): Promise<Response> {
          // Comentário SSE inicial: destrava o buffer do proxy e confirma a conexão.
          send(': connected\n\n');
 
+         const close = () => {
+            cleanup();
+            try {
+               controller.close();
+            } catch {
+               // já fechado
+            }
+         };
+
+         /**
+          * Re-resolve o escopo (#13). Cache de request NOVO: o callback do `subscribe`
+          * roda no contexto de quem publicou, e o cache dele pode ter o usuário antigo.
+          */
+         let checking = false;
+         const recheckScope = () => {
+            if (checking) return;
+            checking = true;
+            void withRequestCache(() => scopeForEmail(db, email))
+               .then((next) => {
+                  if (scopeKey(next) === openedKey) return;
+                  viewer.teamIds = next.teamIds; // corta já o que não é mais visível
+                  close();
+               })
+               .catch(close)
+               .finally(() => {
+                  checking = false;
+               });
+         };
+
          unsubscribe = subscribe((event: CircleEvent) => {
+            // Membership/papel do PRÓPRIO usuário ou estrutura de times mudou: o escopo
+            // pode ter mudado. (Evento de assinatura de issue, com `issueId`, não muda.)
+            if (
+               (event.entity === 'member' && event.id === viewer.userId && !event.issueId) ||
+               event.entity === 'team'
+            )
+               recheckScope();
             const payload = eventForViewer(event, viewer);
             if (!payload) return;
             send(`data: ${JSON.stringify(payload)}\n\n`);
@@ -96,25 +137,12 @@ export async function GET(req: Request): Promise<Response> {
             if (desdeRevalidacao < REVALIDATE_MS) return;
             desdeRevalidacao = 0;
             // Desativou no meio do caminho? Fecha o stream em vez de seguir empurrando.
-            void assertActiveEmail(db, email).catch(() => {
-               cleanup();
-               try {
-                  controller.close();
-               } catch {
-                  // já fechado
-               }
-            });
+            // Ativa: re-resolve o escopo também (papel pode ter mudado no login, #13).
+            void assertActiveEmail(db, email).then(recheckScope, close);
          }, HEARTBEAT_MS);
 
          // Abort do request (cliente fecha a aba) → libera subscriber + timer.
-         onAbort = () => {
-            cleanup();
-            try {
-               controller.close();
-            } catch {
-               // já fechado
-            }
-         };
+         onAbort = close;
          if (req.signal.aborted) onAbort();
          else req.signal.addEventListener('abort', onAbort);
       },

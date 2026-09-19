@@ -52,6 +52,8 @@ import {
    useInboxLayoutStore,
 } from '@/store/inbox-layout-store';
 import type { ImperativePanelHandle } from 'react-resizable-panels';
+import { useNow } from '@/lib/relative-time';
+import { isTypingTarget, hasOpenOverlay } from '@/lib/keyboard-guard';
 
 /** Rótulos legíveis dos tipos de notificação para o filtro (ordem do Linear). */
 const TYPE_LABELS: { value: NotificationType; label: string }[] = [
@@ -87,6 +89,8 @@ function NotificationRows({
    const issues = useIssuesStore((s) => s.issues);
    const snooze = useNotificationsStore((s) => s.snooze);
    const unsnooze = useNotificationsStore((s) => s.unsnooze);
+   // Um tick por minuto para a lista toda: o "2m" anda sem re-hidratar.
+   const now = useNow();
    const statusByIdentifier = useMemo(
       () => new Map(issues.map((issue) => [issue.identifier, issue.status.id])),
       [issues]
@@ -97,6 +101,7 @@ function NotificationRows({
          <IssueLine
             key={notification.id}
             notification={notification}
+            now={now}
             statusId={statusByIdentifier.get(notification.identifier)}
             onUnsnooze={unsnooze}
             showId={showId}
@@ -106,6 +111,7 @@ function NotificationRows({
          <IssueLine
             key={notification.id}
             notification={notification}
+            now={now}
             statusId={statusByIdentifier.get(notification.identifier)}
             isSelected={selectedId === notification.id}
             onOpen={onOpen}
@@ -128,6 +134,8 @@ export default function Inbox() {
    const markAsUnread = useNotificationsStore((s) => s.markAsUnread);
    const markAllAsRead = useNotificationsStore((s) => s.markAllAsRead);
    const hydrateSnoozed = useNotificationsStore((s) => s.hydrateSnoozed);
+   // "Mark all as read" segue a contagem do servidor (a lista é capada — #19).
+   const unreadCount = useNotificationsStore((s) => s.unreadCount);
 
    const openNotification = useCallback(
       (notification: InboxNotification) => {
@@ -216,6 +224,41 @@ export default function Inbox() {
       });
    }, [notifications, snoozed, showSnoozed, showRead, showUnreadFirst, ordering, typeFilter]);
 
+   // Filtro só com os tipos que existem nas notificações carregadas (+ os já marcados):
+   // a lista fixa oferecia tipos que o servidor nunca gera.
+   const availableTypes = useMemo(() => {
+      const present = new Set<NotificationType>([...notifications, ...snoozed].map((n) => n.type));
+      return TYPE_LABELS.filter((t) => present.has(t.value) || typeFilter.has(t.value));
+   }, [notifications, snoozed, typeFilter]);
+
+   // Teclado (paridade Linear): j/↓ e k/↑ andam pela lista e abrem o preview. Inativo
+   // digitando ou com dialog/menu aberto.
+   const navRef = useRef({ filteredNotifications, selectedId: selectedNotification?.id });
+   navRef.current = { filteredNotifications, selectedId: selectedNotification?.id };
+   useEffect(() => {
+      const onKeyDown = (event: KeyboardEvent) => {
+         if (event.metaKey || event.ctrlKey || event.altKey) return;
+         if (isTypingTarget(event.target) || hasOpenOverlay()) return;
+         const step =
+            event.key === 'j' || event.key === 'ArrowDown'
+               ? 1
+               : event.key === 'k' || event.key === 'ArrowUp'
+                 ? -1
+                 : 0;
+         if (!step) return;
+         const { filteredNotifications: rows, selectedId } = navRef.current;
+         const openable = rows.filter((r) => !r.isSnoozed).map((r) => r.item);
+         if (openable.length === 0) return;
+         const index = openable.findIndex((n) => n.id === selectedId);
+         const nextIndex =
+            index === -1 ? 0 : Math.min(openable.length - 1, Math.max(0, index + step));
+         event.preventDefault();
+         openNotification(openable[nextIndex]);
+      };
+      window.addEventListener('keydown', onKeyDown);
+      return () => window.removeEventListener('keydown', onKeyDown);
+   }, [openNotification]);
+
    const listPane = (
       <>
          {/* Header — espelho do Linear: "Inbox" 13px/500 + menu "..." de ações à esquerda;
@@ -236,10 +279,7 @@ export default function Inbox() {
                      </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-52">
-                     <DropdownMenuItem
-                        onClick={markAllAsRead}
-                        disabled={!notifications.some((n) => !n.read)}
-                     >
+                     <DropdownMenuItem onClick={markAllAsRead} disabled={unreadCount === 0}>
                         <CheckCheck className="size-4 text-muted-foreground" />
                         Mark all as read
                      </DropdownMenuItem>
@@ -300,7 +340,7 @@ export default function Inbox() {
                               </CommandGroup>
                            ) : (
                               <CommandGroup>
-                                 {TYPE_LABELS.map((type) => (
+                                 {availableTypes.map((type) => (
                                     <CommandItem
                                        key={type.value}
                                        onSelect={() => toggleType(type.value)}

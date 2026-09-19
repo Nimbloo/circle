@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { EmptyState } from '@/components/common/empty-state';
 import { ListSkeleton } from '@/components/common/list-skeleton';
-import { api } from '@/lib/client';
-import { ApiError } from '@/lib/api/errors';
+import { api, ApiError } from '@/lib/client';
 import type { AuditLogDto } from '@/lib/api/audit';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { SettingsShell } from './shared';
@@ -14,16 +14,18 @@ import { SettingsShell } from './shared';
  * Rótulos legíveis das ações registradas. Chave desconhecida cai no próprio código
  * (o audit log é append-only e pode ganhar ações novas antes desta tela).
  */
-const ACTION_LABELS: Record<string, string> = {
-   'member.add': 'adicionou um membro ao time',
-   'member.remove': 'removeu um membro do time',
-   'member.role': 'alterou a role de um membro',
+export const ACTION_LABELS: Record<string, string> = {
    'team.create': 'criou um time',
    'team.delete': 'excluiu um time',
-   'status.create': 'criou um status',
-   'status.delete': 'excluiu um status',
-   'label.create': 'criou uma label',
-   'label.delete': 'excluiu uma label',
+   'member.add': 'adicionou um membro ao time',
+   'member.remove': 'removeu um membro do time',
+   'member.deactivate': 'desativou um membro',
+   'member.reactivate': 'reativou um membro',
+   'invite.create': 'convidou uma pessoa',
+   'invite.revoke': 'revogou um convite',
+   'webhook.create': 'criou um webhook',
+   'webhook.delete': 'excluiu um webhook',
+   'automation.run': 'executou uma automação',
 };
 
 function formatWhen(iso: string): string {
@@ -48,22 +50,26 @@ export default function AuditLogSettings() {
    const isAdmin = useWorkspaceStore((s) => s.me?.admin ?? false);
    const [entries, setEntries] = useState<AuditLogDto[] | null>(null);
    const [denied, setDenied] = useState(false);
+   const [failed, setFailed] = useState(false);
+   const seq = useRef(0);
 
-   useEffect(() => {
-      let active = true;
+   const load = useCallback(() => {
+      const mine = ++seq.current;
+      setFailed(false);
+      setEntries(null);
       api.audit()
          .then((rows) => {
-            if (active) setEntries(rows);
+            if (mine === seq.current) setEntries(rows);
          })
          .catch((e) => {
-            if (!active) return;
+            if (mine !== seq.current) return;
+            // Erro de carga não é "nenhuma ação" (Ad#22): mostra o erro com retry.
             if (e instanceof ApiError && e.status === 403) setDenied(true);
-            setEntries([]);
+            else setFailed(true);
          });
-      return () => {
-         active = false;
-      };
    }, []);
+
+   useEffect(load, [load]);
 
    return (
       <SettingsShell
@@ -74,6 +80,13 @@ export default function AuditLogSettings() {
             <p className="text-sm text-muted-foreground">
                Só administradores do workspace podem ver o audit log.
             </p>
+         ) : failed ? (
+            <div className="flex flex-col items-center gap-2 py-10 text-sm text-muted-foreground">
+               Não foi possível carregar o audit log.
+               <Button size="sm" variant="outline" onClick={load}>
+                  Tentar novamente
+               </Button>
+            </div>
          ) : entries === null ? (
             <ListSkeleton rows={6} />
          ) : entries.length === 0 ? (

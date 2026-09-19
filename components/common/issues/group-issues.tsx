@@ -2,18 +2,17 @@
 
 import { Issue } from '@/data/issues';
 import { Status } from '@/data/status';
-import { useIssuesStore } from '@/store/issues-store';
 import { useViewStore } from '@/store/view-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
 import { cn } from '@/lib/utils';
 import { Plus } from 'lucide-react';
 import { FC, ReactNode, useCallback, useRef } from 'react';
-import { useDrop } from 'react-dnd';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { AnimatePresence, motion } from 'motion/react';
 import { Button } from '../../ui/button';
-import { IssueDragType, IssueGrid } from './issue-grid';
+import { IssueGrid } from './issue-grid';
 import { IssueLine } from './issue-line';
+import { useGroupDropTarget, type GroupDropValue } from './use-issue-drop-target';
 
 /**
  * Generic descriptor of an issue group. Groups are usually statuses but the
@@ -23,8 +22,16 @@ export interface IssueGroupDescriptor {
    id: string;
    name: string;
    icon: ReactNode;
-   /** Set when grouping by status: enables board drop + "+" default status. */
+   /** Set when grouping by status: "+" default status. */
    status?: Status;
+   /** Campo aplicado à issue solta neste grupo vinda de outro. Ausente = drop recusado. */
+   drop?: GroupDropValue;
+}
+
+/** Grupo + suas issues na ordem exibida — lido no momento do drop (getter estável). */
+export interface IssueGroupContext {
+   group: IssueGroupDescriptor;
+   issues: Issue[];
 }
 
 interface GroupIssuesProps {
@@ -40,37 +47,20 @@ interface GroupIssuesProps {
  * constante. Altura medida dinamicamente (cards variam com título/labels). O
  * overscan generoso (8) preserva o drop-target do DnD nas bordas do scroll.
  */
-/** Getter estável das issues do grupo: cards/linhas leem a ordem atual no drop sem
- *  receber um array novo (que derrubaria o `memo`) a cada mudança do grupo. */
-function useOrderedIssuesGetter(issues: Issue[]) {
-   const latest = useRef(issues);
-   latest.current = issues;
+/** Getter estável do grupo: cards/linhas leem grupo e ordem atuais no drop sem receber
+ *  um array novo (que derrubaria o `memo`) a cada mudança do grupo. */
+export function useGroupGetter(group: IssueGroupDescriptor, issues: Issue[]) {
+   const latest = useRef<IssueGroupContext>({ group, issues });
+   latest.current = { group, issues };
    return useCallback(() => latest.current, []);
 }
 
-const IssueGridList: FC<{ issues: Issue[]; status?: Status }> = ({ issues, status }) => {
+const IssueGridList: FC<{ issues: Issue[]; group: IssueGroupDescriptor }> = ({ issues, group }) => {
    const ref = useRef<HTMLDivElement>(null);
-   const getOrderedIssues = useOrderedIssuesGetter(issues);
-   const updateIssueStatus = useIssuesStore((s) => s.updateIssueStatus);
+   const getGroup = useGroupGetter(group, issues);
 
-   // Drop na área da coluna (fora de um card) → muda o status para o do grupo.
-   const [{ isOver }, drop] = useDrop(
-      () => ({
-         accept: IssueDragType,
-         canDrop: () => status !== undefined,
-         drop(item: Issue, monitor) {
-            // Só trata quando NENHUM card tratou o drop (área vazia do grupo). Se um card
-            // tratou (reorder ou status), `didDrop()` é true e o container não faz nada.
-            if (status && !monitor.didDrop() && item.status.id !== status.id) {
-               updateIssueStatus(item.id, status);
-            }
-         },
-         collect: (monitor) => ({
-            isOver: !!monitor.isOver() && !!monitor.canDrop(),
-         }),
-      }),
-      [status, updateIssueStatus]
-   );
+   // Drop na área da coluna (fora de um card, ou coluna vazia) → campo do grupo.
+   const [{ isOver }, drop] = useGroupDropTarget(getGroup);
    drop(ref);
 
    const virtualizer = useVirtualizer({
@@ -78,6 +68,8 @@ const IssueGridList: FC<{ issues: Issue[]; status?: Status }> = ({ issues, statu
       getScrollElement: () => ref.current,
       estimateSize: () => 132, // altura típica do card (título + labels + footer)
       overscan: 8,
+      // Medição e card presos à issue, não ao índice (reordenar não troca a altura/estado).
+      getItemKey: (i) => issues[i].id,
    });
 
    return (
@@ -100,7 +92,7 @@ const IssueGridList: FC<{ issues: Issue[]; status?: Status }> = ({ issues, statu
                   }}
                >
                   <div className="max-w-[90%] rounded-lg border border-border bg-card p-3 shadow-md">
-                     <p className="text-sm font-medium text-center">Drop to update status</p>
+                     <p className="text-sm font-medium text-center">Move to {group.name}</p>
                   </div>
                </motion.div>
             )}
@@ -122,7 +114,7 @@ const IssueGridList: FC<{ issues: Issue[]; status?: Status }> = ({ issues, statu
                         paddingBottom: 8, // gap entre cards (medido junto com a altura)
                      }}
                   >
-                     <IssueGrid issue={issue} getOrderedIssues={getOrderedIssues} layout={false} />
+                     <IssueGrid issue={issue} getGroup={getGroup} layout={false} />
                   </div>
                );
             })}
@@ -135,7 +127,7 @@ export function GroupIssues({ group, issues, count }: GroupIssuesProps) {
    const { viewType } = useViewStore();
    const isViewTypeGrid = viewType === 'grid';
    const { openModal } = useCreateIssueStore();
-   const getOrderedIssues = useOrderedIssuesGetter(issues);
+   const getGroup = useGroupGetter(group, issues);
 
    return (
       <div
@@ -180,16 +172,11 @@ export function GroupIssues({ group, issues, count }: GroupIssuesProps) {
          {viewType === 'list' ? (
             <div className="space-y-0">
                {issues.map((issue) => (
-                  <IssueLine
-                     key={issue.id}
-                     issue={issue}
-                     getOrderedIssues={getOrderedIssues}
-                     layoutId={true}
-                  />
+                  <IssueLine key={issue.id} issue={issue} getGroup={getGroup} layoutId={true} />
                ))}
             </div>
          ) : (
-            <IssueGridList issues={issues} status={group.status} />
+            <IssueGridList issues={issues} group={group} />
          )}
       </div>
    );

@@ -7,6 +7,8 @@ interface BulkSelectionState {
    toggle: (id: string) => void;
    set: (ids: string[]) => void;
    clear: () => void;
+   /** Mantém só os ids ainda visíveis (issue removida/escondida sai da seleção). */
+   retain: (visibleIds: ReadonlySet<string>) => void;
 }
 
 /**
@@ -26,4 +28,9 @@ export const useBulkSelectionStore = create<BulkSelectionState>((set, get) => ({
       }),
    set: (ids) => set({ selected: new Set(ids) }),
    clear: () => set((state) => (state.selected.size ? { selected: new Set<string>() } : state)),
+   retain: (visibleIds) =>
+      set((state) => {
+         const kept = [...state.selected].filter((id) => visibleIds.has(id));
+         return kept.length === state.selected.size ? state : { selected: new Set(kept) };
+      }),
 }));

@@ -84,47 +84,11 @@ export default function MyIssues() {
       };
    }, [tab]);
 
-   // Aba "Assigned": o escopo vem do filtro SERVIDOR `assignee=me` (junção de responsáveis —
-   // inclui onde sou colaborador), não de um filtro do store no cliente. Re-busca quando o
-   // store muda (SSE/otimista) para acompanhar entradas e saídas; enquanto não chegou,
-   // `scopeMyIssues` aproxima pelos responsáveis já carregados.
-   const [assignedIds, setAssignedIds] = useState<ReadonlySet<string> | undefined>(undefined);
-   // Assinatura do que muda a resposta de `assignee=me`: quais issues existem e quem
-   // responde por elas. Depender do array `issues` era a mesma armadilha do roadmap —
-   // a identidade dele muda a cada update otimista e a cada evento SSE, então esta
-   // busca COMPLETA disparava a cada mutação de qualquer pessoa, sem nada de
-   // responsável ter mudado.
-   const assigneesSignature = useMemo(
-      () =>
-         issues
-            .map((i) => `${i.id}:${i.assignees.map((a) => a.id).join(',')}`)
-            .sort()
-            .join('|'),
-      [issues]
-   );
-   useEffect(() => {
-      if (tab !== 'assigned' || loading) return;
-      let alive = true;
-      api.issues
-         .list({ assignee: ['me'] })
-         .then((dtos) => alive && setAssignedIds(new Set(dtos.map((d) => d.id))))
-         .catch(() => {});
-      return () => {
-         alive = false;
-      };
-   }, [tab, assigneesSignature, loading]);
-
+   // Aba "Assigned" (#29): derivada do store — os DTOs já trazem todos os responsáveis
+   // (principal + colaboradores). Sem busca `assignee=me` a cada mudança de responsável.
    const scopedIssues = useMemo(
-      () =>
-         scopeMyIssues(
-            issues,
-            tab,
-            meId,
-            subscribedIds,
-            activeIds,
-            tab === 'assigned' ? assignedIds : undefined
-         ),
-      [issues, tab, meId, subscribedIds, activeIds, assignedIds]
+      () => scopeMyIssues(issues, tab, meId, subscribedIds, activeIds),
+      [issues, tab, meId, subscribedIds, activeIds]
    );
 
    const displayedIssues = useMemo(

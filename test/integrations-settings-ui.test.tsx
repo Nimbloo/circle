@@ -35,6 +35,7 @@ const apiMocks = vi.hoisted(() => ({
    hooksRedeliver: vi.fn(),
    importPreview: vi.fn(),
    importCommit: vi.fn(),
+   importJob: vi.fn(),
 }));
 
 vi.mock('@/lib/client', () => ({
@@ -47,13 +48,20 @@ vi.mock('@/lib/client', () => ({
          deliveries: apiMocks.hooksDeliveries,
          redeliver: apiMocks.hooksRedeliver,
       },
-      importIssues: { preview: apiMocks.importPreview, commit: apiMocks.importCommit },
+      importIssues: {
+         preview: apiMocks.importPreview,
+         commit: apiMocks.importCommit,
+         job: apiMocks.importJob,
+      },
    },
 }));
 
 const toastMocks = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock('sonner', () => ({ toast: toastMocks }));
-vi.mock('next/navigation', () => ({ useParams: () => ({ orgId: 'nimbloo' }) }));
+vi.mock('next/navigation', () => ({
+   useParams: () => ({ orgId: 'nimbloo' }),
+   usePathname: () => '/nimbloo/settings',
+}));
 
 beforeEach(() => {
    vi.clearAllMocks();
@@ -149,6 +157,28 @@ describe('Settings → Webhooks (#101)', () => {
       await waitFor(() => expect(toastMocks.error).toHaveBeenCalled());
       expect(toggle.getAttribute('data-state')).toBe('checked');
    });
+
+   it('erro ao carregar as entregas mostra erro com retry, não skeleton eterno (Ad#26)', async () => {
+      const user = userEvent.setup();
+      apiMocks.hooksList.mockResolvedValue([
+         {
+            id: 'w1',
+            url: 'https://exemplo.com/circle',
+            events: ['issue.created'],
+            enabled: true,
+            createdAt: '2026-09-01T00:00:00.000Z',
+            createdByName: 'Owner',
+         },
+      ]);
+      apiMocks.hooksDeliveries.mockRejectedValueOnce(new Error('boom'));
+
+      mount(<WebhooksSettings />);
+      await user.click(await screen.findByRole('button', { name: 'Entregas' }));
+      const retry = await screen.findByRole('button', { name: 'Tentar novamente' });
+      await user.click(retry);
+      expect(await screen.findByText('Nenhuma entrega ainda')).toBeTruthy();
+      expect(apiMocks.hooksDeliveries).toHaveBeenCalledTimes(2);
+   });
 });
 
 describe('Settings → Import/Export (#101)', () => {
@@ -179,12 +209,22 @@ describe('Settings → Import/Export (#101)', () => {
          ],
          warnings: ['1 linha(s) sem título serão ignoradas'],
       });
-      apiMocks.importCommit.mockResolvedValue({
+      // Import em background (#10): o commit devolve o job; a tela acompanha até o fim.
+      apiMocks.importCommit.mockResolvedValue({ jobId: 'job-1' });
+      apiMocks.importJob.mockResolvedValue({
+         id: 'job-1',
+         teamId: 'CORE',
+         source: 'linear',
+         status: 'succeeded',
+         total: 3,
+         processed: 3,
          created: 2,
          updated: 0,
          skipped: 1,
          errors: [],
-         issueIds: ['a', 'b'],
+         error: null,
+         createdAt: '2026-09-18T00:00:00.000Z',
+         finishedAt: '2026-09-18T00:00:01.000Z',
       });
 
       mount(<ImportExportSettings />);

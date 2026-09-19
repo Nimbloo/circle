@@ -27,6 +27,7 @@ import { getOrCreateUser } from './users';
 import type { UserRef } from './issues';
 import { teamDescendantIds } from './hierarchy';
 import { assertCanWriteProject, assertCanWriteTeam, assertTeamInScope } from './scope';
+import { publishInitiativeRollups } from './initiatives';
 
 type ProjectRow = typeof projectT.$inferSelect;
 type StatusRow = typeof statusT.$inferSelect;
@@ -212,29 +213,9 @@ export async function listProjects(db: Db, opts: ListProjectsOptions = {}): Prom
            .from(projectT)
            .where(and(...predicates))
       : await db.select().from(projectT);
-   let dtos = await assemble(db, rows, maps);
-
-   if (opts.tab === 'active' || opts.includeClosed === false) {
-      dtos = dtos.filter((d) => !CLOSED_CATEGORIES.has(d.status.category));
-   }
-   if (opts.health?.length) {
-      const set = new Set(opts.health);
-      dtos = dtos.filter((d) => set.has(d.health.id));
-   }
-   if (opts.priority?.length) {
-      const set = new Set(opts.priority);
-      dtos = dtos.filter((d) => set.has(d.priority.id));
-   }
-   // Sub-times (#100): a lista do time pai inclui os projetos dos filhos.
-   if (opts.team) {
-      const expanded = new Set(await teamDescendantIds(db, [opts.team]));
-      dtos = dtos.filter((d) => expanded.has(d.teamId));
-   }
-   if (opts.teamIds) {
-      const scope = new Set(opts.teamIds);
-      dtos = dtos.filter((d) => scope.has(d.teamId));
-   }
-   if (opts.initiative) dtos = dtos.filter((d) => d.initiativeId === opts.initiative);
+   // Filtros (escopo, sub-times, health, priority, initiative, fechados) já vão no SQL
+   // acima — sem refiltrar em memória nem expandir os sub-times duas vezes.
+   const dtos = await assemble(db, rows, maps);
 
    const dir = opts.dir === 'desc' ? -1 : 1;
    const by = opts.sort ?? 'title';
@@ -320,7 +301,8 @@ export async function createProject(
             .onConflictDoNothing();
       }
    });
-   publish({ entity: 'project', action: 'created', id });
+   publish({ entity: 'project', action: 'created', id, teamId: input.teamId });
+   if (input.initiativeId) await publishInitiativeRollups(db, [input.initiativeId]);
    return (await getProject(db, id))!;
 }
 
@@ -359,7 +341,12 @@ export async function updateProject(
    actorEmail?: string
 ): Promise<ProjectDto | null> {
    const existing = await db
-      .select({ id: projectT.id, healthId: projectT.healthId, teamId: projectT.teamId })
+      .select({
+         id: projectT.id,
+         healthId: projectT.healthId,
+         teamId: projectT.teamId,
+         initiativeId: projectT.initiativeId,
+      })
       .from(projectT)
       .where(eq(projectT.id, id))
       .limit(1);
@@ -441,13 +428,29 @@ export async function updateProject(
          });
       }
    });
-   publish({ entity: 'project', action: 'updated', id });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id,
+      teamId: patch.teamId ?? existing[0].teamId,
+   });
+   // Status/progresso/vínculo mudam o rollup das initiatives (antiga e nova) (#41).
+   if (
+      patch.statusId !== undefined ||
+      patch.percentComplete !== undefined ||
+      patch.initiativeId !== undefined
+   ) {
+      await publishInitiativeRollups(db, [
+         existing[0].initiativeId,
+         patch.initiativeId !== undefined ? patch.initiativeId : null,
+      ]);
+   }
    return getProject(db, id);
 }
 
 export async function deleteProject(db: Db, id: string, actorEmail?: string): Promise<boolean> {
    const existing = await db
-      .select({ id: projectT.id })
+      .select({ id: projectT.id, teamId: projectT.teamId, initiativeId: projectT.initiativeId })
       .from(projectT)
       .where(eq(projectT.id, id))
       .limit(1);
@@ -472,6 +475,7 @@ export async function deleteProject(db: Db, id: string, actorEmail?: string): Pr
       await tx.delete(projectSnapshot).where(eq(projectSnapshot.projectId, id));
       await tx.delete(projectT).where(eq(projectT.id, id));
    });
-   publish({ entity: 'project', action: 'deleted', id });
+   publish({ entity: 'project', action: 'deleted', id, teamId: existing[0].teamId });
+   await publishInitiativeRollups(db, [existing[0].initiativeId]);
    return true;
 }

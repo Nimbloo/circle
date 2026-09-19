@@ -49,18 +49,6 @@ export interface View {
 /** Saved views of the workspace (Views page). Fake data, LNDev UI storyline. */
 export const views: View[] = [];
 
-export const issueViews = views.filter((view) => view.type === 'issue');
-export const projectViews = views.filter((view) => view.type === 'project');
-
-export function getViewsByTeam(teamId: string): View[] {
-   return views.filter((view) => view.teamId === teamId);
-}
-
-export function getViewById(id: string): View | undefined {
-   return views.find((view) => view.id === id);
-}
-
-/** Filtro `option` só quando há valores (array vazio = sem filtro, como no servidor). */
 function optionFilter(columnId: string, values: string[] | undefined): FiltersState {
    if (!values?.length) return [];
    return [

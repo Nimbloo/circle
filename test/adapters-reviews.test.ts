@@ -53,7 +53,12 @@ describe('adapters-reviews: arquivos e commits', () => {
          author: 'ana',
          committedAt: new Date(Date.now() - 3 * 3600_000).toISOString(),
       });
-      expect(c).toEqual({ sha: '1234567', message: 'feat: x', timeAgo: '3h' });
+      expect(c).toEqual({
+         sha: '1234567',
+         message: 'feat: x',
+         timeAgo: '3h',
+         committedAt: expect.any(String),
+      });
       expect(
          adaptReviewCommit({ sha: 'a', message: 'm', author: null, committedAt: null }).timeAgo
       ).toBe('');

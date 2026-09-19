@@ -10,12 +10,7 @@ import { toast } from 'sonner';
 import { INTEGRATION_LOGOS } from './integration-logos';
 import { SlackEventsConfig } from './slack-events-config';
 import { SettingsShell } from './shared';
-import {
-   ENABLED_INTEGRATIONS,
-   INTEGRATION_CATEGORIES,
-   INTEGRATIONS,
-   Integration,
-} from './integrations-data';
+import { INTEGRATION_CATEGORIES, INTEGRATIONS, Integration } from './integrations-data';
 
 /** How many cards a category shows before "Show all". */
 const VISIBLE_PER_CATEGORY = 8;
@@ -57,10 +52,10 @@ function IntegrationIcon({ integration, size = 36 }: { integration: Integration;
    );
 }
 
-function StatusBadge({ status }: { status: NonNullable<Integration['status']> }) {
+function PreInstalledBadge() {
    return (
       <span className="text-[11px] text-muted-foreground border rounded px-1 py-px leading-none shrink-0">
-         {status === 'enabled' ? 'Enabled' : 'Pre-installed'}
+         Pre-installed
       </span>
    );
 }
@@ -68,7 +63,8 @@ function StatusBadge({ status }: { status: NonNullable<Integration['status']> })
 /**
  * Cartão do diretório de integrações. É read-only (`div`, não `button`): o fluxo
  * de conexão real (OAuth de terceiros) ainda não existe — evita afordância falsa
- * de clique. O status ("Enabled"/"Pre-installed") vem dos dados do diretório.
+ * de clique. "Conectado" vem do estado REAL (`/integrations/status`); o "Enabled" fixo
+ * dos dados do diretório não aparece mais (Ad#35).
  */
 function ConnectedBadge() {
    return (
@@ -95,7 +91,7 @@ function IntegrationCard({
                {connected ? (
                   <ConnectedBadge />
                ) : (
-                  integration.status && <StatusBadge status={integration.status} />
+                  integration.status === 'pre-installed' && <PreInstalledBadge />
                )}
             </span>
          </div>
@@ -244,6 +240,12 @@ export default function Integrations() {
       };
    }, []);
 
+   // Só o que está conectado de verdade (Ad#35), não o "enabled" fixo do diretório.
+   const enabled = useMemo(
+      () => Object.values(INTEGRATIONS).filter((integration) => connectedIds.has(integration.id)),
+      [connectedIds]
+   );
+
    const [slackTesting, setSlackTesting] = useState(false);
    const testSlack = async () => {
       setSlackTesting(true);
@@ -322,16 +324,21 @@ export default function Integrations() {
                </section>
             ) : (
                <>
-                  <section className="mt-12">
-                     <h2 className="px-4 text-[12px] font-medium uppercase leading-[15px] text-muted-foreground">
-                        Enabled
-                     </h2>
-                     <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-                        {ENABLED_INTEGRATIONS.slice(0, 3).map((integration) => (
-                           <EnabledIntegrationCard key={integration.id} integration={integration} />
-                        ))}
-                     </div>
-                  </section>
+                  {enabled.length > 0 && (
+                     <section className="mt-12">
+                        <h2 className="px-4 text-[12px] font-medium uppercase leading-[15px] text-muted-foreground">
+                           Enabled
+                        </h2>
+                        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                           {enabled.map((integration) => (
+                              <EnabledIntegrationCard
+                                 key={integration.id}
+                                 integration={integration}
+                              />
+                           ))}
+                        </div>
+                     </section>
+                  )}
 
                   <FeaturedIntegration />
 

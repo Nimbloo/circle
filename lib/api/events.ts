@@ -46,6 +46,13 @@ export type CircleEntity =
    | 'review'
    /** Regra de automação de um time (CRUD); `teamId` diz de qual time é a tela a recarregar. */
    | 'automation'
+   /** Favorito do usuário (sempre com `recipientId`): as outras abas dele recarregam a lista. */
+   | 'favorite'
+   /**
+    * Job de import em background (#10): endereçado ao DONO (`recipientId`), `id` = job.
+    * A tela de import consulta `GET /import/jobs/:id` ao receber.
+    */
+   | 'import'
    /**
     * Sinal LOCAL do pod (não vem de mutação): a conexão LISTEN caiu e voltou, então
     * eventos de outros pods podem ter se perdido no intervalo. O cliente deve tratar
@@ -54,8 +61,15 @@ export type CircleEntity =
    | 'resync';
 
 import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { CLIENT_ID_HEADER, CLIENT_ID_PATTERN } from '@/lib/client-id';
+
+export { CLIENT_ID_HEADER };
 
 export type CircleAction = 'created' | 'updated' | 'deleted';
+
+/** O que mudou num evento `catalog` fora do bootstrap (#53). */
+export type CatalogKind = 'template' | 'project_template' | 'sla' | 'emoji';
 
 export interface CircleEvent {
    entity: CircleEntity;
@@ -76,6 +90,21 @@ export interface CircleEvent {
    issueId?: string;
    /** Destinatário único do evento (opcional). Presente → só esse usuário o recebe. */
    recipientId?: string;
+   /**
+    * Aba que originou a mutação (header `x-circle-client-id`, If#16). A própria aba
+    * reconhece o eco e não refaz o GET do que a resposta já trouxe; as outras reagem.
+    */
+   clientId?: string;
+   /**
+    * `content`: só o conteúdo (descrição) mudou — nada do DTO da lista (#18). O cliente
+    * recarrega só o detalhe aberto, sem GET da issue em todos os clientes.
+    */
+   scope?: 'content';
+   /**
+    * Subtipo do `catalog` (#53). Ausente = dado que vive no bootstrap (status): o cliente
+    * re-hidrata o workspace. Com kind, só quem exibe aquele dado recarrega.
+    */
+   kind?: CatalogKind;
    /**
     * Selo monotônico só para ordenação/deduplicação no cliente. É um contador
     * incremental (NÃO `Date.now()`): o valor absoluto é irrelevante e evita
@@ -108,7 +137,10 @@ export function eventForViewer(event: CircleEvent, viewer: EventViewer): CircleE
    if (event.recipientId) return event.recipientId === viewer.userId ? event : null;
    if (viewer.teamIds === null) return event;
    if (event.teamId) return viewer.teamIds.includes(event.teamId) ? event : null;
-   return { entity: event.entity, action: event.action, ts: event.ts };
+   // `kind` não revela nada do recurso e evita que o convidado refaça o bootstrap à toa.
+   return event.kind
+      ? { entity: event.entity, action: event.action, kind: event.kind, ts: event.ts }
+      : { entity: event.entity, action: event.action, ts: event.ts };
 }
 
 /**
@@ -287,6 +319,17 @@ export function runListener(opts: ListenerOptions): () => void {
 async function startListener(): Promise<void> {
    if (g.__circleListenStarted || !notifyEnabled()) return;
    g.__circleListenStarted = true;
+   // Mesmo gatilho (1º subscribe em runtime real, uma vez por pod): liga o timer do sweep
+   // de webhooks (#55) — o retry deixa de depender de tráfego. Import preguiçoso (Edge).
+   void (async () => {
+      try {
+         const { db } = await import('@/db');
+         const { startWebhookSweepTimer } = await import('./webhooks');
+         startWebhookSweepTimer(db);
+      } catch {
+         // best-effort: sem timer, o sweep ainda roda por publish e pela tela.
+      }
+   })();
    const { Client } = await import('pg');
    runListener({
       makeClient: () => new Client({ connectionString: process.env.DATABASE_URL, keepAlive: true }),
@@ -310,13 +353,38 @@ export function subscribe(fn: Subscriber): () => void {
    };
 }
 
+/** Origem da request corrente (aba do cliente), propagada até o `publish`. */
+const eventOrigin = new AsyncLocalStorage<{ clientId?: string }>();
+
 /**
- * Publica um evento. Entrega local síncrona (clientes do próprio pod) + `pg_notify`
- * best-effort (outros pods). Carimba o `ts` internamente e NUNCA lança — um
- * subscriber ou o DB indisponível não podem derrubar a mutação que originou o evento.
+ * Roda `fn` com a aba de origem da request (header `x-circle-client-id`): todo evento
+ * publicado dentro dela sai com `clientId`. Valor fora do formato é ignorado.
  */
-export function publish(event: Omit<CircleEvent, 'ts'>): void {
-   const full: CircleEvent = { ...event, ts: nextTs() };
+export function runWithEventOrigin<T>(
+   clientId: string | null | undefined,
+   fn: () => Promise<T>
+): Promise<T> {
+   const valid = clientId && CLIENT_ID_PATTERN.test(clientId) ? clientId : undefined;
+   return eventOrigin.run({ clientId: valid }, fn);
+}
+
+function stamp(event: Omit<CircleEvent, 'ts'>): CircleEvent {
+   const clientId = event.clientId ?? eventOrigin.getStore()?.clientId;
+   return { ...event, ...(clientId ? { clientId } : {}), ts: nextTs() };
+}
+
+/**
+ * Canal SSE-ONLY: entrega local + `pg_notify` (outros pods), SEM webhooks. Para sinais
+ * que são só do realtime — ex.: o evento coarse do fim de um import (#21), que não
+ * representa uma mutação única para assinantes externos. Nunca lança.
+ */
+export function publishInternal(event: Omit<CircleEvent, 'ts'>): CircleEvent {
+   const full = stamp(event);
+   deliver(full);
+   return full;
+}
+
+function deliver(full: CircleEvent): void {
    fanOutLocal(full);
    if (notifyEnabled()) {
       // fire-and-forget: usa o pool do drizzle (import preguiçoso), best-effort.
@@ -331,6 +399,17 @@ export function publish(event: Omit<CircleEvent, 'ts'>): void {
          }
       })();
    }
+}
+
+/**
+ * Publica um evento. Entrega local síncrona (clientes do próprio pod) + `pg_notify`
+ * best-effort (outros pods) + webhooks de saída. Carimba o `ts` (e o `clientId` da
+ * request) internamente e NUNCA lança — um subscriber ou o DB indisponível não podem
+ * derrubar a mutação que originou o evento.
+ */
+export function publish(event: Omit<CircleEvent, 'ts'>): void {
+   const full = stamp(event);
+   deliver(full);
    dispatchWebhooks(full);
 }
 
@@ -355,7 +434,8 @@ function dispatchWebhooks(event: CircleEvent): void {
    void (async () => {
       try {
          const { db } = await import('@/db');
-         const { onCircleEvent } = await import('./webhooks');
+         const { onCircleEvent, startWebhookSweepTimer } = await import('./webhooks');
+         startWebhookSweepTimer(db); // #55: pod que só publica (sem SSE) também varre
          await onCircleEvent(db, event);
       } catch {
          // Webhook é best-effort: nunca derruba a mutação que originou o evento.

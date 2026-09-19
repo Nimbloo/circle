@@ -9,6 +9,7 @@ import {
    jsonb,
    primaryKey,
    index,
+   uniqueIndex,
    unique,
    type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
@@ -312,6 +313,9 @@ export const cycle = pgTable(
    },
    (t) => [
       index('idx_cycle_team').on(t.teamId),
+      uniqueIndex('cycle_team_current_unique')
+         .on(t.teamId)
+         .where(sql`${t.status} = 'current'`),
       // Nº de cycle é único por time — barra colisão sob concorrência (dois inserts
       // computando max(number)+1 ao mesmo tempo). O 2º insert falha em vez de duplicar.
       unique('cycle_team_id_number_unique').on(t.teamId, t.number),
@@ -354,12 +358,13 @@ export const issue = pgTable(
       createdById: varchar('created_by_id', { length: 36 }).references(() => appUser.id),
       projectId: varchar('project_id', { length: 36 }).references(() => project.id),
       cycleId: varchar('cycle_id', { length: 36 }).references(() => cycle.id),
-      rank: varchar('rank', { length: 64 }).notNull(), // lexorank
+      rank: text('rank').notNull(), // lexorank
       dueDate: date('due_date'),
       estimate: integer('estimate'), // pontos de estimativa (nullable = sem estimativa)
       // Milestone estruturada (paridade Linear): FK p/ project_milestone. Substitui o
       // texto livre issue_content.milestone. NULL = sem milestone.
       milestoneId: varchar('milestone_id', { length: 36 }).references(
+         // eslint-disable-next-line @typescript-eslint/no-use-before-define
          (): AnyPgColumn => projectMilestone.id,
          { onDelete: 'set null' }
       ),
@@ -852,7 +857,7 @@ export const review = pgTable(
       // Guia de review gerado a partir do diff: JSON { sections, generatedAt, model }.
       guide: text('guide'),
    },
-   (t) => [index('idx_review_status').on(t.status)]
+   (t) => [index('idx_review_status').on(t.status), index('idx_review_created_at').on(t.createdAt)]
 );
 
 /**
@@ -1090,6 +1095,41 @@ export const issueImport = pgTable(
       primaryKey({ columns: [t.source, t.externalId] }),
       index('idx_issue_import_issue').on(t.issueId),
    ]
+);
+
+// ── Import em background (#10, frente F4) ──
+/**
+ * Job de import de CSV: `POST /import/commit` grava a linha e devolve o id na hora; o
+ * processamento roda no servidor atualizando `processed`/contadores, e o dono consulta em
+ * `GET /import/jobs/:id`. `updated_at` é o batimento: job `running` sem batimento há
+ * minutos foi interrompido (pod reiniciou) e é reportado como falho.
+ */
+export const importJob = pgTable(
+   'import_job',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      ownerId: varchar('owner_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      teamId: varchar('team_id', { length: 16 })
+         .notNull()
+         .references(() => team.id, { onDelete: 'cascade' }),
+      source: varchar('source', { length: 32 }).notNull(), // csv|linear|jira
+      status: varchar('status', { length: 16 }).notNull(), // queued|running|succeeded|failed
+      total: integer('total').notNull().default(0),
+      processed: integer('processed').notNull().default(0),
+      created: integer('created').notNull().default(0),
+      updated: integer('updated').notNull().default(0),
+      skipped: integer('skipped').notNull().default(0),
+      /** Erros por linha `{ row, message }[]` (limitado), sem abortar o lote. */
+      errors: jsonb('errors').notNull().default([]),
+      /** Falha do job inteiro (não de uma linha). */
+      error: text('error'),
+      createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+      updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+      finishedAt: timestamp('finished_at', { withTimezone: true }),
+   },
+   (t) => [index('idx_import_job_owner').on(t.ownerId, t.createdAt)]
 );
 
 // ── Roadmap: dependências entre projetos e histórico de progresso (#102) ──

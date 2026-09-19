@@ -2,7 +2,7 @@
 
 import './setup-dom';
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RoadmapDto } from '@/lib/client';
 import Roadmap from '@/components/common/roadmap/roadmap';
@@ -253,6 +253,39 @@ describe('Gráfico de progresso no tempo (#102)', () => {
       expect(xs[2]).toBe(100);
    });
 
+   it('pontos são uma parada de Tab só; setas, Home e End movem o foco (Pl#22)', () => {
+      render(
+         <ProjectSnapshotChart
+            points={[
+               { date: '2026-03-01', scope: 10, started: 2, completed: 1 },
+               { date: '2026-03-02', scope: 10, started: 3, completed: 4 },
+               { date: '2026-03-03', scope: 12, started: 1, completed: 8 },
+            ]}
+         />
+      );
+      const point = (day: string) => screen.getByTestId(`snapshot-point-2026-03-0${day}`);
+
+      // Roving tabindex: só o último ponto (o mais recente) entra no Tab.
+      expect(point('1').tabIndex).toBe(-1);
+      expect(point('2').tabIndex).toBe(-1);
+      expect(point('3').tabIndex).toBe(0);
+
+      act(() => point('3').focus());
+      expect(screen.getByRole('tooltip').textContent).toContain('Mar 3');
+
+      fireEvent.keyDown(point('3'), { key: 'ArrowLeft' });
+      expect(document.activeElement).toBe(point('2'));
+      expect(point('2').tabIndex).toBe(0);
+      expect(screen.getByRole('tooltip').textContent).toContain('Mar 2');
+
+      fireEvent.keyDown(point('2'), { key: 'Home' });
+      expect(document.activeElement).toBe(point('1'));
+      fireEvent.keyDown(point('1'), { key: 'ArrowLeft' });
+      expect(document.activeElement).toBe(point('1'));
+      fireEvent.keyDown(point('1'), { key: 'End' });
+      expect(document.activeElement).toBe(point('3'));
+   });
+
    it('com menos de 2 pontos não inventa tendência', () => {
       render(
          <ProjectSnapshotChart
@@ -261,5 +294,47 @@ describe('Gráfico de progresso no tempo (#102)', () => {
       );
       expect(screen.getByTestId('snapshot-chart-empty')).toBeTruthy();
       expect(screen.queryByTestId('snapshot-chart')).toBeNull();
+   });
+});
+
+describe('Roadmap — recarga ao vivo e erro (#40)', () => {
+   it('evento de projeto (dependência/marco) recarrega com debounce, uma vez por rajada', async () => {
+      const { PROJECT_CHANGED_EVENT } = await import('@/lib/use-live-sync');
+      apiMocks.roadmap.mockResolvedValue(roadmapDto());
+      render(<Roadmap />);
+      await waitFor(() => expect(apiMocks.roadmap).toHaveBeenCalledTimes(1));
+
+      for (let i = 0; i < 5; i++)
+         window.dispatchEvent(
+            new CustomEvent(PROJECT_CHANGED_EVENT, { detail: { id: 'p-mother' } })
+         );
+      await waitFor(() => expect(apiMocks.roadmap).toHaveBeenCalledTimes(2));
+      await new Promise((r) => setTimeout(r, 500));
+      expect(apiMocks.roadmap).toHaveBeenCalledTimes(2);
+   });
+
+   it('resposta velha não sobrescreve a mais nova (sequência)', async () => {
+      const { INITIATIVE_CHANGED_EVENT } = await import('@/lib/use-live-sync');
+      let resolveFirst!: (d: RoadmapDto) => void;
+      apiMocks.roadmap
+         .mockImplementationOnce(() => new Promise<RoadmapDto>((r) => (resolveFirst = r)))
+         .mockResolvedValueOnce(roadmapDto());
+      render(<Roadmap />);
+      window.dispatchEvent(new CustomEvent(INITIATIVE_CHANGED_EVENT, { detail: { id: 'mother' } }));
+      await waitFor(() => expect(apiMocks.roadmap).toHaveBeenCalledTimes(2));
+      expect(await screen.findByText('Mother initiative')).toBeTruthy();
+
+      resolveFirst(roadmapDto({ groups: [] }));
+      await new Promise((r) => setTimeout(r, 50));
+      expect(screen.getByText('Mother initiative')).toBeTruthy();
+   });
+
+   it('1ª carga falha → ErrorState com retry (não o vazio)', async () => {
+      apiMocks.roadmap.mockRejectedValueOnce(new Error('rede')).mockResolvedValueOnce(roadmapDto());
+      render(<Roadmap />);
+
+      expect(await screen.findByText('Could not load the roadmap')).toBeTruthy();
+      screen.getByRole('button', { name: 'Try again' }).click();
+      expect(await screen.findByText('Mother initiative')).toBeTruthy();
    });
 });

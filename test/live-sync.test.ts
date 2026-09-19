@@ -5,6 +5,7 @@ import { renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const api = vi.hoisted(() => ({
+   issues: { get: vi.fn() },
    projects: { get: vi.fn() },
    initiatives: { get: vi.fn() },
    cycles: { get: vi.fn() },
@@ -14,7 +15,17 @@ const api = vi.hoisted(() => ({
    labels: { list: vi.fn() },
    me: vi.fn(),
 }));
-vi.mock('@/lib/client', () => ({ api }));
+vi.mock('@/lib/client', () => {
+   class ApiError extends Error {
+      constructor(
+         public status: number,
+         message: string
+      ) {
+         super(message);
+      }
+   }
+   return { api, ApiError };
+});
 
 /** EventSource falso: o teste controla abertura, queda e mensagens. */
 class FakeEventSource {
@@ -64,15 +75,15 @@ function setup() {
    return es;
 }
 
-/** Deixa as promessas dos fetches direcionados resolverem. */
-const flush = () => vi.advanceTimersByTimeAsync(0);
+/** Fecha a janela de coalescência (200 ms) e deixa os fetches direcionados resolverem. */
+const flush = () => vi.advanceTimersByTimeAsync(250);
 
 beforeEach(() => {
    vi.useFakeTimers();
    vi.clearAllMocks();
    FakeEventSource.instances = [];
    vi.stubGlobal('EventSource', FakeEventSource);
-   useIssuesStore.setState({ hydrate: hydrateIssues, issues: [] });
+   useIssuesStore.setState({ hydrate: hydrateIssues, resync: hydrateIssues, issues: [] });
    useWorkspaceStore.setState({
       hydrate: hydrateWorkspace,
       me: { id: 'me' } as never,
@@ -210,7 +221,10 @@ describe('useLiveSync — eventos de janela com id (#19, #28)', () => {
       es.emit({ entity: 'comment', action: 'created', id: 'cm1', issueId: 'i1' });
       es.emit({ entity: 'comment', action: 'created', id: 'cm2' });
       window.removeEventListener(ISSUE_CHANGED_EVENT, on);
-      expect(seen).toEqual([{ id: 'i1' }, { id: undefined }]);
+      expect(seen).toEqual([
+         { id: 'i1', scope: 'activity' },
+         { id: undefined, scope: 'activity' },
+      ]);
    });
 
    it('project com id dispara PROJECT_CHANGED com o id', async () => {
@@ -257,7 +271,7 @@ describe('useLiveSync — resync e assinatura (integração C1)', () => {
    it('evento resync do servidor (LISTEN reconectado) re-hidrata tudo', async () => {
       const es = setup();
       es.emit({ entity: 'resync', action: 'updated' });
-      await vi.advanceTimersByTimeAsync(3000);
+      await vi.advanceTimersByTimeAsync(7000);
       expect(hydrateIssues).toHaveBeenCalledTimes(1);
       expect(hydrateWorkspace).toHaveBeenCalledTimes(1);
       expect(hydrateNotifications).toHaveBeenCalledTimes(1);
@@ -282,5 +296,152 @@ describe('useLiveSync — resync e assinatura (integração C1)', () => {
       await flush();
       expect(api.me).not.toHaveBeenCalled();
       expect(api.members.get).not.toHaveBeenCalled();
+   });
+});
+
+describe('useLiveSync — fetch direcionado coalescido e sequenciado (#11)', () => {
+   const issueDto = (id: string, title = id) => ({ id, title });
+   let applyDto: ReturnType<typeof vi.fn>;
+   beforeEach(() => {
+      applyDto = vi.fn();
+      useIssuesStore.setState({ applyDto, removeRemote: vi.fn() });
+   });
+
+   it('vários eventos da mesma issue na janela viram UM GET', async () => {
+      api.issues.get.mockResolvedValue(issueDto('i1'));
+      const es = setup();
+      for (let k = 0; k < 5; k++) es.emit({ entity: 'issue', action: 'updated', id: 'i1' });
+      await flush();
+      expect(api.issues.get).toHaveBeenCalledTimes(1);
+      expect(applyDto).toHaveBeenCalledTimes(1);
+   });
+
+   it('rajada acima do limite vira UMA sincronização, sem GET por issue', async () => {
+      const es = setup();
+      for (let k = 0; k < 30; k++) es.emit({ entity: 'issue', action: 'updated', id: `i${k}` });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(api.issues.get).not.toHaveBeenCalled();
+      expect(hydrateIssues).toHaveBeenCalledTimes(1);
+   });
+
+   it('resposta de GET mais velho que chega depois é descartada', async () => {
+      let resolveOld!: (v: unknown) => void;
+      api.issues.get
+         .mockReturnValueOnce(new Promise((r) => (resolveOld = r)))
+         .mockResolvedValueOnce(issueDto('i1', 'novo'));
+      const es = setup();
+      es.emit({ entity: 'issue', action: 'updated', id: 'i1' });
+      await flush();
+      es.emit({ entity: 'issue', action: 'updated', id: 'i1' });
+      await flush();
+      resolveOld(issueDto('i1', 'velho'));
+      await flush();
+      expect(applyDto).toHaveBeenCalledTimes(1);
+      expect(applyDto).toHaveBeenCalledWith(issueDto('i1', 'novo'));
+   });
+
+   it('404 no GET direcionado remove a issue do store (If#23)', async () => {
+      const { ApiError } = await import('@/lib/client');
+      const removeRemote = vi.fn();
+      useIssuesStore.setState({ removeRemote });
+      api.issues.get.mockRejectedValueOnce(new ApiError(404, 'x'));
+      const es = setup();
+      es.emit({ entity: 'issue', action: 'updated', id: 'i9' });
+      await flush();
+      expect(api.issues.get).toHaveBeenCalledTimes(1);
+      expect(removeRemote).toHaveBeenCalledWith('i9');
+      expect(hydrateIssues).not.toHaveBeenCalled();
+   });
+
+   it('eco da própria aba não refaz o GET e marca o evento de janela como own (If#16)', async () => {
+      const { getClientId, markOwnMutation } = await import('@/lib/client-id');
+      markOwnMutation('issue', 'i1');
+      api.issues.get.mockResolvedValue(issueDto('i1'));
+      const seen: unknown[] = [];
+      const on = (e: Event) => seen.push((e as CustomEvent).detail);
+      window.addEventListener(ISSUE_CHANGED_EVENT, on);
+      const es = setup();
+      es.emit({ entity: 'issue', action: 'updated', id: 'i1', clientId: getClientId() });
+      es.emit({ entity: 'issue', action: 'updated', id: 'i1', clientId: 'outra-aba-0001' });
+      await flush();
+      window.removeEventListener(ISSUE_CHANGED_EVENT, on);
+      // O da outra aba busca; o eco próprio não.
+      expect(api.issues.get).toHaveBeenCalledTimes(1);
+      expect(seen[0]).toEqual({ id: 'i1', own: true });
+      expect(seen[1]).toEqual({ id: 'i1' });
+   });
+
+   it('mudança só de conteúdo (descrição) não busca o DTO da lista (#18)', async () => {
+      const seen: unknown[] = [];
+      const on = (e: Event) => seen.push((e as CustomEvent).detail);
+      window.addEventListener(ISSUE_CHANGED_EVENT, on);
+      const es = setup();
+      es.emit({ entity: 'issue', action: 'updated', id: 'i1', scope: 'content' });
+      await flush();
+      window.removeEventListener(ISSUE_CHANGED_EVENT, on);
+      expect(api.issues.get).not.toHaveBeenCalled();
+      expect(seen).toEqual([{ id: 'i1' }]);
+   });
+
+   it('projeto buscado 1 vez mesmo com N eventos (rollups de bulk)', async () => {
+      const applyProject = vi.fn();
+      useWorkspaceStore.setState({ applyProject });
+      api.projects.get.mockResolvedValue({ id: 'p1' });
+      const es = setup();
+      for (let k = 0; k < 10; k++) es.emit({ entity: 'project', action: 'updated', id: 'p1' });
+      await flush();
+      expect(api.projects.get).toHaveBeenCalledTimes(1);
+      expect(applyProject).toHaveBeenCalledTimes(1);
+   });
+});
+
+describe('useLiveSync — resync avisa as telas e espalha a carga', () => {
+   it('reconexão dispara os eventos de janela (telas com cache local recarregam)', async () => {
+      const seen: string[] = [];
+      const names = [ISSUE_CHANGED_EVENT, PROJECT_CHANGED_EVENT, DOCUMENT_CHANGED_EVENT];
+      const on = (e: Event) => seen.push(e.type);
+      for (const n of names) window.addEventListener(n, on);
+      const es = setup();
+      es.drop();
+      es.open();
+      await vi.advanceTimersByTimeAsync(3000);
+      for (const n of names) window.removeEventListener(n, on);
+      expect(seen.sort()).toEqual([...names].sort());
+   });
+
+   it('resync do pod usa jitter maior (todos os clientes do pod recebem juntos)', async () => {
+      const random = vi.spyOn(Math, 'random').mockReturnValue(0.99);
+      const es = setup();
+      es.emit({ entity: 'resync', action: 'updated' });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(hydrateWorkspace).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(hydrateWorkspace).toHaveBeenCalledTimes(1);
+      random.mockRestore();
+   });
+
+   it('automação vira evento de janela com o time', async () => {
+      const { AUTOMATION_CHANGED_EVENT } = await import('@/lib/use-live-sync');
+      const seen: unknown[] = [];
+      const on = (e: Event) => seen.push((e as CustomEvent).detail);
+      window.addEventListener(AUTOMATION_CHANGED_EVENT, on);
+      const es = setup();
+      es.emit({ entity: 'automation', action: 'updated', id: 'a1', teamId: 'ENG' });
+      window.removeEventListener(AUTOMATION_CHANGED_EVENT, on);
+      expect(seen).toEqual([{ id: 'a1', teamId: 'ENG' }]);
+   });
+
+   it('useLiveReload com ignoreOwn não recarrega no eco da própria aba', async () => {
+      const { useLiveReload } = await import('@/lib/use-live-sync');
+      const reload = vi.fn();
+      renderHook(() =>
+         useLiveReload(ISSUE_CHANGED_EVENT, { id: 'i1' }, reload, { ignoreOwn: true })
+      );
+      const fire = (detail: unknown) =>
+         window.dispatchEvent(new CustomEvent(ISSUE_CHANGED_EVENT, { detail }));
+      fire({ id: 'i1', own: true });
+      expect(reload).not.toHaveBeenCalled();
+      fire({ id: 'i1' });
+      expect(reload).toHaveBeenCalledTimes(1);
    });
 });

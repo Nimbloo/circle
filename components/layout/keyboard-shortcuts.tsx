@@ -4,11 +4,13 @@ import { useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useCreateIssueStore } from '@/store/create-issue-store';
 import { useSearchStore } from '@/store/search-store';
+import { hasOpenOverlay, isTypingTarget } from '@/lib/keyboard-guard';
 
 /**
  * Atalhos de teclado globais (paridade Linear). Sequências `g` + tecla para navegar,
  * teclas únicas para ações. Ignora quando o foco está em input/textarea/contenteditable
- * ou quando há modificador (⌘/Ctrl/Alt) — pra não colidir com atalhos do SO/⌘K.
+ * ou quando há modificador (⌘/Ctrl/Alt) — pra não colidir com atalhos do SO/⌘K — e com
+ * dialog/menu aberto.
  * Monta uma vez no layout do workspace; não renderiza nada.
  */
 export function KeyboardShortcuts() {
@@ -32,21 +34,10 @@ export function KeyboardShortcuts() {
          t: '/teams',
       };
 
-      const isTyping = (el: EventTarget | null): boolean => {
-         const n = el as HTMLElement | null;
-         if (!n) return false;
-         const tag = n.tagName;
-         return (
-            tag === 'INPUT' ||
-            tag === 'TEXTAREA' ||
-            tag === 'SELECT' ||
-            n.isContentEditable === true
-         );
-      };
-
       const onKey = (e: KeyboardEvent) => {
          if (e.metaKey || e.ctrlKey || e.altKey) return;
-         if (isTyping(e.target)) return;
+         // Digitando, ou com dialog/menu/popover aberto: o atalho é do overlay, não da página.
+         if (isTypingTarget(e.target) || hasOpenOverlay()) return;
          const key = e.key.toLowerCase();
 
          // Sequência `g` + destino.

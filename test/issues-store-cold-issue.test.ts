@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { status } from '@/data/status';
-import { labels } from '@/data/labels';
+import { status } from './helpers/catalog-fixture';
+import { labels } from './helpers/catalog-fixture';
 import { useIssuesStore } from '@/store/issues-store';
 
 const apiMocks = vi.hoisted(() => ({
@@ -58,14 +58,14 @@ describe('issues-store — mutação em issue fora do store', () => {
       useIssuesStore.setState({ issues: [] });
    });
 
-   it('updateIssue chama a API e faz upsert via applyRemote', async () => {
+   it('updateIssue chama a API e faz upsert com o DTO da resposta (sem GET, If#16)', async () => {
       apiMocks.update.mockResolvedValue(dto({ title: 'Renomeada' }));
       apiMocks.get.mockResolvedValue(dto({ title: 'Renomeada' }));
 
       await useIssuesStore.getState().updateIssue('cold-1', { title: 'Renomeada' });
 
       expect(apiMocks.update).toHaveBeenCalledWith('cold-1', { title: 'Renomeada' });
-      expect(apiMocks.get).toHaveBeenCalledWith('cold-1');
+      expect(apiMocks.get).not.toHaveBeenCalled();
       const issue = useIssuesStore.getState().getIssueById('cold-1');
       expect(issue?.title).toBe('Renomeada');
       expect(

@@ -31,10 +31,8 @@ export function LeadSelector({ lead, onLeadChange }: LeadSelectorProps) {
 
    const handleLeadChange = (userId: string) => {
       setOpen(false);
-
-      if (onLeadChange) {
-         onLeadChange(userId);
-      }
+      if (userId === value) return;
+      onLeadChange?.(userId);
    };
 
    return (

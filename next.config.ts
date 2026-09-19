@@ -40,7 +40,7 @@ const nextConfig: NextConfig = {
    env: { NEXT_PUBLIC_APP_VERSION: process.env.npm_package_version ?? 'dev' },
    // Tree-shake barrels grandes (ícones/UI/charts) — só o que é usado entra no chunk.
    experimental: {
-      optimizePackageImports: ['lucide-react', 'react-icons', 'recharts', '@radix-ui/react-icons'],
+      optimizePackageImports: ['lucide-react', 'recharts'],
    },
    async headers() {
       return [{ source: '/:path*', headers: SECURITY_HEADERS }];

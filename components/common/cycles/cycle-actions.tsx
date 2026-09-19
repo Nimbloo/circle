@@ -33,11 +33,11 @@ import {
    AlertDialogHeader,
    AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { api } from '@/lib/client';
+import { api, ApiError } from '@/lib/client';
 import { Cycle, CycleStatus, cycleStatusLabel } from '@/data/cycles';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 const STATUS_IDS: CycleStatus[] = ['planned', 'upcoming', 'current', 'completed'];
@@ -59,17 +59,19 @@ function EditCycleDialog({
    const [endDate, setEndDate] = useState(cycle.endDate);
    const [capacity, setCapacity] = useState(String(cycle.capacity));
 
-   // Ressincroniza o form com o cycle atual ao (re)abrir — o useState inicial só
-   // roda no mount, então sem isto reabrir após o apply mostraria valores stale.
+   // Semeia o form com o cycle atual SÓ na transição fechado→aberto (#38): um evento
+   // remoto que troca o objeto `cycle` com o diálogo aberto não apaga o que foi digitado.
+   const cycleRef = useRef(cycle);
+   cycleRef.current = cycle;
    useEffect(() => {
-      if (open) {
-         setName(cycle.name);
-         setStatus(cycle.status);
-         setStartDate(cycle.startDate);
-         setEndDate(cycle.endDate);
-         setCapacity(String(cycle.capacity));
-      }
-   }, [open, cycle]);
+      if (!open) return;
+      const c = cycleRef.current;
+      setName(c.name);
+      setStatus(c.status);
+      setStartDate(c.startDate);
+      setEndDate(c.endDate);
+      setCapacity(String(c.capacity));
+   }, [open]);
 
    const save = async () => {
       if (!name.trim() || busy) return;
@@ -89,8 +91,9 @@ function EditCycleDialog({
          applyCycle(dto);
          onOpenChange(false);
          toast.success('Cycle updated');
-      } catch {
-         toast.error('Could not update the cycle');
+      } catch (e) {
+         // 409 (outro ciclo em andamento, #35) traz a explicação do servidor.
+         toast.error(e instanceof ApiError ? e.message : 'Could not update the cycle');
       } finally {
          setBusy(false);
       }
@@ -102,7 +105,14 @@ function EditCycleDialog({
             <DialogHeader>
                <DialogTitle>Edit cycle</DialogTitle>
             </DialogHeader>
-            <div className="flex flex-col gap-3">
+            <form
+               id="edit-cycle-form"
+               className="flex flex-col gap-3"
+               onSubmit={(e) => {
+                  e.preventDefault();
+                  void save();
+               }}
+            >
                <div className="flex flex-col gap-1.5">
                   <Label htmlFor="edit-cycle-name">Name</Label>
                   <Input
@@ -158,9 +168,14 @@ function EditCycleDialog({
                      />
                   </div>
                </div>
-            </div>
+            </form>
             <DialogFooter>
-               <Button size="sm" onClick={() => void save()} disabled={busy || !name.trim()}>
+               <Button
+                  type="submit"
+                  form="edit-cycle-form"
+                  size="sm"
+                  disabled={busy || !name.trim()}
+               >
                   Save changes
                </Button>
             </DialogFooter>

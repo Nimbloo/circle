@@ -34,6 +34,8 @@ import { LeadSelector } from './lead-selector';
 import { StatusWithPercent } from './status-with-percent';
 import { DatePicker } from './date-picker';
 import { ProjectContextMenu } from './project-context-menu';
+import { parseDay } from '@/lib/project-dates';
+import { labelColor } from '@/components/common/palette';
 
 interface ProjectLineProps {
    project: Project;
@@ -109,7 +111,7 @@ export default function ProjectLine({ project, showTeam = false }: ProjectLinePr
                      >
                         <span
                            className="size-1.5 rounded-full"
-                           style={{ backgroundColor: label.color }}
+                           style={{ backgroundColor: labelColor(label.color) }}
                         />
                         {label.name}
                      </span>
@@ -145,7 +147,7 @@ export default function ProjectLine({ project, showTeam = false }: ProjectLinePr
             {displayProperties.targetDate && (
                <div className="hidden w-[92px] shrink-0 px-3 xl:block">
                   <DatePicker
-                     date={project.targetDate ? new Date(project.targetDate) : undefined}
+                     date={project.targetDate ? parseDay(project.targetDate) : undefined}
                      onDateChange={(date) =>
                         patchProject(
                            { targetDate: date ? format(date, 'yyyy-MM-dd') : null },

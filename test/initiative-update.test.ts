@@ -50,3 +50,35 @@ describe('initiative updates (paridade Linear)', () => {
       ).rejects.toThrow();
    });
 });
+
+describe('feeds de initiative com limite (Pl baixa)', () => {
+   it('updates e activity da initiative devolvem no máximo o limite do feed', async () => {
+      const { initiativeUpdate, initiativeActivity } = await import('@/db/schema');
+      const { listInitiativeActivity } = await import('@/lib/api/initiatives');
+      const db = await makeTestDb();
+      const fx = await seedWorkspaceFixture(db);
+      const rows = Array.from({ length: 105 }, (_, i) => ({
+         id: `u${i}`,
+         initiativeId: fx.initiativeId,
+         authorId: fx.ownerId,
+         health: 'on-track',
+         blocks: '[]',
+         createdAt: new Date(Date.UTC(2026, 0, 1, 0, i)),
+      }));
+      await db.insert(initiativeUpdate).values(rows);
+      await db.insert(initiativeActivity).values(
+         rows.map((r) => ({
+            id: r.id,
+            initiativeId: r.initiativeId,
+            userId: r.authorId,
+            text: 'changed status',
+            createdAt: r.createdAt,
+         }))
+      );
+
+      const feed = await listInitiativeUpdates(db, fx.initiativeId);
+      expect(feed).toHaveLength(100);
+      expect(feed[0].id).toBe('u104'); // mais recente primeiro
+      expect(await listInitiativeActivity(db, fx.initiativeId)).toHaveLength(100);
+   });
+});

@@ -11,6 +11,7 @@ import { useMemo } from 'react';
 import CycleLine, { CyclePlayIcon } from './cycle-line';
 import dynamic from 'next/dynamic';
 import { CycleProgressLegend } from './cycle-progress-legend';
+import { CycleBurnupEmpty } from './cycle-burnup-empty';
 
 /**
  * O gráfico carrega recharts (357 KB no bundle, medido com o analisador). Sob demanda,
@@ -100,7 +101,11 @@ export default function Cycles() {
                      {cycle.status === 'current' && (
                         <div className="-mt-4 mb-4 flex h-[216px] items-stretch gap-5 px-2.5 xl:pr-[60px]">
                            <div className="min-w-0 flex-1">
-                              <CycleBurnupChart cycle={cycle} height={216} />
+                              {cycle.burnup?.length ? (
+                                 <CycleBurnupChart cycle={cycle} height={216} />
+                              ) : (
+                                 <CycleBurnupEmpty height={216} />
+                              )}
                            </div>
                            <div className="hidden w-[300px] shrink-0 items-center xl:flex">
                               <CycleProgressLegend cycle={cycle} />

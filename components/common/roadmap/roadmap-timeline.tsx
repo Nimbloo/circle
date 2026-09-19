@@ -1,16 +1,16 @@
 'use client';
 
+import { useKeyboardReschedule } from '@/components/common/projects/use-keyboard-reschedule';
 import { CapacityRing } from '@/components/common/cycles/capacity-ring';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Project } from '@/data/projects';
 import type { RoadmapDependency, RoadmapMilestone } from '@/lib/client';
-import { isValidProjectDate, projectDateRangeLabel } from '@/lib/project-dates';
+import { isValidProjectDate, localTodayIso, projectDateRangeLabel } from '@/lib/project-dates';
 import {
    type DateRange,
    type RescheduleMode,
    daysFromPixels,
-   keyboardRescheduleDelta,
    rescheduleRange,
    sameRange,
 } from '@/lib/timeline-reschedule';
@@ -157,13 +157,14 @@ function RoadmapBar({
       if (commit && drag.moved && next && !sameRange(next, base)) onReschedule(project, next);
    };
 
-   const onKeyDown = (event: React.KeyboardEvent) => {
-      if (!reschedulable) return;
-      const delta = keyboardRescheduleDelta(event);
-      if (delta === null) return;
-      event.preventDefault();
-      onReschedule(project, rescheduleRange(base, 'move', delta));
-   };
+   // Teclado: rascunho + 1 commit (#39).
+   const keyboard = useKeyboardReschedule({
+      base,
+      enabled: reschedulable,
+      draftRef,
+      setDraft,
+      onCommit: (next) => onReschedule(project, next),
+   });
 
    const blockedLabel =
       blockedBy.length === 0
@@ -180,9 +181,11 @@ function RoadmapBar({
          onPointerCancel={(event) => endDrag(event, false)}
       >
          <button
+            ref={keyboard.ref}
             type="button"
             onPointerDown={beginDrag('move')}
-            onKeyDown={onKeyDown}
+            onKeyDown={keyboard.onKeyDown}
+            onBlur={keyboard.onBlur}
             aria-label={`${project.name}, ${rangeLabel}`}
             aria-describedby={reschedulable ? RESCHEDULE_HINT_ID : undefined}
             data-testid={`roadmap-bar-${project.id}`}
@@ -430,7 +433,7 @@ export default function RoadmapTimeline({
 
    // "Hoje" só no cliente (SSR safe) e centralizado no primeiro render.
    useEffect(() => {
-      const iso = new Date().toISOString().slice(0, 10);
+      const iso = localTodayIso();
       setTodayIso(iso);
       if (scrollRef.current) {
          const offset = offsetFor(iso, monthWidth);

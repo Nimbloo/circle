@@ -136,12 +136,16 @@ function CreateDialog({
 function Deliveries({ webhookId }: { webhookId: string }) {
    const [items, setItems] = useState<WebhookDeliveryDto[] | null>(null);
    const [busyId, setBusyId] = useState<string | null>(null);
+   const [failed, setFailed] = useState(false);
 
    const load = useCallback(() => {
+      setFailed(false);
+      setItems(null);
       api.webhooks
          .deliveries(webhookId)
          .then(setItems)
-         .catch(() => toast.error('Não foi possível carregar as entregas'));
+         // Sem isto a falha deixava o skeleton para sempre (Ad#26).
+         .catch(() => setFailed(true));
    }, [webhookId]);
 
    useEffect(load, [load]);
@@ -159,6 +163,15 @@ function Deliveries({ webhookId }: { webhookId: string }) {
       }
    };
 
+   if (failed)
+      return (
+         <div className="flex flex-col items-center gap-2 py-6 text-sm text-muted-foreground">
+            Não foi possível carregar as entregas.
+            <Button size="sm" variant="outline" onClick={load}>
+               Tentar novamente
+            </Button>
+         </div>
+      );
    if (!items) return <ListSkeleton rows={2} />;
    if (items.length === 0)
       return (
@@ -230,14 +243,21 @@ export default function WebhooksSettings() {
    };
 
    const remove = async (hook: WebhookDto) => {
-      const previous = hooks;
+      const index = hooks.findIndex((h) => h.id === hook.id);
       setHooks((list) => list.filter((h) => h.id !== hook.id));
       setRemoving(null);
       try {
          await api.webhooks.remove(hook.id);
          toast.success('Webhook excluído');
       } catch {
-         setHooks(previous);
+         // Rollback SÓ do item: restaurar a lista inteira desfazia o que mudou no meio
+         // (toggle/criação de outro webhook enquanto o DELETE estava em voo).
+         setHooks((list) => {
+            if (list.some((h) => h.id === hook.id)) return list;
+            const next = [...list];
+            next.splice(Math.max(0, Math.min(index, next.length)), 0, hook);
+            return next;
+         });
          toast.error('Não foi possível excluir o webhook');
       }
    };

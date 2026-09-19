@@ -126,11 +126,57 @@ export async function listMembers(db: Db, opts: ListMembersOptions = {}): Promis
    return dtos;
 }
 
-export async function getMember(db: Db, id: string): Promise<MemberDto | null> {
+/**
+ * Um membro. Com `scope` (Guest, #100) só os times visíveis entram no DTO — os de fora
+ * não vazam por `teamIds`/`teamCount` (Ad#27). `null` = sem restrição.
+ */
+export async function getMember(
+   db: Db,
+   id: string,
+   scope: string[] | null = null
+): Promise<MemberDto | null> {
    const rows = await db.select().from(appUser).where(eq(appUser.id, id)).limit(1);
    if (rows.length === 0) return null;
-   const memberships = await teamMemberships(db);
-   return toDto(rows[0], memberships.get(id) ?? []);
+   const predicates = [eq(teamMember.userId, id)];
+   if (scope !== null) {
+      if (scope.length === 0) return toDto(rows[0], []);
+      predicates.push(inArray(teamMember.teamId, scope));
+   }
+   const teams = await db
+      .select({ teamId: teamMember.teamId })
+      .from(teamMember)
+      .where(and(...predicates));
+   return toDto(
+      rows[0],
+      teams.map((t) => t.teamId)
+   );
+}
+
+/**
+ * Membros de UM time com o DTO completo (#7): as rotas de membros de time devolviam 6
+ * campos tipados como `MemberDto[]` e o store zerava `teamIds` de quem vinha na lista.
+ * `teamIds` traz TODOS os times do membro, não só este.
+ */
+export async function listTeamMemberDtos(db: Db, teamId: string): Promise<MemberDto[]> {
+   const ids = (
+      await db
+         .select({ id: teamMember.userId })
+         .from(teamMember)
+         .where(eq(teamMember.teamId, teamId))
+   ).map((r) => r.id);
+   if (ids.length === 0) return [];
+   const [users, rows] = await Promise.all([
+      db.select().from(appUser).where(inArray(appUser.id, ids)),
+      db
+         .select({ userId: teamMember.userId, teamId: teamMember.teamId })
+         .from(teamMember)
+         .where(inArray(teamMember.userId, ids)),
+   ]);
+   const map = new Map<string, string[]>();
+   for (const r of rows) map.set(r.userId, [...(map.get(r.userId) ?? []), r.teamId]);
+   return users
+      .map((u) => toDto(u, map.get(u.id) ?? []))
+      .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // Fonte única em data/users (módulo puro, compartilhado com o client);

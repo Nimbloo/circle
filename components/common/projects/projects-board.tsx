@@ -6,6 +6,7 @@ import { Project } from '@/data/projects';
 import { cn } from '@/lib/utils';
 import { useProjectsDisplayStore } from '@/store/projects-display-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { useIssuesStore } from '@/store/issues-store';
 import { format, parseISO } from 'date-fns';
 import { Calendar } from 'lucide-react';
 import Link from 'next/link';
@@ -15,6 +16,7 @@ import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { ProjectGroup } from './projects';
 import { ProjectContextMenu } from './project-context-menu';
+import { labelColor } from '@/components/common/palette';
 
 export const ProjectDragType = 'PROJECT';
 /** Instrução de DnD lida por leitores de tela (aria-describedby dos cards). */
@@ -81,7 +83,7 @@ function ProjectCard({ project }: { project: Project }) {
                      >
                         <span
                            className="size-1.5 rounded-full"
-                           style={{ backgroundColor: label.color }}
+                           style={{ backgroundColor: labelColor(label.color) }}
                         />
                         {label.name}
                      </span>
@@ -120,6 +122,16 @@ function ProjectCard({ project }: { project: Project }) {
    );
 }
 
+/**
+ * O servidor recusa (409) trocar o time de um projeto que tem issues de outro time;
+ * a coluna nem aceita o drop nesse caso (#43) — antes o card ia e voltava com erro.
+ */
+function hasIssuesOutsideTeam(projectId: string, teamId: string): boolean {
+   return useIssuesStore
+      .getState()
+      .issues.some((issue) => issue.project?.id === projectId && issue.teamId !== teamId);
+}
+
 function BoardColumn({
    group,
    onDropProject,
@@ -135,7 +147,11 @@ function BoardColumn({
       () => ({
          accept: ProjectDragType,
          canDrop: (item: Project) =>
-            status ? item.status.id !== status.id : teamId !== undefined && item.teamId !== teamId,
+            status
+               ? item.status.id !== status.id
+               : teamId !== undefined &&
+                 item.teamId !== teamId &&
+                 !hasIssuesOutsideTeam(item.id, teamId),
          drop: (item: Project) => onDropProject(item, group),
          collect: (monitor) => ({ isOver: monitor.isOver(), canDrop: monitor.canDrop() }),
       }),

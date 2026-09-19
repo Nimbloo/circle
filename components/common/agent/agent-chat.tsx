@@ -9,6 +9,7 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { useAgentChatStore, type AgentMessage } from '@/store/agent-chat-store';
 import { ArrowUp, Bot, CalendarClock, ListTodo, Sparkles, X } from 'lucide-react';
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 /** Prompts de exemplo — perguntas reais que o Agent responde consultando o workspace. */
 const agentExamples = [
@@ -35,49 +36,8 @@ const agentExamples = [
    },
 ];
 
-/** Ritmo da revelação: uma palavra (com o espaço seguinte) a cada 14 ms. */
-const MS_PER_WORD = 14;
-
-/**
- * Transmite a resposta na bolha palavra a palavra, em LOTE por frame (rAF): no máximo
- * um `set` no store por frame, com as palavras que "venceram" desde o anterior — em vez
- * de um `set` (e um re-render) por pedaço num setInterval.
- */
-function useStreamReply() {
-   const appendToMessage = useAgentChatStore((s) => s.appendToMessage);
-   const finishMessage = useAgentChatStore((s) => s.finishMessage);
-   const frameRef = useRef<number | null>(null);
-
-   useEffect(() => {
-      return () => {
-         if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
-      };
-   }, []);
-
-   return (chatId: string, messageId: string, reply: string) => {
-      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
-      const words = reply.match(/\S+\s*|\s+/g) ?? [];
-      const start = performance.now();
-      let index = 0;
-      const tick = (now: number) => {
-         const due = Math.min(words.length, Math.floor((now - start) / MS_PER_WORD) + 1);
-         if (due > index) {
-            appendToMessage(chatId, messageId, words.slice(index, due).join(''));
-            index = due;
-         }
-         if (index >= words.length) {
-            frameRef.current = null;
-            finishMessage(chatId, messageId);
-            return;
-         }
-         frameRef.current = requestAnimationFrame(tick);
-      };
-      frameRef.current = requestAnimationFrame(tick);
-   };
-}
-
 /** Aviso honesto: respostas são geradas por IA sobre dados reais e podem conter erros. */
-function DemoBadge() {
+function AiNotice() {
    return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
          <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-medium text-primary">
@@ -89,7 +49,7 @@ function DemoBadge() {
    );
 }
 
-/** Memoizada: durante o streaming só a mensagem que recebe texto re-renderiza. */
+/** Memoizada: a resposta chega inteira e só a bolha que mudou re-renderiza. */
 const AgentMessageBody = memo(function AgentMessageBody({
    content,
    streaming,
@@ -160,7 +120,7 @@ const ChatMessage = memo(function ChatMessage({ message }: { message: AgentMessa
          <span className="mt-1 inline-flex size-6 items-center justify-center rounded-full border bg-container shrink-0">
             <Bot className="size-3.5" />
          </span>
-         <div className="min-w-0 flex-1">
+         <div className={cn('min-w-0 flex-1', message.error && 'text-destructive')}>
             <AgentMessageBody content={message.content} streaming={message.streaming} />
          </div>
       </div>
@@ -225,22 +185,20 @@ function ChatComposer({
 
 /**
  * Página do Agent: pergunte qualquer coisa e obtenha uma resposta de IA REAL
- * (Bedrock/Claude via `api.agent.chat`) sobre os dados vivos do workspace. A resposta
- * é transmitida palavra a palavra na bolha. As conversas vivem num store client e
- * podem ser revisitadas pelo dropdown do header.
+ * (Bedrock/Claude via `api.agent.send`) sobre os dados vivos do workspace. A resposta
+ * aparece inteira quando chega. As conversas são persistidas e podem ser revisitadas
+ * pelo dropdown do header.
  */
 export default function AgentChat() {
    // Seletores estreitos: `find` devolve a referência guardada (estável entre updates de
    // outros chats); ações têm referência fixa.
    const activeChat = useAgentChatStore((s) => s.chats.find((chat) => chat.id === s.activeChatId));
    const activeChatId = useAgentChatStore((s) => s.activeChatId);
-   const sendMessage = useAgentChatStore((s) => s.sendMessage);
+   const resolveMessage = useAgentChatStore((s) => s.resolveMessage);
    const failMessage = useAgentChatStore((s) => s.failMessage);
    const hydrate = useAgentChatStore((s) => s.hydrate);
    const loadChat = useAgentChatStore((s) => s.loadChat);
    const rekeyChat = useAgentChatStore((s) => s.rekeyChat);
-   const stream = useStreamReply();
-   const [bannerDismissed, setBannerDismissed] = useState(false);
    const [examplesDismissed, setExamplesDismissed] = useState(false);
    const scrollRef = useRef<HTMLDivElement>(null);
    // Segue o fim só se o usuário já estava lá (não arranca quem rolou para ler acima).
@@ -265,20 +223,24 @@ export default function AgentChat() {
       void hydrate();
    }, [hydrate]);
 
-   // Ao abrir um chat ainda sem mensagens carregadas, busca do servidor.
+   // Ao abrir um chat persistido ainda não carregado, busca as mensagens do servidor.
+   const needsLoad =
+      !!activeChat?.persisted && !activeChat.loadState && activeChat.messages.length === 0;
    useEffect(() => {
-      if (activeChat && activeChat.messages.length === 0) void loadChat(activeChat.id);
-   }, [activeChat, loadChat]);
+      if (needsLoad && activeChatId) void loadChat(activeChatId);
+   }, [needsLoad, activeChatId, loadChat]);
 
    const handleSend = async (input: string) => {
       if (isStreaming) return;
-      const wasNew = activeChatId === null;
-      const { chatId, assistantMessageId } = sendMessage(input);
+      // Chat ainda não gravado (novo, ou cuja 1ª resposta falhou): o servidor cria.
+      const persisted = activeChat?.persisted ?? false;
+      // Ação que devolve os ids criados: lida no handler, não assinada no render.
+      const { chatId, assistantMessageId } = useAgentChatStore.getState().sendMessage(input);
       try {
          // Persiste no servidor (cria o chat se for novo) e devolve a resposta.
-         const res = await api.agent.send(wasNew ? null : chatId, input);
-         if (wasNew) rekeyChat(chatId, res.chatId, res.title);
-         stream(res.chatId, assistantMessageId, res.reply);
+         const res = await api.agent.send(persisted ? chatId : null, input);
+         if (!persisted) rekeyChat(chatId, res.chatId, res.title);
+         resolveMessage(res.chatId, assistantMessageId, res.reply);
       } catch {
          failMessage(
             chatId,
@@ -293,19 +255,8 @@ export default function AgentChat() {
       return (
          <div className="w-full h-full flex flex-col items-center overflow-y-auto">
             <div className="w-full flex justify-center border-b bg-container px-4 py-2">
-               <DemoBadge />
+               <AiNotice />
             </div>
-            {!bannerDismissed && (
-               <div className="mt-4 flex items-center gap-3 rounded-full border bg-container shadow-xs px-4 py-1.5 text-sm">
-                  <span>Agent is now your default view</span>
-                  <button
-                     onClick={() => setBannerDismissed(true)}
-                     className="font-medium rounded-full border px-2.5 py-0.5 hover:bg-accent transition-colors"
-                  >
-                     Keep
-                  </button>
-               </div>
-            )}
 
             <div className="flex-1 w-full max-w-2xl px-6 flex flex-col justify-center pb-24">
                <div className="flex justify-center mb-8 text-muted-foreground/30">
@@ -354,7 +305,7 @@ export default function AgentChat() {
    return (
       <div className="w-full h-full flex flex-col overflow-hidden">
          <div className="shrink-0 border-b bg-container px-4 py-2">
-            <DemoBadge />
+            <AiNotice />
          </div>
          <div
             ref={scrollRef}
@@ -366,6 +317,21 @@ export default function AgentChat() {
             className="flex-1 min-h-0 overflow-y-auto"
          >
             <div className="max-w-2xl mx-auto px-6 py-8 flex flex-col gap-6">
+               {activeChat.messages.length === 0 && activeChat.loadState === 'loading' && (
+                  <div className="flex flex-col gap-3" aria-busy="true">
+                     <span className="sr-only">Carregando conversa…</span>
+                     <Skeleton className="h-9 w-2/3 self-end rounded-2xl" />
+                     <Skeleton className="h-16 w-full" />
+                  </div>
+               )}
+               {activeChat.messages.length === 0 && activeChat.loadState === 'error' && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                     <span>Não foi possível carregar a conversa.</span>
+                     <Button variant="outline" size="sm" onClick={() => loadChat(activeChat.id)}>
+                        Tentar de novo
+                     </Button>
+                  </div>
+               )}
                {activeChat.messages.map((message) => (
                   <ChatMessage key={message.id} message={message} />
                ))}

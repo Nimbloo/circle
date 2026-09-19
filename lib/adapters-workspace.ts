@@ -1,7 +1,6 @@
 /** Adapters das entidades de referência: API DTO -> tipos ricos do frontend. */
 import { Cuboid } from 'lucide-react';
-import { status as statusCatalog, Status } from '@/data/status';
-import { priorities as priorityCatalog, Priority } from '@/data/priorities';
+import { adaptPriority, adaptStatus } from '@/lib/adapters';
 import { User } from '@/data/users';
 import { Health, Project } from '@/data/projects';
 import { Team } from '@/data/teams';
@@ -14,9 +13,6 @@ import type { MemberDto } from '@/lib/api/members';
 import type { CycleDto } from '@/lib/api/cycles';
 import type { InitiativeDto } from '@/lib/api/initiatives';
 import type { ViewDto } from '@/lib/api/views';
-
-const statusById = new Map(statusCatalog.map((s) => [s.id, s]));
-const priorityById = new Map(priorityCatalog.map((p) => [p.id, p]));
 
 /**
  * Owner sintético quando o ownerId não está no mapa de members (ex.: membro removido).
@@ -36,26 +32,8 @@ function fallbackUser(id: string): User {
    };
 }
 
-function toStatus(s: { id: string; name: string; color: string; category: string }): Status {
-   return (
-      statusById.get(s.id) ?? {
-         id: s.id,
-         name: s.name,
-         color: s.color,
-         category: s.category as Status['category'],
-         icon: Cuboid,
-      }
-   );
-}
-function toPriority(p: { id: string; name: string }): Priority {
-   return (
-      priorityById.get(p.id) ?? {
-         id: p.id,
-         name: p.name,
-         icon: Cuboid as unknown as Priority['icon'],
-      }
-   );
-}
+const toStatus = adaptStatus;
+const toPriority = adaptPriority;
 function toHealth(h: {
    id: string;
    name: string;
