@@ -19,6 +19,7 @@ import { GroupIssues, IssueGroupDescriptor } from './group-issues';
 import { VirtualIssueList } from './virtual-issue-list';
 import { CustomDragLayer } from './issue-grid';
 import { BulkActionsBar } from './bulk-actions-bar';
+import { IssueContextMenuHost } from './issue-context-menu-host';
 
 interface GroupedIssuesViewProps {
    /** Issues to display (after the filter bar has been applied). */
@@ -435,17 +436,19 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
             <BulkActionsBar />
             <div className="h-full flex flex-col">
                <div className="flex-1 min-h-0 overflow-x-auto">
-                  <div className="flex h-full min-w-max gap-0 px-1">
-                     {boardGroups.map((entry) => (
-                        <GroupIssues
-                           key={entry.group.id}
-                           group={entry.group}
-                           issues={entry.issues}
-                           count={entry.issues.length}
-                        />
-                     ))}
-                     {hiddenGroups.length > 0 && <HiddenColumns entries={hiddenGroups} />}
-                  </div>
+                  <IssueContextMenuHost>
+                     <div className="flex h-full min-w-max gap-0 px-1">
+                        {boardGroups.map((entry) => (
+                           <GroupIssues
+                              key={entry.group.id}
+                              group={entry.group}
+                              issues={entry.issues}
+                              count={entry.issues.length}
+                           />
+                        ))}
+                        {hiddenGroups.length > 0 && <HiddenColumns entries={hiddenGroups} />}
+                     </div>
+                  </IssueContextMenuHost>
                </div>
                {showFooter && (
                   <div className="shrink-0 border-t bg-container">
@@ -470,7 +473,9 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
             <div className="h-full flex flex-col min-h-0">
                {/* Lista VIRTUALIZADA: só as linhas visíveis vão pro DOM (fluido a 1000+). */}
                <div className="flex-1 min-h-0">
-                  <VirtualIssueList entries={listGroups} />
+                  <IssueContextMenuHost>
+                     <VirtualIssueList entries={listGroups} />
+                  </IssueContextMenuHost>
                </div>
                {showFooter && (
                   <div className="shrink-0 border-t bg-container">

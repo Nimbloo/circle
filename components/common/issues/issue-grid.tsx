@@ -19,6 +19,7 @@ import { ParentIssueChip } from './parent-issue-chip';
 import { SlaBadge } from './sla-badge';
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { IssueContextMenu } from './issue-context-menu';
+import { useInIssueMenuHost } from './issue-context-menu-host';
 import type { IssueGroupContext } from './group-issues';
 import { IssueDragType, useIssueDropTarget } from './use-issue-drop-target';
 
@@ -95,6 +96,7 @@ function IssueGridComponent({ issue, getGroup, layout = true }: IssueGridProps) 
    const ref = useRef<HTMLDivElement>(null);
    const { orgId } = useParams<{ orgId: string }>();
    const displayProperties = useDisplaySetting('displayProperties');
+   const inMenuHost = useInIssueMenuHost();
 
    // Set up drag functionality.
    // Deps [issue]: sem elas o item arrastado ficava congelado na 1ª versão da issue.
@@ -124,75 +126,78 @@ function IssueGridComponent({ issue, getGroup, layout = true }: IssueGridProps) 
    // Sem animação de layout (coluna virtualizada): div simples, sem o runtime do motion.
    const Card = layout ? motion.div : 'div';
 
+   const card = (
+      <Card
+         ref={ref}
+         data-issue-id={issue.id}
+         className="w-full cursor-default rounded-lg bg-card p-2 shadow-[var(--card-shadow)]"
+         {...(layout && { layoutId: `issue-grid-${issue.identifier}` })}
+         style={{
+            opacity: isDragging ? 0.5 : 1,
+            cursor: isDragging ? 'grabbing' : 'default',
+         }}
+      >
+         {/* Bloco superior: conteúdo à esquerda e assignee fixo no canto. */}
+         <div className="relative mb-2.5 h-[37px]">
+            <div className="flex h-[37px] flex-col pl-1 pr-[34px]">
+               {displayProperties.id ? (
+                  <span className="text-xs font-medium tabular-nums text-muted-foreground">
+                     {issue.identifier}
+                  </span>
+               ) : (
+                  <span />
+               )}
+               <div className="mt-1.5 flex h-4 items-center gap-1.5">
+                  {displayProperties.status && (
+                     <StatusSelector compact status={issue.status} issueId={issue.id} />
+                  )}
+                  <Link
+                     href={`/${orgId ?? 'nimbloo'}/issue/${issue.identifier}`}
+                     className="min-w-0"
+                  >
+                     <h3 className="line-clamp-2 text-[13px] font-medium leading-4">
+                        {issue.parentIdentifier && (
+                           <ParentIssueChip identifier={issue.parentIdentifier} />
+                        )}
+                        {issue.title}
+                     </h3>
+                  </Link>
+               </div>
+            </div>
+            {displayProperties.assignee && (
+               <div className="absolute right-0 top-0">
+                  <AssigneeUser compact users={issue.assignees} issueId={issue.id} />
+               </div>
+            )}
+         </div>
+         {/* Propriedades */}
+         <div className="flex min-h-6 flex-wrap items-center gap-1">
+            {displayProperties.priority && (
+               <PrioritySelector compact priority={issue.priority} issueId={issue.id} />
+            )}
+            {displayProperties.labels && <LabelBadge label={issue.labels} />}
+            {displayProperties.project && issue.project && <ProjectBadge project={issue.project} />}
+            <SlaBadge issue={issue} />
+         </div>
+         {/* Rodapé */}
+         <div className="mt-1.5 flex min-h-6 items-center justify-between gap-2">
+            {displayProperties.created ? (
+               <span className="text-xs tabular-nums text-muted-foreground">
+                  Created {format(new Date(issue.createdAt), 'MMM d')}
+               </span>
+            ) : (
+               <span />
+            )}
+            <SubIssueProgress count={issue.subIssueCount} done={issue.subIssueDoneCount} />
+         </div>
+      </Card>
+   );
+
+   // No board o menu de contexto é um só (R7); card avulso monta o seu.
+   if (inMenuHost) return card;
    return (
       <ContextMenu>
-         <ContextMenuTrigger asChild>
-            <Card
-               ref={ref}
-               className="w-full cursor-default rounded-lg bg-card p-2 shadow-[var(--card-shadow)]"
-               {...(layout && { layoutId: `issue-grid-${issue.identifier}` })}
-               style={{
-                  opacity: isDragging ? 0.5 : 1,
-                  cursor: isDragging ? 'grabbing' : 'default',
-               }}
-            >
-               {/* Bloco superior: conteúdo à esquerda e assignee fixo no canto. */}
-               <div className="relative mb-2.5 h-[37px]">
-                  <div className="flex h-[37px] flex-col pl-1 pr-[34px]">
-                     {displayProperties.id ? (
-                        <span className="text-xs font-medium tabular-nums text-muted-foreground">
-                           {issue.identifier}
-                        </span>
-                     ) : (
-                        <span />
-                     )}
-                     <div className="mt-1.5 flex h-4 items-center gap-1.5">
-                        {displayProperties.status && (
-                           <StatusSelector compact status={issue.status} issueId={issue.id} />
-                        )}
-                        <Link
-                           href={`/${orgId ?? 'nimbloo'}/issue/${issue.identifier}`}
-                           className="min-w-0"
-                        >
-                           <h3 className="line-clamp-2 text-[13px] font-medium leading-4">
-                              {issue.parentIdentifier && (
-                                 <ParentIssueChip identifier={issue.parentIdentifier} />
-                              )}
-                              {issue.title}
-                           </h3>
-                        </Link>
-                     </div>
-                  </div>
-                  {displayProperties.assignee && (
-                     <div className="absolute right-0 top-0">
-                        <AssigneeUser compact users={issue.assignees} issueId={issue.id} />
-                     </div>
-                  )}
-               </div>
-               {/* Propriedades */}
-               <div className="flex min-h-6 flex-wrap items-center gap-1">
-                  {displayProperties.priority && (
-                     <PrioritySelector compact priority={issue.priority} issueId={issue.id} />
-                  )}
-                  {displayProperties.labels && <LabelBadge label={issue.labels} />}
-                  {displayProperties.project && issue.project && (
-                     <ProjectBadge project={issue.project} />
-                  )}
-                  <SlaBadge issue={issue} />
-               </div>
-               {/* Rodapé */}
-               <div className="mt-1.5 flex min-h-6 items-center justify-between gap-2">
-                  {displayProperties.created ? (
-                     <span className="text-xs tabular-nums text-muted-foreground">
-                        Created {format(new Date(issue.createdAt), 'MMM d')}
-                     </span>
-                  ) : (
-                     <span />
-                  )}
-                  <SubIssueProgress count={issue.subIssueCount} done={issue.subIssueDoneCount} />
-               </div>
-            </Card>
-         </ContextMenuTrigger>
+         <ContextMenuTrigger asChild>{card}</ContextMenuTrigger>
          <IssueContextMenu issueId={issue.id} />
       </ContextMenu>
    );

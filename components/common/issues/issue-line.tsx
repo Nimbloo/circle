@@ -33,6 +33,7 @@ import { getEmptyImage } from 'react-dnd-html5-backend';
 
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { IssueContextMenu } from './issue-context-menu';
+import { useInIssueMenuHost } from './issue-context-menu-host';
 
 interface IssueLineProps {
    issue: Issue;
@@ -78,6 +79,7 @@ function IssueRow({
    const updateIssueProject = useIssuesStore((s) => s.updateIssueProject);
    const addIssueLabel = useIssuesStore((s) => s.addIssueLabel);
    const removeIssueLabel = useIssuesStore((s) => s.removeIssueLabel);
+   const inMenuHost = useInIssueMenuHost();
 
    // O seletor devolve o conjunto; o store persiste por delta (add/remove), otimista.
    const changeLabels = (next: LabelInterface[]) => {
@@ -94,149 +96,152 @@ function IssueRow({
    // Sem layoutId não há animação: div simples, sem o runtime do motion por linha.
    const Row = layoutId ? motion.div : 'div';
 
+   const row = (
+      <Row
+         ref={ref}
+         data-issue-id={issue.id}
+         {...(layoutId && { layoutId: `issue-line-${issue.identifier}` })}
+         className={cn(
+            'group/line flex h-11 w-full items-center justify-start px-3 hover:bg-accent/40 focus-within:bg-accent/40',
+            selected && 'bg-primary/5'
+         )}
+         style={dragging ? { opacity: 0.5, cursor: 'grabbing' } : undefined}
+      >
+         <button
+            type="button"
+            onClick={() => toggleSelected(issue.id)}
+            aria-label={selected ? 'Deselect issue' : 'Select issue'}
+            aria-pressed={selected}
+            className={cn(
+               'mr-1.5 shrink-0 size-4 rounded border flex items-center justify-center transition-opacity',
+               selected
+                  ? 'bg-primary border-primary text-primary-foreground opacity-100'
+                  : 'border-border text-transparent opacity-0 group-hover/line:opacity-100 group-focus-within/line:opacity-100',
+               anySelected && 'opacity-100'
+            )}
+         >
+            <Check className="size-3" />
+         </button>
+         <div className="flex items-center gap-0.5">
+            {displayProperties.priority && (
+               <PrioritySelector priority={issue.priority} issueId={issue.id} />
+            )}
+            {displayProperties.id && (
+               <span className="mr-0.5 hidden w-[66px] shrink-0 truncate text-xs tabular-nums text-muted-foreground sm:inline-block">
+                  {issue.identifier}
+               </span>
+            )}
+            {displayProperties.status && (
+               <StatusSelector status={issue.status} issueId={issue.id} />
+            )}
+         </div>
+         <Link
+            href={`/${orgId ?? 'nimbloo'}/issue/${issue.identifier}`}
+            className="min-w-0 flex items-center justify-start mr-1 ml-0.5"
+         >
+            {issue.parentIdentifier && <ParentIssueChip identifier={issue.parentIdentifier} />}
+            <span className="truncate text-[13px] font-medium">{issue.title}</span>
+         </Link>
+         <div className="flex items-center justify-end gap-2 ml-auto sm:w-fit">
+            <div className="w-3 shrink-0"></div>
+            <div className="-space-x-5 hover:space-x-1 lg:space-x-1 items-center justify-end hidden sm:flex">
+               {displayProperties.labels && issue.labels.length > 0 && (
+                  <LabelSelector selectedLabels={issue.labels} onChange={changeLabels}>
+                     <button
+                        type="button"
+                        aria-label="Change labels"
+                        className="flex items-center gap-1 rounded-full outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                     >
+                        <LabelBadge label={issue.labels} />
+                     </button>
+                  </LabelSelector>
+               )}
+               {displayProperties.project && issue.project && (
+                  <ProjectSelector
+                     project={issue.project}
+                     teamId={issue.teamId}
+                     onChange={(project) =>
+                        void updateIssueProject(issue.id, project).catch(() => undefined)
+                     }
+                  >
+                     <button
+                        type="button"
+                        aria-label={`Change project: ${issue.project.name}`}
+                        className={propertyChipClass}
+                     >
+                        <issue.project.icon size={16} />
+                        {issue.project.name}
+                     </button>
+                  </ProjectSelector>
+               )}
+            </div>
+            <SlaBadge issue={issue} />
+            <SubIssueProgress count={issue.subIssueCount} done={issue.subIssueDoneCount} />
+            {displayProperties.estimate && issue.estimate !== undefined && (
+               <EstimateSelector
+                  estimate={issue.estimate}
+                  teamId={issue.teamId}
+                  onChange={(estimate) =>
+                     void updateIssue(issue.id, { estimate }).catch(() => undefined)
+                  }
+               >
+                  <button
+                     type="button"
+                     aria-label="Change estimate"
+                     className={cn(
+                        propertyChipClass,
+                        'hidden rounded-md tabular-nums sm:inline-flex'
+                     )}
+                  >
+                     {estimateLabel(issue.estimate, normalizeScale(team?.estimateScale))}
+                  </button>
+               </EstimateSelector>
+            )}
+            {cycle && (
+               <CycleSelector issue={issue}>
+                  <button
+                     type="button"
+                     aria-label={`Change cycle: ${cycle.name}`}
+                     className={cn(propertyChipClass, 'hidden rounded-md lg:inline-flex')}
+                  >
+                     {cycle.name}
+                  </button>
+               </CycleSelector>
+            )}
+            {displayProperties.dueDate && issue.dueDate && (
+               <DueDateSelector
+                  dueDate={issue.dueDate}
+                  onChange={(dueDate) =>
+                     void updateIssue(issue.id, { dueDate }).catch(() => undefined)
+                  }
+               >
+                  <button
+                     type="button"
+                     aria-label="Change due date"
+                     className="hidden shrink-0 rounded text-xs text-destructive outline-hidden hover:underline focus-visible:ring-2 focus-visible:ring-ring sm:inline-block"
+                  >
+                     Due {format(new Date(issue.dueDate), 'MMM dd')}
+                  </button>
+               </DueDateSelector>
+            )}
+            {/* Padrão Linear: avatar do assignee ANTES da data */}
+            {displayProperties.assignee && (
+               <AssigneeUser users={issue.assignees} issueId={issue.id} />
+            )}
+            {displayProperties.created && (
+               <span className="hidden w-12 shrink-0 text-right text-xs tabular-nums text-muted-foreground sm:inline-block">
+                  {format(new Date(issue.createdAt), 'MMM d')}
+               </span>
+            )}
+         </div>
+      </Row>
+   );
+
+   // Dentro da lista, o menu de contexto é um só (R7); linha avulsa (busca) monta o seu.
+   if (inMenuHost) return row;
    return (
       <ContextMenu>
-         <ContextMenuTrigger asChild>
-            <Row
-               ref={ref}
-               {...(layoutId && { layoutId: `issue-line-${issue.identifier}` })}
-               className={cn(
-                  'group/line flex h-11 w-full items-center justify-start px-3 hover:bg-accent/40 focus-within:bg-accent/40',
-                  selected && 'bg-primary/5'
-               )}
-               style={dragging ? { opacity: 0.5, cursor: 'grabbing' } : undefined}
-            >
-               <button
-                  type="button"
-                  onClick={() => toggleSelected(issue.id)}
-                  aria-label={selected ? 'Deselect issue' : 'Select issue'}
-                  aria-pressed={selected}
-                  className={cn(
-                     'mr-1.5 shrink-0 size-4 rounded border flex items-center justify-center transition-opacity',
-                     selected
-                        ? 'bg-primary border-primary text-primary-foreground opacity-100'
-                        : 'border-border text-transparent opacity-0 group-hover/line:opacity-100 group-focus-within/line:opacity-100',
-                     anySelected && 'opacity-100'
-                  )}
-               >
-                  <Check className="size-3" />
-               </button>
-               <div className="flex items-center gap-0.5">
-                  {displayProperties.priority && (
-                     <PrioritySelector priority={issue.priority} issueId={issue.id} />
-                  )}
-                  {displayProperties.id && (
-                     <span className="mr-0.5 hidden w-[66px] shrink-0 truncate text-xs tabular-nums text-muted-foreground sm:inline-block">
-                        {issue.identifier}
-                     </span>
-                  )}
-                  {displayProperties.status && (
-                     <StatusSelector status={issue.status} issueId={issue.id} />
-                  )}
-               </div>
-               <Link
-                  href={`/${orgId ?? 'nimbloo'}/issue/${issue.identifier}`}
-                  className="min-w-0 flex items-center justify-start mr-1 ml-0.5"
-               >
-                  {issue.parentIdentifier && (
-                     <ParentIssueChip identifier={issue.parentIdentifier} />
-                  )}
-                  <span className="truncate text-[13px] font-medium">{issue.title}</span>
-               </Link>
-               <div className="flex items-center justify-end gap-2 ml-auto sm:w-fit">
-                  <div className="w-3 shrink-0"></div>
-                  <div className="-space-x-5 hover:space-x-1 lg:space-x-1 items-center justify-end hidden sm:flex">
-                     {displayProperties.labels && issue.labels.length > 0 && (
-                        <LabelSelector selectedLabels={issue.labels} onChange={changeLabels}>
-                           <button
-                              type="button"
-                              aria-label="Change labels"
-                              className="flex items-center gap-1 rounded-full outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
-                           >
-                              <LabelBadge label={issue.labels} />
-                           </button>
-                        </LabelSelector>
-                     )}
-                     {displayProperties.project && issue.project && (
-                        <ProjectSelector
-                           project={issue.project}
-                           teamId={issue.teamId}
-                           onChange={(project) =>
-                              void updateIssueProject(issue.id, project).catch(() => undefined)
-                           }
-                        >
-                           <button
-                              type="button"
-                              aria-label={`Change project: ${issue.project.name}`}
-                              className={propertyChipClass}
-                           >
-                              <issue.project.icon size={16} />
-                              {issue.project.name}
-                           </button>
-                        </ProjectSelector>
-                     )}
-                  </div>
-                  <SlaBadge issue={issue} />
-                  <SubIssueProgress count={issue.subIssueCount} done={issue.subIssueDoneCount} />
-                  {displayProperties.estimate && issue.estimate !== undefined && (
-                     <EstimateSelector
-                        estimate={issue.estimate}
-                        teamId={issue.teamId}
-                        onChange={(estimate) =>
-                           void updateIssue(issue.id, { estimate }).catch(() => undefined)
-                        }
-                     >
-                        <button
-                           type="button"
-                           aria-label="Change estimate"
-                           className={cn(
-                              propertyChipClass,
-                              'hidden rounded-md tabular-nums sm:inline-flex'
-                           )}
-                        >
-                           {estimateLabel(issue.estimate, normalizeScale(team?.estimateScale))}
-                        </button>
-                     </EstimateSelector>
-                  )}
-                  {cycle && (
-                     <CycleSelector issue={issue}>
-                        <button
-                           type="button"
-                           aria-label={`Change cycle: ${cycle.name}`}
-                           className={cn(propertyChipClass, 'hidden rounded-md lg:inline-flex')}
-                        >
-                           {cycle.name}
-                        </button>
-                     </CycleSelector>
-                  )}
-                  {displayProperties.dueDate && issue.dueDate && (
-                     <DueDateSelector
-                        dueDate={issue.dueDate}
-                        onChange={(dueDate) =>
-                           void updateIssue(issue.id, { dueDate }).catch(() => undefined)
-                        }
-                     >
-                        <button
-                           type="button"
-                           aria-label="Change due date"
-                           className="hidden shrink-0 rounded text-xs text-destructive outline-hidden hover:underline focus-visible:ring-2 focus-visible:ring-ring sm:inline-block"
-                        >
-                           Due {format(new Date(issue.dueDate), 'MMM dd')}
-                        </button>
-                     </DueDateSelector>
-                  )}
-                  {/* Padrão Linear: avatar do assignee ANTES da data */}
-                  {displayProperties.assignee && (
-                     <AssigneeUser users={issue.assignees} issueId={issue.id} />
-                  )}
-                  {displayProperties.created && (
-                     <span className="hidden w-12 shrink-0 text-right text-xs tabular-nums text-muted-foreground sm:inline-block">
-                        {format(new Date(issue.createdAt), 'MMM d')}
-                     </span>
-                  )}
-               </div>
-            </Row>
-         </ContextMenuTrigger>
+         <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
          <IssueContextMenu issueId={issue.id} />
       </ContextMenu>
    );

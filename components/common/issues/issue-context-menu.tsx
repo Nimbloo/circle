@@ -94,10 +94,16 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
       }))
    );
 
+   // Is#13: o store faz rollback + toast.error e re-lança; aqui só engolimos a rejeição
+   // (sem unhandled rejection) e o toast de sucesso espera a API confirmar.
+   const settle = (p: Promise<unknown>) => void p.catch(() => {});
+
    const handleDelete = () => {
       if (!issueId) return;
-      deleteIssue(issueId);
-      toast.success('Issue deleted');
+      deleteIssue(issueId).then(
+         () => toast.success('Issue deleted'),
+         () => {}
+      );
    };
 
    // Edições inline reversíveis (status/priority/assignee/label/project/cycle/due):
@@ -107,19 +113,19 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
    const handleStatusChange = (statusId: string) => {
       if (!issueId) return;
       const newStatus = status.find((s) => s.id === statusId);
-      if (newStatus) updateIssueStatus(issueId, newStatus);
+      if (newStatus) settle(updateIssueStatus(issueId, newStatus));
    };
 
    const handlePriorityChange = (priorityId: string) => {
       if (!issueId) return;
       const newPriority = priorities.find((p) => p.id === priorityId);
-      if (newPriority) updateIssuePriority(issueId, newPriority);
+      if (newPriority) settle(updateIssuePriority(issueId, newPriority));
    };
 
    const handleAssigneeChange = (userId: string | null) => {
       if (!issueId) return;
       const newAssignee = userId ? users.find((u) => u.id === userId) || null : null;
-      updateIssueAssignee(issueId, newAssignee);
+      settle(updateIssueAssignee(issueId, newAssignee));
    };
 
    const handleLabelToggle = (labelId: string) => {
@@ -127,19 +133,19 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
       const issue = getIssueById(issueId);
       const label = labels.find((l) => l.id === labelId);
       if (!issue || !label) return;
-      if (issue.labels.some((l) => l.id === labelId)) removeIssueLabel(issueId, labelId);
-      else addIssueLabel(issueId, label);
+      if (issue.labels.some((l) => l.id === labelId)) settle(removeIssueLabel(issueId, labelId));
+      else settle(addIssueLabel(issueId, label));
    };
 
    const handleProjectChange = (projectId: string | null) => {
       if (!issueId) return;
       const newProject = projectId ? projects.find((p) => p.id === projectId) : undefined;
-      updateIssueProject(issueId, newProject);
+      settle(updateIssueProject(issueId, newProject));
    };
 
    const handleCycleChange = (cycleId: string) => {
       if (!issueId) return;
-      updateIssue(issueId, { cycleId });
+      settle(updateIssue(issueId, { cycleId }));
    };
 
    // Due date no formato YYYY-MM-DD (o que a rota exige: z.string().date()); mandar
@@ -154,29 +160,34 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
       if (!issueId) return;
       const d = new Date();
       d.setDate(d.getDate() + days);
-      updateIssue(issueId, { dueDate: fmtDate(d) });
+      settle(updateIssue(issueId, { dueDate: fmtDate(d) }));
    };
 
    const clearDueDate = () => {
       if (!issueId) return;
-      updateIssue(issueId, { dueDate: undefined });
+      settle(updateIssue(issueId, { dueDate: undefined }));
    };
 
    const handleMarkAs = (target?: (typeof status)[number]) => {
       if (!issueId || !target) return;
-      updateIssueStatus(issueId, target);
+      settle(updateIssueStatus(issueId, target));
    };
 
    // Snooze de triage: adia a issue por N dias (0 = remove). Some da fila de triage.
    const snoozeInDays = (days: number, label: string) => {
       if (!issueId) return;
       const until = days > 0 ? new Date(Date.now() + days * 86400000).toISOString() : null;
-      updateIssue(issueId, { snoozedUntil: until });
-      toast.success(until ? `Adiada até ${label}` : 'Snooze removido');
+      updateIssue(issueId, { snoozedUntil: until }).then(
+         () => toast.success(until ? `Adiada até ${label}` : 'Snooze removido'),
+         () => {}
+      );
    };
 
    const copyToClipboard = (text: string, msg: string) => {
-      void navigator.clipboard.writeText(text).then(() => toast.success(msg));
+      void navigator.clipboard.writeText(text).then(
+         () => toast.success(msg),
+         () => toast.error('Não foi possível copiar')
+      );
    };
 
    const copyLink = () => {
