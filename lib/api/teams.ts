@@ -546,3 +546,18 @@ export async function deleteTeam(db: Db, id: string): Promise<boolean> {
    if (deleted) publish({ entity: 'team', action: 'deleted', id });
    return deleted;
 }
+
+/**
+ * Destino da landing da org (`/[orgId]`): 1º time do qual o usuário é membro → 1º time
+ * existente → criar time. Convidado (Ad#21–40) nunca cai em time fora do escopo nem em
+ * "criar time" (não pode): sem time, vai para My issues.
+ */
+export async function orgLandingPath(db: Db, email: string | null): Promise<string> {
+   if (!email) return 'settings/teams/new';
+   const me = await getOrCreateUser(db, email);
+   const joined = await listTeams(db, { membership: ['Joined'] }, me.id);
+   if (joined.length > 0) return `team/${joined[0].id}/all`;
+   if (me.role === 'Guest') return 'my-issues';
+   const all = await listTeams(db, {}, me.id);
+   return all.length > 0 ? `team/${all[0].id}/all` : 'settings/teams/new';
+}
