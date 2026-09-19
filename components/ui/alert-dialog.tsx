@@ -6,6 +6,27 @@ import * as AlertDialogPrimitive from '@radix-ui/react-alert-dialog';
 import { cn } from '@/lib/utils';
 import { buttonVariants } from '@/components/ui/button';
 
+/**
+ * Alvo travado: guarda o último alvo não nulo enquanto o diálogo fecha.
+ *
+ * O padrão da casa é `open={alvo !== null}` com o texto lido do próprio alvo. Ao confirmar
+ * ou cancelar, o alvo vira `null` e o diálogo ainda está saindo — o título esvaziava na
+ * animação (`Delete label “”?`, ad#4). Com o alvo travado, o texto permanece até o fim da
+ * saída e volta a acompanhar o alvo na próxima abertura:
+ *
+ * ```tsx
+ * const [deleting, setDeleting] = useState<Label | null>(null);
+ * const target = useLatchedTarget(deleting);
+ * <AlertDialog open={deleting !== null} onOpenChange={(o) => !o && setDeleting(null)}>
+ *    <AlertDialogTitle>Delete label “{target?.name}”?</AlertDialogTitle>
+ * ```
+ */
+function useLatchedTarget<T>(target: T | null | undefined): T | null | undefined {
+   const [latched, setLatched] = React.useState(target);
+   if (target != null && target !== latched) setLatched(target);
+   return target ?? latched;
+}
+
 function AlertDialog({ ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {
    return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />;
 }
@@ -27,10 +48,7 @@ function AlertDialogOverlay({
    return (
       <AlertDialogPrimitive.Overlay
          data-slot="alert-dialog-overlay"
-         className={cn(
-            'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50',
-            className
-         )}
+         className={cn('motion-overlay bg-overlay fixed inset-0 z-50', className)}
          {...props}
       />
    );
@@ -46,7 +64,7 @@ function AlertDialogContent({
          <AlertDialogPrimitive.Content
             data-slot="alert-dialog-content"
             className={cn(
-               'bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-xl border border-[var(--popover-border)] p-6 shadow-[var(--popover-shadow)] duration-150 sm:max-w-[480px]',
+               'motion-modal bg-popover text-popover-foreground fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-xl border border-[var(--popover-border)] p-6 shadow-[var(--popover-shadow)] sm:max-w-[480px]',
                className
             )}
             {...props}
@@ -121,6 +139,7 @@ function AlertDialogCancel({
 }
 
 export {
+   useLatchedTarget,
    AlertDialog,
    AlertDialogPortal,
    AlertDialogOverlay,

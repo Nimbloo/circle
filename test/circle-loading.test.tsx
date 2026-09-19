@@ -3,7 +3,7 @@
 import './setup-dom';
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CircleLoading } from '@/components/common/circle-loading';
 
 describe('CircleLoading', () => {
@@ -50,5 +50,58 @@ describe('CircleLoading', () => {
       expect(status.tagName).toBe('SPAN');
       expect(status.className).toContain('inline-flex');
       expect(status.className).not.toContain('flex-col');
+   });
+
+   /**
+    * Continuidade entre instâncias (vi#12): numa carga fria a área troca de loader duas ou
+    * três vezes. O arco de cada instância é alinhado ao relógio do documento e o fade de
+    * entrada é pulado quando o loader anterior acabou de sair — um loader só, para quem
+    * olha. O efeito visual só se valida no navegador; aqui fica a política.
+    */
+   describe('continuidade entre instâncias', () => {
+      const spin = () => ({
+         animationName: 'circle-loading-spin',
+         startTime: null as number | null,
+         finish: vi.fn(),
+      });
+      const fade = () => ({
+         animationName: 'circle-loading-in',
+         startTime: null as number | null,
+         finish: vi.fn(),
+      });
+      let animations: ReturnType<typeof spin>[] = [];
+
+      const stub = () => {
+         animations = [spin(), fade()];
+         Object.defineProperty(Element.prototype, 'getAnimations', {
+            configurable: true,
+            value: () => animations,
+         });
+         return animations;
+      };
+
+      afterEach(() => {
+         delete (Element.prototype as { getAnimations?: unknown }).getAnimations;
+         vi.restoreAllMocks();
+      });
+
+      it('alinha o giro ao relógio do documento e mantém o fade da primeira instância', () => {
+         // Nenhum loader por perto (o último saiu há muito): a entrada faz o fade normal.
+         vi.spyOn(performance, 'now').mockReturnValue(1e9);
+         const [arc, entrada] = stub();
+         const { unmount } = render(<CircleLoading />);
+         expect(arc.startTime).toBe(0);
+         expect(entrada.finish).not.toHaveBeenCalled();
+         unmount();
+      });
+
+      it('o loader que substitui outro não refaz o fade de entrada', () => {
+         stub();
+         const first = render(<CircleLoading />);
+         const [, entrada] = stub();
+         render(<CircleLoading />);
+         expect(entrada.finish).toHaveBeenCalled();
+         first.unmount();
+      });
    });
 });

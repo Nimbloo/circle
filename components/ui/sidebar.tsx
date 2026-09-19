@@ -657,7 +657,7 @@ function SidebarMenuSubButton({
             'text-sidebar-foreground ring-sidebar-ring transition-colors duration-150 ease-out hover:bg-sidebar-hover hover:text-sidebar-accent-foreground active:bg-sidebar-accent active:text-sidebar-accent-foreground [&>svg]:text-sidebar-accent-foreground flex h-7 min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-lg px-2 text-[13px] outline-hidden focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&>span:last-child]:truncate [&>svg]:size-3.5 [&>svg]:shrink-0',
             'data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground',
             size === 'sm' && 'text-xs',
-            size === 'md' && 'text-sm',
+            size === 'md' && 'text-[13px]',
             'group-data-[collapsible=icon]:hidden',
             className
          )}

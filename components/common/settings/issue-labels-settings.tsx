@@ -9,6 +9,7 @@ import {
    AlertDialogFooter,
    AlertDialogHeader,
    AlertDialogTitle,
+   useLatchedTarget,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import {
@@ -172,6 +173,8 @@ export default function IssueLabelsSettings() {
    const [dialogOpen, setDialogOpen] = useState(false);
    const [editing, setEditing] = useState<LabelInterface | null>(null);
    const [deleting, setDeleting] = useState<LabelInterface | null>(null);
+   // O alvo fica travado até o diálogo fechar: senão o título esvazia na animação de saída.
+   const deleteTarget = useLatchedTarget(deleting);
    const [deleteBusy, setDeleteBusy] = useState(false);
 
    const rows = useMemo(() => {
@@ -257,43 +260,45 @@ export default function IssueLabelsSettings() {
                <div className="w-[72px] text-right">Actions</div>
             </div>
 
-            {rows.map((label) => (
-               <div
-                  key={label.id}
-                  className="content-enter group flex items-center px-2 py-2.5 text-sm border-b border-muted-foreground/5 hover:bg-sidebar/50"
-               >
-                  <div className="flex-1 min-w-0 flex items-center gap-2.5">
-                     <span
-                        className="size-2.5 rounded-full shrink-0"
-                        style={{ backgroundColor: labelColor(label.color) }}
-                     />
-                     <span className="truncate">{label.name}</span>
+            <div className="content-enter">
+               {rows.map((label) => (
+                  <div
+                     key={label.id}
+                     className="group flex items-center px-2 py-2.5 text-sm border-b border-muted-foreground/5 hover:bg-sidebar/50"
+                  >
+                     <div className="flex-1 min-w-0 flex items-center gap-2.5">
+                        <span
+                           className="size-2.5 rounded-full shrink-0"
+                           style={{ backgroundColor: labelColor(label.color) }}
+                        />
+                        <span className="truncate">{label.name}</span>
+                     </div>
+                     <div className="w-[80px] text-xs text-muted-foreground">
+                        {label.issues > 0 && formatCount(label.issues)}
+                     </div>
+                     <div className="w-[72px] flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                        <Button
+                           size="icon"
+                           variant="ghost"
+                           className="size-7"
+                           aria-label={`Edit ${label.name}`}
+                           onClick={() => openEdit(label)}
+                        >
+                           <Pencil className="size-3.5" />
+                        </Button>
+                        <Button
+                           size="icon"
+                           variant="ghost"
+                           className="size-7 text-muted-foreground hover:text-destructive"
+                           aria-label={`Delete ${label.name}`}
+                           onClick={() => setDeleting(label)}
+                        >
+                           <Trash2 className="size-3.5" />
+                        </Button>
+                     </div>
                   </div>
-                  <div className="w-[80px] text-xs text-muted-foreground">
-                     {label.issues > 0 && formatCount(label.issues)}
-                  </div>
-                  <div className="w-[72px] flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                     <Button
-                        size="icon"
-                        variant="ghost"
-                        className="size-7"
-                        aria-label={`Edit ${label.name}`}
-                        onClick={() => openEdit(label)}
-                     >
-                        <Pencil className="size-3.5" />
-                     </Button>
-                     <Button
-                        size="icon"
-                        variant="ghost"
-                        className="size-7 text-muted-foreground hover:text-destructive"
-                        aria-label={`Delete ${label.name}`}
-                        onClick={() => setDeleting(label)}
-                     >
-                        <Trash2 className="size-3.5" />
-                     </Button>
-                  </div>
-               </div>
-            ))}
+               ))}
+            </div>
             {rows.length === 0 &&
                (!catalogLoaded ? (
                   <LoadingArea rows={4} />
@@ -323,7 +328,7 @@ export default function IssueLabelsSettings() {
          <AlertDialog open={deleting !== null} onOpenChange={(o) => !o && setDeleting(null)}>
             <AlertDialogContent>
                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete label “{deleting?.name}”?</AlertDialogTitle>
+                  <AlertDialogTitle>Delete label “{deleteTarget?.name}”?</AlertDialogTitle>
                   <AlertDialogDescription>
                      This removes the label from every issue and project it is applied to. This
                      action cannot be undone.

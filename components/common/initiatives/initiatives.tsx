@@ -384,7 +384,7 @@ function InitiativeRow({
       <InitiativeContextMenu initiative={initiative}>
          <Link
             href={`/${orgId}/initiative/${initiative.id}`}
-            className="content-enter h-[52px] pl-[52px] pr-[34px] flex items-center gap-3 rounded-lg text-[13px] hover:bg-accent/40 transition-colors"
+            className="h-[52px] pl-[52px] pr-[34px] flex items-center gap-3 rounded-lg text-[13px] hover:bg-accent/40 transition-colors"
          >
             <span className="flex min-w-0 flex-1 items-center gap-2.5">
                <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-muted/50 text-sm">
@@ -608,32 +608,38 @@ export default function Initiatives() {
                   />
                )
             ) : groups ? (
-               groups.map((group) => (
-                  <div key={group.statusId}>
-                     <div className="flex items-center gap-2 px-6 h-9 text-sm font-medium bg-[color-mix(in_oklab,var(--accent)_30%,var(--container))] border-b border-border/40">
-                        <InitiativeStatusIcon status={group.statusId} />
-                        {INITIATIVE_STATUS_META[group.statusId].label}
-                        <span className="text-xs text-muted-foreground">{group.items.length}</span>
+               <div className="content-enter">
+                  {groups.map((group) => (
+                     <div key={group.statusId}>
+                        <div className="flex items-center gap-2 px-6 h-9 text-sm font-medium bg-[color-mix(in_oklab,var(--accent)_30%,var(--container))] border-b border-border/40">
+                           <InitiativeStatusIcon status={group.statusId} />
+                           {INITIATIVE_STATUS_META[group.statusId].label}
+                           <span className="text-xs text-muted-foreground">
+                              {group.items.length}
+                           </span>
+                        </div>
+                        {group.items.map((initiative) => (
+                           <InitiativeRow
+                              key={initiative.id}
+                              initiative={initiative}
+                              orgId={orgId}
+                              showStatus={showStatus}
+                           />
+                        ))}
                      </div>
-                     {group.items.map((initiative) => (
-                        <InitiativeRow
-                           key={initiative.id}
-                           initiative={initiative}
-                           orgId={orgId}
-                           showStatus={showStatus}
-                        />
-                     ))}
-                  </div>
-               ))
+                  ))}
+               </div>
             ) : (
-               displayed.map((initiative) => (
-                  <InitiativeRow
-                     key={initiative.id}
-                     initiative={initiative}
-                     orgId={orgId}
-                     showStatus={showStatus}
-                  />
-               ))
+               <div className="content-enter">
+                  {displayed.map((initiative) => (
+                     <InitiativeRow
+                        key={initiative.id}
+                        initiative={initiative}
+                        orgId={orgId}
+                        showStatus={showStatus}
+                     />
+                  ))}
+               </div>
             )}
          </div>
          {openPanel === 'initiatives-breakdown' && <InitiativesSidePanel initiatives={displayed} />}

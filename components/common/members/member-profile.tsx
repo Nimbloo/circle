@@ -1,6 +1,6 @@
 'use client';
 
-import { DetailSidePanel } from '@/components/common/detail-side-panel';
+import { DetailSidePanel, SidePanelSlot } from '@/components/common/detail-side-panel';
 import { applyIssueFilters } from '@/components/common/issues/issue-filter-columns';
 import { GroupedIssuesView } from '@/components/common/issues/grouped-issues-view';
 import dynamic from 'next/dynamic';
@@ -259,11 +259,15 @@ export default function MemberProfile({ member }: { member: User }) {
                />
             </div>
 
-            {openPanel === 'insights' && (
-               <aside className="hidden lg:flex w-[420px] shrink-0 border-l h-full overflow-hidden bg-container">
-                  <InsightsPanel issues={displayedIssues} />
-               </aside>
-            )}
+            <SidePanelSlot
+               open={openPanel === 'insights'}
+               width={420}
+               label="Insights"
+               className="hidden lg:flex"
+               panelClassName="border-l bg-container"
+            >
+               <InsightsPanel issues={displayedIssues} />
+            </SidePanelSlot>
 
             {/* Profile panel */}
             {openPanel !== 'insights' && (

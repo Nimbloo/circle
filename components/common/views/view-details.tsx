@@ -24,6 +24,7 @@ import { useViewStore } from '@/store/view-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/client';
+import { SidePanelSlot } from '@/components/common/detail-side-panel';
 
 function IssueViewBody({ view }: { view: View }) {
    const { openPanel } = useRightPanelStore();
@@ -124,11 +125,15 @@ function IssueViewBody({ view }: { view: View }) {
                   }}
                />
             </div>
-            {openPanel === 'insights' && (
-               <aside className="hidden lg:flex w-[420px] shrink-0 border-l h-full overflow-hidden bg-container">
-                  <InsightsPanel issues={issues} />
-               </aside>
-            )}
+            <SidePanelSlot
+               open={openPanel === 'insights'}
+               width={420}
+               label="Insights"
+               className="hidden lg:flex"
+               panelClassName="border-l bg-container"
+            >
+               <InsightsPanel issues={issues} />
+            </SidePanelSlot>
          </div>
       </div>
    );

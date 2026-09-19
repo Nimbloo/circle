@@ -1,6 +1,7 @@
 'use client';
 
 import type { Issue } from '@/data/issues';
+import { cn } from '@/lib/utils';
 import type { IssueDetail } from '@/data/issue-details';
 import { adaptActivity, adaptIssueDetail, textToBlocks } from '@/lib/adapters-issue-detail';
 import { adaptIssues } from '@/lib/adapters';
@@ -23,7 +24,7 @@ import { AttachmentsSection } from './attachments-section';
 import { useAttachmentUploader } from './use-attachment-uploader';
 import { filesOf, isImageFile } from '@/lib/attachments-client';
 import { IssuePropertiesPanel } from './issue-properties-panel';
-import { LoadingArea } from '@/components/common/loading-area';
+import { LoadingArea, useEnterFade } from '@/components/common/loading-area';
 import { IssuePicker } from './issue-picker';
 import { useParentCandidatesExclusion, useSetParent } from './parent-issue';
 import { SubIssueCreate } from './sub-issue-create';
@@ -105,6 +106,8 @@ const ACTIVITY_COALESCE_MS = 150;
 function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps) {
    const { orgId } = useParams<{ orgId: string }>();
    const inStore = useIssuesStore((s) => s.issues.some((i) => i.id === issue.id));
+   // Troca de irmão (aba, item, layout) não pisca: só a primeira chegada de conteúdo.
+   const fade = useEnterFade('issue-detail');
    const statuses = useStatuses();
 
    const [detail, setDetail] = useState<IssueDetail | null>(null);
@@ -351,7 +354,7 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
    };
 
    return (
-      <div className="content-enter flex h-full w-full overflow-hidden">
+      <div className={cn(fade && 'content-enter', 'flex h-full w-full overflow-hidden')}>
          {/* Main column — conteúdo centralizado nos 791px medidos no Linear. */}
          <article className="h-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-8 sm:px-8 sm:py-10 xl:pt-[59px]">
             <div className="mx-auto w-full max-w-[791px]">

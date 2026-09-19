@@ -148,7 +148,7 @@ export default function IssuePreview({
             ) : issuesLoaded ? (
                // Issue fora do store (ex.: removida ou fora do escopo carregado): mostra o
                // contexto e o título, com o "Open" do cabeçalho para a página da issue.
-               <div className="content-enter mx-auto max-w-3xl p-8">
+               <div className="mx-auto max-w-3xl p-8">
                   <NotificationContext notification={notification} />
                   <h2 className="text-lg font-semibold">{notification.title}</h2>
                </div>

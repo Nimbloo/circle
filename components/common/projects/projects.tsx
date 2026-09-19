@@ -17,6 +17,7 @@ import ProjectsBoard from './projects-board';
 import ProjectsInsightsPanel from './projects-insights-panel';
 import ProjectsList from './projects-list';
 import ProjectsTimeline from './projects-timeline';
+import { SidePanelSlot } from '@/components/common/detail-side-panel';
 
 export interface ProjectGroup {
    id: string;
@@ -149,11 +150,15 @@ export default function Projects({ teamId }: { teamId?: string }) {
                )}
             </div>
 
-            {openPanel === 'insights' && (
-               <aside className="hidden lg:flex w-[360px] shrink-0 border-l h-full overflow-hidden bg-container">
-                  <ProjectsInsightsPanel projects={displayed} />
-               </aside>
-            )}
+            <SidePanelSlot
+               open={openPanel === 'insights'}
+               width={360}
+               label="Insights"
+               className="hidden lg:flex"
+               panelClassName="border-l bg-container"
+            >
+               <ProjectsInsightsPanel projects={displayed} />
+            </SidePanelSlot>
          </div>
       </div>
    );

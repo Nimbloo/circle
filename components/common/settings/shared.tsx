@@ -124,7 +124,7 @@ export function SettingsRow({
       <Comp
          onClick={onClick}
          className={cn(
-            'content-enter flex min-h-[60px] w-full items-center gap-3 px-4 py-[15.5px] text-left last:min-h-[66px]',
+            'flex min-h-[60px] w-full items-center gap-3 px-4 py-[15.5px] text-left last:min-h-[66px]',
             onClick && 'cursor-pointer transition-colors hover:bg-accent/40',
             muted && 'opacity-60'
          )}

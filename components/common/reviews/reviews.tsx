@@ -87,7 +87,7 @@ function ReviewRow({
          // id = `repo/name#n`: sem encode, `/` vira segmento e `#` vira fragment → 404.
          href={`/${orgId}/review/${encodeURIComponent(review.id)}${listQuery(listTab)}`}
          className={cn(
-            'content-enter h-11 px-[18px] text-[13px] flex items-center gap-2 transition-colors',
+            'h-11 px-[18px] text-[13px] flex items-center gap-2 transition-colors',
             selected ? 'bg-accent/60' : 'hover:bg-accent/40'
          )}
       >
@@ -452,29 +452,37 @@ export default function Reviews({
                      className="py-10"
                   />
                ) : groupByStatus ? (
-                  groups.map((group) => (
-                     <ReviewGroup key={group.label} label={group.label} count={group.items.length}>
-                        {group.items.map((review) => (
-                           <ReviewRow
-                              key={review.id}
-                              review={review}
-                              orgId={orgId}
-                              selected={review.id === selectedReviewId}
-                              listTab={listTab}
-                           />
-                        ))}
-                     </ReviewGroup>
-                  ))
+                  <div className="content-enter">
+                     {groups.map((group) => (
+                        <ReviewGroup
+                           key={group.label}
+                           label={group.label}
+                           count={group.items.length}
+                        >
+                           {group.items.map((review) => (
+                              <ReviewRow
+                                 key={review.id}
+                                 review={review}
+                                 orgId={orgId}
+                                 selected={review.id === selectedReviewId}
+                                 listTab={listTab}
+                              />
+                           ))}
+                        </ReviewGroup>
+                     ))}
+                  </div>
                ) : (
-                  source.map((review) => (
-                     <ReviewRow
-                        key={review.id}
-                        review={review}
-                        orgId={orgId}
-                        selected={review.id === selectedReviewId}
-                        listTab={listTab}
-                     />
-                  ))
+                  <div className="content-enter">
+                     {source.map((review) => (
+                        <ReviewRow
+                           key={review.id}
+                           review={review}
+                           orgId={orgId}
+                           selected={review.id === selectedReviewId}
+                           listTab={listTab}
+                        />
+                     ))}
+                  </div>
                )}
                {!loading && !error && total > 0 && (
                   <ReviewPagination

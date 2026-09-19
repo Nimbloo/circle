@@ -1,8 +1,9 @@
 'use client';
 
 import { EmptyState } from '@/components/common/empty-state';
+import { cn } from '@/lib/utils';
 import { GroupedIssuesView } from '@/components/common/issues/grouped-issues-view';
-import { LoadingArea } from '@/components/common/loading-area';
+import { LoadingArea, useEnterFade } from '@/components/common/loading-area';
 import { applyIssueFilters } from '@/components/common/issues/issue-filter-columns';
 import { IssueFilterBar } from '@/components/common/issues/issue-filter-bar';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
@@ -21,6 +22,8 @@ interface ProjectIssuesProps {
 
 /** Project "Issues" tab: the project's issues grouped by status. */
 export default function ProjectIssues({ projectId }: ProjectIssuesProps) {
+   // Troca de irmão (aba, item, layout) não pisca: só a primeira chegada de conteúdo.
+   const fade = useEnterFade('project-tab');
    const project = useWorkspaceStore((s) => s.getProjectById(projectId));
    const loaded = useWorkspaceStore((s) => s.loaded);
    const allIssues = useIssuesStore((s) => s.issues);
@@ -56,7 +59,7 @@ export default function ProjectIssues({ projectId }: ProjectIssuesProps) {
    }
 
    return (
-      <div className="content-enter w-full h-full flex flex-col overflow-hidden">
+      <div className={cn(fade && 'content-enter', 'w-full h-full flex flex-col overflow-hidden')}>
          <IssueFilterBar />
          <div className="flex justify-end px-2.5 pt-2 xl:hidden">
             <DetailSidePanelTrigger kind="project" />

@@ -83,7 +83,11 @@ export default function Members() {
                   />
                )
             ) : (
-               displayed.map((user) => <MemberLine key={user.id} user={user} />)
+               <div className="content-enter">
+                  {displayed.map((user) => (
+                     <MemberLine key={user.id} user={user} />
+                  ))}
+               </div>
             )}
          </div>
       </div>

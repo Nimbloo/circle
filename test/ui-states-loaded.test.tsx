@@ -26,7 +26,10 @@ vi.mock('@/components/common/issues/grouped-issues-view', () => ({
    ),
 }));
 vi.mock('@/components/common/issues/issue-filter-bar', () => ({ IssueFilterBar: () => null }));
-vi.mock('@/components/common/detail-side-panel', () => ({ DetailSidePanel: () => null }));
+vi.mock('@/components/common/detail-side-panel', () => ({
+   DetailSidePanel: () => null,
+   SidePanelSlot: () => null,
+}));
 vi.mock('@/components/layout/headers/profile/header', () => ({ default: () => null }));
 
 import Cycles from '@/components/common/cycles/cycles';

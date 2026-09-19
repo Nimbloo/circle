@@ -128,7 +128,7 @@ export function CreateNewIssue() {
    return (
       <Dialog open={isOpen} onOpenChange={(value) => (value ? openModal() : closeModal())}>
          <DialogContent
-            className="top-[23.8%] w-full gap-[5.5px] rounded-[21px] bg-card p-0 shadow-xl sm:max-w-[750px]"
+            className="top-[23.8%] w-full gap-[5.5px] p-0 sm:max-w-[750px]"
             onKeyDown={(e) => {
                // ⌘Enter / Ctrl+Enter cria de qualquer campo (Is#17, atalho do Linear).
                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {

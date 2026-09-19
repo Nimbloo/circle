@@ -501,13 +501,15 @@ export default function Inbox() {
                   />
                ))}
             {filteredNotifications.length > 0 && (
-               <NotificationRows
-                  items={filteredNotifications}
-                  selectedId={selectedNotification?.id}
-                  showId={showId}
-                  showStatusIcon={showStatusIcon}
-                  onOpen={openNotification}
-               />
+               <div className="content-enter w-full">
+                  <NotificationRows
+                     items={filteredNotifications}
+                     selectedId={selectedNotification?.id}
+                     showId={showId}
+                     showStatusIcon={showStatusIcon}
+                     onOpen={openNotification}
+                  />
+               </div>
             )}
          </div>
       </>

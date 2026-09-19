@@ -28,7 +28,7 @@ export default function MemberLine({ user }: MemberLineProps) {
    const deactivated = Boolean(user.deactivatedAt);
 
    return (
-      <div className="content-enter relative">
+      <div className="relative">
          {/* Ações do membro (#100) ficam FORA do Link — um dropdown dentro de um
              <a> não abre. Posicionado sobre a linha, à direita. */}
          <div className="absolute right-1 top-1/2 z-10 -translate-y-1/2">

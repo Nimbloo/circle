@@ -106,7 +106,11 @@ export default function Teams() {
                   />
                )
             ) : (
-               displayed.map((team) => <TeamLine key={team.id} team={team} />)
+               <div className="content-enter">
+                  {displayed.map((team) => (
+                     <TeamLine key={team.id} team={team} />
+                  ))}
+               </div>
             )}
          </div>
       </div>

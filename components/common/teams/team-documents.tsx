@@ -29,6 +29,7 @@ import {
    AlertDialogFooter,
    AlertDialogHeader,
    AlertDialogTitle,
+   useLatchedTarget,
 } from '@/components/ui/alert-dialog';
 import { adaptFolders } from '@/lib/adapters-documents';
 import { api } from '@/lib/client';
@@ -67,6 +68,8 @@ export default function TeamDocuments() {
    const [busy, setBusy] = useState(false);
    /** Documento aguardando confirmação de exclusão (Ad#21–40: excluía no 1º clique). */
    const [toDelete, setToDelete] = useState<{ id: string; name: string } | null>(null);
+   // O alvo fica travado até o diálogo fechar: senão o título esvazia na animação de saída.
+   const deleteTarget = useLatchedTarget(toDelete);
 
    const reload = useCallback(() => {
       if (!teamId) return;
@@ -160,106 +163,110 @@ export default function TeamDocuments() {
                />
             )}
 
-            {!loading &&
-               !error &&
-               folders.map((folder, fi) => (
-                  <Collapsible
-                     key={folder.id}
-                     defaultOpen={folder.documents.some((d) => d.pinned) || fi === 0}
-                     className={cn('content-enter', fi > 0 && 'border-t border-border/40')}
-                  >
-                     <CollapsibleTrigger asChild>
-                        <button className="group w-full flex items-center gap-2 px-4 h-9 text-sm text-muted-foreground hover:text-foreground">
-                           <ChevronRight className="size-3.5 transition-transform group-data-[state=open]:rotate-90" />
-                           <span className="text-base leading-none">{folder.icon}</span>
-                           <span className="font-medium text-foreground truncate">
-                              {folder.name}
-                           </span>
-                           <span className="text-xs">{folder.documents.length}</span>
-                        </button>
-                     </CollapsibleTrigger>
-                     <CollapsibleContent className="pb-1">
-                        {folder.documents.length === 0 && (
-                           <div className="pl-14 pr-4 h-8 flex items-center text-xs text-muted-foreground">
-                              Empty folder
-                           </div>
-                        )}
-                        {folder.documents.map((doc) => (
-                           <div
-                              key={doc.id}
-                              className="group/doc flex items-center gap-2 pl-11 pr-3 h-10 rounded-md mx-1 hover:bg-sidebar/60 text-sm"
-                           >
-                              <span className="text-base leading-none shrink-0">{doc.icon}</span>
-                              <span className="font-medium truncate">{doc.name}</span>
-                              {doc.pinned && (
-                                 <Pin className="size-3 text-muted-foreground shrink-0" />
-                              )}
-                              <span className="ml-auto hidden md:block text-xs text-muted-foreground shrink-0">
-                                 {timeAgo(doc.updatedAt)}
+            {!loading && !error && (
+               <div className="content-enter">
+                  {folders.map((folder, fi) => (
+                     <Collapsible
+                        key={folder.id}
+                        defaultOpen={folder.documents.some((d) => d.pinned) || fi === 0}
+                        className={cn(fi > 0 && 'border-t border-border/40')}
+                     >
+                        <CollapsibleTrigger asChild>
+                           <button className="group w-full flex items-center gap-2 px-4 h-9 text-sm text-muted-foreground hover:text-foreground">
+                              <ChevronRight className="size-3.5 transition-transform group-data-[state=open]:rotate-90" />
+                              <span className="text-base leading-none">{folder.icon}</span>
+                              <span className="font-medium text-foreground truncate">
+                                 {folder.name}
                               </span>
-                              <Avatar className="size-5 shrink-0">
-                                 <AvatarImage
-                                    src={doc.creator.avatarUrl || undefined}
-                                    alt={doc.creator.name}
-                                 />
-                                 <AvatarFallback>{doc.creator.name[0]}</AvatarFallback>
-                              </Avatar>
-                              <DropdownMenu>
-                                 <DropdownMenuTrigger asChild>
-                                    <Button
-                                       size="icon"
-                                       variant="ghost"
-                                       className="size-7 shrink-0 opacity-0 group-hover/doc:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
-                                       aria-label={`Document actions for ${doc.name}`}
-                                    >
-                                       <MoreHorizontal className="size-4" />
-                                    </Button>
-                                 </DropdownMenuTrigger>
-                                 <DropdownMenuContent align="end">
-                                    <DropdownMenuItem
-                                       onClick={() =>
-                                          setRenaming({
-                                             id: doc.id,
-                                             name: doc.name,
-                                             icon: doc.icon,
-                                          })
-                                       }
-                                    >
-                                       <Pencil className="size-3.5 mr-2" /> Rename
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                       onClick={() => togglePin(doc.id, !!doc.pinned)}
-                                    >
-                                       {doc.pinned ? (
-                                          <>
-                                             <PinOff className="size-3.5 mr-2" /> Unpin
-                                          </>
-                                       ) : (
-                                          <>
-                                             <Pin className="size-3.5 mr-2" /> Pin
-                                          </>
-                                       )}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                       className="text-destructive focus:text-destructive"
-                                       onClick={() => setToDelete({ id: doc.id, name: doc.name })}
-                                    >
-                                       <Trash2 className="size-3.5 mr-2" /> Delete
-                                    </DropdownMenuItem>
-                                 </DropdownMenuContent>
-                              </DropdownMenu>
-                           </div>
-                        ))}
-                     </CollapsibleContent>
-                  </Collapsible>
-               ))}
+                              <span className="text-xs">{folder.documents.length}</span>
+                           </button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="pb-1">
+                           {folder.documents.length === 0 && (
+                              <div className="pl-14 pr-4 h-8 flex items-center text-xs text-muted-foreground">
+                                 Empty folder
+                              </div>
+                           )}
+                           {folder.documents.map((doc) => (
+                              <div
+                                 key={doc.id}
+                                 className="group/doc flex items-center gap-2 pl-11 pr-3 h-10 rounded-md mx-1 hover:bg-sidebar/60 text-sm"
+                              >
+                                 <span className="text-base leading-none shrink-0">{doc.icon}</span>
+                                 <span className="font-medium truncate">{doc.name}</span>
+                                 {doc.pinned && (
+                                    <Pin className="size-3 text-muted-foreground shrink-0" />
+                                 )}
+                                 <span className="ml-auto hidden md:block text-xs text-muted-foreground shrink-0">
+                                    {timeAgo(doc.updatedAt)}
+                                 </span>
+                                 <Avatar className="size-5 shrink-0">
+                                    <AvatarImage
+                                       src={doc.creator.avatarUrl || undefined}
+                                       alt={doc.creator.name}
+                                    />
+                                    <AvatarFallback>{doc.creator.name[0]}</AvatarFallback>
+                                 </Avatar>
+                                 <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                       <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          className="size-7 shrink-0 opacity-0 group-hover/doc:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+                                          aria-label={`Document actions for ${doc.name}`}
+                                       >
+                                          <MoreHorizontal className="size-4" />
+                                       </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                       <DropdownMenuItem
+                                          onClick={() =>
+                                             setRenaming({
+                                                id: doc.id,
+                                                name: doc.name,
+                                                icon: doc.icon,
+                                             })
+                                          }
+                                       >
+                                          <Pencil className="size-3.5 mr-2" /> Rename
+                                       </DropdownMenuItem>
+                                       <DropdownMenuItem
+                                          onClick={() => togglePin(doc.id, !!doc.pinned)}
+                                       >
+                                          {doc.pinned ? (
+                                             <>
+                                                <PinOff className="size-3.5 mr-2" /> Unpin
+                                             </>
+                                          ) : (
+                                             <>
+                                                <Pin className="size-3.5 mr-2" /> Pin
+                                             </>
+                                          )}
+                                       </DropdownMenuItem>
+                                       <DropdownMenuSeparator />
+                                       <DropdownMenuItem
+                                          className="text-destructive focus:text-destructive"
+                                          onClick={() =>
+                                             setToDelete({ id: doc.id, name: doc.name })
+                                          }
+                                       >
+                                          <Trash2 className="size-3.5 mr-2" /> Delete
+                                       </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                 </DropdownMenu>
+                              </div>
+                           ))}
+                        </CollapsibleContent>
+                     </Collapsible>
+                  ))}
+               </div>
+            )}
          </div>
 
          <AlertDialog open={toDelete !== null} onOpenChange={(o) => !o && setToDelete(null)}>
             <AlertDialogContent>
                <AlertDialogHeader>
-                  <AlertDialogTitle>Excluir “{toDelete?.name}”?</AlertDialogTitle>
+                  <AlertDialogTitle>Excluir “{deleteTarget?.name}”?</AlertDialogTitle>
                   <AlertDialogDescription>
                      O documento será removido do time. Esta ação não pode ser desfeita.
                   </AlertDialogDescription>

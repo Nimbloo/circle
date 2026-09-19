@@ -1,6 +1,7 @@
 'use client';
 
 import { EmptyState } from '@/components/common/empty-state';
+import { cn } from '@/lib/utils';
 import { DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 import { BlockEditor } from '@/components/common/editor/block-editor';
 import { Button } from '@/components/ui/button';
@@ -18,7 +19,7 @@ import { DocumentOutline, type OutlineItem } from './document-outline';
 import { ProjectResources } from './project-resources';
 import { ProjectSidePanel } from './project-side-panel';
 import { useSharedProjectDetail } from './use-project-detail';
-import { LoadingArea } from '@/components/common/loading-area';
+import { LoadingArea, useEnterFade } from '@/components/common/loading-area';
 
 interface ProjectOverviewProps {
    projectId: string;
@@ -26,6 +27,8 @@ interface ProjectOverviewProps {
 
 /** Project "Overview" tab: description column + properties side panel. */
 export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
+   // Troca de irmão (aba, item, layout) não pisca: só a primeira chegada de conteúdo.
+   const fade = useEnterFade('project-tab');
    const project = useWorkspaceStore((s) => s.getProjectById(projectId));
    const loaded = useWorkspaceStore((s) => s.loaded);
    const allIssues = useIssuesStore((s) => s.issues);
@@ -154,7 +157,7 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    }
 
    return (
-      <div className="content-enter relative w-full h-full flex overflow-hidden">
+      <div className={cn(fade && 'content-enter', 'relative w-full h-full flex overflow-hidden')}>
          {/* Main column */}
          <div className="flex-1 min-w-0 h-full relative">
             <DocumentOutline items={outlineItems} scrollRef={scrollRef} />
