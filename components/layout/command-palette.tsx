@@ -15,8 +15,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useLabels, usePriorities, useStatuses } from '@/store/catalog-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
 import { useIssuesStore } from '@/store/issues-store';
-import { useRecentsStore } from '@/store/recents-store';
-import { RecentsRecorder } from './command-palette-recents';
+import { resolveRecents, useRecentsStore } from '@/store/recents-store';
+import { RecentsRecorder, useRecentsOwner } from './command-palette-recents';
 import { api, type SearchEntityType, type SearchGroup } from '@/lib/client';
 import { SearchSnippet } from '@/components/common/search/search-snippet';
 import { useShallow } from 'zustand/react/shallow';
@@ -266,7 +266,15 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
 
    const issue = contextCleared ? undefined : contextIssue;
 
-   const recents = useRecentsStore((s) => s.recents);
+   const recentsOwner = useRecentsOwner();
+   const storedRecents = useRecentsStore((s) => (recentsOwner ? s.recentsOf(recentsOwner) : null));
+   const issuesLoaded = useIssuesStore((s) => s.loaded);
+   const workspaceLoaded = useWorkspaceStore((s) => s.loaded);
+   const recents = useMemo(
+      () =>
+         resolveRecents(storedRecents ?? [], issues, allProjects, issuesLoaded && workspaceLoaded),
+      [storedRecents, issues, allProjects, issuesLoaded, workspaceLoaded]
+   );
 
    const close = onClose;
 

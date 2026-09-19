@@ -22,6 +22,7 @@ export function useRecordRecents(): void {
       projectId ? s.projects.find((p) => p.id === projectId) : undefined
    );
    const pushRecent = useRecentsStore((s) => s.push);
+   const owner = useRecentsOwner();
    // Guarda o último gravado: re-render da mesma entidade (edição) não re-grava.
    const lastPushedRef = useRef('');
 
@@ -36,12 +37,20 @@ export function useRecordRecents(): void {
 
    useEffect(() => {
       // Grava quando a entidade da rota hidrata (auto-heal de deep-link frio).
-      if (!recent || lastPushedRef.current === key) return;
-      lastPushedRef.current = key;
-      pushRecent(recent);
+      if (!recent || !owner || lastPushedRef.current === `${owner}|${key}`) return;
+      lastPushedRef.current = `${owner}|${key}`;
+      pushRecent(owner, recent);
       // `recent` é derivado de `key` + entidade; gravar de novo só quando a chave muda.
       // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [key, pushRecent]);
+   }, [key, owner, pushRecent]);
+}
+
+/** Dono dos recentes: `${orgId}:${userId}`; null até o `me` chegar (não grava anônimo). */
+export function useRecentsOwner(): string | null {
+   const pathname = usePathname();
+   const meId = useWorkspaceStore((s) => s.me?.id);
+   const orgId = pathname.split('/')[1] || 'nimbloo';
+   return meId ? `${orgId}:${meId}` : null;
 }
 
 /** Monta o registro de recentes sem renderizar nada. */
