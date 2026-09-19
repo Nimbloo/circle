@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { Initiative } from '@/data/initiatives';
 import { health as allHealth } from '@/data/projects';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { isProjectCompleted } from '@/lib/project-completion';
 import { useMemo, useState } from 'react';
 
 type BreakdownTab = 'health' | 'status' | 'teams' | 'leads';
@@ -29,10 +30,10 @@ export function InitiativeProgressPanel({ initiative }: { initiative: Initiative
 
    const progress = useMemo(() => {
       const total = projects.length;
-      const completed = projects.filter(
-         (project) => project.status.category === 'completed'
+      const completed = projects.filter(isProjectCompleted).length;
+      const started = projects.filter(
+         (project) => !isProjectCompleted(project) && project.status.category === 'started'
       ).length;
-      const started = projects.filter((project) => project.status.category === 'started').length;
       return { total, completed, started, remaining: Math.max(0, total - completed - started) };
    }, [projects]);
 

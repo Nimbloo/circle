@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, ne } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    initiative as initT,
@@ -17,7 +17,8 @@ import { targetDateFromLabel } from '@/lib/initiative-period';
 import { ApiError } from './errors';
 import { publish } from './events';
 import { getOrCreateUser } from './users';
-import { assertInitiativeParent } from './hierarchy';
+import { assertInitiativeParent, initiativeAncestorIds } from './hierarchy';
+import { isProjectCompleted } from '@/lib/project-completion';
 import type { UserRef } from './issues';
 
 type InitiativeRow = typeof initT.$inferSelect;
@@ -103,7 +104,10 @@ async function projectsByInitiative(db: Db, initIds: string[]) {
    const isCompleted = new Map(
       projects.map((p) => [
          p.id,
-         catById.get(p.statusId) === 'completed' || p.percentComplete >= 100,
+         isProjectCompleted({
+            status: { category: catById.get(p.statusId) ?? '' },
+            percentComplete: p.percentComplete,
+         }),
       ])
    );
 
@@ -128,6 +132,58 @@ function childrenByParent(edges: { id: string; parentId: string | null }[]) {
       else map.set(e.parentId, [e.id]);
    }
    return map;
+}
+
+/**
+ * Publica `initiative updated` para as initiatives cujo rollup mudou e para TODAS as
+ * suas ancestrais (o rollup da mãe soma a subárvore) (#41). Chamar depois do commit.
+ */
+export async function publishInitiativeRollups(
+   db: Db,
+   initiativeIds: readonly (string | null | undefined)[]
+): Promise<void> {
+   const ids = new Set<string>();
+   for (const id of initiativeIds) {
+      if (!id || ids.has(id)) continue;
+      ids.add(id);
+      for (const ancestor of await initiativeAncestorIds(db, id)) ids.add(ancestor);
+   }
+   for (const id of ids) publish({ entity: 'initiative', action: 'updated', id });
+}
+
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+
+/**
+ * Vincula `projectIds` a `initiativeId` tirando-os de qualquer OUTRA initiative (um
+ * projeto pertence a uma só — senão o rollup contava 2×, #37). Devolve as initiatives
+ * que perderam projeto, para publicar depois do commit.
+ */
+async function linkProjects(tx: Tx, initiativeId: string, projectIds: string[]): Promise<string[]> {
+   if (projectIds.length === 0) return [];
+   const former = await tx
+      .select({ initiativeId: initiativeProject.initiativeId })
+      .from(initiativeProject)
+      .where(
+         and(
+            inArray(initiativeProject.projectId, projectIds),
+            ne(initiativeProject.initiativeId, initiativeId)
+         )
+      );
+   await tx
+      .delete(initiativeProject)
+      .where(
+         and(
+            inArray(initiativeProject.projectId, projectIds),
+            ne(initiativeProject.initiativeId, initiativeId)
+         )
+      );
+   await tx
+      .insert(initiativeProject)
+      .values(projectIds.map((projectId) => ({ initiativeId, projectId })))
+      .onConflictDoNothing();
+   // Mantém project.initiativeId em sincronia com a tabela de vínculo.
+   await tx.update(projectT).set({ initiativeId }).where(inArray(projectT.id, projectIds));
+   return [...new Set(former.map((f) => f.initiativeId))];
 }
 
 /** Subárvore de `root` (incluindo ele), com teto contra ciclo em dado legado. */
@@ -334,6 +390,8 @@ export async function createInitiative(
       if (!parent.length) throw new ApiError(400, `initiative pai '${input.parentId}' inválida`);
    }
    const id = randomUUID();
+   const projectIds = [...new Set(input.projectIds ?? [])];
+   let former: string[] = [];
    await db.transaction(async (tx) => {
       await tx.insert(initT).values({
          id,
@@ -358,19 +416,12 @@ export async function createInitiative(
             .insert(initiativeLabel)
             .values(labelIds.map((labelId) => ({ initiativeId: id, labelId })));
       }
-      if (input.projectIds?.length) {
-         await tx
-            .insert(initiativeProject)
-            .values(input.projectIds.map((projectId) => ({ initiativeId: id, projectId })))
-            .onConflictDoNothing();
-         // Mantém project.initiativeId em sincronia com a tabela de vínculo.
-         await tx
-            .update(projectT)
-            .set({ initiativeId: id })
-            .where(inArray(projectT.id, input.projectIds));
-      }
+      former = await linkProjects(tx, id, projectIds);
    });
    publish({ entity: 'initiative', action: 'created', id });
+   for (const projectId of projectIds)
+      publish({ entity: 'project', action: 'updated', id: projectId });
+   await publishInitiativeRollups(db, [input.parentId, ...former]);
    return (await getInitiative(db, id))!;
 }
 
@@ -455,6 +506,17 @@ export async function updateInitiative(
       if (parentId) await assertInitiativeParent(db, id, parentId);
       set.parentId = parentId;
    }
+   let former: string[] = [];
+   let touchedProjects: string[] = [];
+   let oldParentId: string | null = null;
+   if (patch.parentId !== undefined) {
+      const [row] = await db
+         .select({ parentId: initT.parentId })
+         .from(initT)
+         .where(eq(initT.id, id))
+         .limit(1);
+      oldParentId = row?.parentId ?? null;
+   }
    await db.transaction(async (tx) => {
       if (Object.keys(set).length) await tx.update(initT).set(set).where(eq(initT.id, id));
       // Reconciliação initiative↔project: substitui o conjunto de vínculos e
@@ -465,6 +527,7 @@ export async function updateInitiative(
             .from(initiativeProject)
             .where(eq(initiativeProject.initiativeId, id));
          const oldIds = old.map((l) => l.projectId);
+         const nextIds = [...new Set(patch.projectIds)];
          await tx.delete(initiativeProject).where(eq(initiativeProject.initiativeId, id));
          // Limpa a back-reference dos projetos que apontavam para esta initiative.
          if (oldIds.length) {
@@ -473,16 +536,13 @@ export async function updateInitiative(
                .set({ initiativeId: null })
                .where(and(inArray(projectT.id, oldIds), eq(projectT.initiativeId, id)));
          }
-         if (patch.projectIds.length) {
-            await tx
-               .insert(initiativeProject)
-               .values(patch.projectIds.map((projectId) => ({ initiativeId: id, projectId })))
-               .onConflictDoNothing();
-            await tx
-               .update(projectT)
-               .set({ initiativeId: id })
-               .where(inArray(projectT.id, patch.projectIds));
-         }
+         former = await linkProjects(tx, id, nextIds);
+         const oldSet = new Set(oldIds);
+         const nextSet = new Set(nextIds);
+         touchedProjects = [
+            ...oldIds.filter((pid) => !nextSet.has(pid)),
+            ...nextIds.filter((pid) => !oldSet.has(pid)),
+         ];
       }
       if (patch.labelIds !== undefined) {
          const labelIds = [...new Set(patch.labelIds)];
@@ -509,6 +569,14 @@ export async function updateInitiative(
       }
    });
    publish({ entity: 'initiative', action: 'updated', id });
+   for (const projectId of touchedProjects)
+      publish({ entity: 'project', action: 'updated', id: projectId });
+   // Rollup: ancestrais desta, as que perderam projeto e a mãe antiga (se trocou de pai).
+   await publishInitiativeRollups(db, [
+      ...(await initiativeAncestorIds(db, id)),
+      ...former,
+      oldParentId,
+   ]);
    return getInitiative(db, id);
 }
 

@@ -27,6 +27,7 @@ import { getOrCreateUser } from './users';
 import type { UserRef } from './issues';
 import { teamDescendantIds } from './hierarchy';
 import { assertCanWriteProject, assertCanWriteTeam, assertTeamInScope } from './scope';
+import { publishInitiativeRollups } from './initiatives';
 
 type ProjectRow = typeof projectT.$inferSelect;
 type StatusRow = typeof statusT.$inferSelect;
@@ -321,6 +322,7 @@ export async function createProject(
       }
    });
    publish({ entity: 'project', action: 'created', id });
+   if (input.initiativeId) await publishInitiativeRollups(db, [input.initiativeId]);
    return (await getProject(db, id))!;
 }
 
@@ -359,7 +361,12 @@ export async function updateProject(
    actorEmail?: string
 ): Promise<ProjectDto | null> {
    const existing = await db
-      .select({ id: projectT.id, healthId: projectT.healthId, teamId: projectT.teamId })
+      .select({
+         id: projectT.id,
+         healthId: projectT.healthId,
+         teamId: projectT.teamId,
+         initiativeId: projectT.initiativeId,
+      })
       .from(projectT)
       .where(eq(projectT.id, id))
       .limit(1);
@@ -442,12 +449,23 @@ export async function updateProject(
       }
    });
    publish({ entity: 'project', action: 'updated', id });
+   // Status/progresso/vínculo mudam o rollup das initiatives (antiga e nova) (#41).
+   if (
+      patch.statusId !== undefined ||
+      patch.percentComplete !== undefined ||
+      patch.initiativeId !== undefined
+   ) {
+      await publishInitiativeRollups(db, [
+         existing[0].initiativeId,
+         patch.initiativeId !== undefined ? patch.initiativeId : null,
+      ]);
+   }
    return getProject(db, id);
 }
 
 export async function deleteProject(db: Db, id: string, actorEmail?: string): Promise<boolean> {
    const existing = await db
-      .select({ id: projectT.id })
+      .select({ id: projectT.id, initiativeId: projectT.initiativeId })
       .from(projectT)
       .where(eq(projectT.id, id))
       .limit(1);
@@ -473,5 +491,6 @@ export async function deleteProject(db: Db, id: string, actorEmail?: string): Pr
       await tx.delete(projectT).where(eq(projectT.id, id));
    });
    publish({ entity: 'project', action: 'deleted', id });
+   await publishInitiativeRollups(db, [existing[0].initiativeId]);
    return true;
 }
