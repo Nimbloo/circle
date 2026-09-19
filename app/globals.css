@@ -39,7 +39,7 @@
 }
 
 :root {
-   /* Motion (ver o bloco MOTION acima). */
+   /* ---- Motion (ver o bloco MOTION acima) ---- */
    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
    --ease-in: cubic-bezier(0.4, 0, 1, 1);
    --ease-std: cubic-bezier(0.2, 0, 0, 1);
@@ -54,9 +54,7 @@
    --scale-modal: 0.98;
    --shift-pop: 4px;
    --overlay: rgb(0 0 0 / 0.4);
-}
 
-:root {
    /* ---- Bench de cores Linear — tema LIGHT (default) ---- */
    --card: #ffffff;
    --card-foreground: #202124;

@@ -74,6 +74,17 @@ describe('motion dos primitivos', () => {
       expect(rule(".motion-modal[data-state='closed']")).toContain('var(--dur-fast)');
    });
 
+   it('a saída de linha colapsa a altura em 150 ms (list-exit)', () => {
+      // Utilitário para as listas (snooze, excluir): vai num wrapper de filho único e o
+      // item sai da lista no `animationend` (ou após MOTION_MS.content).
+      const keyframes = css.slice(css.indexOf('@keyframes list-exit'), css.indexOf('.list-exit {'));
+      expect(keyframes).toContain('grid-template-rows: 1fr');
+      expect(keyframes).toContain('grid-template-rows: 0fr');
+      expect(keyframes).toContain('opacity');
+      expect(rule('.list-exit')).toContain('animation: list-exit var(--dur-content)');
+      expect(rule('.list-exit > *')).toContain('min-height: 0');
+   });
+
    it('popover, dropdown e context menu usam a mesma pele e o mesmo item', () => {
       render(
          <>
