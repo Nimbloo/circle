@@ -159,6 +159,7 @@ const byNewest = (a: InboxNotification, b: InboxNotification) => b.sortAt.locale
 
 /** Timer para trazer de volta a adiada quando o adiamento vence (sem reload). */
 let snoozeTimer: ReturnType<typeof setTimeout> | null = null;
+let snoozeWakeAt: number | null = null;
 
 export const useNotificationsStore = create<NotificationsState>((set, get) => {
    /** Reconsulta só a contagem (patch de notificação fora da lista capada). */
@@ -172,15 +173,28 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => {
       }
    };
 
-   /** Agenda uma hidratação para quando o primeiro adiamento conhecido vencer. */
+   /**
+    * Agenda uma hidratação para quando o primeiro adiamento conhecido vencer. Um timer
+    * só, sempre no MAIS PRÓXIMO: adiar outra por mais tempo não empurra a volta da
+    * primeira. Ao disparar, reagenda para a próxima adiada vigente que conhecemos.
+    */
    const scheduleSnoozeWake = (untilIso: string) => {
-      const ms = new Date(untilIso).getTime() - Date.now();
+      const at = new Date(untilIso).getTime();
+      const ms = at - Date.now();
       // setTimeout estoura acima de ~24,8 dias; adiamentos longos voltam no próximo hydrate.
       if (!(ms > 0) || ms > 2 ** 31 - 1) return;
+      if (snoozeTimer && snoozeWakeAt !== null && snoozeWakeAt <= at) return;
       if (snoozeTimer) clearTimeout(snoozeTimer);
+      snoozeWakeAt = at;
       snoozeTimer = setTimeout(() => {
          snoozeTimer = null;
+         snoozeWakeAt = null;
          void get().hydrate();
+         const next = get()
+            .snoozed.map((n) => n.snoozedUntil)
+            .filter((u): u is string => !!u && new Date(u).getTime() > Date.now())
+            .sort()[0];
+         if (next) scheduleSnoozeWake(next);
       }, ms + 1000);
    };
 

@@ -115,3 +115,20 @@ describe('hydrate não depende do issues-store (#19)', () => {
       expect(item?.user.name).toBeTruthy();
    });
 });
+
+describe('snooze — despertador (Co)', () => {
+   it('adiar uma segunda notificação por mais tempo não atrasa a volta da primeira', async () => {
+      vi.useFakeTimers();
+      try {
+         list.mockResolvedValue([]);
+         const s = useNotificationsStore.getState();
+         s.snooze('a', 0.5);
+         s.snooze('b', 24);
+         await vi.advanceTimersByTimeAsync(1800_000 + 2000);
+         // A primeira venceu: o inbox re-hidrata para trazê-la de volta.
+         expect(list).toHaveBeenCalled();
+      } finally {
+         vi.useRealTimers();
+      }
+   });
+});
