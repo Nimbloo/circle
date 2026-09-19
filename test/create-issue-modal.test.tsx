@@ -9,7 +9,7 @@ import { CreateNewIssue } from '@/components/layout/sidebar/create-new-issue';
 import { CreateIssueModalProvider } from '@/components/common/issues/create-issue-modal-provider';
 import { OrgSwitcher } from '@/components/layout/sidebar/org-switcher';
 import { SidebarProvider } from '@/components/ui/sidebar';
-import { status } from '@/data/status';
+import { seedCatalog, status } from './helpers/catalog-fixture';
 import { useCatalogStore } from '@/store/catalog-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -43,6 +43,7 @@ const titleInput = () => screen.getByPlaceholderText('Título da issue') as HTML
 
 describe('modal de criar issue', () => {
    beforeEach(() => {
+      seedCatalog();
       act(() => useCreateIssueStore.setState({ isOpen: false, defaultStatus: null }));
       useWorkspaceStore.setState({ teams: [], users: [], projects: [], me: null });
    });

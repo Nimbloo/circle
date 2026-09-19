@@ -5,7 +5,7 @@ import React from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Issue } from '@/data/issues';
-import { status } from '@/data/status';
+import { status } from './helpers/catalog-fixture';
 import { priorities } from '@/data/priorities';
 
 /**

@@ -12,7 +12,7 @@ import InboxIssueLine from '@/components/common/inbox/issue-line';
 import type { InboxItem } from '@/data/inbox';
 import type { Issue } from '@/data/issues';
 import { priorities } from '@/data/priorities';
-import { status } from '@/data/status';
+import { status } from './helpers/catalog-fixture';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 

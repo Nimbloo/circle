@@ -9,7 +9,7 @@ import { BlockEditor } from '@/components/common/editor/block-editor';
 import { blocksToDoc, type EditorDoc } from '@/lib/editor-doc';
 import type { Issue } from '@/data/issues';
 import { priorities } from '@/data/priorities';
-import { status } from '@/data/status';
+import { status } from './helpers/catalog-fixture';
 import { useIssuesStore } from '@/store/issues-store';
 
 vi.mock('next/navigation', () => ({

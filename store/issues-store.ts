@@ -11,6 +11,7 @@ import { issueCursor } from '@/lib/issue-cursor';
 import { adaptIssues } from '@/lib/adapters';
 import { rankBetween } from '@/lib/api/rank';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { useCatalogStore } from '@/store/catalog-store';
 import type { CreateIssueInput, UpdateIssueInput, IssueListOptions } from '@/lib/api/issues';
 
 interface FilterOptions {
@@ -521,3 +522,31 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
 
    getIssueById: (id) => get().issues.find((i) => i.id === id),
 }));
+
+/**
+ * Status renomeado/recolorido no catálogo (#16) reflete nas issues em memória, sem
+ * refetch. Só troca o objeto quando a aparência mudou: re-hidratar o bootstrap recria
+ * os Status, mas issue cujo status não mudou mantém a referência (sem re-render).
+ */
+useCatalogStore.subscribe((next, prev) => {
+   if (next.statuses === prev.statuses) return;
+   const byId = new Map(next.statuses.map((st) => [st.id, st]));
+   useIssuesStore.setState((state) => {
+      let changed = false;
+      const issues = state.issues.map((i) => {
+         const st = byId.get(i.status.id);
+         if (
+            !st ||
+            st === i.status ||
+            (st.name === i.status.name &&
+               st.color === i.status.color &&
+               st.category === i.status.category &&
+               st.icon === i.status.icon)
+         )
+            return i;
+         changed = true;
+         return { ...i, status: st };
+      });
+      return changed ? { issues } : {};
+   });
+});

@@ -9,7 +9,7 @@ import IssuePreview from '@/components/common/inbox/issue-preview';
 import type { InboxItem } from '@/data/inbox';
 import type { Issue } from '@/data/issues';
 import { priorities } from '@/data/priorities';
-import { status } from '@/data/status';
+import { status } from './helpers/catalog-fixture';
 import { useIssuesStore } from '@/store/issues-store';
 
 vi.mock('@/lib/client', () => ({

@@ -13,7 +13,7 @@ import {
    adaptInitiative,
    adaptView,
 } from '@/lib/adapters-workspace';
-import type { WorkspaceBootstrap, TeamFull } from '@/lib/api/workspace';
+import type { TeamFull } from '@/lib/api/workspace';
 import type { MeDto } from '@/lib/api/users';
 import type { ProjectDto, UpdateProjectInput } from '@/lib/api/projects';
 import type { InitiativeDto } from '@/lib/api/initiatives';
@@ -33,6 +33,8 @@ export type TeamLike = TeamDto & Partial<Pick<TeamFull, 'members'>>;
 interface WorkspaceState {
    loaded: boolean;
    loading: boolean;
+   /** O último bootstrap falhou: o shell troca o skeleton por erro com retry (#16). */
+   loadError: boolean;
    me: MeDto | null;
    projects: Project[];
    teams: Team[];
@@ -155,6 +157,7 @@ const dropId = (ids: string[], id: string) => ids.filter((x) => x !== id);
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
    loaded: false,
    loading: false,
+   loadError: false,
    me: null,
    projects: [],
    teams: [],
@@ -196,9 +199,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
                views: data.views.map((v) => adaptView(v, usersById)),
                loaded: true,
                loading: false,
+               loadError: false,
             });
          } catch {
-            set({ loading: false });
+            set({ loading: false, loadError: true });
          } finally {
             inFlight = null;
          }

@@ -10,9 +10,9 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import { IssueLine } from '@/components/common/issues/issue-line';
 import { GroupIssues } from '@/components/common/issues/group-issues';
 import type { Issue } from '@/data/issues';
-import { labels } from '@/data/labels';
+import { labels, seedCatalog } from './helpers/catalog-fixture';
 import { priorities } from '@/data/priorities';
-import { status } from '@/data/status';
+import { status } from './helpers/catalog-fixture';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { makeProject } from './helpers/project-fixture';
@@ -67,6 +67,7 @@ const makeIssue = (id: string, over: Partial<Issue> = {}): Issue => ({
 
 describe('seletores da linha de issue — contagens só com o popover aberto', () => {
    beforeEach(() => {
+      seedCatalog();
       useWorkspaceStore.setState({ users: [], projects: [PROJECT], cycles: [] });
    });
 

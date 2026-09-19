@@ -9,9 +9,9 @@ import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { IssueLine } from '@/components/common/issues/issue-line';
 import type { Issue } from '@/data/issues';
-import { labels } from '@/data/labels';
+import { labels, seedCatalog } from './helpers/catalog-fixture';
 import { priorities } from '@/data/priorities';
-import { status } from '@/data/status';
+import { status } from './helpers/catalog-fixture';
 import type { User } from '@/data/users';
 import { firstRank, rankAfter } from '@/lib/api/rank';
 import { useIssuesStore } from '@/store/issues-store';
@@ -88,6 +88,7 @@ const storeIssue = (id: string) => useIssuesStore.getState().getIssueById(id)!;
 
 describe('IssueLine — edição inline pelos seletores', () => {
    beforeEach(() => {
+      seedCatalog();
       vi.clearAllMocks();
       apiMocks.update.mockImplementation(async () => ({}));
       apiMocks.addLabel.mockImplementation(async () => ({}));
@@ -183,6 +184,7 @@ describe('IssueLine — edição inline pelos seletores', () => {
 
 describe('IssueLine — drag-and-drop no modo lista', () => {
    beforeEach(() => {
+      seedCatalog();
       vi.clearAllMocks();
       apiMocks.update.mockImplementation(async () => ({}));
       apiMocks.reorder.mockImplementation(async (id: string) => {
