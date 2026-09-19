@@ -51,6 +51,15 @@ function LoginForm() {
       rawCallback.startsWith('/') && !rawCallback.startsWith('//') ? rawCallback : '/';
 
    const [loading, setLoading] = React.useState(false);
+   // Voltar do Keycloak pelo histórico restaura a página do bfcache com `loading=true`:
+   // o botão ficava preso em "Redirecionando…" (Ad#21–40).
+   React.useEffect(() => {
+      const onShow = (e: PageTransitionEvent) => {
+         if (e.persisted) setLoading(false);
+      };
+      window.addEventListener('pageshow', onShow);
+      return () => window.removeEventListener('pageshow', onShow);
+   }, []);
    // O callback `signIn` redireciona pra cá com o motivo da recusa (ver `auth.ts`).
    const aviso = mensagemDeRecusa(searchParams.get('error'));
 
@@ -83,7 +92,10 @@ function LoginForm() {
                      disabled={loading}
                      onClick={() => {
                         setLoading(true);
-                        void signIn('keycloak', { callbackUrl });
+                        // Falha antes do redirect (rede, provider fora) reabilita o botão.
+                        Promise.resolve(signIn('keycloak', { callbackUrl })).catch(() =>
+                           setLoading(false)
+                        );
                      }}
                      className="flex h-11 w-full items-center justify-center gap-3 rounded-lg border border-[#dadce0] bg-white text-sm font-medium text-[#1f1f1f] shadow-sm transition-colors hover:bg-[#f8f9fa] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4285F4]/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/15 dark:bg-[#1f1f22] dark:text-[#e3e3e3] dark:shadow-none dark:hover:bg-[#26262b]"
                   >
