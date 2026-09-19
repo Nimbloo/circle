@@ -1,5 +1,6 @@
 'use client';
 
+import { TimeAgo } from './time-ago';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { fetchReviews, syncReviews } from '@/lib/adapters-reviews';
@@ -91,7 +92,9 @@ function ReviewRow({
       >
          <PrIcon status={review.status} />
          <span className="flex-1 truncate">{review.title}</span>
-         <span className="text-xs text-muted-foreground shrink-0">{review.timeAgo}</span>
+         <span className="text-xs text-muted-foreground shrink-0">
+            <TimeAgo iso={review.createdAt} fallback={review.timeAgo} />
+         </span>
       </Link>
    );
 }

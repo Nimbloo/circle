@@ -1,5 +1,6 @@
 'use client';
 
+import { TimeAgo } from './time-ago';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -103,7 +104,9 @@ export function ReviewDiff({ review, handle }: { review: Review; handle: ReviewC
                         >
                            <span className="font-mono text-muted-foreground">{commit.sha}</span>
                            <span className="flex-1 truncate">{commit.message}</span>
-                           <span className="text-muted-foreground shrink-0">{commit.timeAgo}</span>
+                           <span className="text-muted-foreground shrink-0">
+                              <TimeAgo iso={commit.committedAt} fallback={commit.timeAgo} />
+                           </span>
                         </div>
                      ))}
                   </PopoverContent>

@@ -48,3 +48,9 @@ export function useNow(): number {
    }, []);
    return now;
 }
+
+/** `relativeTime` que anda com o relógio da página; sem ISO devolve o `fallback`. */
+export function useRelativeTime(iso: string | null | undefined, fallback = ''): string {
+   const now = useNow();
+   return iso ? relativeTime(iso, now) : fallback;
+}

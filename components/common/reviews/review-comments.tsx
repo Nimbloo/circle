@@ -1,5 +1,6 @@
 'use client';
 
+import { TimeAgo } from './time-ago';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import type { Review, ReviewComment, ReviewVerdictKind } from '@/data/reviews';
@@ -206,7 +207,9 @@ export function ReviewCommentItem({
                <AvatarFallback className="text-[9px]">{authorName[0]}</AvatarFallback>
             </Avatar>
             <span className="text-sm font-medium truncate">{authorName}</span>
-            <span className="text-xs text-muted-foreground shrink-0">{comment.timeAgo}</span>
+            <span className="text-xs text-muted-foreground shrink-0">
+               <TimeAgo iso={comment.createdAt} fallback={comment.timeAgo} />
+            </span>
             {comment.kind !== 'comment' && <VerdictBadge kind={comment.kind} />}
             {showAnchor && comment.path && (
                <span className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/60 px-1.5 py-px text-[11px] font-mono text-muted-foreground truncate">

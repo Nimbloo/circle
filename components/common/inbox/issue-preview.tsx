@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { getNotificationIcon } from '@/lib/notification-utils';
 import type { InboxLineItem } from './issue-line';
-import { relativeTime } from '@/lib/relative-time';
+import { useRelativeTime } from '@/lib/relative-time';
 import { useIssuesStore } from '@/store/issues-store';
 import { ArrowUpRight, Check } from 'lucide-react';
 import Link from 'next/link';
@@ -32,9 +32,7 @@ interface IssuePreviewProps {
 
 /** Contexto da notificação (quem/quando/o quê) exibido acima da issue. */
 function NotificationContext({ notification }: { notification: InboxPreviewItem }) {
-   const when = notification.sortAt
-      ? relativeTime(notification.sortAt)
-      : (notification.timestamp ?? '');
+   const when = useRelativeTime(notification.sortAt, notification.timestamp ?? '');
    return (
       <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg mb-8">
          <div className="relative shrink-0">
