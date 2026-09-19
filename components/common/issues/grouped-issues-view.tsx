@@ -18,6 +18,7 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import { GroupIssues, IssueGroupDescriptor } from './group-issues';
 import { VirtualIssueList } from './virtual-issue-list';
 import { CustomDragLayer } from './issue-grid';
+import { IssueLineDragLayer } from './issue-line';
 import { BulkActionsBar } from './bulk-actions-bar';
 import { useBulkSelectionKeys } from './use-bulk-selection-keys';
 import { useIssueDeleteShortcut } from './use-issue-delete-shortcut';
@@ -481,7 +482,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
 
    return (
       <DndProvider backend={HTML5Backend}>
-         <CustomDragLayer />
+         <IssueLineDragLayer />
          <BulkActionsBar />
          {listGroups.length === 0 && !showFooter ? (
             <IssuesEmptyState loading={loading} error={error} onRetry={onRetry} />

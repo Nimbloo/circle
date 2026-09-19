@@ -29,7 +29,7 @@ import { DueDateSelector } from '@/components/layout/sidebar/create-new-issue/du
 import { estimateLabel, normalizeScale } from '@/data/estimate-scales';
 import { motion } from 'motion/react';
 import { memo, useEffect, useRef, type Ref } from 'react';
-import { DragSourceMonitor, useDrag } from 'react-dnd';
+import { DragSourceMonitor, useDrag, useDragLayer } from 'react-dnd';
 import { getEmptyImage } from 'react-dnd-html5-backend';
 
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
@@ -57,12 +57,15 @@ function IssueRow({
    issue,
    layoutId = false,
    dragging = false,
+   dropIndicator = null,
    getGroup,
 }: {
    ref?: Ref<HTMLDivElement>;
    issue: Issue;
    layoutId?: boolean;
    dragging?: boolean;
+   /** Linha de inserção de 2px (is#21): onde a issue arrastada vai cair ao soltar aqui. */
+   dropIndicator?: 'above' | 'below' | null;
    getGroup?: () => IssueGroupContext;
 }) {
    const { orgId } = useParams<{ orgId: string }>();
@@ -112,11 +115,21 @@ function IssueRow({
          data-issue-id={issue.id}
          {...(layoutId && { layoutId: `issue-line-${issue.identifier || issue.id}` })}
          className={cn(
-            'group/line flex h-11 w-full items-center justify-start px-3 hover:bg-accent/40 focus-within:bg-accent/40',
+            'group/line relative flex h-11 w-full items-center justify-start px-3 hover:bg-accent/40 focus-within:bg-accent/40',
             selected && 'bg-primary/5'
          )}
          style={dragging ? { opacity: 0.5, cursor: 'grabbing' } : undefined}
       >
+         {dropIndicator && (
+            <span
+               aria-hidden
+               data-testid="drop-indicator"
+               className={cn(
+                  'pointer-events-none absolute inset-x-0 h-0.5 bg-primary',
+                  dropIndicator === 'above' ? 'top-0' : 'bottom-0'
+               )}
+            />
+         )}
          <button
             type="button"
             onClick={pick}
@@ -286,12 +299,12 @@ function DraggableIssueRow({
       [issue]
    );
 
-   // Preview custom (CustomDragLayer) em vez do ghost nativo do browser.
+   // Preview custom (IssueLineDragLayer) em vez do ghost nativo do browser.
    useEffect(() => {
       preview(getEmptyImage(), { captureDraggingState: true });
    }, [preview]);
 
-   const drop = useIssueDropTarget(issue.id, getGroup, ref);
+   const { drop, isOver, dropAbove } = useIssueDropTarget(issue.id, getGroup, ref);
    drag(drop(ref));
 
    return (
@@ -300,6 +313,7 @@ function DraggableIssueRow({
          issue={issue}
          layoutId={layoutId}
          dragging={isDragging}
+         dropIndicator={isOver ? (dropAbove ? 'above' : 'below') : null}
          getGroup={getGroup}
       />
    );
@@ -316,3 +330,33 @@ function IssueLineComponent({ issue, layoutId = false, getGroup }: IssueLineProp
 /** Memoizada: só re-renderiza quando as props mudam — importante na lista
  *  virtualizada, onde o container re-renderiza ao rolar (evita re-render das linhas). */
 export const IssueLine = memo(IssueLineComponent);
+
+/**
+ * Fantasma do drag na lista (is#21): antes, a lista reaproveitava o card do board
+ * (`CustomDragLayer`, issue-grid.tsx) — largo demais e com o layout errado. Aqui o
+ * fantasma tem a cara de uma linha.
+ */
+export function IssueLineDragLayer() {
+   const { itemType, isDragging, item, currentOffset } = useDragLayer((monitor) => ({
+      item: monitor.getItem() as Issue,
+      itemType: monitor.getItemType(),
+      currentOffset: monitor.getSourceClientOffset(),
+      isDragging: monitor.isDragging(),
+   }));
+
+   if (!isDragging || itemType !== IssueDragType || !currentOffset || !item) {
+      return null;
+   }
+
+   return (
+      <div
+         className="fixed left-0 top-0 z-50 pointer-events-none"
+         style={{ transform: `translate(${currentOffset.x}px, ${currentOffset.y}px)`, width: '420px' }}
+      >
+         <div className="flex h-11 items-center gap-2 rounded-md border border-border bg-card px-3 shadow-[var(--card-shadow)]">
+            <item.status.icon />
+            <span className="truncate text-[13px] font-medium">{item.title}</span>
+         </div>
+      </div>
+   );
+}

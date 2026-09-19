@@ -131,7 +131,7 @@ function IssueGridComponent({ issue, getGroup, layout = true }: IssueGridProps) 
 
    // Drop sobre o card: reorder no grupo ou campo do agrupamento (R2). O resultado
    // sinaliza `didDrop()` ao container, que então não trata de novo.
-   const drop = useIssueDropTarget(issue.id, getGroup, ref);
+   const { drop } = useIssueDropTarget(issue.id, getGroup, ref);
 
    // Connect drag and drop to the element.
    drag(drop(ref));
