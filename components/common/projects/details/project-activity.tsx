@@ -19,13 +19,11 @@ import {
    projectUpdateHealthColor,
    projectUpdateHealthLabel,
 } from '@/data/project-details';
-import { useIssuesStore } from '@/store/issues-store';
 import { useProjectUpdatesStore } from '@/store/project-updates-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { ProjectSidePanel } from './project-side-panel';
 import { useSharedProjectDetail } from './use-project-detail';
 
 interface ProjectActivityProps {
@@ -71,11 +69,6 @@ function UpdateCard({ update }: { update: ProjectUpdate }) {
 export default function ProjectActivity({ projectId }: ProjectActivityProps) {
    const project = useWorkspaceStore((s) => s.getProjectById(projectId));
    const loaded = useWorkspaceStore((s) => s.loaded);
-   const allIssues = useIssuesStore((s) => s.issues);
-   const issues = useMemo(
-      () => allIssues.filter((issue) => issue.project?.id === projectId),
-      [allIssues, projectId]
-   );
    const { postedUpdates, postUpdate, removeUpdate } = useProjectUpdatesStore();
    const [health, setHealth] = useState<ProjectUpdateHealth>('on-track');
    const [text, setText] = useState('');
@@ -131,8 +124,8 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
    }
 
    return (
-      <div className="content-enter relative w-full h-full flex overflow-hidden">
-         <div className="flex-1 min-w-0 h-full overflow-y-auto">
+      <div className="content-enter relative h-full w-full overflow-hidden">
+         <div className="h-full min-w-0 overflow-y-auto">
             <div className="max-w-3xl mx-auto px-6 lg:px-10 py-8">
                <div className="mb-3 flex justify-end xl:hidden">
                   <DetailSidePanelTrigger kind="project" />
@@ -214,14 +207,6 @@ export default function ProjectActivity({ projectId }: ProjectActivityProps) {
                )}
             </div>
          </div>
-
-         <ProjectSidePanel
-            project={project}
-            detail={detail}
-            issues={issues}
-            projectId={projectId}
-            onChanged={reload}
-         />
       </div>
    );
 }

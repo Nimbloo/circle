@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { ErrorState } from '@/components/common/error-state';
 import { api, ApiError } from '@/lib/client';
 import { blocksToDoc, docHeadings, type EditorDoc } from '@/lib/editor-doc';
-import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { ChevronDown, PenLine } from 'lucide-react';
 import Link from 'next/link';
@@ -16,7 +15,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { DocumentOutline, type OutlineItem } from './document-outline';
 import { ProjectResources } from './project-resources';
-import { ProjectSidePanel } from './project-side-panel';
 import { useSharedProjectDetail } from './use-project-detail';
 import { LoadingArea } from '@/components/common/loading-area';
 
@@ -28,7 +26,6 @@ interface ProjectOverviewProps {
 export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    const project = useWorkspaceStore((s) => s.getProjectById(projectId));
    const loaded = useWorkspaceStore((s) => s.loaded);
-   const allIssues = useIssuesStore((s) => s.issues);
    const { orgId } = useParams<{ orgId: string }>();
    const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -57,11 +54,6 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
          toast.error('Could not update the summary');
       }
    };
-
-   const issues = useMemo(
-      () => allIssues.filter((issue) => issue.project?.id === projectId),
-      [allIssues, projectId]
-   );
 
    // Descrição: doc do servidor ou conversão da projeção em blocos. `liveDoc` acompanha o
    // que está no editor (antes do save) para o outline reagir enquanto se digita.
@@ -154,9 +146,9 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    }
 
    return (
-      <div className="content-enter relative w-full h-full flex overflow-hidden">
-         {/* Main column */}
-         <div className="flex-1 min-w-0 h-full relative">
+      <div className="content-enter relative h-full w-full overflow-hidden">
+         {/* Main column (o sidecar vem do layout do projeto, pl#6) */}
+         <div className="relative h-full min-w-0">
             <DocumentOutline items={outlineItems} scrollRef={scrollRef} />
             <div ref={scrollRef} className="h-full overflow-y-auto">
                <div className="mx-auto max-w-[869px] px-8 pt-16 pb-10">
@@ -237,15 +229,6 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                </div>
             </div>
          </div>
-
-         {/* Side panel */}
-         <ProjectSidePanel
-            project={project}
-            detail={detail}
-            issues={issues}
-            projectId={projectId}
-            onChanged={reload}
-         />
       </div>
    );
 }

@@ -12,8 +12,6 @@ import { useViewStore } from '@/store/view-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useMemo } from 'react';
 import { DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
-import { ProjectSidePanel } from './project-side-panel';
-import { useSharedProjectDetail } from './use-project-detail';
 
 interface ProjectIssuesProps {
    projectId: string;
@@ -31,9 +29,6 @@ export default function ProjectIssues({ projectId }: ProjectIssuesProps) {
    const loading = useIssuesStore(selectIssuesLoading);
    const error = useIssuesStore((s) => s.error);
    const hydrate = useIssuesStore((s) => s.hydrate);
-
-   // Detalhe compartilhado pelas abas (layout da rota, #45), com live reload.
-   const { detail, reload } = useSharedProjectDetail(projectId);
 
    const issues = useMemo(
       () => allIssues.filter((issue) => issue.project?.id === projectId),
@@ -61,8 +56,8 @@ export default function ProjectIssues({ projectId }: ProjectIssuesProps) {
          <div className="flex justify-end px-2.5 pt-2 xl:hidden">
             <DetailSidePanelTrigger kind="project" />
          </div>
-         <div className="relative flex-1 min-h-0 w-full flex overflow-hidden">
-            <div className="flex-1 min-w-0 h-full overflow-hidden">
+         <div className="relative flex-1 min-h-0 w-full overflow-hidden">
+            <div className="h-full min-w-0 overflow-hidden">
                <GroupedIssuesView
                   issues={displayedIssues}
                   totalIssues={issues}
@@ -73,14 +68,6 @@ export default function ProjectIssues({ projectId }: ProjectIssuesProps) {
                   onRetry={() => hydrate()}
                />
             </div>
-            <ProjectSidePanel
-               project={project}
-               detail={detail}
-               issues={issues}
-               insightsIssues={displayedIssues}
-               projectId={projectId}
-               onChanged={reload}
-            />
          </div>
       </div>
    );
