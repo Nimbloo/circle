@@ -413,7 +413,6 @@ export const api = {
    members: {
       list: (q = '') => get<MemberDto[]>(`/members${q}`),
       get: (id: string) => get<MemberDto>(`/members/${id}`),
-      updateRole: (id: string, role: string) => patch<MemberDto>(`/members/${id}`, { role }),
       /** Desativa/reativa o membro (#100, admin). Remove de todos os times ao desativar. */
       setDeactivated: (id: string, deactivated: boolean) =>
          patch<MemberDto>(`/members/${id}`, { deactivated }),

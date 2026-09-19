@@ -4,7 +4,7 @@ import { ok, notFound } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
 import { isAdmin } from '@/lib/api/auth';
 import { ApiError } from '@/lib/api/errors';
-import { getMember, setMemberDeactivated, updateMemberRole, MEMBER_ROLES } from '@/lib/api/members';
+import { getMember, setMemberDeactivated, MEMBER_ROLES } from '@/lib/api/members';
 import { getOrCreateUser } from '@/lib/api/users';
 import { recordAudit } from '@/lib/api/audit';
 
@@ -54,16 +54,12 @@ export async function PATCH(req: Request, { params }: Params) {
          return dto ? ok(dto) : notFound(`Membro '${id}' não encontrado`);
       }
 
-      const dto = await updateMemberRole(db, id, patch.role!);
-      if (dto) {
-         await recordAudit(db, {
-            actorId: actor.id,
-            action: 'role.change',
-            targetType: 'member',
-            targetId: id,
-            meta: { role: patch.role },
-         });
-      }
-      return dto ? ok(dto) : notFound(`Membro '${id}' não encontrado`);
+      // Papel (#52, decisão do usuário): a fonte única é o Keycloak/Orbis, re-sincronizado
+      // a cada login — uma troca aqui seria desfeita no acesso seguinte. O break-glass
+      // `CIRCLE_ADMIN_EMAILS` continua valendo, mas também não passa por esta rota.
+      throw new ApiError(
+         409,
+         'O papel vem do Keycloak (Orbis) e é sincronizado a cada login: altere-o lá.'
+      );
    }, req);
 }

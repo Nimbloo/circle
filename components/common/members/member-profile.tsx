@@ -297,7 +297,7 @@ export default function MemberProfile({ member }: { member: User }) {
                         </div>
                         <div className="flex items-center justify-between gap-4">
                            <span className="text-muted-foreground shrink-0">Role</span>
-                           <RoleControl userId={member.id} role={member.role} />
+                           <RoleControl role={member.role} />
                         </div>
                         <div className="flex items-start justify-between gap-4">
                            <span className="text-muted-foreground shrink-0 pt-0.5">Teams</span>
