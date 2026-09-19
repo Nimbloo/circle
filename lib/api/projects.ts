@@ -320,7 +320,7 @@ export async function createProject(
             .onConflictDoNothing();
       }
    });
-   publish({ entity: 'project', action: 'created', id });
+   publish({ entity: 'project', action: 'created', id, teamId: input.teamId });
    return (await getProject(db, id))!;
 }
 
@@ -441,13 +441,18 @@ export async function updateProject(
          });
       }
    });
-   publish({ entity: 'project', action: 'updated', id });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id,
+      teamId: patch.teamId ?? existing[0].teamId,
+   });
    return getProject(db, id);
 }
 
 export async function deleteProject(db: Db, id: string, actorEmail?: string): Promise<boolean> {
    const existing = await db
-      .select({ id: projectT.id })
+      .select({ id: projectT.id, teamId: projectT.teamId })
       .from(projectT)
       .where(eq(projectT.id, id))
       .limit(1);
@@ -472,6 +477,6 @@ export async function deleteProject(db: Db, id: string, actorEmail?: string): Pr
       await tx.delete(projectSnapshot).where(eq(projectSnapshot.projectId, id));
       await tx.delete(projectT).where(eq(projectT.id, id));
    });
-   publish({ entity: 'project', action: 'deleted', id });
+   publish({ entity: 'project', action: 'deleted', id, teamId: existing[0].teamId });
    return true;
 }

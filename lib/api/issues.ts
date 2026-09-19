@@ -42,7 +42,14 @@ import { issueAttachmentUrls, removeAttachmentObjects } from './attachments';
 import { applySla } from './slas';
 import { runAutomations } from './automations';
 import { getOrCreateUser } from './users';
-import { rankAfter, firstRank, rankBetween } from './rank';
+import {
+   rankAfter,
+   firstRank,
+   rankBetween,
+   needsRankRebalance,
+   rebalanceTeamRanksInTransaction,
+   ISSUE_RANK_LOCK_KEY,
+} from './rank';
 import { ApiError } from './errors';
 import { assertAssignableUsers } from './members';
 import { dispatchNotification } from './notify';
@@ -69,8 +76,6 @@ const DEFAULT_LIST_LIMIT = 500;
  * Chave do advisory lock que serializa o cálculo do rank de append (#25): sem ele, duas
  * criações concorrentes liam o MESMO maior rank e gravavam o mesmo rank.
  */
-const ISSUE_RANK_LOCK_KEY = 4210773;
-
 /** Opções de mutação de issue. */
 export interface IssueMutationOptions {
    /**
@@ -702,6 +707,7 @@ export async function createIssue(
    const principalId = assigneeIds[0] ?? null;
 
    // Atômico: incremento do contador + issue + content + labels + evento.
+   let rebalanced = false;
    await db.transaction(async (tx) => {
       // identifier: incremento atômico do contador do time
       const seqRes = await tx
@@ -717,6 +723,7 @@ export async function createIssue(
       const maxRankRows = await tx
          .select({ r: issue.rank })
          .from(issue)
+         .where(eq(issue.teamId, teamId))
          .orderBy(sql`${issue.rank} DESC`)
          .limit(1);
       const rank = maxRankRows.length ? rankAfter(maxRankRows[0].r) : firstRank();
@@ -743,6 +750,10 @@ export async function createIssue(
          createdAt: now,
          updatedAt: now,
       });
+      if (needsRankRebalance(rank)) {
+         await rebalanceTeamRanksInTransaction(tx, teamId);
+         rebalanced = true;
+      }
 
       if (content.text) {
          await tx.insert(issueContent).values({
@@ -801,6 +812,7 @@ export async function createIssue(
 
    if (!opts.silent) {
       publish({ entity: 'issue', action: 'created', id, actorEmail, teamId });
+      if (rebalanced) publish({ entity: 'issue', action: 'updated', teamId });
       // O rollup do pai mudou (nova filha) → o board atualiza a linha dele.
       if (parent)
          publish({
@@ -852,227 +864,245 @@ export async function updateIssue(
    actorEmail: string,
    opts: IssueMutationOptions = {}
 ): Promise<IssueDto | null> {
-   const existing = await db.select().from(issue).where(eq(issue.id, id)).limit(1);
-   if (existing.length === 0) return null;
    const actor = await getOrCreateUser(db, actorEmail);
-   const prev = existing[0];
-
-   // Escopo de escrita: a issue de ORIGEM e os alvos do movimento (projeto e pai) têm
-   // que estar no escopo — mover para dentro/fora do próprio time é a escalação clássica.
-   const scope: ActorScope = { user: actor, teamIds: await visibleTeamIds(db, actor) };
-   assertTeamInScope(scope.teamIds, prev.teamId);
-   if (patch.projectId) {
-      await assertCanWriteProject(db, scope, patch.projectId);
-      await assertProjectOfTeam(db, patch.projectId, prev.teamId);
-   }
-   if (patch.parentId) await assertCanWriteIssue(db, scope, patch.parentId);
-
-   // Responsáveis (#96): `assigneeIds` substitui o conjunto; `assigneeId` sozinho troca só
-   // o principal e mantém os colaboradores (`""` → sem principal, como cycleId). O
-   // principal gravado em `issue.assignee_id` é SEMPRE o 1º do conjunto resultante.
+   let prev!: typeof issue.$inferSelect;
    let nextAssigneeIds: string[] | null = null;
    let prevAssigneeIds: string[] = [];
-   if (patch.assigneeIds !== undefined || patch.assigneeId !== undefined) {
-      const links = await db
-         .select({ userId: issueAssignee.userId })
-         .from(issueAssignee)
-         .where(eq(issueAssignee.issueId, id))
-         .orderBy(asc(issueAssignee.createdAt));
-      prevAssigneeIds = normalizeAssigneeIds([prev.assigneeId, ...links.map((l) => l.userId)]);
-      nextAssigneeIds =
-         patch.assigneeIds !== undefined
-            ? normalizeAssigneeIds(patch.assigneeIds)
-            : normalizeAssigneeIds([
-                 patch.assigneeId || null,
-                 ...prevAssigneeIds.filter((u) => u !== prev.assigneeId),
-              ]);
-   }
-   const addedAssigneeIds = nextAssigneeIds
-      ? nextAssigneeIds.filter((u) => !prevAssigneeIds.includes(u))
-      : [];
-   const removedAssigneeIds = nextAssigneeIds
-      ? prevAssigneeIds.filter((u) => !nextAssigneeIds!.includes(u))
-      : [];
-   const nextPrincipalId = nextAssigneeIds ? (nextAssigneeIds[0] ?? null) : prev.assigneeId;
-   const principalChanged = nextPrincipalId !== prev.assigneeId;
-
-   const set: Record<string, unknown> = { updatedAt: new Date() };
-   if (patch.title !== undefined) set.title = patch.title;
-   if (patch.statusId !== undefined) set.statusId = patch.statusId;
-   if (patch.priorityId !== undefined) set.priorityId = patch.priorityId;
-   if (nextAssigneeIds) {
-      await assertAssignableUsers(db, nextAssigneeIds);
-      set.assigneeId = nextPrincipalId;
-   }
-   // `""` (limpar o campo) → null, consistente com cycleId: senão a FK vira 404
-   // "recurso não existe" em vez de desvincular.
-   if (patch.projectId !== undefined) set.projectId = patch.projectId || null;
-   if (patch.cycleId !== undefined) {
-      if (patch.cycleId) await assertCycleOfTeam(db, patch.cycleId, prev.teamId);
-      set.cycleId = patch.cycleId || null;
-   }
-   // Due date manual desliga o SLA da issue (o indicador só vale para o prazo automático).
-   if (patch.dueDate !== undefined) {
-      set.dueDate = patch.dueDate;
-      set.slaAppliedAt = null;
-   }
-   if (patch.estimate !== undefined) set.estimate = patch.estimate;
-   if (patch.snoozedUntil !== undefined)
-      set.snoozedUntil = patch.snoozedUntil ? new Date(patch.snoozedUntil) : null;
-   if (patch.milestoneId !== undefined) {
-      if (patch.milestoneId) {
-         // valida que a milestone pertence ao projeto da issue (após aplicar o patch de projeto)
-         const projectId = patch.projectId !== undefined ? patch.projectId || null : prev.projectId;
-         const [m] = await db
-            .select({ projectId: projectMilestoneT.projectId })
-            .from(projectMilestoneT)
-            .where(eq(projectMilestoneT.id, patch.milestoneId))
-            .limit(1);
-         if (!m) throw new ApiError(400, 'Milestone inválida');
-         if (m.projectId !== projectId)
-            throw new ApiError(400, 'Milestone não pertence ao projeto da issue');
-      }
-      set.milestoneId = patch.milestoneId || null;
-   } else if (patch.projectId !== undefined && (patch.projectId || null) !== prev.projectId) {
-      // Trocou/removeu o projeto SEM tocar em milestone: a milestone atual pertence ao
-      // projeto ANTIGO → limpa (senão fica órfã, inflando progresso e aparecendo em issue
-      // de outro projeto). project_milestone não tem FK cascade, então é app-level.
-      if (prev.milestoneId) set.milestoneId = null;
-   }
-
-   // Pai (#95): "" limpa como os demais FKs; guarda de auto-pai e de ciclo em resolveParent.
-   const nextParentId = patch.parentId !== undefined ? patch.parentId || null : undefined;
+   let addedAssigneeIds: string[] = [];
+   let removedAssigneeIds: string[] = [];
+   let nextPrincipalId: string | null = null;
+   let principalChanged = false;
+   let set: Record<string, unknown> = {};
    let newParent: typeof issue.$inferSelect | null = null;
-   if (nextParentId !== undefined && nextParentId !== prev.parentId) {
-      if (nextParentId) newParent = await resolveParent(db, id, nextParentId);
-      if (newParent) assertParentOfTeam(newParent, prev.teamId);
-      set.parentId = nextParentId;
-   }
-
-   // SLA (#97): trocar a prioridade recalcula o prazo — mas só quando a issue NÃO tem
-   // due date manual (sem data, ou com data que veio do próprio SLA) e o patch não está
-   // definindo uma data explicitamente.
    let appliedSla: { hours: number; dueDate: string } | null = null;
-   if (
-      patch.priorityId !== undefined &&
-      patch.priorityId !== prev.priorityId &&
-      patch.dueDate === undefined &&
-      (prev.dueDate === null || prev.slaAppliedAt !== null)
-   ) {
-      const sla = await applySla(db, prev.teamId, patch.priorityId, set.updatedAt as Date);
-      if (sla) {
-         set.dueDate = sla.dueDate;
-         set.slaAppliedAt = sla.slaAppliedAt;
-         appliedSla = { hours: sla.hours, dueDate: sla.dueDate };
-      }
-   }
-
-   // Transição de status: marcos temporais (cycle/lead time) + auto-add ao cycle.
    let enteredCompleted = false;
-   const prevCategory = (await loadCatalogs(db)).statuses.get(prev.statusId)?.category;
-   let nextCategory = prevCategory;
-   if (patch.statusId !== undefined && patch.statusId !== prev.statusId) {
-      const cat = (await loadCatalogs(db)).statuses.get(patch.statusId)?.category;
-      nextCategory = cat;
-      const now = set.updatedAt as Date;
-      enteredCompleted = cat === 'completed';
-      // startedAt: 1ª entrada em "started" (sticky — não sobrescreve).
-      if (cat === 'started' && !prev.startedAt) set.startedAt = now;
-      // completedAt: entra em "completed" grava; sai de "completed" (reabriu) limpa.
-      if (cat === 'completed') {
-         set.completedAt = now;
-         // Pulou direto p/ done sem passar por started: cycle time ~0 (consistente c/ create).
-         if (!prev.startedAt) set.startedAt = now;
-      } else if (prev.completedAt) {
-         set.completedAt = null;
+   let prevCategory: string | undefined;
+   let nextCategory: string | undefined;
+   let statusChanged = false;
+   let estimateChanged = false;
+
+   const committed = await db.transaction(async (tx) => {
+      const txDb = tx as unknown as Db;
+      const locked = await tx.select().from(issue).where(eq(issue.id, id)).for('update').limit(1);
+      if (locked.length === 0) return false;
+      prev = locked[0];
+
+      // Escopo de escrita: a issue de ORIGEM e os alvos do movimento (projeto e pai) têm
+      // que estar no escopo — mover para dentro/fora do próprio time é a escalação clássica.
+      const scope: ActorScope = { user: actor, teamIds: await visibleTeamIds(txDb, actor) };
+      assertTeamInScope(scope.teamIds, prev.teamId);
+      if (patch.projectId) {
+         await assertCanWriteProject(txDb, scope, patch.projectId);
+         await assertProjectOfTeam(txDb, patch.projectId, prev.teamId);
+      }
+      if (patch.parentId) await assertCanWriteIssue(txDb, scope, patch.parentId);
+
+      // Responsáveis (#96): `assigneeIds` substitui o conjunto; `assigneeId` sozinho troca só
+      // o principal e mantém os colaboradores (`""` → sem principal, como cycleId). O
+      // principal gravado em `issue.assignee_id` é SEMPRE o 1º do conjunto resultante.
+      if (patch.assigneeIds !== undefined || patch.assigneeId !== undefined) {
+         const links = await txDb
+            .select({ userId: issueAssignee.userId })
+            .from(issueAssignee)
+            .where(eq(issueAssignee.issueId, id))
+            .orderBy(asc(issueAssignee.createdAt));
+         prevAssigneeIds = normalizeAssigneeIds([prev.assigneeId, ...links.map((l) => l.userId)]);
+         nextAssigneeIds =
+            patch.assigneeIds !== undefined
+               ? normalizeAssigneeIds(patch.assigneeIds)
+               : normalizeAssigneeIds([
+                    patch.assigneeId || null,
+                    ...prevAssigneeIds.filter((u) => u !== prev!.assigneeId),
+                 ]);
+      }
+      addedAssigneeIds = nextAssigneeIds
+         ? nextAssigneeIds.filter((u) => !prevAssigneeIds.includes(u))
+         : [];
+      removedAssigneeIds = nextAssigneeIds
+         ? prevAssigneeIds.filter((u) => !nextAssigneeIds!.includes(u))
+         : [];
+      nextPrincipalId = nextAssigneeIds ? (nextAssigneeIds[0] ?? null) : prev.assigneeId;
+      principalChanged = nextPrincipalId !== prev.assigneeId;
+
+      set = { updatedAt: new Date() };
+      if (patch.title !== undefined) set.title = patch.title;
+      if (patch.statusId !== undefined) set.statusId = patch.statusId;
+      if (patch.priorityId !== undefined) set.priorityId = patch.priorityId;
+      if (nextAssigneeIds) {
+         await assertAssignableUsers(txDb, nextAssigneeIds);
+         set.assigneeId = nextPrincipalId;
+      }
+      // `""` (limpar o campo) → null, consistente com cycleId: senão a FK vira 404
+      // "recurso não existe" em vez de desvincular.
+      if (patch.projectId !== undefined) set.projectId = patch.projectId || null;
+      if (patch.cycleId !== undefined) {
+         if (patch.cycleId) await assertCycleOfTeam(txDb, patch.cycleId, prev.teamId);
+         set.cycleId = patch.cycleId || null;
+      }
+      // Due date manual desliga o SLA da issue (o indicador só vale para o prazo automático).
+      if (patch.dueDate !== undefined) {
+         set.dueDate = patch.dueDate;
+         set.slaAppliedAt = null;
+      }
+      if (patch.estimate !== undefined) set.estimate = patch.estimate;
+      if (patch.snoozedUntil !== undefined)
+         set.snoozedUntil = patch.snoozedUntil ? new Date(patch.snoozedUntil) : null;
+      if (patch.milestoneId !== undefined) {
+         if (patch.milestoneId) {
+            // valida que a milestone pertence ao projeto da issue (após aplicar o patch de projeto)
+            const projectId =
+               patch.projectId !== undefined ? patch.projectId || null : prev.projectId;
+            const [m] = await txDb
+               .select({ projectId: projectMilestoneT.projectId })
+               .from(projectMilestoneT)
+               .where(eq(projectMilestoneT.id, patch.milestoneId))
+               .limit(1);
+            if (!m) throw new ApiError(400, 'Milestone inválida');
+            if (m.projectId !== projectId)
+               throw new ApiError(400, 'Milestone não pertence ao projeto da issue');
+         }
+         set.milestoneId = patch.milestoneId || null;
+      } else if (patch.projectId !== undefined && (patch.projectId || null) !== prev.projectId) {
+         // Trocou/removeu o projeto SEM tocar em milestone: a milestone atual pertence ao
+         // projeto ANTIGO → limpa (senão fica órfã, inflando progresso e aparecendo em issue
+         // de outro projeto). project_milestone não tem FK cascade, então é app-level.
+         if (prev.milestoneId) set.milestoneId = null;
       }
 
-      // Auto-add ao cycle atual (paridade Linear): issue que ENTRA em "started" e não tem
-      // cycle é atribuída ao cycle corrente do time — a menos que o cycle esteja sendo
-      // setado explicitamente neste patch.
-      if (cat === 'started' && patch.cycleId === undefined && !prev.cycleId) {
-         const [cur] = await db
-            .select({ id: cycleT.id })
-            .from(cycleT)
-            .where(and(eq(cycleT.teamId, prev.teamId), eq(cycleT.status, 'current')))
-            .limit(1);
-         if (cur) set.cycleId = cur.id;
+      // Pai (#95): "" limpa como os demais FKs; guarda de auto-pai e de ciclo em resolveParent.
+      const nextParentId = patch.parentId !== undefined ? patch.parentId || null : undefined;
+      if (nextParentId !== undefined && nextParentId !== prev.parentId) {
+         if (nextParentId) newParent = await resolveParent(txDb, id, nextParentId);
+         if (newParent) assertParentOfTeam(newParent, prev.teamId);
+         set.parentId = nextParentId;
       }
-   }
 
-   // O auto-add acima é uma das MAIORES fontes de crescimento de escopo do ciclo, e
-   // era completamente invisível no histórico: o evento de `cycle` só é emitido quando
-   // `patch.cycleId` vem preenchido, e aqui ele vem `undefined`.
-   const autoAddedCycleId =
-      set.cycleId !== undefined && patch.cycleId === undefined ? (set.cycleId as string) : null;
+      // SLA (#97): trocar a prioridade recalcula o prazo — mas só quando a issue NÃO tem
+      // due date manual (sem data, ou com data que veio do próprio SLA) e o patch não está
+      // definindo uma data explicitamente.
+      if (
+         patch.priorityId !== undefined &&
+         patch.priorityId !== prev.priorityId &&
+         patch.dueDate === undefined &&
+         (prev.dueDate === null || prev.slaAppliedAt !== null)
+      ) {
+         const sla = await applySla(txDb, prev.teamId, patch.priorityId, set.updatedAt as Date);
+         if (sla) {
+            set.dueDate = sla.dueDate;
+            set.slaAppliedAt = sla.slaAppliedAt;
+            appliedSla = { hours: sla.hours, dueDate: sla.dueDate };
+         }
+      }
 
-   // Nomes p/ o histórico "added/removed assignee X" (um SELECT só quando houve mudança).
-   const changedAssigneeIds = [...addedAssigneeIds, ...removedAssigneeIds];
-   const assigneeNames = new Map<string, string>(
-      changedAssigneeIds.length
-         ? (
-              await db
-                 .select({ id: appUser.id, name: appUser.name })
-                 .from(appUser)
-                 .where(inArray(appUser.id, changedAssigneeIds))
-           ).map((u) => [u.id, u.name])
-         : []
-   );
+      // Transição de status: marcos temporais (cycle/lead time) + auto-add ao cycle.
+      prevCategory = (await loadCatalogs(txDb)).statuses.get(prev.statusId)?.category;
+      nextCategory = prevCategory;
+      if (patch.statusId !== undefined && patch.statusId !== prev.statusId) {
+         const cat = (await loadCatalogs(txDb)).statuses.get(patch.statusId)?.category;
+         nextCategory = cat;
+         const now = set.updatedAt as Date;
+         enteredCompleted = cat === 'completed';
+         // startedAt: 1ª entrada em "started" (sticky — não sobrescreve).
+         if (cat === 'started' && !prev.startedAt) set.startedAt = now;
+         // completedAt: entra em "completed" grava; sai de "completed" (reabriu) limpa.
+         if (cat === 'completed') {
+            set.completedAt = now;
+            // Pulou direto p/ done sem passar por started: cycle time ~0 (consistente c/ create).
+            if (!prev.startedAt) set.startedAt = now;
+         } else if (prev.completedAt) {
+            set.completedAt = null;
+         }
 
-   // eventos de atividade para transições relevantes
-   const statusChanged = patch.statusId !== undefined && patch.statusId !== prev.statusId;
-   const events: { event: string; text: string }[] = [];
-   if (statusChanged) events.push({ event: 'status', text: `changed status` });
-   if (patch.priorityId !== undefined && patch.priorityId !== prev.priorityId)
-      events.push({ event: 'priority', text: `changed priority` });
-   // De/para no texto: sem isso o histórico não permite reconstruir o escopo de um
-   // ciclo ao longo do tempo — foi o que bloqueou o `scopeDelta` real (#24).
-   if (patch.cycleId !== undefined && (patch.cycleId || null) !== prev.cycleId)
-      events.push({
-         event: 'cycle',
-         text: `changed cycle from ${prev.cycleId ?? 'none'} to ${patch.cycleId ?? 'none'}`,
-      });
-   if (autoAddedCycleId)
-      events.push({
-         event: 'cycle',
-         text: `added to cycle ${autoAddedCycleId} on start`,
-      });
-   // Entradas/saídas do conjunto têm evento por pessoa; "changed assignee" fica só para
-   // a troca de principal sem ninguém entrar/sair (ex.: promover um colaborador).
-   if (principalChanged && !addedAssigneeIds.length && !removedAssigneeIds.length)
-      events.push({ event: 'assignee', text: `changed assignee` });
-   for (const uid of addedAssigneeIds)
-      events.push({ event: 'assignee', text: `added assignee ${assigneeNames.get(uid) ?? uid}` });
-   for (const uid of removedAssigneeIds)
-      events.push({ event: 'assignee', text: `removed assignee ${assigneeNames.get(uid) ?? uid}` });
-   if (patch.title !== undefined && patch.title !== prev.title)
-      events.push({ event: 'title', text: `renamed the issue` });
-   if (patch.projectId !== undefined && (patch.projectId || null) !== prev.projectId)
-      events.push({ event: 'project', text: `changed project` });
-   const estimateChanged =
-      patch.estimate !== undefined && (patch.estimate ?? null) !== prev.estimate;
-   if (estimateChanged)
-      events.push({
-         event: 'estimate',
-         text: `changed estimate from ${prev.estimate ?? 'none'} to ${patch.estimate ?? 'none'}`,
-      });
-   if (patch.dueDate !== undefined && (patch.dueDate ?? null) !== prev.dueDate)
-      events.push({ event: 'dueDate', text: `changed due date` });
-   if (appliedSla)
-      events.push({
-         event: 'sla',
-         text: `applied SLA (${appliedSla.hours}h): due ${appliedSla.dueDate}`,
-      });
-   if (set.parentId !== undefined)
-      events.push({
-         event: 'parent',
-         text: newParent ? `set parent to ${newParent.identifier}` : 'removed parent',
-      });
+         // Auto-add ao cycle atual (paridade Linear): issue que ENTRA em "started" e não tem
+         // cycle é atribuída ao cycle corrente do time — a menos que o cycle esteja sendo
+         // setado explicitamente neste patch.
+         if (cat === 'started' && patch.cycleId === undefined && !prev.cycleId) {
+            const [cur] = await txDb
+               .select({ id: cycleT.id })
+               .from(cycleT)
+               .where(and(eq(cycleT.teamId, prev.teamId), eq(cycleT.status, 'current')))
+               .limit(1);
+            if (cur) set.cycleId = cur.id;
+         }
+      }
 
-   // Atômico (#10): a issue, a junção de responsáveis, o histórico e o auto-subscribe
-   // dos novos responsáveis entram juntos — antes o histórico era gravado DEPOIS do
-   // commit, e uma falha ali devolvia erro de uma mutação já aplicada (e sem evento).
-   await db.transaction(async (tx) => {
+      // O auto-add acima é uma das MAIORES fontes de crescimento de escopo do ciclo, e
+      // era completamente invisível no histórico: o evento de `cycle` só é emitido quando
+      // `patch.cycleId` vem preenchido, e aqui ele vem `undefined`.
+      const autoAddedCycleId =
+         set.cycleId !== undefined && patch.cycleId === undefined ? (set.cycleId as string) : null;
+
+      // Nomes p/ o histórico "added/removed assignee X" (um SELECT só quando houve mudança).
+      const changedAssigneeIds = [...addedAssigneeIds, ...removedAssigneeIds];
+      const assigneeNames = new Map<string, string>(
+         changedAssigneeIds.length
+            ? (
+                 await txDb
+                    .select({ id: appUser.id, name: appUser.name })
+                    .from(appUser)
+                    .where(inArray(appUser.id, changedAssigneeIds))
+              ).map((u) => [u.id, u.name])
+            : []
+      );
+
+      // eventos de atividade para transições relevantes
+      statusChanged = patch.statusId !== undefined && patch.statusId !== prev.statusId;
+      const events: { event: string; text: string }[] = [];
+      if (statusChanged) events.push({ event: 'status', text: `changed status` });
+      if (patch.priorityId !== undefined && patch.priorityId !== prev.priorityId)
+         events.push({ event: 'priority', text: `changed priority` });
+      // De/para no texto: sem isso o histórico não permite reconstruir o escopo de um
+      // ciclo ao longo do tempo — foi o que bloqueou o `scopeDelta` real (#24).
+      if (patch.cycleId !== undefined && (patch.cycleId || null) !== prev.cycleId)
+         events.push({
+            event: 'cycle',
+            text: `changed cycle from ${prev.cycleId ?? 'none'} to ${patch.cycleId ?? 'none'}`,
+         });
+      if (autoAddedCycleId)
+         events.push({
+            event: 'cycle',
+            text: `added to cycle ${autoAddedCycleId} on start`,
+         });
+      // Entradas/saídas do conjunto têm evento por pessoa; "changed assignee" fica só para
+      // a troca de principal sem ninguém entrar/sair (ex.: promover um colaborador).
+      if (principalChanged && !addedAssigneeIds.length && !removedAssigneeIds.length)
+         events.push({ event: 'assignee', text: `changed assignee` });
+      for (const uid of addedAssigneeIds)
+         events.push({
+            event: 'assignee',
+            text: `added assignee ${assigneeNames.get(uid) ?? uid}`,
+         });
+      for (const uid of removedAssigneeIds)
+         events.push({
+            event: 'assignee',
+            text: `removed assignee ${assigneeNames.get(uid) ?? uid}`,
+         });
+      if (patch.title !== undefined && patch.title !== prev.title)
+         events.push({ event: 'title', text: `renamed the issue` });
+      if (patch.projectId !== undefined && (patch.projectId || null) !== prev.projectId)
+         events.push({ event: 'project', text: `changed project` });
+      estimateChanged = patch.estimate !== undefined && (patch.estimate ?? null) !== prev.estimate;
+      if (estimateChanged)
+         events.push({
+            event: 'estimate',
+            text: `changed estimate from ${prev.estimate ?? 'none'} to ${patch.estimate ?? 'none'}`,
+         });
+      if (patch.dueDate !== undefined && (patch.dueDate ?? null) !== prev.dueDate)
+         events.push({ event: 'dueDate', text: `changed due date` });
+      if (appliedSla)
+         events.push({
+            event: 'sla',
+            text: `applied SLA (${appliedSla.hours}h): due ${appliedSla.dueDate}`,
+         });
+      if (set.parentId !== undefined)
+         events.push({
+            event: 'parent',
+            text: newParent ? `set parent to ${newParent.identifier}` : 'removed parent',
+         });
+
+      // Atômico (#10): a issue, a junção de responsáveis, o histórico e o auto-subscribe
+      // dos novos responsáveis entram juntos — antes o histórico era gravado DEPOIS do
+      // commit, e uma falha ali devolvia erro de uma mutação já aplicada (e sem evento).
       await tx.update(issue).set(set).where(eq(issue.id, id));
       if (removedAssigneeIds.length) {
          await tx
@@ -1111,7 +1141,11 @@ export async function updateIssue(
             }))
          );
       }
+      return true;
    });
+
+   if (!committed) return null;
+   const committedParent = newParent as typeof issue.$inferSelect | null;
 
    // ── Depois do commit: primeiro o evento, depois os efeitos colaterais. ──
    if (!opts.silent) {
@@ -1120,7 +1154,7 @@ export async function updateIssue(
       const parentsToRefresh = new Set<string>();
       if (set.parentId !== undefined) {
          if (prev.parentId) parentsToRefresh.add(prev.parentId);
-         if (newParent) parentsToRefresh.add(newParent.id);
+         if (committedParent) parentsToRefresh.add(committedParent.id);
       } else if (prev.parentId && statusChanged) {
          parentsToRefresh.add(prev.parentId);
       }
@@ -1472,35 +1506,53 @@ export async function reorderIssue(
    actorEmail?: string
 ): Promise<IssueDto | null> {
    if (actorEmail) await assertCanWriteIssue(db, actorEmail, id);
-   const getRank = async (rid?: string | null) => {
-      if (!rid) return null;
-      const r = await db.select({ r: issue.rank }).from(issue).where(eq(issue.id, rid)).limit(1);
-      return r.length ? r[0].r : null;
-   };
-   const before = await getRank(beforeId);
-   const after = await getRank(afterId);
-   let newRank: string;
-   if (before && after && before >= after) {
-      // Vizinhos empatados ou invertidos (#25) — dois drags concorrentes ou lista velha no
-      // cliente. `LexoRank.between` lançava (500); ancora logo depois de `before`, entre
-      // ele e o próximo rank ESTRITAMENTE maior (sem contar a própria issue).
-      const [next] = await db
-         .select({ r: issue.rank })
+   let rebalanced = false;
+   const res = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(${ISSUE_RANK_LOCK_KEY})`);
+      const [target] = await tx
+         .select({ rank: issue.rank, teamId: issue.teamId })
          .from(issue)
-         .where(and(gt(issue.rank, before), ne(issue.id, id)))
-         .orderBy(asc(issue.rank))
+         .where(eq(issue.id, id))
+         .for('update')
          .limit(1);
-      newRank = rankBetween(before, next?.r ?? null);
-   } else {
-      newRank = rankBetween(before, after);
-   }
-   const res = await db
-      .update(issue)
-      .set({ rank: newRank, updatedAt: new Date() })
-      .where(eq(issue.id, id))
-      .returning({ id: issue.id, teamId: issue.teamId });
+      if (!target) return [];
+
+      const getRank = async (rid?: string | null) => {
+         if (!rid) return null;
+         const r = await tx.select({ r: issue.rank }).from(issue).where(eq(issue.id, rid)).limit(1);
+         return r.length ? r[0].r : null;
+      };
+      const before = await getRank(beforeId);
+      const after = await getRank(afterId);
+      let newRank: string;
+      if (before && after && before >= after) {
+         // Vizinhos empatados ou invertidos (#25) — dois drags concorrentes ou lista velha no
+         // cliente. `LexoRank.between` lançava (500); ancora logo depois de `before`, entre
+         // ele e o próximo rank ESTRITAMENTE maior (sem contar a própria issue).
+         const [next] = await tx
+            .select({ r: issue.rank })
+            .from(issue)
+            .where(and(gt(issue.rank, before), ne(issue.id, id)))
+            .orderBy(asc(issue.rank))
+            .limit(1);
+         newRank = rankBetween(before, next?.r ?? null);
+      } else {
+         newRank = rankBetween(before, after);
+      }
+      const updated = await tx
+         .update(issue)
+         .set({ rank: newRank, updatedAt: new Date() })
+         .where(eq(issue.id, id))
+         .returning({ id: issue.id, teamId: issue.teamId });
+      if (updated.length && needsRankRebalance(newRank)) {
+         await rebalanceTeamRanksInTransaction(tx, target.teamId);
+         rebalanced = true;
+      }
+      return updated;
+   });
    if (res.length === 0) return null;
    publish({ entity: 'issue', action: 'updated', id, actorEmail, teamId: res[0].teamId });
+   if (rebalanced) publish({ entity: 'issue', action: 'updated', teamId: res[0].teamId });
    return getIssue(db, id);
 }
 

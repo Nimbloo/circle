@@ -427,7 +427,7 @@ async function applyAction(
             .returning({ labelId: issueLabel.labelId });
          if (inserted.length === 0) return false;
          await logRun(db, rule, issueId, ctx, `added label ${labelId}`);
-         publish({ entity: 'issue', action: 'updated', id: issueId });
+         publish({ entity: 'issue', action: 'updated', id: issueId, teamId: target.teamId });
          await runAutomations(db, 'issue.label_added', issueId, {
             ...ctx,
             labelId,
@@ -450,7 +450,13 @@ async function applyAction(
          }
          await db.update(issueT).set(set).where(eq(issueT.id, issueId));
          await logRun(db, rule, issueId, ctx, `set status to ${next.name}`);
-         publish({ entity: 'issue', action: 'updated', id: issueId, actorEmail: ctx.actorEmail });
+         publish({
+            entity: 'issue',
+            action: 'updated',
+            id: issueId,
+            actorEmail: ctx.actorEmail,
+            teamId: target.teamId,
+         });
          await runAutomations(db, 'issue.status_changed', issueId, {
             ...ctx,
             toCategory: next.category,
@@ -480,7 +486,13 @@ async function applyAction(
          }
          await db.update(issueT).set(set).where(eq(issueT.id, issueId));
          await logRun(db, rule, issueId, ctx, `set priority to ${next.name}`);
-         publish({ entity: 'issue', action: 'updated', id: issueId, actorEmail: ctx.actorEmail });
+         publish({
+            entity: 'issue',
+            action: 'updated',
+            id: issueId,
+            actorEmail: ctx.actorEmail,
+            teamId: target.teamId,
+         });
          return true;
       }
       case 'set_assignee': {
@@ -498,7 +510,13 @@ async function applyAction(
             .values({ issueId, userId: assigneeId, createdAt: now })
             .onConflictDoNothing();
          await logRun(db, rule, issueId, ctx, `assigned to ${user.name}`);
-         publish({ entity: 'issue', action: 'updated', id: issueId, actorEmail: ctx.actorEmail });
+         publish({
+            entity: 'issue',
+            action: 'updated',
+            id: issueId,
+            actorEmail: ctx.actorEmail,
+            teamId: target.teamId,
+         });
          return true;
       }
       case 'close_sub_issues': {
@@ -528,9 +546,9 @@ async function applyAction(
             if (!child.startedAt)
                await db.update(issueT).set({ startedAt: now }).where(eq(issueT.id, child.id));
             await logRun(db, rule, child.id, ctx, 'closed with the parent issue');
-            publish({ entity: 'issue', action: 'updated', id: child.id });
+            publish({ entity: 'issue', action: 'updated', id: child.id, teamId: target.teamId });
          }
-         publish({ entity: 'issue', action: 'updated', id: issueId });
+         publish({ entity: 'issue', action: 'updated', id: issueId, teamId: target.teamId });
          return true;
       }
       default:

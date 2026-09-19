@@ -134,6 +134,15 @@ async function assertProject(db: Db, projectId: string): Promise<void> {
    if (rows.length === 0) throw new ApiError(404, `Project '${projectId}' não encontrado`);
 }
 
+async function projectTeamId(db: Db, projectId: string): Promise<string | undefined> {
+   const [row] = await db
+      .select({ teamId: projectT.teamId })
+      .from(projectT)
+      .where(eq(projectT.id, projectId))
+      .limit(1);
+   return row?.teamId;
+}
+
 async function loadUsers(db: Db, ids: string[]) {
    const uniq = [...new Set(ids.filter(Boolean))];
    if (uniq.length === 0) return new Map<string, typeof appUser.$inferSelect>();
@@ -316,7 +325,12 @@ export async function updateProjectDetail(
          })
          .onConflictDoUpdate({ target: projectDetail.projectId, set });
    }
-   publish({ entity: 'project', action: 'updated', id: projectId });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id: projectId,
+      teamId: await projectTeamId(db, projectId),
+   });
    return getProjectDetail(db, projectId);
 }
 
@@ -342,7 +356,12 @@ export async function addMilestone(
       targetDate: input.targetDate ?? null,
       completed: false,
    });
-   publish({ entity: 'project', action: 'updated', id: projectId });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id: projectId,
+      teamId: await projectTeamId(db, projectId),
+   });
    return {
       id,
       name: input.name.trim(),
@@ -381,7 +400,12 @@ export async function updateMilestone(
    if (Object.keys(set).length > 0) {
       await db.update(projectMilestone).set(set).where(eq(projectMilestone.id, milestoneId));
    }
-   publish({ entity: 'project', action: 'updated', id: rows[0].projectId });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id: rows[0].projectId,
+      teamId: await projectTeamId(db, rows[0].projectId),
+   });
    const m = { ...rows[0], ...set };
    return {
       id: m.id,
@@ -432,7 +456,12 @@ export async function deleteMilestone(
       await tx.update(issueT).set({ milestoneId: null }).where(eq(issueT.milestoneId, milestoneId));
       await tx.delete(projectMilestone).where(eq(projectMilestone.id, milestoneId));
    });
-   publish({ entity: 'project', action: 'updated', id: rows[0].projectId });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id: rows[0].projectId,
+      teamId: await projectTeamId(db, rows[0].projectId),
+   });
    return true;
 }
 
@@ -455,7 +484,12 @@ export async function addResource(
    await db
       .insert(projectResource)
       .values({ id, projectId, label: input.label.trim(), url: input.url.trim() });
-   publish({ entity: 'project', action: 'updated', id: projectId });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id: projectId,
+      teamId: await projectTeamId(db, projectId),
+   });
    return { id, label: input.label.trim(), url: input.url.trim() };
 }
 
@@ -478,7 +512,12 @@ export async function updateResource(
       .update(projectResource)
       .set({ label: input.label.trim() })
       .where(eq(projectResource.id, resourceId));
-   publish({ entity: 'project', action: 'updated', id: rows[0].projectId });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id: rows[0].projectId,
+      teamId: await projectTeamId(db, rows[0].projectId),
+   });
    return true;
 }
 
@@ -495,7 +534,12 @@ export async function deleteResource(
    if (rows.length === 0) return false;
    await assertChildOfProject(db, ctx, rows[0].projectId, 'Resource', resourceId);
    await db.delete(projectResource).where(eq(projectResource.id, resourceId));
-   publish({ entity: 'project', action: 'updated', id: rows[0].projectId });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id: rows[0].projectId,
+      teamId: await projectTeamId(db, rows[0].projectId),
+   });
    return true;
 }
 
@@ -533,7 +577,12 @@ export async function postProjectUpdate(
       .set({ healthId: input.health, healthUpdatedAt: now })
       .where(eq(projectT.id, projectId));
    const users = await loadUsers(db, [authorId]);
-   publish({ entity: 'project', action: 'updated', id: projectId });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id: projectId,
+      teamId: await projectTeamId(db, projectId),
+   });
    return {
       id,
       author: userRef(users.get(authorId)),

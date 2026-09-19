@@ -130,25 +130,29 @@ export async function bootstrapWorkspace(
    const teamIds = teams.map((t) => t.id);
    if (opts.rollover !== false) {
       const day = new Date().toISOString().slice(0, 10);
-      const housekeepingTeams: string[] = [];
       for (const id of teamIds) {
-         if (!claimHousekeeping(db, id, day)) continue;
+         if (!claimHousekeeping(db, `${id}:rollover`, day)) continue;
          try {
             await rolloverCyclesForTeam(db, id);
-            housekeepingTeams.push(id);
          } catch (error) {
-            releaseHousekeeping(db, id, day);
+            releaseHousekeeping(db, `${id}:rollover`, day);
             throw error;
          }
       }
       // Roadmap (#102): o snapshot diário do projeto também é lazy — o boot grava o
       // dia (upsert idempotente) uma vez por time e por pod.
-      if (housekeepingTeams.length > 0) {
-         const scope = new Set(housekeepingTeams);
-         await snapshotProjects(
-            db,
-            projects.filter((project) => scope.has(project.teamId)).map((project) => project.id)
-         );
+      const snapshotTeams = teamIds.filter((id) => claimHousekeeping(db, `${id}:snapshot`, day));
+      if (snapshotTeams.length > 0) {
+         try {
+            const scope = new Set(snapshotTeams);
+            await snapshotProjects(
+               db,
+               projects.filter((project) => scope.has(project.teamId)).map((project) => project.id)
+            );
+         } catch (error) {
+            for (const id of snapshotTeams) releaseHousekeeping(db, `${id}:snapshot`, day);
+            throw error;
+         }
       }
    }
 

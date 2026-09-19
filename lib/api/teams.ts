@@ -225,7 +225,7 @@ export async function createTeam(
          .values({ teamId: id, userId: creator.id, joined: true })
          .onConflictDoNothing();
    }
-   publish({ entity: 'team', action: 'created', id });
+   publish({ entity: 'team', action: 'created', id, teamId: id });
    return (await getTeam(db, id, creatorId))!;
 }
 
@@ -260,7 +260,7 @@ export async function addTeamMember(db: Db, teamId: string, email: string): Prom
       .values({ teamId, userId: user.id, joined: true })
       .onConflictDoNothing()
       .returning();
-   if (inserted.length) publish({ entity: 'member', action: 'updated', id: user.id });
+   if (inserted.length) publish({ entity: 'member', action: 'updated', id: user.id, teamId });
 
    // E-mail (best-effort): só em inserção nova e com remetente configurado. Acesso ao
    // Circle já é via SSO Keycloak (grupo `app-circle`) — aqui é só o aviso de que
@@ -289,7 +289,7 @@ export async function removeTeamMember(db: Db, teamId: string, userId: string): 
    await db
       .delete(teamMember)
       .where(and(eq(teamMember.teamId, teamId), eq(teamMember.userId, userId)));
-   publish({ entity: 'member', action: 'updated', id: userId });
+   publish({ entity: 'member', action: 'updated', id: userId, teamId });
 }
 
 // ── Request-to-join (Linear-style) ───────────────────────────────────────────
@@ -340,7 +340,7 @@ export async function requestToJoin(
          target: [teamJoinRequest.teamId, teamJoinRequest.userId],
          set: { status: 'pending', createdAt: new Date(), decidedAt: null, decidedBy: null },
       });
-   publish({ entity: 'member', action: 'updated', id: user.id });
+   publish({ entity: 'member', action: 'updated', id: user.id, teamId });
    notifyAdminsOfJoinRequest(t[0].name, user.name).catch(() => {});
    return { status: 'pending' };
 }
@@ -402,7 +402,7 @@ export async function decideJoinRequest(
       .update(teamJoinRequest)
       .set({ status: decision, decidedAt: new Date(), decidedBy: deciderId })
       .where(eq(teamJoinRequest.id, requestId));
-   publish({ entity: 'member', action: 'updated', id: rows[0].userId });
+   publish({ entity: 'member', action: 'updated', id: rows[0].userId, teamId });
    const [requests, members] = await Promise.all([
       listJoinRequests(db, teamId),
       listTeamMembers(db, teamId),
@@ -471,7 +471,7 @@ export async function updateTeam(
       set.parentId = parentId;
    }
    if (Object.keys(set).length) await db.update(teamT).set(set).where(eq(teamT.id, id));
-   publish({ entity: 'team', action: 'updated', id });
+   publish({ entity: 'team', action: 'updated', id, teamId: id });
    return getTeam(db, id);
 }
 
@@ -530,6 +530,6 @@ export async function deleteTeam(db: Db, id: string): Promise<boolean> {
    await db.delete(teamAutomation).where(eq(teamAutomation.teamId, id));
    await db.delete(teamMember).where(eq(teamMember.teamId, id));
    await db.delete(teamT).where(eq(teamT.id, id));
-   publish({ entity: 'team', action: 'deleted', id });
+   publish({ entity: 'team', action: 'deleted', id, teamId: id });
    return true;
 }

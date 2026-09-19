@@ -106,7 +106,7 @@ export async function createAttachment(
       throw new ApiError(413, 'Arquivo excede o tamanho máximo (25 MB)');
 
    const [iss] = await db
-      .select({ id: issueT.id })
+      .select({ id: issueT.id, teamId: issueT.teamId })
       .from(issueT)
       .where(eq(issueT.id, input.issueId))
       .limit(1);
@@ -142,7 +142,7 @@ export async function createAttachment(
       createdAt: new Date(),
    };
    await db.insert(attachmentT).values(row);
-   publishFor(row, 'updated', actorEmail);
+   publishFor(row, 'updated', actorEmail, iss.teamId);
    return (await toDtos(db, [row]))[0];
 }
 
@@ -185,7 +185,12 @@ export async function deleteAttachment(db: Db, id: string, actorEmail: string): 
       throw new ApiError(403, 'Só quem anexou (ou admin) pode remover o anexo');
    await db.delete(attachmentT).where(eq(attachmentT.id, id));
    void removeFromStorage([row.url]);
-   publishFor(row, 'updated', actorEmail);
+   const [issue] = await db
+      .select({ teamId: issueT.teamId })
+      .from(issueT)
+      .where(eq(issueT.id, row.issueId))
+      .limit(1);
+   publishFor(row, 'updated', actorEmail, issue?.teamId);
    return true;
 }
 
@@ -232,7 +237,7 @@ async function removeFromStorage(urls: string[]): Promise<void> {
 }
 
 /** Anexo de comentário → evento `comment` (id do comentário); da issue → `issue`. */
-function publishFor(row: Row, action: 'updated', actorEmail: string): void {
-   if (row.commentId) publish({ entity: 'comment', action, id: row.commentId, actorEmail });
-   else publish({ entity: 'issue', action, id: row.issueId, actorEmail });
+function publishFor(row: Row, action: 'updated', actorEmail: string, teamId?: string): void {
+   if (row.commentId) publish({ entity: 'comment', action, id: row.commentId, actorEmail, teamId });
+   else publish({ entity: 'issue', action, id: row.issueId, actorEmail, teamId });
 }

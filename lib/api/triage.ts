@@ -399,7 +399,7 @@ async function generateOnce(
                  isNull(issueTriageSuggestion.dismissedAt)
               ),
       });
-   publish({ entity: 'issue', action: 'updated', id: issueId });
+   publish({ entity: 'issue', action: 'updated', id: issueId, teamId: target.teamId });
    return getTriageSuggestion(db, issueId);
 }
 
@@ -628,7 +628,12 @@ export async function acceptTriageSuggestion(
       .update(issueTriageSuggestion)
       .set({ appliedAt: new Date(), dismissedAt: null })
       .where(eq(issueTriageSuggestion.issueId, issueId));
-   publish({ entity: 'issue', action: 'updated', id: issueId });
+   publish({
+      entity: 'issue',
+      action: 'updated',
+      id: issueId,
+      teamId: movedTeam ? teamId! : target.teamId,
+   });
    return (await getTriageSuggestion(db, issueId))!;
 }
 
@@ -648,6 +653,13 @@ export async function dismissTriageSuggestion(
       .returning();
    const current = updated ? await toDto(db, updated) : await getTriageSuggestion(db, issueId);
    if (!current) throw new ApiError(404, 'Sugestão de triagem não encontrada');
-   if (updated) publish({ entity: 'issue', action: 'updated', id: issueId });
+   if (updated) {
+      const [issue] = await db
+         .select({ teamId: issueT.teamId })
+         .from(issueT)
+         .where(eq(issueT.id, issueId))
+         .limit(1);
+      publish({ entity: 'issue', action: 'updated', id: issueId, teamId: issue?.teamId });
+   }
    return current;
 }
