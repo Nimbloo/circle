@@ -62,6 +62,9 @@ import { randomUUID } from 'node:crypto';
 
 export type CircleAction = 'created' | 'updated' | 'deleted';
 
+/** O que mudou num evento `catalog` fora do bootstrap (#53). */
+export type CatalogKind = 'template' | 'project_template' | 'sla' | 'emoji';
+
 export interface CircleEvent {
    entity: CircleEntity;
    action: CircleAction;
@@ -81,6 +84,11 @@ export interface CircleEvent {
    issueId?: string;
    /** Destinatário único do evento (opcional). Presente → só esse usuário o recebe. */
    recipientId?: string;
+   /**
+    * Subtipo do `catalog` (#53). Ausente = dado que vive no bootstrap (status): o cliente
+    * re-hidrata o workspace. Com kind, só quem exibe aquele dado recarrega.
+    */
+   kind?: CatalogKind;
    /**
     * Selo monotônico só para ordenação/deduplicação no cliente. É um contador
     * incremental (NÃO `Date.now()`): o valor absoluto é irrelevante e evita
@@ -113,7 +121,10 @@ export function eventForViewer(event: CircleEvent, viewer: EventViewer): CircleE
    if (event.recipientId) return event.recipientId === viewer.userId ? event : null;
    if (viewer.teamIds === null) return event;
    if (event.teamId) return viewer.teamIds.includes(event.teamId) ? event : null;
-   return { entity: event.entity, action: event.action, ts: event.ts };
+   // `kind` não revela nada do recurso e evita que o convidado refaça o bootstrap à toa.
+   return event.kind
+      ? { entity: event.entity, action: event.action, kind: event.kind, ts: event.ts }
+      : { entity: event.entity, action: event.action, ts: event.ts };
 }
 
 /**

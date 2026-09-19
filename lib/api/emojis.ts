@@ -84,7 +84,7 @@ export async function createEmoji(db: Db, input: CreateEmojiInput): Promise<Emoj
       createdBy: input.createdBy ?? null,
    });
    const [row] = await db.select().from(emojiT).where(eq(emojiT.id, id)).limit(1);
-   publish({ entity: 'catalog', action: 'created', id });
+   publish({ entity: 'catalog', action: 'created', id, kind: 'emoji' });
    return toDto(row);
 }
 
@@ -93,6 +93,6 @@ export async function deleteEmoji(db: Db, id: string): Promise<boolean> {
    if (!row) return false;
    await deleteAsset(row.s3Key).catch(() => undefined); // best-effort no S3
    await db.delete(emojiT).where(eq(emojiT.id, id));
-   publish({ entity: 'catalog', action: 'deleted', id });
+   publish({ entity: 'catalog', action: 'deleted', id, kind: 'emoji' });
    return true;
 }
