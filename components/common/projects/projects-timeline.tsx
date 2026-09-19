@@ -278,6 +278,7 @@ function TimelineBar({
             onPointerCancel={(event) => endDrag(event, false)}
          >
             <button
+               ref={keyboard.ref}
                type="button"
                onClick={onClick}
                onPointerDown={beginDrag('move')}

@@ -181,6 +181,7 @@ function RoadmapBar({
          onPointerCancel={(event) => endDrag(event, false)}
       >
          <button
+            ref={keyboard.ref}
             type="button"
             onPointerDown={beginDrag('move')}
             onKeyDown={keyboard.onKeyDown}
