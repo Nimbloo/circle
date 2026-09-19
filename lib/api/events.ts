@@ -47,6 +47,11 @@ export type CircleEntity =
    /** Regra de automação de um time (CRUD); `teamId` diz de qual time é a tela a recarregar. */
    | 'automation'
    /**
+    * Job de import em background (#10): endereçado ao DONO (`recipientId`), `id` = job.
+    * A tela de import consulta `GET /import/jobs/:id` ao receber.
+    */
+   | 'import'
+   /**
     * Sinal LOCAL do pod (não vem de mutação): a conexão LISTEN caiu e voltou, então
     * eventos de outros pods podem ter se perdido no intervalo. O cliente deve tratar
     * como uma reconexão — re-hidratar issues, workspace e notificações.
@@ -316,6 +321,15 @@ export function subscribe(fn: Subscriber): () => void {
  * subscriber ou o DB indisponível não podem derrubar a mutação que originou o evento.
  */
 export function publish(event: Omit<CircleEvent, 'ts'>): void {
+   dispatchWebhooks(publishInternal(event));
+}
+
+/**
+ * Só o realtime (SSE local + `pg_notify`), SEM webhook. Para sinais internos que não são
+ * contrato externo: o coarse do import (#21 — um `issue.updated` sem id disparava webhook
+ * vazio) e o aviso de job ao dono. Devolve o evento carimbado.
+ */
+export function publishInternal(event: Omit<CircleEvent, 'ts'>): CircleEvent {
    const full: CircleEvent = { ...event, ts: nextTs() };
    fanOutLocal(full);
    if (notifyEnabled()) {
@@ -331,7 +345,7 @@ export function publish(event: Omit<CircleEvent, 'ts'>): void {
          }
       })();
    }
-   dispatchWebhooks(full);
+   return full;
 }
 
 /**
