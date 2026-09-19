@@ -303,6 +303,17 @@ export function runListener(opts: ListenerOptions): () => void {
 async function startListener(): Promise<void> {
    if (g.__circleListenStarted || !notifyEnabled()) return;
    g.__circleListenStarted = true;
+   // Mesmo gatilho (1º subscribe em runtime real, uma vez por pod): liga o timer do sweep
+   // de webhooks (#55) — o retry deixa de depender de tráfego. Import preguiçoso (Edge).
+   void (async () => {
+      try {
+         const { db } = await import('@/db');
+         const { startWebhookSweepTimer } = await import('./webhooks');
+         startWebhookSweepTimer(db);
+      } catch {
+         // best-effort: sem timer, o sweep ainda roda por publish e pela tela.
+      }
+   })();
    const { Client } = await import('pg');
    runListener({
       makeClient: () => new Client({ connectionString: process.env.DATABASE_URL, keepAlive: true }),
@@ -380,7 +391,8 @@ function dispatchWebhooks(event: CircleEvent): void {
    void (async () => {
       try {
          const { db } = await import('@/db');
-         const { onCircleEvent } = await import('./webhooks');
+         const { onCircleEvent, startWebhookSweepTimer } = await import('./webhooks');
+         startWebhookSweepTimer(db); // #55: pod que só publica (sem SSE) também varre
          await onCircleEvent(db, event);
       } catch {
          // Webhook é best-effort: nunca derruba a mutação que originou o evento.

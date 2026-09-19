@@ -542,6 +542,39 @@ export async function sweepWebhookDeliveries(
    }
 }
 
+/** Intervalo do sweep por timer (#55), por pod. */
+const SWEEP_TIMER_MS = 60_000;
+const timerState = globalThis as unknown as { __circleWebhookSweepStop?: () => void };
+
+/**
+ * Timer de sweep por pod (#55): o retry não depende mais de tráfego (antes só rodava em
+ * `publish` com assinante ou no GET da tela). Idempotente por processo — sobrevive ao HMR
+ * no global; devolve o `stop` do timer já ativo. `unref` para não segurar o processo.
+ * O advisory lock do `claimDue` garante um sweep por vez entre pods.
+ */
+export function startWebhookSweepTimer(
+   db: Db,
+   opts: { intervalMs?: number; fetchImpl?: typeof fetch } = {}
+): () => void {
+   if (timerState.__circleWebhookSweepStop) return timerState.__circleWebhookSweepStop;
+   let running = false;
+   const handle = setInterval(() => {
+      if (running) return; // lote anterior ainda em voo (receptor lento)
+      running = true;
+      void sweepWebhookDeliveries(db, opts.fetchImpl).finally(() => {
+         running = false;
+      });
+   }, opts.intervalMs ?? SWEEP_TIMER_MS);
+   (handle as { unref?: () => void }).unref?.();
+   const stop = () => {
+      clearInterval(handle);
+      if (timerState.__circleWebhookSweepStop === stop)
+         timerState.__circleWebhookSweepStop = undefined;
+   };
+   timerState.__circleWebhookSweepStop = stop;
+   return stop;
+}
+
 /* -------------------------- Ponte com o barramento ------------------------- */
 
 /** `{entity, action}` do barramento → nome do evento assinável, ou null. */
