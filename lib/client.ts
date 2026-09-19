@@ -573,6 +573,8 @@ export const api = {
          post<{ added: boolean }>('/favorites', { entityType, entityId }),
       remove: (entityType: FavoriteEntityType, entityId: string) =>
          del<{ removed: boolean }>(`/favorites?entityType=${entityType}&entityId=${entityId}`),
+      /** Nova ordem (ids de favorito) da sidebar (co#16). */
+      reorder: (order: string[]) => patch<{ reordered: number }>('/favorites', { order }),
    },
 
    reviews: {

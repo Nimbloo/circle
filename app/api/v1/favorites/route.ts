@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { ok, badRequest } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
-import { listFavorites, addFavorite, removeFavorite } from '@/lib/api/favorites';
+import { listFavorites, addFavorite, removeFavorite, reorderFavorites } from '@/lib/api/favorites';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,6 +24,17 @@ export async function POST(req: Request) {
       const email = await requireEmail(req);
       const { entityType, entityId } = BodySchema.parse(await req.json());
       return ok(await addFavorite(db, email, entityType, entityId));
+   }, req);
+}
+
+/** Nova ordem dos favoritos do usuario (co#16). */
+const OrderSchema = z.object({ order: z.array(z.string().min(1).max(36)).max(200) });
+
+export async function PATCH(req: Request) {
+   return handle(async () => {
+      const email = await requireEmail(req);
+      const { order } = OrderSchema.parse(await req.json());
+      return ok(await reorderFavorites(db, email, order));
    }, req);
 }
 

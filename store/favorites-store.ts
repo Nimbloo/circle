@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { toast } from 'sonner';
 import { api } from '@/lib/client';
 import type { FavoriteDto, FavoriteEntityType } from '@/lib/api/favorites';
 
@@ -32,6 +33,8 @@ interface FavoritesState {
    onEntityChanged: (type: FavoriteEntityType, id: string) => void;
    isFavorite: (type: FavoriteEntityType, id: string) => boolean;
    toggle: (type: FavoriteEntityType, id: string) => Promise<void>;
+   /** Move o favorito `id` para a posicao do `beforeId` (arraste na sidebar). */
+   reorder: (id: string, beforeId: string) => Promise<void>;
 }
 
 /** Token da leitura mais recente: só ela aplica (respostas fora de ordem são descartadas). */
@@ -89,6 +92,25 @@ export const useFavoritesStore = create<FavoritesState>()((set, get) => {
 
       isFavorite: (type, id) => get().keys.has(keyOf(type, id)),
 
+      reorder: async (id, beforeId) => {
+         const previous = get().items;
+         const from = previous.findIndex((f) => f.id === id);
+         const to = previous.findIndex((f) => f.id === beforeId);
+         if (from === -1 || to === -1 || from === to) return;
+         const items = [...previous];
+         const [moved] = items.splice(from, 1);
+         items.splice(to, 0, moved);
+         set({ items });
+         try {
+            await api.favorites.reorder(items.map((f) => f.id));
+         } catch {
+            // Reconcilia com o servidor (a ordem otimista nao vingou).
+            const fresh = await api.favorites.list().catch(() => previous);
+            set({ items: fresh, keys: keysOf(fresh) });
+            toast.error('Falha ao reordenar os favoritos');
+         }
+      },
+
       toggle: async (type, id) => {
          const k = keyOf(type, id);
          const wasFav = get().keys.has(k);
@@ -106,6 +128,7 @@ export const useFavoritesStore = create<FavoritesState>()((set, get) => {
             try {
                await api.favorites.remove(type, id);
             } catch {
+               toast.error('Falha ao desfavoritar');
                // Reconcilia com o servidor só se a mutação falhou.
                const items = await api.favorites.list().catch(() => get().items);
                if (get().seq === mySeq) set({ items, keys: keysOf(items) });
@@ -117,11 +140,15 @@ export const useFavoritesStore = create<FavoritesState>()((set, get) => {
          const keys = new Set(get().keys);
          keys.add(k);
          set({ keys });
+         let failed = false;
          try {
             await api.favorites.add(type, id);
          } catch {
             // segue pro reload, que reverte se o servidor não gravou
+            failed = true;
          }
+         // Falha silenciosa (co#16): a estrela voltava sozinha, sem explicar.
+         if (failed) toast.error('Falha ao favoritar');
          const items = await api.favorites.list().catch(() => null);
          // Só aplica se este ainda é o toggle mais recente (descarta resposta fora de ordem).
          if (items && get().seq === mySeq) set({ items, keys: keysOf(items) });
