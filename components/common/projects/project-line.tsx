@@ -145,7 +145,7 @@ export default function ProjectLine({ project, showTeam = false }: ProjectLinePr
                </div>
             )}
             {displayProperties.targetDate && (
-               <div className="hidden w-[92px] shrink-0 px-3 xl:block">
+               <div className="hidden w-[120px] shrink-0 px-3 xl:block">
                   <DatePicker
                      date={project.targetDate ? parseDay(project.targetDate) : undefined}
                      onDateChange={(date) =>

@@ -71,7 +71,7 @@ import {
    AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-const TABS = ['overview', 'activity', 'projects'] as const;
+const TABS = ['overview', 'projects', 'activity'] as const;
 const formatDay = (iso: string) => format(parseISO(iso), 'MMM d, yyyy');
 
 /* ------------------------------ projects table ---------------------------- */

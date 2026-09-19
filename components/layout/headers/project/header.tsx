@@ -9,6 +9,7 @@ import {
    ViewBar,
 } from '@/components/layout/header-primitives';
 import { DetailPanelToggle } from '@/components/common/detail-side-panel';
+import { ProjectActions } from '@/components/common/projects/project-actions';
 import { DisplayOptions } from '../display-options';
 import { cn } from '@/lib/utils';
 import { useDetailPanelStore } from '@/store/detail-panel-store';
@@ -18,10 +19,11 @@ import { BarChart3 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, usePathname } from 'next/navigation';
 
+// Mesma ordem do painel da initiative (pl#14): visão geral, conteúdo, histórico.
 const PROJECT_TABS = [
    { label: 'Overview', segment: 'overview' },
-   { label: 'Activity', segment: 'activity' },
    { label: 'Issues', segment: 'issues' },
+   { label: 'Activity', segment: 'activity' },
 ];
 
 function ProjectTabs({ projectId }: { projectId: string }) {
@@ -99,6 +101,9 @@ export default function Header({ projectId }: { projectId: string }) {
                   <HeaderTitle>{project.name}</HeaderTitle>
                </div>
             </HeaderGroup>
+            <HeaderActions>
+               <ProjectActions project={project} />
+            </HeaderActions>
          </LocationBar>
          <ViewBar>
             <ProjectTabs projectId={project.id} />

@@ -19,6 +19,7 @@ import { PROGRESS_COLORS } from '../progress-colors';
 import { PropertyRow, ProjectPropertyRows } from '../project-property-fields';
 import { Check, Plus, Trash2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useParams, usePathname, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 interface ProjectPropertiesPanelProps {
@@ -59,12 +60,34 @@ function buildRows<T>(
       .sort((a, b) => b.total - a.total);
 }
 
+/**
+ * Fora da aba Issues o filtro do painel não tem lista para filtrar (pl#7): o clique
+ * abre a aba Issues do projeto já com o filtro na URL (`?filters=`, o mesmo formato
+ * do filter-store), em vez de não fazer nada.
+ */
+function filterHref(orgId: string, projectId: string, target: PanelFilterTarget): string {
+   const filters = [
+      {
+         columnId: target.columnId,
+         type: target.columnId === 'labels' ? 'multiOption' : 'option',
+         operator: target.columnId === 'labels' ? 'include' : 'is',
+         values: [target.value],
+      },
+   ];
+   return `/${orgId}/project/${projectId}/issues?filters=${encodeURIComponent(
+      JSON.stringify(filters)
+   )}`;
+}
+
 function BreakdownList({
    rows,
    panelFilter,
+   onNavigate,
 }: {
    rows: BreakdownRow[];
    panelFilter: ReturnType<typeof usePanelFilter>;
+   /** Ausente na aba Issues: ali o clique filtra a lista que já está na tela. */
+   onNavigate?: (target: PanelFilterTarget) => void;
 }) {
    if (rows.length === 0) {
       return <p className="text-xs text-muted-foreground px-1 py-3">Nothing to show yet.</p>;
@@ -77,7 +100,11 @@ function BreakdownList({
                <button
                   key={row.key}
                   type="button"
-                  onClick={() => row.target && panelFilter.toggle(row.target)}
+                  onClick={() => {
+                     if (!row.target) return;
+                     if (onNavigate) onNavigate(row.target);
+                     else panelFilter.toggle(row.target);
+                  }}
                   className={cn(
                      'flex items-center justify-between gap-3 py-2 px-1.5 -mx-1.5 rounded-md text-left transition-colors',
                      row.target && 'cursor-pointer hover:bg-accent/50',
@@ -113,6 +140,14 @@ export function ProjectPropertiesPanel({
    onChanged,
 }: ProjectPropertiesPanelProps) {
    const panelFilter = usePanelFilter();
+   const { orgId } = useParams<{ orgId: string }>();
+   const router = useRouter();
+   const pathname = usePathname();
+   // Na aba Issues o filtro age na lista da tela; fora dela, navega para a aba (pl#7).
+   const navigate =
+      projectId && !pathname.endsWith('/issues')
+         ? (target: PanelFilterTarget) => router.push(filterHref(orgId, projectId, target))
+         : undefined;
    const completed = issues.filter(isCompleted).length;
 
    const started = issues.filter((issue) => issue.status.category === 'started').length;
@@ -421,13 +456,13 @@ export function ProjectPropertiesPanel({
                      </TabsTrigger>
                   </TabsList>
                   <TabsContent value="assignees">
-                     <BreakdownList rows={assigneeRows} panelFilter={panelFilter} />
+                     <BreakdownList rows={assigneeRows} panelFilter={panelFilter} onNavigate={navigate} />
                   </TabsContent>
                   <TabsContent value="labels">
-                     <BreakdownList rows={labelRows} panelFilter={panelFilter} />
+                     <BreakdownList rows={labelRows} panelFilter={panelFilter} onNavigate={navigate} />
                   </TabsContent>
                   <TabsContent value="cycles">
-                     <BreakdownList rows={cycleRows} panelFilter={panelFilter} />
+                     <BreakdownList rows={cycleRows} panelFilter={panelFilter} onNavigate={navigate} />
                   </TabsContent>
                </Tabs>
             </div>
