@@ -74,16 +74,16 @@ Arquivos: `components/common/{projects,initiatives,roadmap,cycles}/**`, `app/[or
 
 Arquivos: `components/common/{reviews,inbox,agent,search}/**`, `app/[orgId]/{review,reviews,inbox,agent}/**`, `components/layout/command-palette*.tsx`, `components/layout/keyboard-shortcuts.tsx`, `components/layout/sidebar/nav-inbox.tsx`, `components/common/issues/triage/**`, `lib/api/{reviews,review-*,notifications,notify,agent,triage,favorites}*.ts`, `lib/diff-patch.ts`, `store/{notifications,agent-chat,favorites,recents,inbox-layout}-store.ts`.
 
-- [ ] #8 + R5 layout de reviews com lista persistente; seção fora do segmento que remonta; `listTab` na URL.
-- [ ] #9 automação `pr.merged` só na transição para merged; publicar `issue` só quando o link mudar; Co#18 link por `(issue, repo, prNumber)`; Co#19 responder rápido e guardar ordem por `updated_at`.
-- [ ] #47 diff: memo por patch, `memo(DiffView)`, comentários agrupados por path, `content-visibility:auto`/colapso de arquivos grandes.
-- [ ] #48 reviews: debounce, recarregar com `limit = carregados`, ignorar eco próprio no detalhe.
-- [ ] #49 Slack: uma mensagem por evento (não por destinatário), sem "você" ambíguo.
-- [ ] #50 agent: gravar par user/assistant só no sucesso (ou fundir turnos), histórico com teto; hydrate mescla sem apagar chat em voo; loading ao abrir chat; Co#11 revelar resposta de uma vez (sem digitação simulada lenta).
-- [ ] #51 command palette: corpo montado só aberto; recentes em hook separado; AbortController e descarte de resultado de query antiga; "copy branch name" do usuário atual.
-- [ ] #19 inbox: evento com `{id, read, snoozedUntil}` aplicado como patch (sem hydrate completo) — coordenar formato com F5b/F4 (`lib/api/notifications.ts` é seu); linha renderizada do `dto.issue` (não descartar notificação de issue fora do store); "Mark all as read" por `unreadCount`; hidratar inbox em paralelo às issues (coordenar `data-hydrator` com F5b).
-- [ ] #28 triagem: fila filtra por ids/time, card não re-hidrata em edição, duplicatas em lote (sem N+1); Co#16 accept em transação com `UPDATE … WHERE applied_at IS NULL`.
-- [ ] Baixas Co#12–25 (snooze, teclado no inbox + j/k, filtro de tipos reais, contagem de reviews pendentes e atualizada, filtro de reviews no servidor + índice (pedir índice à F5a), guia com dedupe e evento, checkbox Reviewed ou remover, favoritos/recentes por org+usuário e com evento, atalhos inativos com dialog/menu aberto, busca em comentários — pedir índice trigram à F5a), `relativeTime` único com tick, código morto do agent, `listReviews` sem ternário duplicado.
+- [x] #8 + R5 layout de reviews com lista persistente; seção fora do segmento que remonta; `listTab` na URL.
+- [x] #9 automação `pr.merged` só na transição para merged; publicar `issue` só quando o link mudar; Co#18 link por `(issue, repo, prNumber)`; Co#19 responder rápido e guardar ordem por `updated_at`.
+- [x] #47 diff: memo por patch, `memo(DiffView)`, comentários agrupados por path, `content-visibility:auto`/colapso de arquivos grandes.
+- [x] #48 reviews: debounce, recarregar com `limit = carregados`, ignorar eco próprio no detalhe.
+- [x] #49 Slack: uma mensagem por evento (não por destinatário), sem "você" ambíguo.
+- [x] #50 agent: gravar par user/assistant só no sucesso (ou fundir turnos), histórico com teto; hydrate mescla sem apagar chat em voo; loading ao abrir chat; Co#11 revelar resposta de uma vez (sem digitação simulada lenta).
+- [x] #51 command palette: corpo montado só aberto; recentes em hook separado; AbortController e descarte de resultado de query antiga; "copy branch name" do usuário atual.
+- [x] #19 inbox: evento com `{id, read, snoozedUntil}` aplicado como patch (sem hydrate completo) — coordenar formato com F5b/F4 (`lib/api/notifications.ts` é seu); linha renderizada do `dto.issue` (não descartar notificação de issue fora do store); "Mark all as read" por `unreadCount`; hidratar inbox em paralelo às issues (coordenar `data-hydrator` com F5b).
+- [x] #28 triagem: fila filtra por ids/time, card não re-hidrata em edição, duplicatas em lote (sem N+1); Co#16 accept em transação com `UPDATE … WHERE applied_at IS NULL`.
+- [x] Baixas Co#12–25 (busca em comentários fica com a F5a: `lib/api/search.ts` + índice trigram) (snooze, teclado no inbox + j/k, filtro de tipos reais, contagem de reviews pendentes e atualizada, filtro de reviews no servidor + índice (pedir índice à F5a), guia com dedupe e evento, checkbox Reviewed ou remover, favoritos/recentes por org+usuário e com evento, atalhos inativos com dialog/menu aberto, busca em comentários — pedir índice trigram à F5a), `relativeTime` único com tick, código morto do agent, `listReviews` sem ternário duplicado.
 
 ### F4 — Administração, acesso e conteúdo (Claude) · worktree `.claude/worktrees/s3-f4`
 
