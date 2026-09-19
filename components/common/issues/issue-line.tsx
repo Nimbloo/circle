@@ -57,11 +57,13 @@ function IssueRow({
    issue,
    layoutId = false,
    dragging = false,
+   getGroup,
 }: {
    ref?: Ref<HTMLDivElement>;
    issue: Issue;
    layoutId?: boolean;
    dragging?: boolean;
+   getGroup?: () => IssueGroupContext;
 }) {
    const { orgId } = useParams<{ orgId: string }>();
    // Selector estreito: assina só displayProperties (não o store inteiro) — senão toda
@@ -76,6 +78,13 @@ function IssueRow({
    const selected = useBulkSelectionStore((s) => s.selected.has(issue.id));
    const anySelected = useBulkSelectionStore((s) => s.selected.size > 0);
    const toggleSelected = useBulkSelectionStore((s) => s.toggle);
+   const selectRange = useBulkSelectionStore((s) => s.selectRange);
+   // Shift+clique seleciona o intervalo dentro do grupo visível (is#10).
+   const pick = (e: { shiftKey: boolean }) => {
+      const ordered = getGroup?.().issues.map((i) => i.id);
+      if (e.shiftKey && ordered) selectRange(ordered, issue.id);
+      else toggleSelected(issue.id);
+   };
    const updateIssue = useIssuesStore((s) => s.updateIssue);
    const updateIssueProject = useIssuesStore((s) => s.updateIssueProject);
    const addIssueLabel = useIssuesStore((s) => s.addIssueLabel);
@@ -110,7 +119,7 @@ function IssueRow({
       >
          <button
             type="button"
-            onClick={() => toggleSelected(issue.id)}
+            onClick={pick}
             aria-label={selected ? 'Deselect issue' : 'Select issue'}
             aria-pressed={selected}
             className={cn(
@@ -285,7 +294,15 @@ function DraggableIssueRow({
    const drop = useIssueDropTarget(issue.id, getGroup, ref);
    drag(drop(ref));
 
-   return <IssueRow ref={ref} issue={issue} layoutId={layoutId} dragging={isDragging} />;
+   return (
+      <IssueRow
+         ref={ref}
+         issue={issue}
+         layoutId={layoutId}
+         dragging={isDragging}
+         getGroup={getGroup}
+      />
+   );
 }
 
 function IssueLineComponent({ issue, layoutId = false, getGroup }: IssueLineProps) {

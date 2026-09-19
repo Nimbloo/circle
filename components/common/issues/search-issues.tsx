@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { BulkActionsBar } from './bulk-actions-bar';
+import { useBulkSelectionKeys } from './use-bulk-selection-keys';
 import { IssueLine } from './issue-line';
 
 /**
@@ -88,6 +89,7 @@ export function SearchIssues() {
    const applyRemote = useIssuesStore((s) => s.applyRemote);
    const params = useParams<{ orgId?: string }>();
    const orgId = params?.orgId ?? 'nimbloo';
+   useBulkSelectionKeys();
 
    useEffect(() => {
       const q = searchQuery.trim();

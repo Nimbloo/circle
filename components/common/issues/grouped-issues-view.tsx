@@ -19,6 +19,7 @@ import { GroupIssues, IssueGroupDescriptor } from './group-issues';
 import { VirtualIssueList } from './virtual-issue-list';
 import { CustomDragLayer } from './issue-grid';
 import { BulkActionsBar } from './bulk-actions-bar';
+import { useBulkSelectionKeys } from './use-bulk-selection-keys';
 import { IssueContextMenuHost } from './issue-context-menu-host';
 import { labelColor } from '@/components/common/palette';
 
@@ -230,9 +231,10 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
    const labels = useLabels();
    const hasActiveFilters = filters.length > 0;
 
-   // Limpa a seleção em lote ao desmontar (troca de view).
+   // Limpa a seleção em lote ao desmontar (troca de view) e no Esc (is#10).
    const clearSelection = useBulkSelectionStore((s) => s.clear);
    useEffect(() => () => clearSelection(), [clearSelection]);
+   useBulkSelectionKeys();
 
    const groups = useMemo<GroupEntry[]>(() => {
       const hideDone = (list: Issue[]) =>
