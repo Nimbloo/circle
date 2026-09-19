@@ -17,7 +17,7 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 /**
@@ -91,26 +91,38 @@ export function TriageSuggestionCard({
       };
    }, [issueId, hydrate]);
 
+   // Edição em curso não pode ser apagada por uma recarga da fila (#28).
+   const editingRef = useRef(false);
+   editingRef.current = editing;
+   const fedByQueue = initial !== undefined;
+
+   // Troca de issue: estado do card zera.
    useEffect(() => {
       setHidden(false);
       setEditing(false);
-      // A fila já traz a sugestão pronta: só o painel da issue precisa do GET.
+   }, [issueId]);
+
+   useEffect(() => {
+      // A fila já traz a sugestão pronta: só o painel da issue precisa do GET. Uma
+      // recarga da fila (objeto novo) só re-hidrata fora da edição.
       if (initial && initial.issueId === issueId) {
-         hydrate(initial);
+         if (!editingRef.current) hydrate(initial);
          return;
       }
       return load();
    }, [issueId, initial, hydrate, load]);
 
-   // A sugestão chega depois (geração assíncrona): o evento da issue traz o card.
+   // A sugestão chega depois (geração assíncrona): o evento da issue traz o card. Na
+   // fila quem escuta é a fila (que filtra pelo time) — o card não faz GET próprio.
    useEffect(() => {
+      if (fedByQueue) return;
       const onChanged = (e: Event) => {
          const id = (e as CustomEvent<{ id?: string }>).detail?.id;
-         if (!id || id === issueId) load();
+         if ((!id || id === issueId) && !editingRef.current) load();
       };
       window.addEventListener(ISSUE_CHANGED_EVENT, onChanged);
       return () => window.removeEventListener(ISSUE_CHANGED_EVENT, onChanged);
-   }, [issueId, load]);
+   }, [issueId, load, fedByQueue]);
 
    if (!suggestion || hidden || suggestion.appliedAt || suggestion.dismissedAt) return null;
    const isHeuristic = suggestion.source === 'heuristic';
