@@ -160,6 +160,7 @@ function IssueRow({
                      {displayProperties.project && issue.project && (
                         <ProjectSelector
                            project={issue.project}
+                           teamId={issue.teamId}
                            onChange={(project) =>
                               void updateIssueProject(issue.id, project).catch(() => undefined)
                            }

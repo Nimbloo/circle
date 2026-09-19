@@ -183,6 +183,7 @@ export function CreateNewIssue() {
                   />
                   <ProjectSelector
                      project={addIssueForm.project}
+                     teamId={teamId}
                      onChange={(newProject) =>
                         setAddIssueForm({ ...addIssueForm, project: newProject })
                      }
