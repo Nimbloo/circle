@@ -104,13 +104,28 @@ describe('painel de propriedades da issue', () => {
       expect(row('Labels')).toMatch(/Add label/);
    });
 
-   it('contrato com a frente C: circle:issue-shortcut abre o seletor da propriedade', async () => {
+   it('contrato com a frente C: circle:issue-shortcut abre o seletor e cancela o evento', async () => {
       panel();
+      const event = new CustomEvent('circle:issue-shortcut', {
+         detail: { action: 'priority' },
+         cancelable: true,
+      });
       act(() => {
-         window.dispatchEvent(
-            new CustomEvent('circle:issue-shortcut', { detail: { action: 'priority' } })
-         );
+         window.dispatchEvent(event);
       });
       expect(await screen.findByPlaceholderText('Set priority...')).toBeTruthy();
+      expect(event.defaultPrevented).toBe(true);
+   });
+
+   it('ação desconhecida (sem trigger no painel) não cancela o evento', () => {
+      panel();
+      const event = new CustomEvent('circle:issue-shortcut', {
+         detail: { action: 'nao-existe' },
+         cancelable: true,
+      });
+      act(() => {
+         window.dispatchEvent(event);
+      });
+      expect(event.defaultPrevented).toBe(false);
    });
 });

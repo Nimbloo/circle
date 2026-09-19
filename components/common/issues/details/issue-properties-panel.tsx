@@ -41,8 +41,9 @@ import { CalendarClock, Folder, Gauge, Tag, UserCircle } from 'lucide-react';
 import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
 
 /**
- * Atalhos da issue (contrato com a frente C): a tecla dispara o evento de janela e o
- * painel abre o seletor da propriedade — clicando no trigger, que já é o dono do popover.
+ * Atalhos da issue (contrato com a frente C): a tecla dispara o evento de janela
+ * CANCELÁVEL e o painel abre o seletor da propriedade — clicando no trigger, que já é o
+ * dono do popover — e chama `preventDefault()` para a palette não abrir junto.
  */
 export const ISSUE_SHORTCUT_EVENT = 'circle:issue-shortcut';
 export type IssueShortcutAction =
@@ -189,7 +190,12 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
    useEffect(() => {
       const onShortcut = (e: Event) => {
          const action = (e as CustomEvent<{ action?: IssueShortcutAction }>).detail?.action;
-         if (action) triggers.current[action]?.click();
+         const trigger = action ? triggers.current[action] : null;
+         if (!trigger) return;
+         // Contrato com a frente C: o evento é cancelável e quem abre o seletor avisa
+         // com `preventDefault()` — senão a palette abre a sub-página por cima.
+         e.preventDefault();
+         trigger.click();
       };
       window.addEventListener(ISSUE_SHORTCUT_EVENT, onShortcut);
       return () => window.removeEventListener(ISSUE_SHORTCUT_EVENT, onShortcut);
