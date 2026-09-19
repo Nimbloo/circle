@@ -228,7 +228,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
          .then((dto) => get().applyProject(dto))
          .catch((e) => {
             set((s) => ({ projects: s.projects.map((p) => (p.id === id ? prev : p)) }));
-            toast.error('Could not update the project');
+            // Erro de API (tem `status`) traz a explicação do servidor, ex.: 409 (F2, #43).
+            const apiMessage =
+               e instanceof Error && typeof (e as { status?: unknown }).status === 'number'
+                  ? e.message
+                  : null;
+            toast.error(apiMessage || 'Could not update the project');
             throw e;
          });
    },
