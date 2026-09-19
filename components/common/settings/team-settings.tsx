@@ -28,11 +28,12 @@ import {
    AlertDialogHeader,
    AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { api, ApiError } from '@/lib/client';
+import { api } from '@/lib/client';
 import { ESTIMATE_SCALE_META, normalizeScale, type EstimateScale } from '@/data/estimate-scales';
 import { useLabels, useStatuses } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { teamWithDescendants } from '@/lib/team-tree';
+import { DeleteTeamDialog } from '@/components/common/teams/delete-team-dialog';
 import type { Team } from '@/data/teams';
 import {
    Bot,
@@ -324,7 +325,6 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
    const teams = useWorkspaceStore((s) => s.teams);
    const me = useWorkspaceStore((s) => s.me);
    const applyTeamMembers = useWorkspaceStore((s) => s.applyTeamMembers);
-   const removeTeamLocal = useWorkspaceStore((s) => s.removeTeamLocal);
    // Deriva da fatia assinada: `getCyclesByTeam` devolve array NOVO a cada leitura,
    // entao nao pode ir dentro do seletor (referencia nova = re-render infinito).
    const allCycles = useWorkspaceStore((s) => s.cycles);
@@ -335,7 +335,6 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
    const [editOpen, setEditOpen] = useState(false);
    const [leaveOpen, setLeaveOpen] = useState(false);
    const [deleteOpen, setDeleteOpen] = useState(false);
-   const [confirmName, setConfirmName] = useState('');
    const [busy, setBusy] = useState(false);
    const isAdmin = me?.admin ?? false;
 
@@ -354,21 +353,6 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
          router.push(`/${orgId}`);
       } catch {
          toast.error('Não foi possível sair do time');
-         setBusy(false);
-      }
-   };
-
-   const deleteTeam = async () => {
-      if (busy || confirmName !== team.name) return;
-      setBusy(true);
-      try {
-         await api.teams.remove(team.id);
-         removeTeamLocal(team.id);
-         toast.success('Time excluído');
-         router.push(`/${orgId}`);
-      } catch (e) {
-         // A API explica o motivo (ex.: 409 com o conteúdo que ainda está no time).
-         toast.error(e instanceof ApiError ? e.message : 'Não foi possível excluir o time');
          setBusy(false);
       }
    };
@@ -579,10 +563,7 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
                            variant="destructive"
                            disabled={!isAdmin}
                            title={isAdmin ? undefined : 'Apenas administradores'}
-                           onClick={() => {
-                              setConfirmName('');
-                              setDeleteOpen(true);
-                           }}
+                           onClick={() => setDeleteOpen(true)}
                         >
                            Excluir…
                         </Button>
@@ -617,36 +598,7 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
             </AlertDialogContent>
          </AlertDialog>
 
-         <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-            <AlertDialogContent>
-               <AlertDialogHeader>
-                  <AlertDialogTitle>Excluir “{team.name}”?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                     Isso exclui o time e todas as suas issues, ciclos e dados. Esta ação NÃO pode
-                     ser desfeita. Digite o nome do time para confirmar.
-                  </AlertDialogDescription>
-               </AlertDialogHeader>
-               <Input
-                  value={confirmName}
-                  onChange={(e) => setConfirmName(e.target.value)}
-                  placeholder={team.name}
-                  autoFocus
-               />
-               <AlertDialogFooter>
-                  <AlertDialogCancel disabled={busy}>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction
-                     onClick={(e) => {
-                        e.preventDefault();
-                        void deleteTeam();
-                     }}
-                     disabled={busy || confirmName !== team.name}
-                     className="bg-destructive text-white hover:bg-destructive/90"
-                  >
-                     Excluir permanentemente
-                  </AlertDialogAction>
-               </AlertDialogFooter>
-            </AlertDialogContent>
-         </AlertDialog>
+         <DeleteTeamDialog team={team} open={deleteOpen} onOpenChange={setDeleteOpen} />
       </>
    );
 }

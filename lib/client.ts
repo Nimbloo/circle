@@ -21,7 +21,7 @@ import type {
    PostUpdateInput,
 } from '@/lib/api/project-detail';
 import type { InitiativeUpdateDto, PostInitiativeUpdateInput } from '@/lib/api/initiative-detail';
-import type { TeamDto, CreateTeamInput, JoinRequestDto } from '@/lib/api/teams';
+import type { TeamDto, CreateTeamInput, JoinRequestDto, TeamDeletionImpact } from '@/lib/api/teams';
 import type { MemberDto } from '@/lib/api/members';
 import {
    DEACTIVATED_LOGIN_URL,
@@ -368,6 +368,8 @@ export const api = {
          }
       ) => patch<TeamDto>(`/teams/${key}`, body),
       remove: (key: string) => del<{ deleted: boolean }>(`/teams/${key}`),
+      /** O que a exclusão do time apaga junto (contagens). Só admin. */
+      deletionImpact: (key: string) => get<TeamDeletionImpact>(`/teams/${key}/deletion-impact`),
       members: (key: string) => get<MemberDto[]>(`/teams/${key}/members`),
       addMember: (key: string, email: string) =>
          post<MemberDto[]>(`/teams/${key}/members`, { email }),
