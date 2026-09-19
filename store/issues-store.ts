@@ -158,6 +158,10 @@ const pendingCreates = new Set<string>();
 const RESYNC_MARGIN_MS = 60_000;
 
 function upsertDto(issues: Issue[], dto: IssueDto): Issue[] {
+   // Uma race entre o cache de catálogos e a mutação pode devolver a issue sem status.
+   // Mantém o valor atual (ou ignora a nova issue) até a próxima hidratação, sem derrubar
+   // a tela ao tentar adaptar um campo obrigatório ausente.
+   if (!dto.status) return issues;
    const fresh = adaptIssues([dto])[0];
    const cur = issues.find((i) => i.id === dto.id);
    // Resposta mais velha que o que já está no store (GETs fora de ordem): ignora.

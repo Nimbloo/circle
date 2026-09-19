@@ -27,7 +27,12 @@ export async function GET(req: Request, { params }: Params) {
 }
 
 const UpdateSchema = z.object({
-   title: z.string().min(1).max(512).optional(),
+   title: z
+      .string()
+      .trim()
+      .min(1, 'title é obrigatório')
+      .max(512, 'title deve ter no máximo 512 caracteres')
+      .optional(),
    statusId: z.string().min(1).max(64).optional(),
    priorityId: z.string().min(1).max(64).optional(),
    assigneeId: z.string().max(36).nullish(),

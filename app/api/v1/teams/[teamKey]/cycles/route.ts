@@ -26,11 +26,19 @@ export async function GET(req: Request, { params }: Params) {
 }
 
 const CreateSchema = z.object({
-   name: z.string().min(1),
-   startDate: z.string().min(1),
-   endDate: z.string().min(1),
+   name: z
+      .string()
+      .trim()
+      .min(1, 'name é obrigatório')
+      .max(96, 'name deve ter no máximo 96 caracteres'),
+   startDate: z.string().trim().min(1),
+   endDate: z.string().trim().min(1),
    status: z.enum(['planned', 'upcoming', 'current', 'completed']).optional(),
-   capacity: z.number().int().min(0).optional(),
+   capacity: z
+      .number({ invalid_type_error: 'capacity deve ser um inteiro maior ou igual a zero' })
+      .int('capacity deve ser um inteiro maior ou igual a zero')
+      .min(0, 'capacity deve ser um inteiro maior ou igual a zero')
+      .optional(),
 });
 
 export async function POST(req: Request, { params }: Params) {
