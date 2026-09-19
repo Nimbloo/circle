@@ -1,12 +1,13 @@
 'use client';
 
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { Issue } from '@/data/issues';
 import { cn } from '@/lib/utils';
 import { IssueLine } from './issue-line';
 import type { IssueGroupContext, IssueGroupDescriptor } from './group-issues';
 import { useGroupDropTarget } from './use-issue-drop-target';
+import { isKeyNavBlocked, navDirectionOf } from '@/store/issue-navigation-store';
 
 interface Entry {
    group: IssueGroupDescriptor;
@@ -106,15 +107,57 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
       overscan: 14,
    });
 
+   // J/K (#33): cursor de teclado pelas linhas de issue; Enter abre a issue do cursor.
+   const [activeKey, setActiveKey] = useState<string | null>(null);
+   const rowsRef = useRef(rows);
+   rowsRef.current = rows;
+   const activeKeyRef = useRef(activeKey);
+   activeKeyRef.current = activeKey;
+   const scrollToIndex = virtualizer.scrollToIndex;
+   useEffect(() => {
+      const keyOf = (row: Row) =>
+         row.kind === 'issue' ? `issue:${row.groupId}:${row.issue.id}` : null;
+      const onKey = (e: KeyboardEvent) => {
+         if (e.key === 'Enter') {
+            if (!activeKeyRef.current || isKeyNavBlocked(e)) return;
+            const link = parentRef.current?.querySelector<HTMLAnchorElement>(
+               '[data-active="true"] a[href]'
+            );
+            if (!link) return;
+            e.preventDefault();
+            link.click();
+            return;
+         }
+         const dir = navDirectionOf(e);
+         if (!dir) return;
+         const list = rowsRef.current;
+         const issueIdx = list.flatMap((row, i) => (row.kind === 'issue' ? [i] : []));
+         if (issueIdx.length === 0) return;
+         e.preventDefault();
+         const at = issueIdx.findIndex((i) => keyOf(list[i]) === activeKeyRef.current);
+         const nextPos = at === -1 ? (dir === 1 ? 0 : issueIdx.length - 1) : at + dir;
+         const target = issueIdx[Math.max(0, Math.min(issueIdx.length - 1, nextPos))];
+         const nextKey = keyOf(list[target]);
+         activeKeyRef.current = nextKey; // teclas rápidas: a próxima já parte daqui
+         setActiveKey(nextKey);
+         scrollToIndex(target, { align: 'auto' });
+      };
+      window.addEventListener('keydown', onKey);
+      return () => window.removeEventListener('keydown', onKey);
+   }, [scrollToIndex]);
+
    return (
       <div ref={parentRef} className="h-full overflow-y-auto pr-[5px] [scrollbar-gutter:stable]">
          <div style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
             {virtualizer.getVirtualItems().map((vi) => {
                const row = rows[vi.index];
+               const active = vi.key === activeKey;
                return (
                   <div
                      key={vi.key}
                      data-index={vi.index}
+                     data-active={active || undefined}
+                     className={active ? 'bg-accent/40' : undefined}
                      style={{
                         position: 'absolute',
                         top: 0,

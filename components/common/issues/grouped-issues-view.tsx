@@ -10,6 +10,7 @@ import { usePriorities, useLabels } from '@/store/catalog-store';
 import { useDisplaySetting } from '@/store/display-settings-store';
 import { useFilterStore } from '@/store/filter-store';
 import { useBulkSelectionStore } from '@/store/bulk-selection-store';
+import { useIssueNavigationStore, type IssueNavItem } from '@/store/issue-navigation-store';
 import { Box, ChevronDown, Layers, Tag, User, X } from 'lucide-react';
 import { FC, useEffect, useMemo, useState } from 'react';
 import { DndProvider } from 'react-dnd';
@@ -393,11 +394,20 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
    // Seleção em lote segue o que está na tela (#30): issue apagada, filtrada ou escondida
    // (done/sub-issues) sai da seleção — a barra nunca age sobre o que o usuário não vê.
    const retainSelection = useBulkSelectionStore((s) => s.retain);
+   // A mesma ordem visível vira a lista de origem do detalhe (#33: anterior/próxima, J/K).
+   const setNavOrder = useIssueNavigationStore((s) => s.setOrder);
    useEffect(() => {
       const visible = new Set<string>();
-      for (const entry of groups) for (const issue of entry.issues) visible.add(issue.id);
+      const order: IssueNavItem[] = [];
+      for (const entry of groups)
+         for (const issue of entry.issues) {
+            if (visible.has(issue.id)) continue; // por label, a issue aparece em vários grupos
+            visible.add(issue.id);
+            order.push({ id: issue.id, identifier: issue.identifier });
+         }
       retainSelection(visible);
-   }, [groups, retainSelection]);
+      setNavOrder(order);
+   }, [groups, retainSelection, setNavOrder]);
 
    const hiddenCount = Math.max(0, totalIssues.length - issues.length);
    const showFooter = hasActiveFilters && hiddenCount > 0;
