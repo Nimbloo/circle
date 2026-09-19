@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { patchToLines } from '@/lib/diff-patch';
-import type { Review, ReviewFileStat } from '@/data/reviews';
+import type { Review, ReviewComment, ReviewFileStat } from '@/data/reviews';
 import { DiffView } from './diff-view';
 import type { ReviewCommentsHandle } from './review-comments';
 import { DiffStat } from './review-shared';
@@ -33,7 +33,7 @@ import {
    Search,
    SlidersHorizontal,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 /** Diff tab: Files / Commits toolbar, file list and stacked unified diffs (comentáveis). */
 export function ReviewDiff({ review, handle }: { review: Review; handle: ReviewCommentsHandle }) {
@@ -47,6 +47,26 @@ export function ReviewDiff({ review, handle }: { review: Review; handle: ReviewC
          ),
       [review.files, query]
    );
+
+   // Comentários agrupados por arquivo UMA vez (antes: um `filter` por arquivo a cada
+   // render). A lista de cada arquivo só muda de referência quando o conteúdo dele muda —
+   // é o que deixa o `memo` do DiffView pular os outros arquivos (#47).
+   const prevByPathRef = useRef(new Map<string, ReviewComment[]>());
+   const commentsByPath = useMemo(() => {
+      const grouped = new Map<string, ReviewComment[]>();
+      for (const c of review.comments) {
+         if (!c.path) continue;
+         grouped.set(c.path, [...(grouped.get(c.path) ?? []), c]);
+      }
+      const prev = prevByPathRef.current;
+      for (const [path, list] of grouped) {
+         const old = prev.get(path);
+         if (old && old.length === list.length && old.every((c, i) => c === list[i]))
+            grouped.set(path, old);
+      }
+      prevByPathRef.current = grouped;
+      return grouped;
+   }, [review.comments]);
 
    return (
       <div className="h-full flex flex-col overflow-hidden">
@@ -152,7 +172,12 @@ export function ReviewDiff({ review, handle }: { review: Review; handle: ReviewC
                      const lines = patchToLines(file.patch);
                      const path = fullPath(file);
                      return (
-                        <div key={path} id={anchorId(file)}>
+                        <div
+                           key={path}
+                           id={anchorId(file)}
+                           // Arquivos fora da tela não pagam layout/paint (#47).
+                           className="[content-visibility:auto] [contain-intrinsic-size:auto_320px]"
+                        >
                            {lines.length > 0 ? (
                               <DiffView
                                  diff={{
@@ -163,7 +188,7 @@ export function ReviewDiff({ review, handle }: { review: Review; handle: ReviewC
                                     lines,
                                  }}
                                  filePath={path}
-                                 comments={review.comments.filter((c) => c.path === path)}
+                                 comments={commentsByPath.get(path)}
                                  handle={handle}
                               />
                            ) : (

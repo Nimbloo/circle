@@ -9,7 +9,24 @@ const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
  * Patch vazio ou inválido → `[]` (a UI mostra só o cabeçalho do arquivo).
  */
 export function patchToLines(patch: string | null | undefined): DiffLine[] {
-   if (!patch) return [];
+   if (!patch) return EMPTY;
+   // Memo por conteúdo (#47): a recarga do review (evento de comentário/checks) traz os
+   // MESMOS patches em objetos novos — sem o cache, todo arquivo era re-parseado e o
+   // array novo furava o `memo` do DiffView.
+   const cached = cache.get(patch);
+   if (cached) return cached;
+   const lines = parse(patch);
+   if (cache.size >= CACHE_LIMIT) cache.delete(cache.keys().next().value as string);
+   cache.set(patch, lines);
+   return lines;
+}
+
+const EMPTY: DiffLine[] = [];
+/** Teto de patches memoizados (FIFO): cobre alguns PRs grandes abertos na sessão. */
+const CACHE_LIMIT = 500;
+const cache = new Map<string, DiffLine[]>();
+
+function parse(patch: string): DiffLine[] {
    const out: DiffLine[] = [];
    let newLine = 0;
    let lastNewEnd = 0; // última linha nova coberta pelo hunk anterior
