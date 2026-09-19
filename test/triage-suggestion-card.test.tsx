@@ -32,6 +32,9 @@ vi.mock('@/lib/client', () => ({
          queue: apiMocks.queue,
       },
    },
+   ApiError: class extends Error {
+      status = 0;
+   },
 }));
 const toastMocks = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock('sonner', () => ({ toast: toastMocks }));
