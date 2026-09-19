@@ -131,6 +131,33 @@ describe('detalhe da issue', () => {
       expect(apiMocks.issues.detail).toHaveBeenCalledTimes(1);
    });
 
+   it('#27: eco marcado own (clientId da aba) não recarrega nem o feed', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+         const { IssueDetailView } = await import(
+            '@/components/common/issues/details/issue-details'
+         );
+         apiMocks.issues.detail.mockResolvedValue(dto('CORE-1'));
+         render(<IssueDetailView issue={make('a', 'CORE-1')} />);
+         await waitFor(() => expect(feedProps.onOwnAction).toBeTypeOf('function'));
+         apiMocks.issues.activity.mockClear();
+
+         act(() => feedProps.onOwnAction!());
+         act(() => {
+            window.dispatchEvent(
+               new CustomEvent(ISSUE_CHANGED_EVENT, { detail: { id: 'a', own: true } })
+            );
+         });
+         await act(async () => {
+            vi.advanceTimersByTime(2500);
+         });
+         expect(apiMocks.issues.activity).not.toHaveBeenCalled();
+         expect(apiMocks.issues.detail).toHaveBeenCalledTimes(1);
+      } finally {
+         vi.useRealTimers();
+      }
+   });
+
    it('evento de outra pessoa (sem ação própria) recarrega', async () => {
       const { IssueDetailView } = await import('@/components/common/issues/details/issue-details');
       apiMocks.issues.detail.mockResolvedValue(dto('CORE-1'));

@@ -3,7 +3,6 @@
 import type { Issue } from '@/data/issues';
 import type { IssueDetail } from '@/data/issue-details';
 import { adaptActivity, adaptIssueDetail, textToBlocks } from '@/lib/adapters-issue-detail';
-import { useWorkspaceStore } from '@/store/workspace-store';
 import { adaptIssues } from '@/lib/adapters';
 import { api, ApiError } from '@/lib/client';
 import { blocksToDoc, type EditorDoc } from '@/lib/editor-doc';
@@ -105,7 +104,6 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
    const { orgId } = useParams<{ orgId: string }>();
    const inStore = useIssuesStore((s) => s.issues.some((i) => i.id === issue.id));
    const statuses = useStatuses();
-   const meEmail = useWorkspaceStore((s) => s.me?.email);
 
    const [detail, setDetail] = useState<IssueDetail | null>(null);
    const [loading, setLoading] = useState(true);
@@ -199,8 +197,8 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
       );
    }, []);
 
-   // Eco da própria ação: o SSE avisa esta aba também. Com `actorEmail` no evento, o eco
-   // é reconhecido; sem ele, dentro da janela da ação, recarrega só o feed no fim dela
+   // Eco da própria ação: o SSE avisa esta aba também. Com `own` no evento (clientId da
+   // aba, If#16), o eco é reconhecido; sem ele, dentro da janela da ação, recarrega só o feed no fim dela
    // (um evento de outra pessoa no mesmo intervalo não se perde).
    const ownActionUntil = useRef(0);
    const echoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -218,24 +216,22 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
    // OUTRO usuário), refaz o fetch do detail/feed. Sem isso, o painel aberto fica stale.
    useEffect(() => {
       const onChanged = (e: Event) => {
-         const d = (e as CustomEvent<{ id?: string; actorEmail?: string }>).detail ?? {};
+         const d = (e as CustomEvent<{ id?: string; own?: boolean }>).detail ?? {};
          if (d.id && d.id !== detailIssueId) return;
          const remaining = ownActionUntil.current - Date.now();
          if (remaining > 0) {
-            if (d.actorEmail && d.actorEmail === meEmail) return;
-            if (!d.actorEmail) {
-               echoTimer.current ??= setTimeout(() => {
-                  echoTimer.current = null;
-                  reloadActivityRef.current();
-               }, remaining);
-               return;
-            }
+            if (d.own) return;
+            echoTimer.current ??= setTimeout(() => {
+               echoTimer.current = null;
+               reloadActivityRef.current();
+            }, remaining);
+            return;
          }
          setReloadKey((k) => k + 1);
       };
       window.addEventListener(ISSUE_CHANGED_EVENT, onChanged);
       return () => window.removeEventListener(ISSUE_CHANGED_EVENT, onChanged);
-   }, [detailIssueId, meEmail]);
+   }, [detailIssueId]);
 
    // Depois do remount pós-conflito, o editor novo volta a salvar (o flush do editor
    // antigo, no unmount, já foi descartado).
