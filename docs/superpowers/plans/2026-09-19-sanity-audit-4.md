@@ -130,10 +130,27 @@ Arquivos: `components/common/{projects,initiatives,roadmap,cycles}/**`, `app/[or
 
 Arquivos: `components/common/{inbox,reviews,agent,search}/**`, `components/layout/{command-palette.tsx (grupos e busca), keyboard-shortcuts.tsx}`, `components/layout/sidebar/{nav-inbox,nav-favorites,nav-footer}.tsx`, `lib/api/{notifications,favorites,reviews,review-*}*.ts` + rotas, `store/{notifications,favorites,recents,agent-chat}-store.ts`, `lib/client.ts` (métodos novos da C), `lib/shortcuts.ts` (novo).
 
-- [ ] co#1 a co#16, exceto a parte de servidor do co#12 (fica com a S) e o co#9 na palette (fica com a M; a C cuida da linha adiada saindo e do dropdown por baixo).
-- [ ] co#3: paginação da inbox por cursor (`sortAt`, `id`) + excluir notificação (rota DELETE + ⌫ + UI), com carregar mais ou scroll infinito.
-- [ ] co#5/#6: `lib/shortcuts.ts` como tabela única que alimenta o listener, as dicas da palette e o painel `?`. As teclas da issue disparam `circle:issue-shortcut` (contrato com a I).
-- [ ] co#16: reordenar favoritos por arraste na sidebar (usa `position`).
+- [x] co#1 a co#16, exceto a parte de servidor do co#12 (fica com a S) e o co#9 na palette (fica com a M; a C cuida da linha adiada saindo e do dropdown por baixo).
+- [x] co#3: paginação da inbox por cursor (`sortAt`, `id`) + excluir notificação (rota DELETE + ⌫ + UI), com carregar mais ou scroll infinito.
+- [x] co#5/#6: `lib/shortcuts.ts` como tabela única que alimenta o listener, as dicas da palette e o painel `?`. As teclas da issue disparam `circle:issue-shortcut` (contrato com a I).
+- [x] co#16: reordenar favoritos por arraste na sidebar (usa `position`).
+
+Contratos entregues pela C (para as outras frentes):
+
+- **`circle:issue-shortcut`** (evento de janela, `{ action }`, **`cancelable`**): quem abrir o
+  seletor precisa chamar `event.preventDefault()`. Sem isso, o listener global entende que
+  ninguém tratou e abre o ⌘K na sub-página equivalente — e os dois abrem juntos. Ações:
+  `status | priority | assignee | labels | project | cycle | estimate | dueDate`.
+- **`circle:open-command`** aceita `detail.page` (`status`, `priority`, `assign`, `labels`,
+  `project`, `cycle`, `due-date`) para abrir a paleta direto na sub-página.
+- **`circle:open-shortcuts`** abre o painel `?` (hospedado no `KeyboardShortcuts`).
+- **Inbox:** `GET /inbox` aceita `limit`/`cursor` e devolve `meta.nextCursor` (`data` segue
+  sendo o array); `DELETE /notifications/:id` exclui a do próprio destinatário.
+  `PATCH /favorites { order }` grava a ordem dos favoritos.
+
+Pendências registradas: "Reviewed" do diff continua **local** (localStorage) e colapsa sem
+animação — persistir exigiria coluna nova (migration é da A); chat do Agent com falha some no
+reload (persistência é da S, co#12).
 
 ### A — Administração e conteúdo (Claude) · `.claude/worktrees/s4-a`
 
