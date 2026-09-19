@@ -19,7 +19,7 @@ describe('entrada suave de conteúdo', () => {
       render(
          <>
             <EmptyState title="Nada aqui" />
-            <ErrorState title="Falhou" />
+            <ErrorState title="Falhou" description="Tente de novo." />
             <SettingsRow title="Linha" />
          </>
       );

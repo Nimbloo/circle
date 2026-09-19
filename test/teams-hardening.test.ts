@@ -96,3 +96,34 @@ describe('deleteTeam em transação trata templates (#59)', () => {
       ).toEqual([]);
    });
 });
+
+describe('deleteTeam com conteúdo explica o que impede', () => {
+   it('o 409 diz quantas issues e projetos o time ainda tem', async () => {
+      const { createIssue } = await import('@/lib/api/issues');
+      const { createProject } = await import('@/lib/api/projects');
+      await seedUser(db, { name: 'Ana', email: 'ana@x.com' });
+      await createIssue(
+         db,
+         { teamId: 'OPEN', title: 'A', statusId: 'backlog', priorityId: 'low' },
+         'ana@x.com'
+      );
+      await createIssue(
+         db,
+         { teamId: 'OPEN', title: 'B', statusId: 'backlog', priorityId: 'low' },
+         'ana@x.com'
+      );
+      await createProject(db, {
+         name: 'P',
+         teamId: 'OPEN',
+         statusId: 'proj-in-progress',
+         priorityId: 'high',
+         healthId: 'on-track',
+      });
+
+      const err = await deleteTeam(db, 'OPEN').catch((e) => e);
+      expect(err.status).toBe(409);
+      expect(err.message).toContain('2 issues');
+      expect(err.message).toContain('1 projeto');
+      expect(err.message).not.toContain('cycles');
+   });
+});
