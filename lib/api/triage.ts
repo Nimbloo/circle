@@ -81,6 +81,7 @@ export interface TriageSuggestionDto {
 }
 
 type Row = typeof issueTriageSuggestion.$inferSelect;
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 const EMPTY_PAYLOAD: TriageSuggestionPayload = {
    teamId: null,
@@ -110,32 +111,42 @@ function readPayload(raw: unknown): TriageSuggestionPayload {
    };
 }
 
-/** Resolve identifier/título das duplicatas (as que sumiram do banco caem fora). */
-async function toDto(db: Db, row: Row): Promise<TriageSuggestionDto> {
-   const payload = readPayload(row.payload);
-   const ids = payload.duplicates.map((d) => d.issueId);
-   const rows = ids.length
+/**
+ * Resolve identifier/título das duplicatas (as que sumiram do banco caem fora). Em lote:
+ * a fila inteira resolve as duplicatas de todos os cards numa consulta só (#28).
+ */
+async function toDtos(db: Db, rows: Row[]): Promise<TriageSuggestionDto[]> {
+   const payloads = rows.map((r) => readPayload(r.payload));
+   const ids = [...new Set(payloads.flatMap((p) => p.duplicates.map((d) => d.issueId)))];
+   const refs = ids.length
       ? await db
            .select({ id: issueT.id, identifier: issueT.identifier, title: issueT.title })
            .from(issueT)
            .where(inArray(issueT.id, ids))
       : [];
-   const byId = new Map(rows.map((r) => [r.id, r]));
-   return {
-      issueId: row.issueId,
-      source: row.source as TriageSuggestionSource,
-      teamId: payload.teamId,
-      priorityId: payload.priorityId,
-      labelIds: payload.labelIds,
-      duplicates: payload.duplicates.flatMap((d) => {
-         const ref = byId.get(d.issueId);
-         return ref ? [{ ...d, identifier: ref.identifier, title: ref.title }] : [];
-      }),
-      summary: payload.summary,
-      createdAt: row.createdAt.toISOString(),
-      appliedAt: row.appliedAt?.toISOString() ?? null,
-      dismissedAt: row.dismissedAt?.toISOString() ?? null,
-   };
+   const byId = new Map(refs.map((r) => [r.id, r]));
+   return rows.map((row, i) => {
+      const payload = payloads[i];
+      return {
+         issueId: row.issueId,
+         source: row.source as TriageSuggestionSource,
+         teamId: payload.teamId,
+         priorityId: payload.priorityId,
+         labelIds: payload.labelIds,
+         duplicates: payload.duplicates.flatMap((d) => {
+            const ref = byId.get(d.issueId);
+            return ref ? [{ ...d, identifier: ref.identifier, title: ref.title }] : [];
+         }),
+         summary: payload.summary,
+         createdAt: row.createdAt.toISOString(),
+         appliedAt: row.appliedAt?.toISOString() ?? null,
+         dismissedAt: row.dismissedAt?.toISOString() ?? null,
+      };
+   });
+}
+
+async function toDto(db: Db, row: Row): Promise<TriageSuggestionDto> {
+   return (await toDtos(db, [row]))[0];
 }
 
 // ── Heurística de duplicatas (fallback sem IA) ───────────────────────────
@@ -497,10 +508,10 @@ export async function listTeamTriageSuggestions(
          .select()
          .from(issueTriageSuggestion)
          .where(inArray(issueTriageSuggestion.issueId, ids));
-      return Promise.all(refreshed.map((r) => toDto(db, r)));
+      return toDtos(db, refreshed);
    }
    for (const id of missing) scheduleTriageSuggestion(db, id);
-   return Promise.all(rows.map((r) => toDto(db, r)));
+   return toDtos(db, rows);
 }
 
 // ── Accept / Dismiss ─────────────────────────────────────────────────────
@@ -517,7 +528,7 @@ export interface AcceptTriageInput {
  * Move a issue de time: `team_id` + identifier NOVO (a numeração é por time). Só é
  * chamado quando o time sugerido difere do atual.
  */
-async function moveIssueToTeam(db: Db, issueId: string, teamId: string): Promise<string> {
+async function moveIssueToTeam(db: Db | Tx, issueId: string, teamId: string): Promise<string> {
    const [seq] = await db
       .update(teamT)
       .set({ issueSeq: sql`${teamT.issueSeq} + 1` })
@@ -574,26 +585,65 @@ export async function acceptTriageSuggestion(
          .sort((a, b) => a.position - b.position)[0];
    if (!open) throw new ApiError(409, 'Nenhum status aberto configurado no workspace');
 
-   // Time primeiro: o identifier muda, e as etapas seguintes já usam o novo.
+   const parts = [`moved to ${open.name}`];
    const movedTeam = !!teamId && teamId !== target.teamId;
-   if (movedTeam) await moveIssueToTeam(db, issueId, teamId!);
+   if (movedTeam) parts.push(`team ${teamId}`);
+   if (priorityId)
+      parts.push(
+         `priority ${catalogs.priorities.find((p) => p.id === priorityId)?.name ?? priorityId}`
+      );
+   if (labelIds.length) parts.push(`${labelIds.length} label(s)`);
+   if (duplicateIds.length) parts.push(`${duplicateIds.length} duplicate(s) linked`);
 
-   if (labelIds.length) {
-      await db
-         .insert(issueLabel)
-         .values(labelIds.map((labelId) => ({ issueId, labelId })))
-         .onConflictDoNothing();
-   }
+   // Co#16: o carimbo `applied_at` é a trava. Numa transação, só quem vira a sugestão de
+   // pendente para aplicada (`WHERE applied_at IS NULL`) move o time, grava labels e a
+   // activity — dois Accepts simultâneos não movem a issue duas vezes.
+   await db.transaction(async (tx) => {
+      const claimed = await tx
+         .update(issueTriageSuggestion)
+         .set({ appliedAt: new Date(), dismissedAt: null })
+         .where(
+            and(eq(issueTriageSuggestion.issueId, issueId), isNull(issueTriageSuggestion.appliedAt))
+         )
+         .returning({ issueId: issueTriageSuggestion.issueId });
+      if (claimed.length === 0) throw new ApiError(409, 'Sugestão já aplicada');
 
-   // Status/prioridade pelo caminho normal: SLA, automações de status e notificações
-   // continuam valendo (o usuário mudou a issue — a sugestão só propôs).
+      // Time primeiro: o identifier muda, e as etapas seguintes já usam o novo.
+      if (movedTeam) await moveIssueToTeam(tx, issueId, teamId!);
+      if (labelIds.length) {
+         await tx
+            .insert(issueLabel)
+            .values(labelIds.map((labelId) => ({ issueId, labelId })))
+            .onConflictDoNothing();
+      }
+      await tx.insert(activityEvent).values({
+         id: randomUUID(),
+         issueId,
+         actorId: actor.id,
+         event: 'triage',
+         text: `triaged with suggestion (${parts.join(', ')})`,
+         createdAt: new Date(),
+      });
+   });
+
+   // Status/prioridade pelo caminho normal, DEPOIS do commit: SLA, automações de status,
+   // notificações e o publish de `updateIssue` só veem estado confirmado.
    const { updateIssue } = await import('./issues');
-   await updateIssue(
-      db,
-      issueId,
-      { statusId: open.id, ...(priorityId ? { priorityId } : {}) },
-      actorEmail
-   );
+   try {
+      await updateIssue(
+         db,
+         issueId,
+         { statusId: open.id, ...(priorityId ? { priorityId } : {}) },
+         actorEmail
+      );
+   } catch (e) {
+      // Sem o status a issue segue na fila: devolve a sugestão para um novo Accept.
+      await db
+         .update(issueTriageSuggestion)
+         .set({ appliedAt: null })
+         .where(eq(issueTriageSuggestion.issueId, issueId));
+      throw e;
+   }
 
    // Duplicatas viram relação `related` (nunca fecham a issue sozinhas).
    const { addRelation } = await import('./issue-detail');
@@ -607,27 +657,6 @@ export async function acceptTriageSuggestion(
       }
    }
 
-   const parts = [`moved to ${open.name}`];
-   if (movedTeam) parts.push(`team ${teamId}`);
-   if (priorityId)
-      parts.push(
-         `priority ${catalogs.priorities.find((p) => p.id === priorityId)?.name ?? priorityId}`
-      );
-   if (labelIds.length) parts.push(`${labelIds.length} label(s)`);
-   if (duplicateIds.length) parts.push(`${duplicateIds.length} duplicate(s) linked`);
-   await db.insert(activityEvent).values({
-      id: randomUUID(),
-      issueId,
-      actorId: actor.id,
-      event: 'triage',
-      text: `triaged with suggestion (${parts.join(', ')})`,
-      createdAt: new Date(),
-   });
-
-   await db
-      .update(issueTriageSuggestion)
-      .set({ appliedAt: new Date(), dismissedAt: null })
-      .where(eq(issueTriageSuggestion.issueId, issueId));
    publish({ entity: 'issue', action: 'updated', id: issueId });
    return (await getTriageSuggestion(db, issueId))!;
 }
