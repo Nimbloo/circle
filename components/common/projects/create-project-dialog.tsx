@@ -42,6 +42,7 @@ import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 import { persistNewProject, type CreateProgress } from './create-project-persist';
 import { toast } from 'sonner';
 import { labelColor } from '@/components/common/palette';
+import { InitiativeGlyph } from '@/components/common/initiatives/initiative-glyph';
 
 /** Status icons são uma união (Lucide | Remixicon); o cast expõe className/style. */
 type IconCmp = ComponentType<{ className?: string; style?: CSSProperties }>;
@@ -505,7 +506,11 @@ export function CreateProjectButton() {
                         <Chip active={!!initiative}>
                            {initiative ? (
                               <>
-                                 <span className="text-sm leading-none">{initiative.icon}</span>
+                                 <InitiativeGlyph
+                                    icon={initiative.icon}
+                                    color={initiative.iconColor}
+                                    className="size-3.5"
+                                 />
                                  {initiative.name}
                               </>
                            ) : (
@@ -529,7 +534,11 @@ export function CreateProjectButton() {
                                  </CommandItem>
                                  {initiatives.map((i) => (
                                     <CommandItem key={i.id} onSelect={() => setInitiativeId(i.id)}>
-                                       <span className="text-sm leading-none">{i.icon}</span>
+                                       <InitiativeGlyph
+                                          icon={i.icon}
+                                          color={i.iconColor}
+                                          className="size-3.5"
+                                       />
                                        {i.name}
                                        {initiativeId === i.id && (
                                           <CheckIcon className="ml-auto size-3.5" />

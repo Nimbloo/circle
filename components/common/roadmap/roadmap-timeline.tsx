@@ -31,7 +31,9 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
 import { AlertTriangle, Compass, Route } from 'lucide-react';
 import { EmptyState } from '@/components/common/empty-state';
+import { InitiativeGlyph } from '@/components/common/initiatives/initiative-glyph';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { healthColor } from '@/components/common/projects/progress-colors';
 
 /** Grupo já resolvido para a tela: a initiative (ou "No initiative") e seus projetos. */
 export interface RoadmapRenderGroup {
@@ -381,6 +383,7 @@ export default function RoadmapTimeline({
    showProjectList,
 }: RoadmapTimelineProps) {
    const patchProject = useWorkspaceStore((s) => s.patchProject);
+   const initiatives = useWorkspaceStore((s) => s.initiatives);
    const [todayIso, setTodayIso] = useState<string | null>(null);
    const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -559,7 +562,11 @@ export default function RoadmapTimeline({
                            }}
                         >
                            {group.icon ? (
-                              <span>{group.icon}</span>
+                              <InitiativeGlyph
+                                 icon={group.icon}
+                                 color={initiatives.find((i) => i.id === group.id)?.iconColor}
+                                 className="size-3.5"
+                              />
                            ) : (
                               <Compass className="size-3.5 text-muted-foreground" />
                            )}
@@ -599,7 +606,7 @@ export default function RoadmapTimeline({
                                     <span className="flex-1 truncate">{project.name}</span>
                                     <span
                                        className="size-2 shrink-0 rounded-full"
-                                       style={{ backgroundColor: project.health.color }}
+                                       style={{ backgroundColor: healthColor(project.health.id) }}
                                     />
                                     {project.lead && (
                                        <Avatar className="size-4 shrink-0">

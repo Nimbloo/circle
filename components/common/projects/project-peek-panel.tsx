@@ -1,25 +1,15 @@
 'use client';
 
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
-import {
-   ArrowRight,
-   Calendar,
-   CalendarPlus,
-   ChevronRight,
-   Compass,
-   Slack,
-   Tag,
-   X,
-} from 'lucide-react';
+import { ChevronRight, X } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useMemo } from 'react';
 import { ProjectProgressChart, PROGRESS_COLORS } from './details/project-progress-chart';
 import { useSharedProjectDetail } from './details/use-project-detail';
-import { labelColor } from '@/components/common/palette';
+import { ProjectPropertyRows } from './project-property-fields';
 
 interface ProjectPeekPanelProps {
    projectId: string;
@@ -27,15 +17,6 @@ interface ProjectPeekPanelProps {
 }
 
 const formatDay = (iso?: string) => (iso ? format(parseISO(iso), 'MMM do') : '—');
-
-function PropertyRow({ label, children }: { label: string; children: React.ReactNode }) {
-   return (
-      <div className="flex items-center gap-4 min-h-8">
-         <span className="text-sm text-muted-foreground w-24 shrink-0">{label}</span>
-         <div className="flex items-center gap-1.5 text-sm min-w-0">{children}</div>
-      </div>
-   );
-}
 
 function Card({ children, className }: { children: React.ReactNode; className?: string }) {
    return (
@@ -53,8 +34,6 @@ function Card({ children, className }: { children: React.ReactNode; className?: 
 export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) {
    const { orgId } = useParams<{ orgId: string }>();
    const allIssues = useIssuesStore((s) => s.issues);
-   const teams = useWorkspaceStore((s) => s.teams);
-   const initiatives = useWorkspaceStore((s) => s.initiatives);
 
    const project = useWorkspaceStore((s) => s.getProjectById(projectId));
 
@@ -87,7 +66,6 @@ export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) 
 
    if (!project) return null;
 
-   const team = teams.find((candidate) => candidate.id === project.teamId);
    const started = issues.filter((issue) => issue.status.category === 'started').length;
    const completed = issues.filter((issue) => issue.status.category === 'completed').length;
 
@@ -122,116 +100,7 @@ export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) 
             <div className="flex items-center justify-between mb-1.5">
                <h3 className="text-sm font-medium">Properties</h3>
             </div>
-            <div className="flex flex-col">
-               <PropertyRow label="Status">
-                  <project.status.icon />
-                  <span>{project.status.name}</span>
-               </PropertyRow>
-               <PropertyRow label="Priority">
-                  <project.priority.icon className="size-3.5 text-muted-foreground" />
-                  <span>{project.priority.name}</span>
-               </PropertyRow>
-               <PropertyRow label="Lead">
-                  {project.lead ? (
-                     <>
-                        <Avatar className="size-5">
-                           <AvatarImage
-                              src={project.lead.avatarUrl || undefined}
-                              alt={project.lead.name}
-                           />
-                           <AvatarFallback>{project.lead.name[0]}</AvatarFallback>
-                        </Avatar>
-                        <span className="truncate max-w-40">{project.lead.name}</span>
-                     </>
-                  ) : (
-                     <span className="text-muted-foreground">—</span>
-                  )}
-               </PropertyRow>
-               <PropertyRow label="Members">
-                  {members.length > 0 ? (
-                     <span className="inline-flex items-center gap-1.5">
-                        <span className="flex -space-x-1.5">
-                           {members.slice(0, 3).map((member) => (
-                              <Avatar key={member.id} className="size-5 border-2 border-container">
-                                 <AvatarImage
-                                    src={member.avatarUrl || undefined}
-                                    alt={member.name}
-                                 />
-                                 <AvatarFallback>{member.name[0]}</AvatarFallback>
-                              </Avatar>
-                           ))}
-                        </span>
-                        {members.length} {members.length === 1 ? 'member' : 'members'}
-                     </span>
-                  ) : (
-                     <span className="text-muted-foreground">No members</span>
-                  )}
-               </PropertyRow>
-               <PropertyRow label="Dates">
-                  <span className="inline-flex items-center gap-1">
-                     <Calendar className="size-3.5 text-muted-foreground" />
-                     {formatDay(project.startDate)}
-                  </span>
-                  <ArrowRight className="size-3 text-muted-foreground" />
-                  <span className="inline-flex items-center gap-1 text-muted-foreground">
-                     <CalendarPlus className="size-3.5" />
-                     {project.targetDate ? (
-                        <span className="text-foreground">{formatDay(project.targetDate)}</span>
-                     ) : (
-                        'Target'
-                     )}
-                  </span>
-               </PropertyRow>
-               <PropertyRow label="Teams">
-                  <span className="inline-flex items-center gap-1.5">
-                     {team?.icon} {team?.name ?? project.teamId}
-                  </span>
-               </PropertyRow>
-               <PropertyRow label="Slack">
-                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                     <Slack className="size-3.5" />
-                     No channel
-                  </span>
-               </PropertyRow>
-               <PropertyRow label="Initiatives">
-                  {project.initiative ? (
-                     <span className="inline-flex items-center gap-1.5 truncate max-w-44">
-                        <span>
-                           {initiatives.find((i) => i.id === project.initiative)?.icon ?? '🎯'}
-                        </span>
-                        {initiatives.find((i) => i.id === project.initiative)?.name ??
-                           project.initiative}
-                     </span>
-                  ) : (
-                     <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                        <Compass className="size-3.5" />
-                        No initiative
-                     </span>
-                  )}
-               </PropertyRow>
-               <PropertyRow label="Labels">
-                  <div className="flex items-center gap-1.5">
-                     {project.labels.length === 0 && (
-                        <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                           <Tag className="size-3.5" />
-                           Add label
-                        </span>
-                     )}
-                     {project.labels.map((label) => (
-                        <span
-                           key={label.id}
-                           className="inline-flex items-center gap-1 text-xs border rounded-full px-2 py-0.5"
-                        >
-                           <span
-                              className="size-2 rounded-full"
-                              style={{ backgroundColor: labelColor(label.color) }}
-                           />
-                           {label.name}
-                        </span>
-                     ))}
-                  </div>
-               </PropertyRow>
-            </div>
+            <ProjectPropertyRows project={project} members={members} />
          </Card>
 
          {/* Milestones */}

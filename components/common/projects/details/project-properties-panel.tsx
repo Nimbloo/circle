@@ -15,10 +15,11 @@ import { format, parseISO } from 'date-fns';
 import { ProjectProgressChart } from './project-progress-chart';
 import { ProjectDependenciesPicker } from './project-dependencies-picker';
 import { ProgressHistory } from '../progress-history';
-import { ArrowRight, Calendar, Check, Compass, Plus, Tag, Trash2, UserPlus, X } from 'lucide-react';
+import { PROGRESS_COLORS } from '../progress-colors';
+import { PropertyRow, ProjectPropertyRows } from '../project-property-fields';
+import { Check, Plus, Trash2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { labelColor } from '@/components/common/palette';
 
 interface ProjectPropertiesPanelProps {
    project: Project;
@@ -88,7 +89,7 @@ function BreakdownList({
                      <span className="text-sm truncate">{row.label}</span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0 text-sm text-muted-foreground">
-                     <CapacityRing value={row.completedPercent} color="var(--primary)" />
+                     <CapacityRing value={row.completedPercent} color={PROGRESS_COLORS.completed} />
                      <span className="whitespace-nowrap">
                         {row.completedPercent}% of {row.total}
                      </span>
@@ -96,15 +97,6 @@ function BreakdownList({
                </button>
             );
          })}
-      </div>
-   );
-}
-
-function PropertyRow({ label, children }: { label: string; children: React.ReactNode }) {
-   return (
-      <div className="flex items-center justify-between gap-4 min-h-7">
-         <span className="shrink-0 text-[13px] text-muted-foreground">{label}</span>
-         <div className="flex min-w-0 items-center gap-1.5 text-[13px]">{children}</div>
       </div>
    );
 }
@@ -121,11 +113,7 @@ export function ProjectPropertiesPanel({
    onChanged,
 }: ProjectPropertiesPanelProps) {
    const panelFilter = usePanelFilter();
-   const teams = useWorkspaceStore((s) => s.teams);
-   const initiatives = useWorkspaceStore((s) => s.initiatives);
    const completed = issues.filter(isCompleted).length;
-
-   const team = teams.find((candidate) => candidate.id === project.teamId);
 
    const started = issues.filter((issue) => issue.status.category === 'started').length;
 
@@ -260,115 +248,18 @@ export function ProjectPropertiesPanel({
       <div className="flex h-full w-full flex-col gap-2 overflow-y-auto">
          {/* Properties */}
          <div className="rounded-[10px] border bg-card p-3">
-            <h3 className="mb-2.5 text-[13px] font-medium leading-4">Properties</h3>
-            <div className="flex flex-col gap-1">
-               <PropertyRow label="Status">
-                  <project.status.icon />
-                  <span>{project.status.name}</span>
-               </PropertyRow>
-               <PropertyRow label="Priority">
-                  <project.priority.icon className="size-3.5 text-muted-foreground" />
-                  <span>{project.priority.name}</span>
-               </PropertyRow>
-               <PropertyRow label="Lead">
-                  {project.lead ? (
-                     <>
-                        <Avatar className="size-5">
-                           <AvatarImage
-                              src={project.lead.avatarUrl || undefined}
-                              alt={project.lead.name}
-                           />
-                           <AvatarFallback>{project.lead.name[0]}</AvatarFallback>
-                        </Avatar>
-                        <span className="truncate max-w-36">{project.lead.name}</span>
-                     </>
-                  ) : (
-                     <span className="text-muted-foreground">—</span>
-                  )}
-               </PropertyRow>
-               <PropertyRow label="Members">
-                  {members.length > 0 ? (
-                     <span className="inline-flex items-center gap-1.5">
-                        <span className="flex -space-x-1.5">
-                           {members.slice(0, 3).map((member) => (
-                              <Avatar key={member.id} className="size-5 border-2 border-container">
-                                 <AvatarImage
-                                    src={member.avatarUrl || undefined}
-                                    alt={member.name}
-                                 />
-                                 <AvatarFallback>{member.name[0]}</AvatarFallback>
-                              </Avatar>
-                           ))}
-                        </span>
-                        {members.length} {members.length === 1 ? 'member' : 'members'}
-                     </span>
-                  ) : (
-                     <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                        <UserPlus className="size-3.5" />
-                        No members
-                     </span>
-                  )}
-               </PropertyRow>
-               <PropertyRow label="Dates">
-                  <span className="inline-flex items-center gap-1">
-                     <Calendar className="size-3.5 text-muted-foreground" />
-                     {formatDay(project.startDate)}
-                  </span>
-                  <ArrowRight className="size-3 text-muted-foreground" />
-                  <span className="inline-flex items-center gap-1">
-                     <Calendar className="size-3.5 text-muted-foreground" />
-                     {project.targetDate ? formatDay(project.targetDate) : 'Target'}
-                  </span>
-               </PropertyRow>
-               <PropertyRow label="Teams">
-                  <span className="inline-flex items-center gap-1.5">
-                     {team?.icon} {team?.name ?? project.teamId}
-                  </span>
-               </PropertyRow>
-               <PropertyRow label="Initiatives">
-                  {project.initiative ? (
-                     <span className="inline-flex items-center gap-1.5 truncate max-w-44">
-                        <span>
-                           {initiatives.find((i) => i.id === project.initiative)?.icon ?? '🎯'}
-                        </span>
-                        {initiatives.find((i) => i.id === project.initiative)?.name ??
-                           project.initiative}
-                     </span>
-                  ) : (
-                     <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                        <Compass className="size-3.5" />
-                        No initiative
-                     </span>
-                  )}
-               </PropertyRow>
-               {projectId && (
-                  <PropertyRow label="Depends on">
-                     <ProjectDependenciesPicker projectId={projectId} />
-                  </PropertyRow>
-               )}
-               <PropertyRow label="Labels">
-                  <div className="flex items-center gap-1.5">
-                     {project.labels.length === 0 && (
-                        <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                           <Tag className="size-3.5" />
-                           Add label
-                        </span>
-                     )}
-                     {project.labels.map((label) => (
-                        <span
-                           key={label.id}
-                           className="inline-flex items-center gap-1 text-xs border rounded-full px-2 py-0.5"
-                        >
-                           <span
-                              className="size-2 rounded-full"
-                              style={{ backgroundColor: labelColor(label.color) }}
-                           />
-                           {label.name}
-                        </span>
-                     ))}
-                  </div>
-               </PropertyRow>
-            </div>
+            <h3 className="mb-1.5 text-[13px] font-medium leading-4">Properties</h3>
+            <ProjectPropertyRows
+               project={project}
+               members={members}
+               extra={
+                  projectId && (
+                     <PropertyRow label="Depends on">
+                        <ProjectDependenciesPicker projectId={projectId} />
+                     </PropertyRow>
+                  )
+               }
+            />
          </div>
 
          {/* Milestones */}
@@ -482,21 +373,21 @@ export function ProjectPropertiesPanel({
                <div className="grid grid-cols-3 gap-2 mb-2">
                   <div className="flex flex-col gap-0.5">
                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <span className="size-2 rounded-[2px] bg-muted-foreground" />
+                        <span className="size-2 rounded-[2px] bg-progress-scope" />
                         Scope
                      </div>
                      <span className="text-sm font-medium">{issues.length}</span>
                   </div>
                   <div className="flex flex-col gap-0.5">
                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <span className="size-2 rounded-[2px] bg-chart-4" />
+                        <span className="size-2 rounded-[2px] bg-progress-started" />
                         Started
                      </div>
                      <span className="text-sm font-medium">{started}</span>
                   </div>
                   <div className="flex flex-col gap-0.5">
                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <span className="size-2 rounded-[2px] bg-primary" />
+                        <span className="size-2 rounded-[2px] bg-progress-completed" />
                         Completed
                      </div>
                      <span className="text-sm font-medium">{completed}</span>

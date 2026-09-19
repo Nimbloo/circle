@@ -10,6 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { dayLabel, targetDateFromLabel, toIsoDate } from '@/lib/initiative-period';
 import { cn } from '@/lib/utils';
+import { PropertyButton } from '@/components/common/projects/project-property-fields';
 
 type PeriodMode = 'day' | 'month' | 'quarter' | 'half-year' | 'year';
 const MODES: { key: PeriodMode; label: string }[] = [
@@ -41,12 +42,15 @@ export function InitiativeTargetPicker({
    date,
    onChange,
    compact = false,
+   ghost = false,
 }: {
    kind?: 'target' | 'start';
    label?: string | null;
    date?: string | null;
    onChange: (next: InitiativePeriodValue) => void;
    compact?: boolean;
+   /** Valor da linha de propriedade (botão fantasma) em vez do chip com borda. */
+   ghost?: boolean;
 }) {
    const [open, setOpen] = useState(false);
    const [query, setQuery] = useState('');
@@ -73,7 +77,23 @@ export function InitiativeTargetPicker({
       commit(isStart ? { label: null, date: iso } : { label: dayLabel(iso), date: iso });
    };
 
-   const trigger = (
+   const icon = isStart ? (
+      <CalendarDays className="size-3.5 shrink-0 text-muted-foreground" />
+   ) : (
+      <CalendarClock className="size-3.5 shrink-0 text-muted-foreground" />
+   );
+   const trigger = ghost ? (
+      <PopoverTrigger asChild>
+         <PropertyButton
+            aria-label={isStart ? 'Change initiative start date' : 'Change initiative target date'}
+         >
+            {icon}
+            <span className={cn('truncate', !hasValue && 'text-muted-foreground')}>
+               {hasValue ? text : isStart ? 'Add start date' : 'Add target date'}
+            </span>
+         </PropertyButton>
+      </PopoverTrigger>
+   ) : (
       <PopoverTrigger asChild>
          <Button
             type="button"
