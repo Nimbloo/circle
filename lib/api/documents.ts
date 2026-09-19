@@ -107,7 +107,10 @@ export async function createFolder(
 export async function createDocument(
    db: Db,
    input: {
-      folderId: string;
+      /** Pasta existente. Ou `newFolder`, que cria a pasta junto (Ad#37). */
+      folderId?: string;
+      /** Pasta nova criada na MESMA transação do documento: falhou, nada fica órfão. */
+      newFolder?: { name: string; icon?: string | null };
       teamId: string;
       name: string;
       icon?: string | null;
@@ -116,28 +119,46 @@ export async function createDocument(
    creatorEmail: string
 ): Promise<DocumentDto> {
    if (!input.name?.trim()) throw new ApiError(400, 'name é obrigatório');
+   if (!input.folderId && !input.newFolder?.name?.trim())
+      throw new ApiError(400, 'informe folderId ou newFolder');
    const creator = await assertTeamMember(db, input.teamId, creatorEmail);
-   // A pasta-alvo tem que existir E pertencer ao mesmo time (evita gravar documento
-   // em pasta de outro time via folderId forjado).
-   const [folder] = await db
-      .select({ teamId: documentFolder.teamId })
-      .from(documentFolder)
-      .where(eq(documentFolder.id, input.folderId))
-      .limit(1);
-   if (!folder) throw new ApiError(404, 'Pasta não encontrada');
-   if (folder.teamId !== input.teamId) throw new ApiError(400, 'A pasta não pertence a este time');
+   if (input.folderId) {
+      // A pasta-alvo tem que existir E pertencer ao mesmo time (evita gravar documento
+      // em pasta de outro time via folderId forjado).
+      const [folder] = await db
+         .select({ teamId: documentFolder.teamId })
+         .from(documentFolder)
+         .where(eq(documentFolder.id, input.folderId))
+         .limit(1);
+      if (!folder) throw new ApiError(404, 'Pasta não encontrada');
+      if (folder.teamId !== input.teamId)
+         throw new ApiError(400, 'A pasta não pertence a este time');
+   }
+   const folderId = input.folderId ?? randomUUID();
    const id = randomUUID();
    const now = new Date();
-   await db.insert(teamDocument).values({
-      id,
-      folderId: input.folderId,
-      name: input.name,
-      icon: input.icon ?? null,
-      creatorId: creator.id,
-      pinned: input.pinned ?? false,
-      createdAt: now,
-      updatedAt: now,
+   await db.transaction(async (tx) => {
+      if (!input.folderId && input.newFolder) {
+         await tx.insert(documentFolder).values({
+            id: folderId,
+            teamId: input.teamId,
+            name: input.newFolder.name.trim(),
+            icon: input.newFolder.icon ?? null,
+         });
+      }
+      await tx.insert(teamDocument).values({
+         id,
+         folderId,
+         name: input.name,
+         icon: input.icon ?? null,
+         creatorId: creator.id,
+         pinned: input.pinned ?? false,
+         createdAt: now,
+         updatedAt: now,
+      });
    });
+   if (!input.folderId)
+      publish({ entity: 'document', action: 'created', id: folderId, teamId: input.teamId });
    publish({
       entity: 'document',
       action: 'created',
@@ -147,7 +168,7 @@ export async function createDocument(
    });
    return {
       id,
-      folderId: input.folderId,
+      folderId,
       name: input.name,
       icon: input.icon ?? null,
       creator: {

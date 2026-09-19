@@ -31,6 +31,7 @@ import { formatDistanceToNowStrict } from 'date-fns';
 import { parseAsString, useQueryState } from 'nuqs';
 import { useEffect, useMemo, useState } from 'react';
 import { RoleControl } from './role-control';
+import { labelColor } from '@/components/common/palette';
 
 const presenceLabel: Record<User['status'], string> = {
    online: 'Online now',
@@ -53,6 +54,21 @@ function countBy(issues: Issue[], keyOf: (issue: Issue) => string[]): Map<string
       }
    }
    return map;
+}
+
+/**
+ * Issues exibidas por time, maior primeiro (Ad#38: antes toda linha repetia o total).
+ * Entram os times das issues, como nos breakdowns de label/prioridade/projeto.
+ */
+export function teamBreakdownCounts<T extends { id: string }>(
+   issues: Issue[],
+   teams: T[]
+): (T & { count: number })[] {
+   const counts = countBy(issues, (issue) => (issue.teamId ? [issue.teamId] : []));
+   return teams
+      .filter((team) => counts.has(team.id))
+      .map((team) => ({ ...team, count: counts.get(team.id) ?? 0 }))
+      .sort((a, b) => b.count - a.count);
 }
 
 function BreakdownList({ rows }: { rows: BreakdownRow[] }) {
@@ -171,7 +187,7 @@ export default function MemberProfile({ member }: { member: User }) {
             leading: (
                <span
                   className="size-2.5 rounded-full shrink-0"
-                  style={{ backgroundColor: label.color }}
+                  style={{ backgroundColor: labelColor(label.color) }}
                />
             ),
             count: counts.get(label.id) ?? 0,
@@ -207,13 +223,13 @@ export default function MemberProfile({ member }: { member: User }) {
 
    const teamRows = useMemo<BreakdownRow[]>(
       () =>
-         memberTeams.map((team) => ({
+         teamBreakdownCounts(displayedIssues, teams).map((team) => ({
             key: team.id,
             label: team.name,
             leading: <span className="text-sm shrink-0">{team.icon}</span>,
-            count: displayedIssues.length,
+            count: team.count,
          })),
-      [memberTeams, displayedIssues.length]
+      [teams, displayedIssues]
    );
 
    if (isSearching) {

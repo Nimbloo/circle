@@ -41,7 +41,7 @@ function Chip({ active, children }: { active?: boolean; children: React.ReactNod
  * Modal de criação de documento no MESMO padrão do New project (Linear): header com
  * breadcrumb da pasta (escolher existente ou criar nova inline) + fechar, ícone
  * quadrado editável + título grande, chip Pinned e footer. Persiste via
- * createFolder (quando nova) + createDocument.
+ * createDocument (com `newFolder` quando a pasta é nova, na mesma transação).
  */
 export function CreateDocumentButton({
    teamId,
@@ -85,17 +85,14 @@ export function CreateDocumentButton({
       if (!name.trim() || !teamId || !hasFolder || busy) return;
       setBusy(true);
       try {
-         let targetFolderId = folderId;
-         if (!selectedFolder && newFolder.trim()) {
-            const folder = await api.teams.createFolder(teamId, {
-               name: newFolder.trim(),
-               icon: '📁',
-            });
-            targetFolderId = folder.id;
-         }
-         if (!targetFolderId) throw new Error('no folder');
+         // Pasta nova vai JUNTO com o documento (uma transação, Ad#37): antes eram dois
+         // POSTs e a pasta ficava órfã quando o documento falhava.
+         const newFolderName = !selectedFolder ? newFolder.trim() : '';
+         if (!newFolderName && !folderId) throw new Error('no folder');
          await api.teams.createDocument(teamId, {
-            folderId: targetFolderId,
+            ...(newFolderName
+               ? { newFolder: { name: newFolderName, icon: '📁' } }
+               : { folderId: folderId! }),
             name: name.trim(),
             icon: icon || null,
             pinned,

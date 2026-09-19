@@ -30,7 +30,9 @@ const CreateSchema = z.discriminatedUnion('kind', [
    }),
    z.object({
       kind: z.literal('document'),
-      folderId: z.string().min(1),
+      // `folderId` OU `newFolder` (Ad#37, aditivo): pasta nova criada junto, atômica.
+      folderId: z.string().min(1).optional(),
+      newFolder: z.object({ name: z.string().min(1), icon: z.string().nullish() }).optional(),
       name: z.string().min(1),
       icon: z.string().nullish(),
       pinned: z.boolean().optional(),
@@ -61,6 +63,7 @@ export async function POST(req: Request, { params }: Params) {
             db,
             {
                folderId: input.folderId,
+               newFolder: input.newFolder,
                teamId: teamKey,
                name: input.name,
                icon: input.icon ?? null,

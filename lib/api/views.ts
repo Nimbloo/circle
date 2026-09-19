@@ -270,12 +270,22 @@ export async function deleteView(db: Db, id: string, actorEmail: string): Promis
 }
 
 /** Aplica o filtro salvo da view a issues (ou projects). */
+/** Teto de issues em `/views/:id/results` (o mesmo default da listagem). */
+export const VIEW_RESULTS_LIMIT = 500;
+
 export async function resolveView(
    db: Db,
    id: string,
    viewerId?: string,
-   teamScope?: string[]
-): Promise<{ type: string; issues?: IssueDto[]; projects?: ProjectDto[] } | null> {
+   teamScope?: string[],
+   limit = VIEW_RESULTS_LIMIT
+): Promise<{
+   type: string;
+   issues?: IssueDto[];
+   projects?: ProjectDto[];
+   /** Havia mais issues que o limite: o resultado NÃO é completo (Ad#30, aditivo). */
+   truncated?: boolean;
+} | null> {
    const view = await getView(db, id, viewerId);
    if (!view) return null;
    // Escopo de Guest (#100): view de um time fora do escopo não resolve.
@@ -297,7 +307,11 @@ export async function resolveView(
                : undefined,
          project: f.projectIds?.length ? f.projectIds : undefined,
          teamIds: teamScope,
+         // `limit + 1` para saber se havia mais (antes cortava em 500 em silêncio).
+         limit: limit + 1,
       });
+      const truncated = issues.length > limit;
+      if (truncated) issues = issues.slice(0, limit);
       if (f.hasProject) issues = issues.filter((i) => i.project !== null);
       if (f.q?.trim()) {
          // Saved search: mesmo motor da busca. Os ids vêm ranqueados, e a ordem do
@@ -312,7 +326,7 @@ export async function resolveView(
             .filter((i) => position.has(i.id))
             .sort((a, b) => position.get(a.id)! - position.get(b.id)!);
       }
-      return { type: 'issue', issues };
+      return { type: 'issue', issues, truncated };
    }
 
    // project view: aplica o que mapeia (categoria/status/priority/labels)

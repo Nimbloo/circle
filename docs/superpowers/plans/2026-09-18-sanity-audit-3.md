@@ -105,23 +105,25 @@ Arquivos: `components/common/{reviews,inbox,agent,search}/**`, `app/[orgId]/{rev
 
 Arquivos: `components/common/{teams,members,views,settings}/**`, `app/[orgId]/settings/**`, `app/invite/**`, `app/login/**`, `app/[orgId]/page.tsx`, `lib/api/{teams,members,users,invites,views,settings,import,export,webhooks,templates,emojis,slas,documents,automations,audit,integrations/*}.ts`, rotas correspondentes, `auth.ts`, `auth.config.ts`, `middleware.ts`, `lib/client.ts` (401 + R5 parse único), `lib/user-settings-sync.ts`, `store/*filter-store.ts`.
 
-- [ ] #6 + R6 `ViewFilterSchema` único (POST/PATCH) com teste pela rota.
-- [ ] #7 + R6 rotas de membros de time devolvem `MemberDto` completo; teste pelo payload da rota.
-- [ ] #10 import como job (decisão): tabela de jobs (pedir à F5a na migration — descreva as colunas no relatório e crie o schema em `db/schema.ts` coordenando com F5a: **F4 escreve o bloco da tabela `import_job` em `db/schema.ts`; F5a gera a migration única no fim**), progresso, `GET /import/jobs/:id`, evento SSE ao dono, UI com progresso; #24 `externalId` duplicado no CSV rejeitado antes; #21 coarse sem webhook (usar canal SSE-only de F5b/F5a: `publishInternal` — se não existir, crie em `lib/api/events.ts` e registre); pular Slack/automações/triagem por linha.
-- [ ] #12 401 → redirect `/login?callbackUrl=` no client (parse único R5) e SSE para de reconectar; middleware anexa `callbackUrl`; 403 de conta desativada vira tela própria.
-- [ ] #13 escopo do SSE re-resolvido na revalidação e em evento `member`/`team` do próprio usuário (fechar stream para reconectar); cliente hidrata issues quando `me.teamIds` muda (coordenar com F5b).
-- [ ] #15 settings: `PATCH /settings` por seção com merge no servidor (PUT continua); cliente só grava após GET ok, manda só a seção alterada; Ad#5 tema importado validado antes de aplicar; erro de sync exposto.
-- [ ] #20 `GET /issues/:id/subscription` com checagem de escopo (arquivo `app/api/v1/issues/[id]/subscription/route.ts`).
-- [ ] #22 atribuir issue avisa a aba do responsável (evento de assinatura pós-commit) — helper único usado por create/assign/import (arquivo `lib/api/issues.ts`, hunk pequeno).
-- [ ] #52 papel somente leitura na UI + rota recusa alteração explicando a fonte (decisão).
-- [ ] #53 evento `catalog` com `kind` (template/emoji/sla/status…): cliente só re-hidrata o bootstrap quando o dado está nele; cache de emojis invalida por evento e não cacheia falha.
-- [ ] #54 + R6 nada de valor de `lib/api/*` importado em componente (`ApiError` do client); regra `no-restricted-imports` no ESLint.
-- [ ] #55 sweep de webhooks também por timer por pod.
-- [ ] #57 templates com seq/loading/erro (R4 `useAsyncResource`), sem resposta trocada.
-- [ ] #58 documentos com `teamId` no evento; overview do time escuta `DOCUMENT_CHANGED`; join requests ao vivo.
-- [ ] #59 `deleteTeam` em transação, tratando templates.
-- [ ] #38 (admin) `EditTeamDialog` e Edit de view semeiam só ao abrir.
-- [ ] Baixas Ad#21–40 e R8 (tooltips mortos, `byStatus` do pulse).
+- [x] #6 + R6 `ViewFilterSchema` único (POST/PATCH) com teste pela rota.
+- [x] #7 + R6 rotas de membros de time devolvem `MemberDto` completo; teste pelo payload da rota.
+- [x] #10 import como job (decisão): tabela de jobs (pedir à F5a na migration — descreva as colunas no relatório e crie o schema em `db/schema.ts` coordenando com F5a: **F4 escreve o bloco da tabela `import_job` em `db/schema.ts`; F5a gera a migration única no fim**), progresso, `GET /import/jobs/:id`, evento SSE ao dono, UI com progresso; #24 `externalId` duplicado no CSV rejeitado antes; #21 coarse sem webhook (usar canal SSE-only de F5b/F5a: `publishInternal` — se não existir, crie em `lib/api/events.ts` e registre); pular Slack/automações/triagem por linha.
+- [x] #12 401 → redirect `/login?callbackUrl=` no client (parse único R5) e SSE para de reconectar; middleware anexa `callbackUrl`; 403 de conta desativada vira tela própria.
+- [x] #13 escopo do SSE re-resolvido na revalidação e em evento `member`/`team` do próprio usuário (fechar stream para reconectar); cliente hidrata issues quando `me.teamIds` muda (coordenar com F5b).
+- [x] #15 settings: `PATCH /settings` por seção com merge no servidor (PUT continua); cliente só grava após GET ok, manda só a seção alterada; Ad#5 tema importado validado antes de aplicar; erro de sync exposto.
+- [x] #20 `GET /issues/:id/subscription` com checagem de escopo (arquivo `app/api/v1/issues/[id]/subscription/route.ts`).
+- [x] #22 atribuir issue avisa a aba do responsável (evento de assinatura pós-commit) — helper único usado por create/assign/import (arquivo `lib/api/issues.ts`, hunk pequeno).
+- [x] #52 papel somente leitura na UI + rota recusa alteração explicando a fonte (decisão).
+- [x] #53 evento `catalog` com `kind` (template/emoji/sla/status…): cliente só re-hidrata o bootstrap quando o dado está nele; cache de emojis invalida por evento e não cacheia falha.
+- [x] #54 + R6 nada de valor de `lib/api/*` importado em componente (`ApiError` do client); regra `no-restricted-imports` no ESLint.
+- [x] #55 sweep de webhooks também por timer por pod.
+- [x] #57 templates com seq/loading/erro (R4 `useAsyncResource`), sem resposta trocada.
+- [x] #58 documentos com `teamId` no evento; overview do time escuta `DOCUMENT_CHANGED`; join requests ao vivo.
+- [x] #59 `deleteTeam` em transação, tratando templates.
+- [x] #38 (admin) `EditTeamDialog` e Edit de view semeiam só ao abrir.
+- [x] Baixas Ad#21–40 e R8 (tooltips mortos, `byStatus` do pulse).
+
+**Estado F4 (2026-09-18, claude):** todas as tasks entregues na branch `danilo/s3-f4` (worktree `.claude/worktrees/s3-f4`). #24 e Ad#5 já estavam resolvidos (validação no `prepareImport`/`validateImportCsv` e `parseImportedTheme`); SidebarTrigger já em `lg:hidden`. Última verificação: 24 arquivos de teste da frente (141 testes) verdes, `pnpm typecheck` e `pnpm lint` limpos. **Ad#40** só registrado: `circle.nimbloo.ai` está no `gateway-interno` (VPN-only) e o host público `circle-sentry` roteia só os paths exatos do Sentry, então `/api/metrics` não sai para a internet; qualquer um na VPN lê métricas técnicas (RED + process, sem PII). Endurecer, se desejado, no `nimbloo-k8s` (VirtualService devolvendo 404 para `/api/metrics` no host do app, com o ServiceMonitor raspando o Service direto) — sem mudança no app.
 
 ### F5a — Banco e servidor transversal (Codex) · worktree `C:/Projetos/.codex-worktrees/circle-s3-f5a`
 

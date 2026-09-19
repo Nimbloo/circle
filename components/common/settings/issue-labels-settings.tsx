@@ -29,6 +29,7 @@ import { EmptyState } from '@/components/common/empty-state';
 import { ListSkeleton } from '@/components/common/list-skeleton';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { labelColor } from '@/components/common/palette';
 
 /** Paleta pronta (clicável) + picker nativo p/ cor custom. */
 const PRESET_COLORS = [
@@ -96,7 +97,7 @@ function LabelDialog({
                <div className="flex items-center gap-2.5">
                   <span
                      className="size-4 rounded-full border shrink-0"
-                     style={{ backgroundColor: color }}
+                     style={{ backgroundColor: labelColor(color) }}
                   />
                   <Input
                      autoFocus
@@ -264,7 +265,7 @@ export default function IssueLabelsSettings() {
                   <div className="flex-1 min-w-0 flex items-center gap-2.5">
                      <span
                         className="size-2.5 rounded-full shrink-0"
-                        style={{ backgroundColor: label.color }}
+                        style={{ backgroundColor: labelColor(label.color) }}
                      />
                      <span className="truncate">{label.name}</span>
                   </div>

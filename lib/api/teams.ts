@@ -153,8 +153,8 @@ export async function getTeam(db: Db, id: string, meId?: string): Promise<TeamDt
    const rows = await db.select().from(teamT).where(eq(teamT.id, id)).limit(1);
    if (rows.length === 0) return null;
    const [counts, joined, requested] = await Promise.all([
-      countsByTeam(db),
-      joinedTeamIds(db, meId),
+      countsByTeam(db, [id]),
+      joinedTeamIds(db, meId, [id]),
       pendingRequestTeamIds(db, meId),
    ]);
    return toDto(rows[0], counts, joined, new Set(requested));
