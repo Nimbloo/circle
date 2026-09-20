@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import type { Status } from '@/data/status';
 import { useProjectStatuses } from '@/store/catalog-store';
 import { CheckIcon } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 
 interface StatusWithPercentProps {
    status: Status;
@@ -29,22 +29,13 @@ export function StatusWithPercent({
    const id = useId();
    const allStatus = useProjectStatuses();
    const [open, setOpen] = useState<boolean>(false);
-   const [value, setValue] = useState<string>(status.id);
-
-   // Ressincroniza com o prop quando o status muda por FORA (context menu, hydrate,
-   // splice) — o useState inicial só roda no mount e ficava stale, mostrando o ícone
-   // antigo até remount.
-   useEffect(() => {
-      setValue(status.id);
-   }, [status.id]);
+   // Deriva do prop — reverte quando o PATCH falha e reflete mudança externa.
+   const value = status.id;
 
    const handleStatusChange = (statusId: string) => {
-      setValue(statusId);
       setOpen(false);
-
-      if (onStatusChange) {
-         onStatusChange(statusId);
-      }
+      if (statusId === value) return;
+      onStatusChange?.(statusId);
    };
 
    return (
@@ -57,6 +48,7 @@ export function StatusWithPercent({
                variant="ghost"
                role="combobox"
                aria-expanded={open}
+               aria-label="Set status"
             >
                {(() => {
                   const selectedItem = allStatus.find((item) => item.id === value);

@@ -9,7 +9,7 @@ import { useIssuesStore } from '@/store/issues-store';
 import { cn } from '@/lib/utils';
 import { Check } from 'lucide-react';
 import { format } from 'date-fns';
-import Link from 'next/link';
+import { MaybeLink } from './maybe-link';
 import { useParams } from 'next/navigation';
 import { AssigneeUser } from './assignee-user';
 import { CycleSelector } from './cycle-selector';
@@ -19,7 +19,9 @@ import { StatusSelector } from './status-selector';
 import { SubIssueProgress } from './sub-issue-progress';
 import { ParentIssueChip } from './parent-issue-chip';
 import { SlaBadge } from './sla-badge';
-import { IssueDragType } from './issue-grid';
+import { DUE_DATE_TONE_CLASS, dueDateLabel, dueDateTone } from './due-date';
+import type { IssueGroupContext } from './group-issues';
+import { IssueDragType, useIssueDropTarget } from './use-issue-drop-target';
 import { LabelSelector } from '@/components/layout/sidebar/create-new-issue/label-selector';
 import { ProjectSelector } from '@/components/layout/sidebar/create-new-issue/project-selector';
 import { EstimateSelector } from '@/components/layout/sidebar/create-new-issue/estimate-selector';
@@ -27,24 +29,24 @@ import { DueDateSelector } from '@/components/layout/sidebar/create-new-issue/du
 import { estimateLabel, normalizeScale } from '@/data/estimate-scales';
 import { motion } from 'motion/react';
 import { memo, useEffect, useRef, type Ref } from 'react';
-import { DragSourceMonitor, useDrag, useDrop } from 'react-dnd';
+import { DragSourceMonitor, useDrag, useDragLayer } from 'react-dnd';
 import { getEmptyImage } from 'react-dnd-html5-backend';
 
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { IssueContextMenu } from './issue-context-menu';
+import { useInIssueMenuHost } from './issue-context-menu-host';
 
 interface IssueLineProps {
    issue: Issue;
    layoutId?: boolean;
    /**
-    * Issues do grupo na ordem de exibição — liga o drag-and-drop da linha (reordenar no
-    * grupo; soltar em outro grupo de status muda o status). Ausente (busca, listas fora
-    * de um `DndProvider`): linha estática.
+    * Grupo da linha e suas issues — liga o drag-and-drop (reordenar no grupo; soltar em
+    * outro grupo aplica o campo do agrupamento). Ausente (busca, listas fora de um
+    * `DndProvider`): linha estática. É um getter ESTÁVEL (não o array): o array muda a
+    * cada evento e derrubaria o `memo` de todas as linhas do grupo.
     */
-   orderedIssues?: Issue[];
+   getGroup?: () => IssueGroupContext;
 }
-
-type IssueDropResult = { handled: true };
 
 /** Chip de propriedade clicável (padrão Linear): mesmo visual do badge, abre o seletor. */
 const propertyChipClass =
@@ -55,11 +57,16 @@ function IssueRow({
    issue,
    layoutId = false,
    dragging = false,
+   dropIndicator = null,
+   getGroup,
 }: {
    ref?: Ref<HTMLDivElement>;
    issue: Issue;
    layoutId?: boolean;
    dragging?: boolean;
+   /** Linha de inserção de 2px (is#21): onde a issue arrastada vai cair ao soltar aqui. */
+   dropIndicator?: 'above' | 'below' | null;
+   getGroup?: () => IssueGroupContext;
 }) {
    const { orgId } = useParams<{ orgId: string }>();
    // Selector estreito: assina só displayProperties (não o store inteiro) — senão toda
@@ -74,10 +81,18 @@ function IssueRow({
    const selected = useBulkSelectionStore((s) => s.selected.has(issue.id));
    const anySelected = useBulkSelectionStore((s) => s.selected.size > 0);
    const toggleSelected = useBulkSelectionStore((s) => s.toggle);
+   const selectRange = useBulkSelectionStore((s) => s.selectRange);
+   // Shift+clique seleciona o intervalo dentro do grupo visível (is#10).
+   const pick = (e: { shiftKey: boolean }) => {
+      const ordered = getGroup?.().issues.map((i) => i.id);
+      if (e.shiftKey && ordered) selectRange(ordered, issue.id);
+      else toggleSelected(issue.id);
+   };
    const updateIssue = useIssuesStore((s) => s.updateIssue);
    const updateIssueProject = useIssuesStore((s) => s.updateIssueProject);
    const addIssueLabel = useIssuesStore((s) => s.addIssueLabel);
    const removeIssueLabel = useIssuesStore((s) => s.removeIssueLabel);
+   const inMenuHost = useInIssueMenuHost();
 
    // O seletor devolve o conjunto; o store persiste por delta (add/remove), otimista.
    const changeLabels = (next: LabelInterface[]) => {
@@ -91,148 +106,169 @@ function IssueRow({
          .forEach((l) => void removeIssueLabel(issue.id, l.id).catch(() => undefined));
    };
 
+   // Sem layoutId não há animação: div simples, sem o runtime do motion por linha.
+   const Row = layoutId ? motion.div : 'div';
+
+   const row = (
+      <Row
+         ref={ref}
+         data-issue-id={issue.id}
+         {...(layoutId && { layoutId: `issue-line-${issue.identifier || issue.id}` })}
+         className={cn(
+            'group/line relative flex h-11 w-full items-center justify-start px-3 hover:bg-accent/40 focus-within:bg-accent/40',
+            selected && 'bg-primary/5'
+         )}
+         style={dragging ? { opacity: 0.5, cursor: 'grabbing' } : undefined}
+      >
+         {dropIndicator && (
+            <span
+               aria-hidden
+               data-testid="drop-indicator"
+               className={cn(
+                  'pointer-events-none absolute inset-x-0 h-0.5 bg-primary',
+                  dropIndicator === 'above' ? 'top-0' : 'bottom-0'
+               )}
+            />
+         )}
+         <button
+            type="button"
+            onClick={pick}
+            aria-label={selected ? 'Deselect issue' : 'Select issue'}
+            aria-pressed={selected}
+            className={cn(
+               'mr-1.5 shrink-0 size-4 rounded border flex items-center justify-center transition-opacity',
+               selected
+                  ? 'bg-primary border-primary text-primary-foreground opacity-100'
+                  : 'border-border text-transparent opacity-0 group-hover/line:opacity-100 group-focus-within/line:opacity-100',
+               anySelected && 'opacity-100'
+            )}
+         >
+            <Check className="size-3" />
+         </button>
+         <div className="flex items-center gap-0.5">
+            {displayProperties.priority && (
+               <PrioritySelector priority={issue.priority} issueId={issue.id} />
+            )}
+            {displayProperties.id && (
+               <span className="mr-0.5 hidden w-[66px] shrink-0 truncate text-xs tabular-nums text-muted-foreground sm:inline-block">
+                  {issue.identifier}
+               </span>
+            )}
+            {displayProperties.status && (
+               <StatusSelector status={issue.status} issueId={issue.id} />
+            )}
+         </div>
+         {/* Issue otimista ainda sem identifier (Is#17): sem link até o servidor responder. */}
+         <MaybeLink
+            href={issue.identifier ? `/${orgId ?? 'nimbloo'}/issue/${issue.identifier}` : null}
+            className="min-w-0 flex items-center justify-start mr-1 ml-0.5"
+         >
+            {issue.parentIdentifier && <ParentIssueChip identifier={issue.parentIdentifier} />}
+            <span className="truncate text-[13px] font-medium">{issue.title}</span>
+         </MaybeLink>
+         <div className="flex items-center justify-end gap-2 ml-auto sm:w-fit">
+            <div className="w-3 shrink-0"></div>
+            <div className="-space-x-5 hover:space-x-1 lg:space-x-1 items-center justify-end hidden sm:flex">
+               {displayProperties.labels && issue.labels.length > 0 && (
+                  <LabelSelector selectedLabels={issue.labels} onChange={changeLabels}>
+                     <button
+                        type="button"
+                        aria-label="Change labels"
+                        className="flex items-center gap-1 rounded-full outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                     >
+                        <LabelBadge label={issue.labels} />
+                     </button>
+                  </LabelSelector>
+               )}
+               {displayProperties.project && issue.project && (
+                  <ProjectSelector
+                     project={issue.project}
+                     teamId={issue.teamId}
+                     onChange={(project) =>
+                        void updateIssueProject(issue.id, project).catch(() => undefined)
+                     }
+                  >
+                     <button
+                        type="button"
+                        aria-label={`Change project: ${issue.project.name}`}
+                        className={propertyChipClass}
+                     >
+                        <issue.project.icon size={16} />
+                        {issue.project.name}
+                     </button>
+                  </ProjectSelector>
+               )}
+            </div>
+            <SlaBadge issue={issue} />
+            <SubIssueProgress count={issue.subIssueCount} done={issue.subIssueDoneCount} />
+            {displayProperties.estimate && issue.estimate !== undefined && (
+               <EstimateSelector
+                  estimate={issue.estimate}
+                  teamId={issue.teamId}
+                  onChange={(estimate) =>
+                     void updateIssue(issue.id, { estimate }).catch(() => undefined)
+                  }
+               >
+                  <button
+                     type="button"
+                     aria-label="Change estimate"
+                     className={cn(
+                        propertyChipClass,
+                        'hidden rounded-md tabular-nums sm:inline-flex'
+                     )}
+                  >
+                     {estimateLabel(issue.estimate, normalizeScale(team?.estimateScale))}
+                  </button>
+               </EstimateSelector>
+            )}
+            {cycle && (
+               <CycleSelector issue={issue}>
+                  <button
+                     type="button"
+                     aria-label={`Change cycle: ${cycle.name}`}
+                     className={cn(propertyChipClass, 'hidden rounded-md lg:inline-flex')}
+                  >
+                     {cycle.name}
+                  </button>
+               </CycleSelector>
+            )}
+            {displayProperties.dueDate && issue.dueDate && (
+               <DueDateSelector
+                  dueDate={issue.dueDate}
+                  onChange={(dueDate) =>
+                     void updateIssue(issue.id, { dueDate }).catch(() => undefined)
+                  }
+               >
+                  <button
+                     type="button"
+                     aria-label="Change due date"
+                     className={cn(
+                        'hidden shrink-0 rounded text-xs outline-hidden hover:underline focus-visible:ring-2 focus-visible:ring-ring sm:inline-block',
+                        DUE_DATE_TONE_CLASS[dueDateTone(issue.dueDate)]
+                     )}
+                  >
+                     Due {dueDateLabel(issue.dueDate)}
+                  </button>
+               </DueDateSelector>
+            )}
+            {/* Padrão Linear: avatar do assignee ANTES da data */}
+            {displayProperties.assignee && (
+               <AssigneeUser users={issue.assignees} issueId={issue.id} />
+            )}
+            {displayProperties.created && (
+               <span className="hidden w-12 shrink-0 text-right text-xs tabular-nums text-muted-foreground sm:inline-block">
+                  {format(new Date(issue.createdAt), 'MMM d')}
+               </span>
+            )}
+         </div>
+      </Row>
+   );
+
+   // Dentro da lista, o menu de contexto é um só (R7); linha avulsa (busca) monta o seu.
+   if (inMenuHost) return row;
    return (
       <ContextMenu>
-         <ContextMenuTrigger asChild>
-            <motion.div
-               ref={ref}
-               {...(layoutId && { layoutId: `issue-line-${issue.identifier}` })}
-               className={cn(
-                  'group/line flex h-11 w-full items-center justify-start px-3 hover:bg-accent/40 focus-within:bg-accent/40',
-                  selected && 'bg-primary/5'
-               )}
-               style={dragging ? { opacity: 0.5, cursor: 'grabbing' } : undefined}
-            >
-               <button
-                  type="button"
-                  onClick={() => toggleSelected(issue.id)}
-                  aria-label={selected ? 'Deselect issue' : 'Select issue'}
-                  aria-pressed={selected}
-                  className={cn(
-                     'mr-1.5 shrink-0 size-4 rounded border flex items-center justify-center transition-opacity',
-                     selected
-                        ? 'bg-primary border-primary text-primary-foreground opacity-100'
-                        : 'border-border text-transparent opacity-0 group-hover/line:opacity-100 group-focus-within/line:opacity-100',
-                     anySelected && 'opacity-100'
-                  )}
-               >
-                  <Check className="size-3" />
-               </button>
-               <div className="flex items-center gap-0.5">
-                  {displayProperties.priority && (
-                     <PrioritySelector priority={issue.priority} issueId={issue.id} />
-                  )}
-                  {displayProperties.id && (
-                     <span className="mr-0.5 hidden w-[66px] shrink-0 truncate text-xs tabular-nums text-muted-foreground sm:inline-block">
-                        {issue.identifier}
-                     </span>
-                  )}
-                  {displayProperties.status && (
-                     <StatusSelector status={issue.status} issueId={issue.id} />
-                  )}
-               </div>
-               <Link
-                  href={`/${orgId ?? 'nimbloo'}/issue/${issue.identifier}`}
-                  className="min-w-0 flex items-center justify-start mr-1 ml-0.5"
-               >
-                  {issue.parentIdentifier && (
-                     <ParentIssueChip identifier={issue.parentIdentifier} />
-                  )}
-                  <span className="truncate text-[13px] font-medium">{issue.title}</span>
-               </Link>
-               <div className="flex items-center justify-end gap-2 ml-auto sm:w-fit">
-                  <div className="w-3 shrink-0"></div>
-                  <div className="-space-x-5 hover:space-x-1 lg:space-x-1 items-center justify-end hidden sm:flex duration-200 transition-all">
-                     {displayProperties.labels && issue.labels.length > 0 && (
-                        <LabelSelector selectedLabels={issue.labels} onChange={changeLabels}>
-                           <button
-                              type="button"
-                              aria-label="Change labels"
-                              className="flex items-center gap-1 rounded-full outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
-                           >
-                              <LabelBadge label={issue.labels} />
-                           </button>
-                        </LabelSelector>
-                     )}
-                     {displayProperties.project && issue.project && (
-                        <ProjectSelector
-                           project={issue.project}
-                           onChange={(project) =>
-                              void updateIssueProject(issue.id, project).catch(() => undefined)
-                           }
-                        >
-                           <button
-                              type="button"
-                              aria-label={`Change project: ${issue.project.name}`}
-                              className={propertyChipClass}
-                           >
-                              <issue.project.icon size={16} />
-                              {issue.project.name}
-                           </button>
-                        </ProjectSelector>
-                     )}
-                  </div>
-                  <SlaBadge issue={issue} />
-                  <SubIssueProgress count={issue.subIssueCount} done={issue.subIssueDoneCount} />
-                  {displayProperties.estimate && issue.estimate !== undefined && (
-                     <EstimateSelector
-                        estimate={issue.estimate}
-                        teamId={issue.teamId}
-                        onChange={(estimate) =>
-                           void updateIssue(issue.id, { estimate }).catch(() => undefined)
-                        }
-                     >
-                        <button
-                           type="button"
-                           aria-label="Change estimate"
-                           className={cn(
-                              propertyChipClass,
-                              'hidden rounded-md tabular-nums sm:inline-flex'
-                           )}
-                        >
-                           {estimateLabel(issue.estimate, normalizeScale(team?.estimateScale))}
-                        </button>
-                     </EstimateSelector>
-                  )}
-                  {cycle && (
-                     <CycleSelector issue={issue}>
-                        <button
-                           type="button"
-                           aria-label={`Change cycle: ${cycle.name}`}
-                           className={cn(propertyChipClass, 'hidden rounded-md lg:inline-flex')}
-                        >
-                           {cycle.name}
-                        </button>
-                     </CycleSelector>
-                  )}
-                  {displayProperties.dueDate && issue.dueDate && (
-                     <DueDateSelector
-                        dueDate={issue.dueDate}
-                        onChange={(dueDate) =>
-                           void updateIssue(issue.id, { dueDate }).catch(() => undefined)
-                        }
-                     >
-                        <button
-                           type="button"
-                           aria-label="Change due date"
-                           className="hidden shrink-0 rounded text-xs text-destructive outline-hidden hover:underline focus-visible:ring-2 focus-visible:ring-ring sm:inline-block"
-                        >
-                           Due {format(new Date(issue.dueDate), 'MMM dd')}
-                        </button>
-                     </DueDateSelector>
-                  )}
-                  {/* Padrão Linear: avatar do assignee ANTES da data */}
-                  {displayProperties.assignee && (
-                     <AssigneeUser users={issue.assignees} issueId={issue.id} />
-                  )}
-                  {displayProperties.created && (
-                     <span className="hidden w-12 shrink-0 text-right text-xs tabular-nums text-muted-foreground sm:inline-block">
-                        {format(new Date(issue.createdAt), 'MMM d')}
-                     </span>
-                  )}
-               </div>
-            </motion.div>
-         </ContextMenuTrigger>
+         <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
          <IssueContextMenu issueId={issue.id} />
       </ContextMenu>
    );
@@ -240,21 +276,19 @@ function IssueRow({
 
 /**
  * Linha arrastável (mesmo protocolo do card do board, `issue-grid.tsx`): soltar sobre
- * outra linha reordena por rank entre os vizinhos; soltar sobre linha de outro status
- * adota o status dela. Exige um `DndProvider` acima (grouped-issues-view).
+ * outra linha do grupo reordena por rank; sobre linha de outro grupo aplica o campo do
+ * agrupamento (`useIssueDropTarget`). Exige um `DndProvider` acima (grouped-issues-view).
  */
 function DraggableIssueRow({
    issue,
    layoutId,
-   orderedIssues,
+   getGroup,
 }: {
    issue: Issue;
    layoutId?: boolean;
-   orderedIssues: Issue[];
+   getGroup: () => IssueGroupContext;
 }) {
    const ref = useRef<HTMLDivElement>(null);
-   const reorderIssue = useIssuesStore((s) => s.reorderIssue);
-   const updateIssueStatus = useIssuesStore((s) => s.updateIssueStatus);
 
    const [{ isDragging }, drag, preview] = useDrag(
       () => ({
@@ -265,50 +299,29 @@ function DraggableIssueRow({
       [issue]
    );
 
-   // Preview custom (CustomDragLayer) em vez do ghost nativo do browser.
+   // Preview custom (IssueLineDragLayer) em vez do ghost nativo do browser.
    useEffect(() => {
       preview(getEmptyImage(), { captureDraggingState: true });
    }, [preview]);
 
-   const [, drop] = useDrop<Issue, IssueDropResult, unknown>(
-      () => ({
-         accept: IssueDragType,
-         drop(item, monitor): IssueDropResult | undefined {
-            if (item.id === issue.id) return { handled: true };
-
-            // Grupo diferente: adota o status da linha-alvo.
-            if (item.status.id !== issue.status.id) {
-               void updateIssueStatus(item.id, issue.status).catch(() => undefined);
-               return { handled: true };
-            }
-
-            // Mesmo grupo: reordena por rank entre os vizinhos do alvo (exclui o arrastado).
-            const list = orderedIssues.filter((i) => i.id !== item.id);
-            const targetIdx = list.findIndex((i) => i.id === issue.id);
-            if (targetIdx === -1) return { handled: true };
-
-            const rect = ref.current?.getBoundingClientRect();
-            const pointerY = monitor.getClientOffset()?.y ?? 0;
-            const dropAbove = rect ? pointerY < rect.top + rect.height / 2 : false;
-
-            // asc(rank): index menor = rank menor = acima.
-            const beforeId = dropAbove ? (list[targetIdx - 1]?.id ?? null) : issue.id;
-            const afterId = dropAbove ? issue.id : (list[targetIdx + 1]?.id ?? null);
-            reorderIssue(item.id, beforeId, afterId);
-            return { handled: true };
-         },
-      }),
-      [issue, orderedIssues, reorderIssue, updateIssueStatus]
-   );
-
+   const { drop, isOver, dropAbove } = useIssueDropTarget(issue.id, getGroup, ref);
    drag(drop(ref));
 
-   return <IssueRow ref={ref} issue={issue} layoutId={layoutId} dragging={isDragging} />;
+   return (
+      <IssueRow
+         ref={ref}
+         issue={issue}
+         layoutId={layoutId}
+         dragging={isDragging}
+         dropIndicator={isOver ? (dropAbove ? 'above' : 'below') : null}
+         getGroup={getGroup}
+      />
+   );
 }
 
-function IssueLineComponent({ issue, layoutId = false, orderedIssues }: IssueLineProps) {
-   return orderedIssues ? (
-      <DraggableIssueRow issue={issue} layoutId={layoutId} orderedIssues={orderedIssues} />
+function IssueLineComponent({ issue, layoutId = false, getGroup }: IssueLineProps) {
+   return getGroup ? (
+      <DraggableIssueRow issue={issue} layoutId={layoutId} getGroup={getGroup} />
    ) : (
       <IssueRow issue={issue} layoutId={layoutId} />
    );
@@ -317,3 +330,36 @@ function IssueLineComponent({ issue, layoutId = false, orderedIssues }: IssueLin
 /** Memoizada: só re-renderiza quando as props mudam — importante na lista
  *  virtualizada, onde o container re-renderiza ao rolar (evita re-render das linhas). */
 export const IssueLine = memo(IssueLineComponent);
+
+/**
+ * Fantasma do drag na lista (is#21): antes, a lista reaproveitava o card do board
+ * (`CustomDragLayer`, issue-grid.tsx) — largo demais e com o layout errado. Aqui o
+ * fantasma tem a cara de uma linha.
+ */
+export function IssueLineDragLayer() {
+   const { itemType, isDragging, item, currentOffset } = useDragLayer((monitor) => ({
+      item: monitor.getItem() as Issue,
+      itemType: monitor.getItemType(),
+      currentOffset: monitor.getSourceClientOffset(),
+      isDragging: monitor.isDragging(),
+   }));
+
+   if (!isDragging || itemType !== IssueDragType || !currentOffset || !item) {
+      return null;
+   }
+
+   return (
+      <div
+         className="fixed left-0 top-0 z-50 pointer-events-none"
+         style={{
+            transform: `translate(${currentOffset.x}px, ${currentOffset.y}px)`,
+            width: '420px',
+         }}
+      >
+         <div className="flex h-11 items-center gap-2 rounded-md border border-border bg-card px-3 shadow-[var(--card-shadow)]">
+            <item.status.icon />
+            <span className="truncate text-[13px] font-medium">{item.title}</span>
+         </div>
+      </div>
+   );
+}

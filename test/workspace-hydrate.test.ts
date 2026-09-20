@@ -27,7 +27,10 @@ vi.mock('@/lib/client', () => ({
    },
 }));
 vi.mock('@/store/catalog-store', () => ({
-   useCatalogStore: { getState: () => ({ setCatalogs: () => {} }) },
+   useCatalogStore: {
+      getState: () => ({ setCatalogs: () => {}, statuses: [], projectStatuses: [] }),
+      subscribe: () => () => {},
+   },
 }));
 
 const { useWorkspaceStore } = await import('@/store/workspace-store');

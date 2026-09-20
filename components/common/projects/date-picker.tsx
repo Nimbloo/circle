@@ -1,11 +1,12 @@
 'use client';
 
 import * as React from 'react';
-import { format } from 'date-fns';
+import { format, isSameDay } from 'date-fns';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { formatPlanDay } from './format-day';
 
 interface DatePickerProps {
    date: Date | undefined;
@@ -17,11 +18,10 @@ export function DatePicker({ date, onDateChange }: DatePickerProps) {
    // Deriva do prop — reverte junto com o rollback e reflete mudança externa.
    const selectedDate = date;
 
-   const handleDateSelect = (date: Date | undefined) => {
-      if (onDateChange) {
-         onDateChange(date);
-      }
+   const handleDateSelect = (next: Date | undefined) => {
       setOpen(false);
+      const same = next && selectedDate ? isSameDay(next, selectedDate) : next === selectedDate;
+      if (!same) onDateChange?.(next);
    };
 
    return (
@@ -35,8 +35,8 @@ export function DatePicker({ date, onDateChange }: DatePickerProps) {
             >
                <CalendarIcon className="h-4 w-4 md:mr-0.5" />
                {selectedDate ? (
-                  <span className="text-xs hidden xl:inline mt-[1px]">
-                     {format(selectedDate, 'MMM dd, yyyy')}
+                  <span className="text-xs hidden xl:inline mt-[1px] truncate">
+                     {formatPlanDay(format(selectedDate, 'yyyy-MM-dd'))}
                   </span>
                ) : (
                   <span className="text-xs text-muted-foreground hidden xl:inline mt-[1px]">

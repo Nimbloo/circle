@@ -23,7 +23,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { EmptyState } from '@/components/common/empty-state';
+import { LoadingArea } from '@/components/common/loading-area';
 import { api } from '@/lib/client';
 import { WEBHOOK_EVENTS, type WebhookEvent } from '@/lib/api/webhook-events';
 import type { WebhookDeliveryDto, WebhookDto } from '@/lib/api/webhooks';
@@ -31,6 +32,7 @@ import { cn } from '@/lib/utils';
 import { Plus, RefreshCw, Trash2, Webhook } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { errorReason } from '@/lib/error-reason';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
 
 /**
@@ -78,8 +80,8 @@ function CreateDialog({
          onOpenChange(false);
          onCreated(created);
          toast.success('Webhook criado');
-      } catch {
-         toast.error('Não foi possível criar o webhook (URL válida?)');
+      } catch (err) {
+         toast.error(errorReason(err, 'Não foi possível criar o webhook (URL válida?)'));
       } finally {
          setBusy(false);
       }
@@ -100,6 +102,7 @@ function CreateDialog({
                   <Input
                      id="webhook-url"
                      value={url}
+                     maxLength={512}
                      placeholder="https://exemplo.com/circle"
                      onChange={(e) => setUrl(e.target.value)}
                   />
@@ -135,12 +138,16 @@ function CreateDialog({
 function Deliveries({ webhookId }: { webhookId: string }) {
    const [items, setItems] = useState<WebhookDeliveryDto[] | null>(null);
    const [busyId, setBusyId] = useState<string | null>(null);
+   const [failed, setFailed] = useState(false);
 
    const load = useCallback(() => {
+      setFailed(false);
+      setItems(null);
       api.webhooks
          .deliveries(webhookId)
          .then(setItems)
-         .catch(() => toast.error('Não foi possível carregar as entregas'));
+         // Sem isto a falha deixava o loading para sempre (Ad#26).
+         .catch(() => setFailed(true));
    }, [webhookId]);
 
    useEffect(load, [load]);
@@ -151,22 +158,35 @@ function Deliveries({ webhookId }: { webhookId: string }) {
          const updated = await api.webhooks.redeliver(delivery.id);
          setItems((list) => list?.map((d) => (d.id === updated.id ? updated : d)) ?? null);
          toast.success(updated.status === 'success' ? 'Reenviado' : 'Reenvio falhou de novo');
-      } catch {
-         toast.error('Não foi possível reenviar');
+      } catch (err) {
+         toast.error(errorReason(err, 'Não foi possível reenviar'));
       } finally {
          setBusyId(null);
       }
    };
 
-   if (!items)
-      return <div className="px-4 py-3 text-[13px] text-muted-foreground">Carregando…</div>;
+   if (failed)
+      return (
+         <div className="flex flex-col items-center gap-2 py-6 text-sm text-muted-foreground">
+            Não foi possível carregar as entregas.
+            <Button size="sm" variant="outline" onClick={load}>
+               Tentar novamente
+            </Button>
+         </div>
+      );
+   if (!items) return <LoadingArea rows={2} />;
    if (items.length === 0)
       return (
-         <div className="px-4 py-3 text-[13px] text-muted-foreground">Nenhuma entrega ainda.</div>
+         <EmptyState
+            variant="activity"
+            title="Nenhuma entrega ainda"
+            description="As entregas deste webhook aparecem aqui."
+            className="py-6"
+         />
       );
 
    return (
-      <ul className="divide-y divide-border/60">
+      <ul className="content-enter divide-y divide-border/60">
          {items.map((d) => (
             <li key={d.id} className="flex items-center gap-3 px-4 py-2.5 text-[13px]">
                <code className="min-w-0 flex-1 truncate text-muted-foreground">{d.event}</code>
@@ -204,7 +224,9 @@ export default function WebhooksSettings() {
       api.webhooks
          .list()
          .then((list) => alive && setHooks(list))
-         .catch(() => alive && toast.error('Não foi possível carregar os webhooks'))
+         .catch(
+            (err) => alive && toast.error(errorReason(err, 'Não foi possível carregar os webhooks'))
+         )
          .finally(() => alive && setLoading(false));
       return () => {
          alive = false;
@@ -218,22 +240,42 @@ export default function WebhooksSettings() {
          const dto = await api.webhooks.update(hook.id, { enabled });
          setHooks((list) => list.map((h) => (h.id === dto.id ? dto : h)));
          toast.success(enabled ? 'Webhook ativado' : 'Webhook desativado');
-      } catch {
+      } catch (err) {
          setHooks((list) => list.map((h) => (h.id === hook.id ? hook : h)));
-         toast.error('Não foi possível atualizar o webhook');
+         toast.error(errorReason(err, 'Não foi possível atualizar o webhook'));
       }
    };
 
+   /** Copiar pode ser negado (permissão/contexto inseguro): avisa e mantém o segredo. */
+   const copySecret = async () => {
+      if (!secret) return;
+      try {
+         await navigator.clipboard.writeText(secret);
+      } catch {
+         toast.error('Não foi possível copiar — copie o segredo manualmente antes de fechar');
+         return;
+      }
+      toast.success('Segredo copiado');
+      setSecret(null);
+   };
+
    const remove = async (hook: WebhookDto) => {
-      const previous = hooks;
+      const index = hooks.findIndex((h) => h.id === hook.id);
       setHooks((list) => list.filter((h) => h.id !== hook.id));
       setRemoving(null);
       try {
          await api.webhooks.remove(hook.id);
          toast.success('Webhook excluído');
-      } catch {
-         setHooks(previous);
-         toast.error('Não foi possível excluir o webhook');
+      } catch (err) {
+         // Rollback SÓ do item: restaurar a lista inteira desfazia o que mudou no meio
+         // (toggle/criação de outro webhook enquanto o DELETE estava em voo).
+         setHooks((list) => {
+            if (list.some((h) => h.id === hook.id)) return list;
+            const next = [...list];
+            next.splice(Math.max(0, Math.min(index, next.length)), 0, hook);
+            return next;
+         });
+         toast.error(errorReason(err, 'Não foi possível excluir o webhook'));
       }
    };
 
@@ -251,7 +293,7 @@ export default function WebhooksSettings() {
          >
             <SettingsSection>
                {loading ? (
-                  <ListSkeleton rows={3} />
+                  <LoadingArea rows={3} />
                ) : hooks.length === 0 ? (
                   <SettingsCard>
                      <SettingsRow
@@ -265,8 +307,11 @@ export default function WebhooksSettings() {
                      <SettingsCard key={hook.id}>
                         <SettingsRow
                            icon={<Webhook className="size-4" />}
-                           title={hook.url}
-                           muted={!hook.enabled}
+                           title={
+                              <span className={cn('truncate', !hook.enabled && 'opacity-60')}>
+                                 {hook.url}
+                              </span>
+                           }
                            description={hook.events.join(', ')}
                            trailing={
                               <div className="flex items-center gap-2">
@@ -311,8 +356,14 @@ export default function WebhooksSettings() {
             }}
          />
 
-         <Dialog open={Boolean(secret)} onOpenChange={(v) => !v && setSecret(null)}>
-            <DialogContent>
+         {/* O segredo só volta uma vez: o diálogo NÃO fecha por Esc nem por clique fora
+             (ad#12) — some só quando a pessoa copia ou diz que já guardou. */}
+         <Dialog open={Boolean(secret)}>
+            <DialogContent
+               showCloseButton={false}
+               onEscapeKeyDown={(e) => e.preventDefault()}
+               onInteractOutside={(e) => e.preventDefault()}
+            >
                <DialogHeader>
                   <DialogTitle>Segredo de assinatura</DialogTitle>
                   <DialogDescription>
@@ -324,14 +375,10 @@ export default function WebhooksSettings() {
                   {secret}
                </code>
                <DialogFooter>
-                  <Button
-                     onClick={() => {
-                        if (secret) void navigator.clipboard?.writeText(secret);
-                        setSecret(null);
-                     }}
-                  >
-                     Copiar e fechar
+                  <Button variant="ghost" onClick={() => setSecret(null)}>
+                     Já guardei
                   </Button>
+                  <Button onClick={() => void copySecret()}>Copiar e fechar</Button>
                </DialogFooter>
             </DialogContent>
          </Dialog>

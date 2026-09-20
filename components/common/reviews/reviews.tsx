@@ -1,10 +1,15 @@
 'use client';
 
+import { TimeAgo } from './time-ago';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { fetchReviews, syncReviews } from '@/lib/adapters-reviews';
 import { Review, ReviewList, ReviewStatus } from '@/data/reviews';
 import { CheckIcon, ChevronLeft, ListFilter, RefreshCw, SlidersHorizontal } from 'lucide-react';
+import { EmptyState } from '@/components/common/empty-state';
+import { ErrorState } from '@/components/common/error-state';
+import { CircleLoading } from '@/components/common/circle-loading';
+import { LoadingArea } from '@/components/common/loading-area';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ReactNode, useEffect, useRef, useState } from 'react';
@@ -12,7 +17,6 @@ import { REVIEW_CHANGED_EVENT } from '@/lib/use-live-sync';
 import { ReviewDetail, ReviewSection } from './review-detail';
 import { toast } from 'sonner';
 import { PrIcon } from './review-shared';
-import { Skeleton } from '@/components/ui/skeleton';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import {
@@ -57,20 +61,31 @@ const REVIEW_STATUSES = Object.keys(GROUP_LABELS) as ReviewStatus[];
 
 /** Tamanho de página do load-more (alinhado ao default do backend). */
 const PAGE_SIZE = 50;
+/** Teto de `limit` aceito pelo `GET /reviews`. */
+const MAX_LIMIT = 200;
+/** Janela de coalescência dos eventos de review (sync do GitHub publica em rajada). */
+const RELOAD_DEBOUNCE_MS = 400;
+
+/** Sufixo que mantém a aba da lista na URL do detalhe (`?list=created`). */
+export function listQuery(listTab: ReviewList): string {
+   return listTab === 'created' ? '?list=created' : '';
+}
 
 function ReviewRow({
    review,
    orgId,
    selected,
+   listTab,
 }: {
    review: Review;
    orgId: string;
    selected: boolean;
+   listTab: ReviewList;
 }) {
    return (
       <Link
          // id = `repo/name#n`: sem encode, `/` vira segmento e `#` vira fragment → 404.
-         href={`/${orgId}/review/${encodeURIComponent(review.id)}`}
+         href={`/${orgId}/review/${encodeURIComponent(review.id)}${listQuery(listTab)}`}
          className={cn(
             'h-11 px-[18px] text-[13px] flex items-center gap-2 transition-colors',
             selected ? 'bg-accent/60' : 'hover:bg-accent/40'
@@ -78,7 +93,9 @@ function ReviewRow({
       >
          <PrIcon status={review.status} />
          <span className="flex-1 truncate">{review.title}</span>
-         <span className="text-xs text-muted-foreground shrink-0">{review.timeAgo}</span>
+         <span className="text-xs text-muted-foreground shrink-0">
+            <TimeAgo iso={review.createdAt} fallback={review.timeAgo} />
+         </span>
       </Link>
    );
 }
@@ -175,6 +192,10 @@ export default function Reviews({
 }: ReviewsProps) {
    const { orgId } = useParams<{ orgId: string }>();
    const isAdmin = useWorkspaceStore((s) => s.me?.admin ?? false);
+   // O recorte das duas abas depende do handle do GitHub no perfil: sem ele a lista vem
+   // vazia e nada explicava o porquê (co#7).
+   // (só depois do bootstrap: com `me` ainda nulo não dá para afirmar que falta handle)
+   const needsGithub = useWorkspaceStore((s) => !!s.me && !s.me.githubLogin);
    const [reviews, setReviews] = useState<Review[]>([]);
    const [total, setTotal] = useState(0);
    const [loading, setLoading] = useState(true);
@@ -184,31 +205,59 @@ export default function Reviews({
    const [reloadKey, setReloadKey] = useState(0);
 
    // Tempo real: sync do GitHub ou webhook de PR/check mudou algum review. O refetch é
-   // silencioso (o skeleton só aparece na primeira carga), então a lista se atualiza sem
-   // piscar — e sem o "aperta F5" que era o único jeito de ver PR novo.
+   // silencioso (o loading só aparece na primeira carga) e coalescido: o sync publica
+   // em rajada e cada evento virava um GET da lista (#48).
    useEffect(() => {
-      const onChanged = () => setReloadKey((k) => k + 1);
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const onChanged = () => {
+         if (timer) clearTimeout(timer);
+         timer = setTimeout(() => setReloadKey((k) => k + 1), RELOAD_DEBOUNCE_MS);
+      };
       window.addEventListener(REVIEW_CHANGED_EVENT, onChanged);
-      return () => window.removeEventListener(REVIEW_CHANGED_EVENT, onChanged);
+      return () => {
+         if (timer) clearTimeout(timer);
+         window.removeEventListener(REVIEW_CHANGED_EVENT, onChanged);
+      };
    }, []);
    const [visibleStatuses, setVisibleStatuses] = useState<Set<ReviewStatus>>(
       () => new Set(REVIEW_STATUSES)
    );
    const [groupByStatus, setGroupByStatus] = useState(true);
+   // Filtro de status no SERVIDOR (baixa Co): filtrar só a página carregada escondia PRs
+   // e deixava o "X de Y" errado. Todos marcados = sem filtro.
+   const statuses = REVIEW_STATUSES.filter((status) => visibleStatuses.has(status));
+   const statusFilter = statuses.length === REVIEW_STATUSES.length ? undefined : statuses;
+   const statusKey = statuses.join(',');
+   const queryKey = `${listTab}|${statusKey}`;
 
-   // Skeleton só na PRIMEIRA carga; o refetch do reloadKey (pós-sync) é silencioso —
-   // a lista atual permanece na tela até a nova chegar (padrão stale-while-revalidate,
-   // mesmo do issue-details). Falha de refetch também não derruba dados já exibidos.
+   // Loading só na PRIMEIRA carga; o refetch (tempo real, troca de aba/filtro) é
+   // silencioso — a lista atual permanece até a nova chegar (stale-while-revalidate).
+   // Falha de refetch também não derruba dados já exibidos.
    const loadedOnceRef = useRef(false);
+   const loadedCountRef = useRef(0);
+   loadedCountRef.current = reviews.length;
+   const lastQueryRef = useRef(queryKey);
    useEffect(() => {
       let active = true;
+      // Mesma consulta (recarga por evento): refaz o que já está carregado, sem apagar
+      // o "carregar mais" (#48). Consulta nova (aba/filtro): volta à primeira página.
+      const sameQuery = loadedOnceRef.current && lastQueryRef.current === queryKey;
+      lastQueryRef.current = queryKey;
+      const loaded = sameQuery ? loadedCountRef.current : 0;
+      const limit = Math.min(MAX_LIMIT, Math.max(PAGE_SIZE, loaded));
       if (!loadedOnceRef.current) setLoading(true);
       setError(false);
-      fetchReviews({ limit: PAGE_SIZE, offset: 0, list: listTab })
+      fetchReviews({ limit, offset: 0, list: listTab, statuses: statusFilter })
          .then((page) => {
             if (active) {
                loadedOnceRef.current = true;
-               setReviews(page.reviews);
+               const fresh = new Set(page.reviews.map((r) => r.id));
+               // Acima do teto do servidor, o que passou dele fica como estava.
+               setReviews((prev) =>
+                  loaded > limit
+                     ? [...page.reviews, ...prev.slice(limit).filter((r) => !fresh.has(r.id))]
+                     : page.reviews
+               );
                setTotal(page.total);
             }
          })
@@ -225,9 +274,10 @@ export default function Reviews({
       return () => {
          active = false;
       };
-      // `listTab` entra nas deps: o recorte agora é feito no servidor, então trocar
-      // de aba precisa refazer a busca — antes as duas abas liam o mesmo conjunto.
-   }, [reloadKey, listTab]);
+      // `listTab`/status entram nas deps: o recorte é feito no servidor, então trocar
+      // de aba ou de filtro refaz a busca. `statusFilter` é derivado de `statusKey`.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [reloadKey, listTab, statusKey]);
 
    async function handleLoadMore() {
       setLoadingMore(true);
@@ -236,6 +286,7 @@ export default function Reviews({
             limit: PAGE_SIZE,
             offset: reviews.length,
             list: listTab,
+            statuses: statusFilter,
          });
          setReviews((prev) => [...prev, ...page.reviews]);
          setTotal(page.total);
@@ -382,47 +433,67 @@ export default function Reviews({
             </div>
             <div className="flex-1 overflow-y-auto">
                {loading ? (
-                  <div className="flex flex-col divide-y divide-border/50">
-                     {Array.from({ length: 8 }).map((_, i) => (
-                        <div key={i} className="flex h-11 items-center gap-3 px-[18px]">
-                           <Skeleton className="size-4 rounded-full shrink-0" />
-                           <Skeleton className="h-4 flex-1 max-w-md" />
-                           <Skeleton className="h-4 w-16 shrink-0" />
-                        </div>
+                  <LoadingArea rows={8} />
+               ) : error ? (
+                  <ErrorState
+                     title="Could not load reviews"
+                     description="Something went wrong while loading the reviews."
+                     action={
+                        <Button size="sm" onClick={() => setReloadKey((key) => key + 1)}>
+                           Try again
+                        </Button>
+                     }
+                     className="min-h-0 px-4 py-10"
+                  />
+               ) : groups.length === 0 ? (
+                  <EmptyState
+                     variant={reviews.length > 0 ? 'filtered' : 'empty'}
+                     title={
+                        reviews.length > 0
+                           ? 'No reviews match the current filters'
+                           : needsGithub
+                             ? 'Configure seu GitHub no perfil'
+                             : 'No reviews yet'
+                     }
+                     description={
+                        reviews.length === 0 && needsGithub
+                           ? 'A lista mostra os PRs do seu usuário do GitHub.'
+                           : undefined
+                     }
+                     className="py-10"
+                  />
+               ) : groupByStatus ? (
+                  <div className="content-enter">
+                     {groups.map((group) => (
+                        <ReviewGroup
+                           key={group.label}
+                           label={group.label}
+                           count={group.items.length}
+                        >
+                           {group.items.map((review) => (
+                              <ReviewRow
+                                 key={review.id}
+                                 review={review}
+                                 orgId={orgId}
+                                 selected={review.id === selectedReviewId}
+                                 listTab={listTab}
+                              />
+                           ))}
+                        </ReviewGroup>
                      ))}
                   </div>
-               ) : error ? (
-                  <div className="px-[18px] py-6 text-[13px] text-muted-foreground">
-                     Could not load reviews.
-                  </div>
-               ) : groups.length === 0 ? (
-                  <div className="px-[18px] py-6 text-[13px] text-muted-foreground">
-                     {reviews.length > 0
-                        ? 'No reviews match the current filters.'
-                        : 'No reviews yet.'}
-                  </div>
-               ) : groupByStatus ? (
-                  groups.map((group) => (
-                     <ReviewGroup key={group.label} label={group.label} count={group.items.length}>
-                        {group.items.map((review) => (
-                           <ReviewRow
-                              key={review.id}
-                              review={review}
-                              orgId={orgId}
-                              selected={review.id === selectedReviewId}
-                           />
-                        ))}
-                     </ReviewGroup>
-                  ))
                ) : (
-                  source.map((review) => (
-                     <ReviewRow
-                        key={review.id}
-                        review={review}
-                        orgId={orgId}
-                        selected={review.id === selectedReviewId}
-                     />
-                  ))
+                  <div className="content-enter">
+                     {source.map((review) => (
+                        <ReviewRow
+                           key={review.id}
+                           review={review}
+                           orgId={orgId}
+                           selected={review.id === selectedReviewId}
+                           listTab={listTab}
+                        />
+                     ))}
+                  </div>
                )}
                {!loading && !error && total > 0 && (
                   <ReviewPagination
@@ -444,7 +515,7 @@ export default function Reviews({
             {selectedReviewId ? (
                <div className="flex h-full flex-col">
                   <Link
-                     href={`/${orgId}/reviews`}
+                     href={`/${orgId}/reviews${listTab === 'created' ? '/created' : ''}`}
                      aria-label="Back to reviews"
                      className="flex h-11 shrink-0 items-center gap-1 border-b border-border px-4 text-[13px] text-muted-foreground transition-colors hover:text-foreground md:hidden"
                   >
@@ -452,12 +523,36 @@ export default function Reviews({
                      Reviews
                   </Link>
                   <div className="min-h-0 flex-1">
-                     <ReviewDetail reviewId={selectedReviewId} section={section} />
+                     <ReviewDetail
+                        key={selectedReviewId}
+                        reviewId={selectedReviewId}
+                        section={section}
+                        listTab={listTab}
+                     />
+                  </div>
+               </div>
+            ) : !loading && !error && total === 0 && needsGithub ? (
+               <div className="flex h-full items-center justify-center px-6 text-muted-foreground">
+                  <div className="flex w-full max-w-[540px] flex-col gap-4">
+                     <EmptySketch />
+                     <h3 className="text-[15px] font-semibold leading-[23px] text-foreground">
+                        Configure seu GitHub para ver seus PRs
+                     </h3>
+                     <p className="text-[13px] font-[450] leading-[18.2px]">
+                        As abas &quot;For you&quot; e &quot;Created&quot; filtram pelo seu usuário
+                        do GitHub, e o seu perfil ainda não tem um.
+                     </p>
+                     <Link
+                        href={`/${orgId}/settings/profile`}
+                        className="inline-flex h-7 self-start items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                     >
+                        Abrir o perfil
+                     </Link>
                   </div>
                </div>
             ) : !loading && !error && total === 0 ? (
-               <div className="flex h-full items-center justify-center text-muted-foreground">
-                  <div className="flex w-[540px] flex-col gap-6">
+               <div className="flex h-full items-center justify-center px-6 text-muted-foreground">
+                  <div className="flex w-full max-w-[540px] flex-col gap-6">
                      <EmptySketch />
                      <div className="flex flex-col gap-2">
                         <h3 className="text-[15px] font-semibold leading-[23px] text-foreground">
@@ -480,7 +575,11 @@ export default function Reviews({
                            disabled={syncing}
                            className="inline-flex h-7 self-start items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
                         >
-                           <RefreshCw className={cn('size-3.5', syncing && 'animate-spin')} />
+                           {syncing ? (
+                              <CircleLoading size="sm" inline />
+                           ) : (
+                              <RefreshCw className="size-3.5" />
+                           )}
                            {syncing ? 'Syncing…' : 'Sync from GitHub'}
                         </button>
                      )}
@@ -489,9 +588,7 @@ export default function Reviews({
             ) : (
                <div className="h-full flex flex-col items-center justify-center gap-4 text-muted-foreground">
                   <EmptySketch />
-                  <span className="text-sm">
-                     {loading ? 'Loading…' : error ? 'Could not load reviews.' : `${total} reviews`}
-                  </span>
+                  {!loading && !error && <span className="text-sm">{total} reviews</span>}
                   {isAdmin && (
                      <button
                         type="button"
@@ -499,7 +596,11 @@ export default function Reviews({
                         disabled={syncing}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium hover:bg-accent/50 transition-colors disabled:opacity-60"
                      >
-                        <RefreshCw className={cn('size-3.5', syncing && 'animate-spin')} />
+                        {syncing ? (
+                           <CircleLoading size="sm" inline />
+                        ) : (
+                           <RefreshCw className="size-3.5" />
+                        )}
                         {syncing ? 'Syncing…' : 'Sync from GitHub'}
                      </button>
                   )}

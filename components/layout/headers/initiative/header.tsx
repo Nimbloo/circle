@@ -17,7 +17,8 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
 
-const TABS = ['overview', 'activity', 'projects'] as const;
+// Ordem do Linear, igual à do projeto (pl#14).
+const TABS = ['overview', 'projects', 'activity'] as const;
 
 export default function Header() {
    const { orgId, initiativeId } = useParams<{ orgId: string; initiativeId: string }>();

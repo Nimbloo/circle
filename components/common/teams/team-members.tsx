@@ -1,15 +1,28 @@
 'use client';
 
+import {
+   AlertDialog,
+   AlertDialogAction,
+   AlertDialogCancel,
+   AlertDialogContent,
+   AlertDialogDescription,
+   AlertDialogFooter,
+   AlertDialogHeader,
+   AlertDialogTitle,
+   useLatchedTarget,
+} from '@/components/ui/alert-dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/client';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import type { JoinRequestDto } from '@/lib/api/teams';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Check, X } from 'lucide-react';
 import { useParams } from 'next/navigation';
+import { TEAM_CHANGED_EVENT, useLiveReload } from '@/lib/use-live-sync';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { errorReason } from '@/lib/error-reason';
 
 /**
  * Team Home — "Members" tab: membros do time, com adicionar e remover. Só entra no
@@ -27,6 +40,11 @@ export default function TeamMembers() {
    const team = teams.find((t) => t.id === teamId);
 
    const [busy, setBusy] = useState(false);
+   // Remover do time pede confirmação (ad#13); alvo e `open` separados para o nome
+   // não sumir do título durante a saída.
+   const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null);
+   const removingLatched = useLatchedTarget(removing);
+   const [removeOpen, setRemoveOpen] = useState(false);
 
    // Solicitações de entrada pendentes (só admin enxerga/decide).
    const [requests, setRequests] = useState<JoinRequestDto[]>([]);
@@ -44,6 +62,8 @@ export default function TeamMembers() {
    useEffect(() => {
       void refreshRequests();
    }, [refreshRequests]);
+   // #58: pedido novo (ou decidido por outro admin) chega ao vivo.
+   useLiveReload(TEAM_CHANGED_EVENT, { teamId }, refreshRequests);
 
    const decide = async (id: string, decision: 'approved' | 'denied') => {
       setBusy(true);
@@ -60,11 +80,11 @@ export default function TeamMembers() {
    };
 
    if (!team) {
-      // Hidratando → skeleton; not-found só como estado final (fim do flash no deep-link frio).
+      // Hidratando → loading; not-found só como estado final (fim do flash no deep-link frio).
       if (!loaded) {
          return (
             <div className="p-6">
-               <ListSkeleton rows={5} />
+               <LoadingArea rows={5} />
             </div>
          );
       }
@@ -73,20 +93,23 @@ export default function TeamMembers() {
 
    const members = [...team.members].sort((a, b) => a.name.localeCompare(b.name));
 
-   const removeMember = async (id: string, name: string) => {
+   const removeMember = async () => {
+      if (!removing || busy) return;
+      const { id, name } = removing;
       setBusy(true);
       try {
          applyTeamMembers(team.id, await api.teams.removeMember(team.id, id));
+         setRemoveOpen(false);
          toast.success(`${name} removed from ${team.name}`);
-      } catch {
-         toast.error('Could not remove the member');
+      } catch (err) {
+         toast.error(errorReason(err, 'Could not remove the member'));
       } finally {
          setBusy(false);
       }
    };
 
    return (
-      <div className="w-full">
+      <div className="content-enter w-full">
          {isAdmin && requests.length > 0 && (
             <div className="mx-6 mb-3 rounded-lg border border-amber-500/30 bg-amber-500/5">
                <div className="px-4 py-2 text-xs font-medium text-amber-600 dark:text-amber-400 border-b border-amber-500/20">
@@ -151,7 +174,7 @@ export default function TeamMembers() {
                         {member.name}
                      </span>
                      <span className="truncate text-xs font-medium leading-[15px] text-muted-foreground">
-                        {member.name.split('.')[0]}
+                        {member.slug || member.email.split('@')[0]}
                      </span>
                   </div>
                </div>
@@ -168,10 +191,13 @@ export default function TeamMembers() {
                   {isAdmin && (
                      <button
                         type="button"
-                        onClick={() => void removeMember(member.id, member.name)}
+                        onClick={() => {
+                           setRemoving({ id: member.id, name: member.name });
+                           setRemoveOpen(true);
+                        }}
                         disabled={busy}
                         aria-label={`Remove ${member.name}`}
-                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground disabled:opacity-40"
+                        className="text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 disabled:opacity-40 group-hover:opacity-100 max-md:opacity-100"
                      >
                         <X className="size-4" />
                      </button>
@@ -179,6 +205,33 @@ export default function TeamMembers() {
                </div>
             </div>
          ))}
+
+         <AlertDialog open={removeOpen} onOpenChange={(o) => !busy && setRemoveOpen(o)}>
+            <AlertDialogContent>
+               <AlertDialogHeader>
+                  <AlertDialogTitle>
+                     Remove {removingLatched?.name} from {team.name}?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                     They stop being a member of this team. Issues assigned to them keep the
+                     assignment.
+                  </AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter>
+                  <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                     onClick={(e) => {
+                        e.preventDefault();
+                        void removeMember();
+                     }}
+                     disabled={busy}
+                     className="bg-destructive text-white hover:bg-destructive/90"
+                  >
+                     Remove
+                  </AlertDialogAction>
+               </AlertDialogFooter>
+            </AlertDialogContent>
+         </AlertDialog>
       </div>
    );
 }

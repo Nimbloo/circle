@@ -1,59 +1,51 @@
 import { create } from 'zustand';
 import { useMemo } from 'react';
 import { Circle } from 'lucide-react';
-import { status as mockStatuses, Status, StatusCategory } from '@/data/status';
-import { priorities as mockPriorities, Priority } from '@/data/priorities';
-import { LabelInterface, labels as mockLabels } from '@/data/labels';
-import { Health, health as mockHealth } from '@/data/projects';
+import { Status, StatusCategory, statusIconFor } from '@/data/status';
+import { priorities as priorityPresentation, Priority } from '@/data/priorities';
+import { LabelInterface } from '@/data/labels';
+import { Health } from '@/data/projects';
 import type { WorkspaceBootstrap } from '@/lib/api/workspace';
 import type { StatusDto } from '@/lib/api/statuses';
-import type { LabelDto } from '@/lib/api/labels';
+import type { LabelDto, LabelGroupDto } from '@/lib/api/labels';
 
 /**
- * Catálogos (status/priority/label/health) vindos da API. A API carrega os DADOS
- * (id/name/color/category/position); os catálogos mock carregam apenas a
- * PRESENTAÇÃO UI-only (ícones React), mesclada por id — igual aos adapters de issue.
- *
- * O estado inicial é semeado com os catálogos demo (mock) para render instantâneo
- * (SSR/primeiro paint); o bootstrap do workspace (`workspace-store.hydrate`) chama
- * `setCatalogs` com os dados vivos, substituindo o seed. Não há fetch próprio aqui —
- * os catálogos já vêm no bootstrap do workspace, então não duplicamos rede.
+ * Catálogos (status/priority/label/health) vindos da API (#16). Nascem VAZIOS, com
+ * `loaded=false` — nada de dado de demonstração: o bootstrap do workspace
+ * (`workspace-store.hydrate`) chama `setCatalogs` com os dados vivos. O ícone de status
+ * sai do próprio DTO (categoria + cor, `statusIconFor`); o de prioridade é presentação
+ * fixa por id (os 5 níveis não mudam). Não há fetch próprio aqui — os catálogos já vêm
+ * no bootstrap do workspace, então não duplicamos rede.
  */
 
 type CatalogBootstrap = Pick<
    WorkspaceBootstrap,
    'statuses' | 'projectStatuses' | 'priorities' | 'labels' | 'healthStates'
->;
+> &
+   // Grupos de label (aditivo): bootstrap antigo sem o campo → lista vazia.
+   Partial<Pick<WorkspaceBootstrap, 'labelGroups'>>;
 
-const statusIconById = new Map(mockStatuses.map((s) => [s.id, s.icon]));
-const priorityIconById = new Map(mockPriorities.map((p) => [p.id, p.icon]));
+const priorityIconById = new Map(priorityPresentation.map((p) => [p.id, p.icon]));
 
-// Ícone por CATEGORIA (1º status de issue de cada categoria) — reusado para dar aos
-// status de PROJETO um ícone coerente sem ids correspondentes no mock.
-const iconByCategory = new Map<StatusCategory, Status['icon']>();
-for (const s of mockStatuses)
-   if (!iconByCategory.has(s.category)) iconByCategory.set(s.category, s.icon);
+type StatusLike = { id: string; name: string; color: string; category: string };
 
-function toStatus(row: { id: string; name: string; color: string; category: string }): Status {
-   return {
-      id: row.id,
-      name: row.name,
-      color: row.color,
-      category: row.category as StatusCategory,
-      icon: statusIconById.get(row.id) ?? Circle,
-   };
-}
-
-function toProjectStatus(row: CatalogBootstrap['projectStatuses'][number]): Status {
-   const category = row.category as StatusCategory;
-   return {
-      id: row.id,
-      name: row.name,
-      color: row.color,
-      category,
-      // 'planned' não existe em issue: cai no ícone de 'unstarted' (to-do) como aproximação.
-      icon: iconByCategory.get(category) ?? iconByCategory.get('unstarted') ?? Circle,
-   };
+/**
+ * Status na ordem do workflow (a da API) → tipo rico com ícone. O "pie" dos `started`
+ * enche conforme a posição entre eles (estilo Linear).
+ */
+function toStatuses(rows: StatusLike[]): Status[] {
+   const started = rows.filter((r) => r.category === 'started');
+   const fraction = new Map(started.map((r, i) => [r.id, (i + 1) / (started.length + 1)]));
+   return rows.map((row) => {
+      const category = row.category as StatusCategory;
+      return {
+         id: row.id,
+         name: row.name,
+         color: row.color,
+         category,
+         icon: statusIconFor(category, row.color, fraction.get(row.id), row.name),
+      };
+   });
 }
 
 function toPriority(row: CatalogBootstrap['priorities'][number]): Priority {
@@ -64,8 +56,15 @@ function toPriority(row: CatalogBootstrap['priorities'][number]): Priority {
    };
 }
 
-function toLabel(row: LabelDto & { groupId?: string | null }): LabelInterface {
-   return { id: row.id, name: row.name, color: row.color, groupId: row.groupId };
+type LabelLike = Omit<LabelDto, 'groupId'> & { groupId?: string | null };
+
+function toLabel(row: LabelLike): LabelInterface {
+   return { id: row.id, name: row.name, color: row.color, groupId: row.groupId ?? null };
+}
+
+/** `groupId` do DTO quando ele vem; senão o já carregado (cliente/servidor antigos). */
+function groupOf(dto: { groupId?: string | null }, prev: string | null | undefined) {
+   return dto.groupId !== undefined ? dto.groupId : prev;
 }
 
 function toHealth(row: CatalogBootstrap['healthStates'][number]): Health {
@@ -124,13 +123,20 @@ interface CatalogState {
    projectStatuses: Status[];
    priorities: Priority[];
    labels: LabelInterface[];
+   /** Grupos de label (paridade Linear) na ordem de exibição. */
+   labelGroups: LabelGroupDto[];
    healthStates: Health[];
    /** Substitui os catálogos seed pelos dados vivos do bootstrap do workspace. */
    setCatalogs: (data: CatalogBootstrap) => void;
    /** Splice de UM item a partir do DTO devolvido pela mutação, em vez de re-hidratar o
     * workspace inteiro. Cada um mexe SÓ na sua coleção. */
-   applyLabel: (dto: LabelDto) => void;
+   applyLabel: (dto: LabelLike) => void;
    removeLabel: (id: string) => void;
+   /** Lista inteira de labels (evento remoto): sem `groupId` no DTO, preserva o carregado. */
+   setLabels: (dtos: LabelLike[]) => void;
+   /** Splice de um grupo (retorno da mutação) e remoção local (solta as labels dele). */
+   applyLabelGroup: (dto: LabelGroupDto) => void;
+   removeLabelGroup: (id: string) => void;
    applyStatus: (dto: StatusDto) => void;
    /** Lista inteira já ordenada (retorno do reorder). */
    setStatuses: (dtos: StatusDto[]) => void;
@@ -145,18 +151,19 @@ function upsert<T extends { id: string }>(list: T[], item: T): T[] {
 
 export const useCatalogStore = create<CatalogState>((set) => ({
    loaded: false,
-   // Seed = catálogos demo (mock) p/ render instantâneo; trocado pela API no bootstrap.
-   statuses: mockStatuses,
-   projectStatuses: mockStatuses, // seed provisório; trocado pelo catálogo real no bootstrap
-   priorities: mockPriorities,
-   labels: mockLabels,
-   healthStates: mockHealth,
+   statuses: [],
+   projectStatuses: [],
+   priorities: [],
+   labels: [],
+   labelGroups: [],
+   healthStates: [],
    setCatalogs: (data) =>
       set({
-         statuses: data.statuses.map(toStatus),
-         projectStatuses: data.projectStatuses.map(toProjectStatus),
+         statuses: toStatuses(data.statuses),
+         projectStatuses: toStatuses(data.projectStatuses),
          priorities: data.priorities.map(toPriority),
          labels: data.labels.map(toLabel),
+         labelGroups: data.labelGroups ?? [],
          healthStates: data.healthStates.map(toHealth),
          loaded: true,
       }),
@@ -165,14 +172,35 @@ export const useCatalogStore = create<CatalogState>((set) => ({
          // LabelDto não traz groupId: preserva o do item já carregado. A API lista por
          // nome, então o upsert re-ordena igual para o novo/renomeado cair no lugar certo.
          const prev = s.labels.find((l) => l.id === dto.id);
-         const next = toLabel({ ...dto, groupId: prev?.groupId });
+         const next = toLabel({ ...dto, groupId: groupOf(dto, prev?.groupId) });
          return { labels: upsert(s.labels, next).sort((a, b) => a.name.localeCompare(b.name)) };
       }),
    removeLabel: (id) => set((s) => ({ labels: s.labels.filter((l) => l.id !== id) })),
+   applyLabelGroup: (dto) =>
+      set((s) => ({
+         labelGroups: upsert(s.labelGroups, dto).sort(
+            (a, b) => a.position - b.position || a.name.localeCompare(b.name)
+         ),
+      })),
+   removeLabelGroup: (id) =>
+      set((s) => ({
+         labelGroups: s.labelGroups.filter((g) => g.id !== id),
+         labels: s.labels.map((l) => (l.groupId === id ? { ...l, groupId: null } : l)),
+      })),
+   setLabels: (dtos) =>
+      set((s) => {
+         const groupById = new Map(s.labels.map((l) => [l.id, l.groupId]));
+         return {
+            labels: dtos.map((d) => toLabel({ ...d, groupId: groupOf(d, groupById.get(d.id)) })),
+         };
+      }),
    // Status criado recebe a maior position (vai pro fim); editado fica na mesma casa.
-   applyStatus: (dto) => set((s) => ({ statuses: upsert(s.statuses, toStatus(dto)) })),
-   setStatuses: (dtos) => set({ statuses: dtos.map(toStatus) }),
-   removeStatus: (id) => set((s) => ({ statuses: s.statuses.filter((st) => st.id !== id) })),
+   // Recalcula os ícones da lista toda: o "pie" dos started depende da posição.
+   applyStatus: (dto) =>
+      set((s) => ({ statuses: toStatuses(upsert<StatusLike>(s.statuses, dto)) })),
+   setStatuses: (dtos) => set({ statuses: toStatuses(dtos) }),
+   removeStatus: (id) =>
+      set((s) => ({ statuses: toStatuses(s.statuses.filter((st) => st.id !== id)) })),
 }));
 
 /* --------------------------- Hooks de conveniência -------------------------- */
@@ -181,6 +209,7 @@ export const useStatuses = (): Status[] => useCatalogStore((s) => s.statuses);
 export const useProjectStatuses = (): Status[] => useCatalogStore((s) => s.projectStatuses);
 export const usePriorities = (): Priority[] => useCatalogStore((s) => s.priorities);
 export const useLabels = (): LabelInterface[] => useCatalogStore((s) => s.labels);
+export const useLabelGroups = (): LabelGroupDto[] => useCatalogStore((s) => s.labelGroups);
 export const useHealthStates = (): Health[] => useCatalogStore((s) => s.healthStates);
 
 /** Status ordenados p/ exibição no board (colunas), a partir do catálogo hidratado. */

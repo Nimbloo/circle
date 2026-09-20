@@ -9,7 +9,7 @@ import { SidebarProvider } from '@/components/ui/sidebar';
 import type { Issue } from '@/data/issues';
 import type { IssueDetail } from '@/data/issue-details';
 import type { Team } from '@/data/teams';
-import { status } from '@/data/status';
+import { status } from './helpers/catalog-fixture';
 import { priorities } from '@/data/priorities';
 import { useCurrentIssueStore } from '@/store/current-issue-store';
 import { useIssuesStore } from '@/store/issues-store';
@@ -48,7 +48,6 @@ const team: Team = {
    autoCloseChildren: false,
    parentId: null,
    members: [],
-   projects: [],
 };
 
 const child: Issue = {

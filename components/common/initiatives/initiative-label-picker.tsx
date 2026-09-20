@@ -12,31 +12,22 @@ import {
    CommandList,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-
-const LABEL_COLOR: Record<string, string> = {
-   purple: 'var(--primary)',
-   indigo: 'var(--primary)',
-   red: 'var(--destructive)',
-   green: 'var(--review-open)',
-   yellow: 'var(--cycle-started)',
-   orange: 'var(--chart-4)',
-   pink: 'var(--chart-5)',
-   blue: 'var(--chart-3)',
-   cyan: 'var(--chart-2)',
-   teal: 'var(--chart-2)',
-   gray: 'var(--muted-foreground)',
-};
+import { labelColor } from '@/components/common/palette';
+import { EmptyValue, PropertyButton } from '@/components/common/projects/project-property-fields';
 
 export function InitiativeLabelPicker({
    labels,
    value,
    onChange,
    compact = false,
+   ghost = false,
 }: {
    labels: LabelInterface[];
    value: string[];
    onChange: (value: string[]) => void;
    compact?: boolean;
+   /** Valor da linha de propriedade (botão fantasma com chips) em vez do chip com borda. */
+   ghost?: boolean;
 }) {
    const selected = labels.filter((label) => value.includes(label.id));
    const toggle = (labelId: string) =>
@@ -47,22 +38,45 @@ export function InitiativeLabelPicker({
    return (
       <Popover>
          <PopoverTrigger asChild>
-            <Button
-               type="button"
-               size={compact ? 'xxs' : 'xs'}
-               variant="outline"
-               className="max-w-44 gap-1.5 bg-transparent px-2 text-xs font-normal text-muted-foreground"
-               aria-label="Change labels"
-            >
-               <Tag className="size-3.5" />
-               <span className="truncate">
-                  {selected.length === 0
-                     ? 'Labels'
-                     : selected.length === 1
-                       ? selected[0].name
-                       : `${selected[0].name} +${selected.length - 1}`}
-               </span>
-            </Button>
+            {ghost ? (
+               <PropertyButton aria-label="Change labels">
+                  {selected.length === 0 ? (
+                     <EmptyValue icon={Tag}>Add label</EmptyValue>
+                  ) : (
+                     <span className="flex min-w-0 flex-wrap items-center gap-1 py-1">
+                        {selected.map((label) => (
+                           <span
+                              key={label.id}
+                              className="inline-flex max-w-40 items-center gap-1 rounded-full border px-2 py-px text-xs"
+                           >
+                              <span
+                                 className="size-2 shrink-0 rounded-full"
+                                 style={{ backgroundColor: labelColor(label.color) }}
+                              />
+                              <span className="truncate">{label.name}</span>
+                           </span>
+                        ))}
+                     </span>
+                  )}
+               </PropertyButton>
+            ) : (
+               <Button
+                  type="button"
+                  size={compact ? 'xxs' : 'xs'}
+                  variant="outline"
+                  className="max-w-44 gap-1.5 bg-transparent px-2 text-xs font-normal text-muted-foreground"
+                  aria-label="Change labels"
+               >
+                  <Tag className="size-3.5" />
+                  <span className="truncate">
+                     {selected.length === 0
+                        ? 'Labels'
+                        : selected.length === 1
+                          ? selected[0].name
+                          : `${selected[0].name} +${selected.length - 1}`}
+                  </span>
+               </Button>
+            )}
          </PopoverTrigger>
          <PopoverContent align="start" className="w-60 p-0">
             <Command>
@@ -75,8 +89,7 @@ export function InitiativeLabelPicker({
                            <span
                               className="size-2.5 rounded-full"
                               style={{
-                                 backgroundColor:
-                                    LABEL_COLOR[label.color] ?? 'var(--muted-foreground)',
+                                 backgroundColor: labelColor(label.color),
                               }}
                            />
                            {label.name}

@@ -47,7 +47,7 @@ describe('applyIssueFilters — valor ausente', () => {
                columnId: 'dueDate',
                type: 'date',
                operator: 'is not',
-               values: [new Date('2026-09-10')],
+               values: [new Date(2026, 8, 10)], // o calendário entrega meia-noite local
             },
          ]
       );
@@ -59,7 +59,7 @@ describe('applyIssueFilters — valor ausente', () => {
                columnId: 'dueDate',
                type: 'date',
                operator: 'is before',
-               values: [new Date('2026-09-11')],
+               values: [new Date(2026, 8, 11)],
             },
          ]
       );

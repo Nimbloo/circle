@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/client';
+import { AUTOMATION_CHANGED_EVENT, useLiveReload } from '@/lib/use-live-sync';
 import type { TeamSlaDto } from '@/lib/api/slas';
 import type {
    AutomationAction,
@@ -40,6 +41,7 @@ import type {
 import { useLabels, usePriorities, useStatuses } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Pencil, Plus, Timer, Trash2, Workflow } from 'lucide-react';
+import { LoadingArea } from '@/components/common/loading-area';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
@@ -452,6 +454,15 @@ export default function TeamWorkflowsSettings({ teamId }: { teamId: string }) {
          alive = false;
       };
    }, [teamId]);
+   // SLA/automação alterados por OUTRO admin: recarrega em silêncio.
+   useLiveReload(AUTOMATION_CHANGED_EVENT, { teamId }, () =>
+      Promise.all([api.teamSlas.list(teamId), api.automations.list(teamId)])
+         .then(([slaList, ruleList]) => {
+            setSlas(slaList);
+            setAutomations(ruleList);
+         })
+         .catch(() => {})
+   );
 
    const submitAutomation = useCallback(
       async (draft: AutomationDraft) => {
@@ -550,10 +561,13 @@ export default function TeamWorkflowsSettings({ teamId }: { teamId: string }) {
                }
             >
                <SettingsCard>
-                  {automations.length === 0 ? (
+                  {automations.length === 0 && loading ? (
+                     // Carga separada do vazio: "Nenhuma automação" só depois da resposta.
+                     <LoadingArea rows={2} />
+                  ) : automations.length === 0 ? (
                      <SettingsRow
                         icon={<Workflow className="size-4" />}
-                        title={loading ? 'Carregando…' : 'Nenhuma automação'}
+                        title="Nenhuma automação"
                         description="Crie a primeira regra para o time"
                         muted
                      />

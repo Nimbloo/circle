@@ -9,6 +9,7 @@ import type { ActivityItem, Attachment, IssueDetail, PrLink } from '@/data/issue
 import type { IssueDetailDto, ActivityItem as ActivityDto } from '@/lib/api/issue-detail';
 import type { AttachmentDto } from '@/lib/api/attachments';
 import { textToBlocks } from '@/lib/text-blocks';
+import { relativeTime } from '@/lib/relative-time';
 
 export { textToBlocks };
 
@@ -38,21 +39,7 @@ const SYSTEM_USER: User = {
    timezone: 'UTC',
 };
 
-/** Tempo relativo compacto ("2h", "1d") a partir de um ISO. */
-function relativeTime(iso: string): string {
-   const then = new Date(iso).getTime();
-   const diff = Math.max(0, Date.now() - then);
-   const min = Math.floor(diff / 60000);
-   if (min < 1) return 'now';
-   if (min < 60) return `${min}m`;
-   const hours = Math.floor(min / 60);
-   if (hours < 24) return `${hours}h`;
-   const days = Math.floor(hours / 24);
-   if (days < 7) return `${days}d`;
-   return `${Math.floor(days / 7)}w`;
-}
-
-function adaptActivity(dtos: ActivityDto[]): ActivityItem[] {
+export function adaptActivity(dtos: ActivityDto[]): ActivityItem[] {
    return dtos.map((a) => {
       const actor = a.actor ? adaptUser(a.actor) : SYSTEM_USER;
       const timeAgo = relativeTime(a.createdAt);
@@ -63,6 +50,7 @@ function adaptActivity(dtos: ActivityDto[]): ActivityItem[] {
             actor,
             timeAgo,
             body: textToBlocks(a.body),
+            source: a.body ?? '',
             parentId: a.parentId ?? null,
             updatedAt: a.updatedAt ?? null,
             resolvedAt: a.resolvedAt ?? null,

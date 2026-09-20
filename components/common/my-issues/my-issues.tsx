@@ -15,17 +15,19 @@ const InsightsPanel = dynamic(
    { ssr: false }
 );
 import { IssueLine } from '@/components/common/issues/issue-line';
+import { EmptyState } from '@/components/common/empty-state';
 import { BreakdownPanel } from './breakdown-panel';
 import { api } from '@/lib/client';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
-import { useIssuesStore } from '@/store/issues-store';
+import { selectIssuesLoading, useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useSearchStore } from '@/store/search-store';
 import { useViewStore } from '@/store/view-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useEffect, useMemo, useState } from 'react';
-import { scopeMyIssues, useMyIssuesTab } from './use-my-issues';
+import { scopeMyIssues, useMyIssuesActiveIds, useMyIssuesTab } from './use-my-issues';
+import { SidePanelSlot } from '@/components/common/detail-side-panel';
 
 /**
  * "My issues" body — the exact same machinery as the team issue views
@@ -38,7 +40,7 @@ export default function MyIssues() {
    const { viewType } = useViewStore();
    const { filters } = useFilterStore();
    const issues = useIssuesStore((s) => s.issues);
-   const loading = useIssuesStore((s) => s.loading);
+   const loading = useIssuesStore(selectIssuesLoading);
    const error = useIssuesStore((s) => s.error);
    const hydrate = useIssuesStore((s) => s.hydrate);
    const { openPanel } = useRightPanelStore();
@@ -49,64 +51,34 @@ export default function MyIssues() {
    const isSearching = isSearchOpen && searchQuery.trim() !== '';
    const isViewTypeGrid = viewType === 'grid';
 
-   const subscribedIds = useMemo(() => new Set(subscribedIssueIds ?? []), [subscribedIssueIds]);
-
-   // Aba "Activity" (padrão Linear = board de issues em que estive ativo): busca os
-   // ids das issues com atividade minha e usa como escopo do board.
-   const [activeIds, setActiveIds] = useState<ReadonlySet<string>>(new Set());
+   // Aba "Subscribed": o bootstrap só traz as assinaturas de issues abertas; a lista
+   // completa (com as fechadas) vem sob demanda e é unida às vivas do store.
+   const [allSubscribed, setAllSubscribed] = useState<readonly string[]>([]);
    useEffect(() => {
-      if (tab !== 'activity') return;
+      if (tab !== 'subscribed') return;
       let alive = true;
       api.me
-         .activity()
-         .then((items) => alive && setActiveIds(new Set(items.map((i) => i.issueId))))
+         .subscriptions()
+         .then(({ issueIds }) => alive && setAllSubscribed(issueIds))
          .catch(() => {});
       return () => {
          alive = false;
       };
-   }, [tab]);
+   }, [tab, subscribedIssueIds]);
+   const subscribedIds = useMemo(() => {
+      const live = new Set(subscribedIssueIds ?? []);
+      return new Set([...(tab === 'subscribed' ? allSubscribed : []), ...live]);
+   }, [subscribedIssueIds, allSubscribed, tab]);
 
-   // Aba "Assigned": o escopo vem do filtro SERVIDOR `assignee=me` (junção de responsáveis —
-   // inclui onde sou colaborador), não de um filtro do store no cliente. Re-busca quando o
-   // store muda (SSE/otimista) para acompanhar entradas e saídas; enquanto não chegou,
-   // `scopeMyIssues` aproxima pelos responsáveis já carregados.
-   const [assignedIds, setAssignedIds] = useState<ReadonlySet<string> | undefined>(undefined);
-   // Assinatura do que muda a resposta de `assignee=me`: quais issues existem e quem
-   // responde por elas. Depender do array `issues` era a mesma armadilha do roadmap —
-   // a identidade dele muda a cada update otimista e a cada evento SSE, então esta
-   // busca COMPLETA disparava a cada mutação de qualquer pessoa, sem nada de
-   // responsável ter mudado.
-   const assigneesSignature = useMemo(
-      () =>
-         issues
-            .map((i) => `${i.id}:${i.assignees.map((a) => a.id).join(',')}`)
-            .sort()
-            .join('|'),
-      [issues]
-   );
-   useEffect(() => {
-      if (tab !== 'assigned' || loading) return;
-      let alive = true;
-      api.issues
-         .list({ assignee: ['me'] })
-         .then((dtos) => alive && setAssignedIds(new Set(dtos.map((d) => d.id))))
-         .catch(() => {});
-      return () => {
-         alive = false;
-      };
-   }, [tab, assigneesSignature, loading]);
+   // Aba "Activity" (padrão Linear = board de issues em que estive ativo): ids das
+   // issues com atividade minha, usados como escopo do board.
+   const activeIds = useMyIssuesActiveIds(tab);
 
+   // Aba "Assigned" (#29): derivada do store — os DTOs já trazem todos os responsáveis
+   // (principal + colaboradores). Sem busca `assignee=me` a cada mudança de responsável.
    const scopedIssues = useMemo(
-      () =>
-         scopeMyIssues(
-            issues,
-            tab,
-            meId,
-            subscribedIds,
-            activeIds,
-            tab === 'assigned' ? assignedIds : undefined
-         ),
-      [issues, tab, meId, subscribedIds, activeIds, assignedIds]
+      () => scopeMyIssues(issues, tab, meId, subscribedIds, activeIds),
+      [issues, tab, meId, subscribedIds, activeIds]
    );
 
    const displayedIssues = useMemo(
@@ -140,9 +112,11 @@ export default function MyIssues() {
                      </div>
                   </div>
                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                     No results found for &quot;{searchQuery}&quot;
-                  </div>
+                  <EmptyState
+                     variant="search"
+                     title="No results"
+                     description={`Nothing matches "${searchQuery}".`}
+                  />
                )}
             </div>
          </div>
@@ -165,16 +139,24 @@ export default function MyIssues() {
                />
             </div>
 
-            {openPanel === 'insights' && (
-               <aside className="hidden lg:flex w-[420px] shrink-0 border-l h-full overflow-hidden bg-container">
-                  <InsightsPanel issues={displayedIssues} />
-               </aside>
-            )}
-            {openPanel === 'breakdown' && (
-               <aside className="hidden lg:flex w-80 shrink-0 border-l h-full overflow-hidden bg-container">
-                  <BreakdownPanel issues={displayedIssues} />
-               </aside>
-            )}
+            <SidePanelSlot
+               open={openPanel === 'insights'}
+               width={420}
+               label="Insights"
+               className="hidden lg:flex"
+               panelClassName="border-l bg-container"
+            >
+               <InsightsPanel issues={displayedIssues} />
+            </SidePanelSlot>
+            <SidePanelSlot
+               open={openPanel === 'breakdown'}
+               width={320}
+               label="Breakdown"
+               className="hidden lg:flex"
+               panelClassName="border-l bg-container"
+            >
+               <BreakdownPanel issues={displayedIssues} />
+            </SidePanelSlot>
          </div>
       </div>
    );

@@ -235,8 +235,11 @@ export function CommentComposer({
             }}
             placeholder={placeholder}
             rows={2}
-            disabled={submitting}
-            className="w-full resize-none bg-transparent outline-none text-sm placeholder:text-muted-foreground disabled:opacity-60"
+            // is#22: readOnly (e não disabled) durante o envio — desabilitar tira o foco do
+            // textarea e ele ia parar no body; assim o próximo comentário já sai digitando.
+            readOnly={submitting}
+            aria-busy={submitting}
+            className="w-full resize-none bg-transparent outline-none text-sm placeholder:text-muted-foreground read-only:opacity-60"
          />
          {files.length > 0 && (
             <div className="flex flex-wrap gap-1.5">

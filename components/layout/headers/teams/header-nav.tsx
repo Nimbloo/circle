@@ -11,7 +11,7 @@ import {
 export default function HeaderNav() {
    return (
       <LocationBar>
-         <HeaderGroup className="pl-2.5">
+         <HeaderGroup>
             <HeaderTitle>Teams</HeaderTitle>
          </HeaderGroup>
          <HeaderActions className="pr-0.5">

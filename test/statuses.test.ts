@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest';
+import { asc } from 'drizzle-orm';
 import { makeTestDb } from './helpers/db';
 import { seedTeam } from './helpers/fixtures';
 import { createStatus, updateStatus, deleteStatus, reorderStatuses } from '@/lib/api/statuses';
+import { subscribe } from '@/lib/api/events';
 import { createIssue } from '@/lib/api/issues';
 import { ApiError } from '@/lib/api/errors';
+import { status as statusT } from '@/db/schema';
 
 const ME = 'dev@nimbloo.ai';
 
@@ -55,5 +58,25 @@ describe('status catalog CRUD', () => {
       const posB = out.find((s) => s.id === b.id)!.position;
       const posA = out.find((s) => s.id === a.id)!.position;
       expect(posB).toBeLessThan(posA);
+   });
+
+   it('normaliza uma lista parcial: ids enviados primeiro e demais na ordem atual', async () => {
+      const db = await makeTestDb();
+      await seedTeam(db, 'CORE');
+      const before = await db.select().from(statusT).orderBy(asc(statusT.position));
+      const requested = [before[3].id, before[1].id];
+      const events: string[] = [];
+      const unsubscribe = subscribe((event) => {
+         if (event.entity === 'catalog' && event.action === 'updated') events.push(event.entity);
+      });
+
+      const out = await reorderStatuses(db, requested);
+      unsubscribe();
+
+      expect(out.map((status) => status.id)).toEqual([
+         ...requested,
+         ...before.map((status) => status.id).filter((id) => !requested.includes(id)),
+      ]);
+      expect(events).toEqual(['catalog']);
    });
 });

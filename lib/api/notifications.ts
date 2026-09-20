@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, count, desc, eq, gt, inArray, isNull, lte, or } from 'drizzle-orm';
+import { and, count, desc, eq, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { notification, issue as issueT, appUser } from '@/db/schema';
 import { publish } from './events';
@@ -16,6 +16,24 @@ export interface NotificationDto {
    createdAt: string;
    actor: UserRef | null;
    issue: { id: string; identifier: string; title: string } | null;
+}
+
+/**
+ * Estado novo carregado no evento `notification` (campos ADITIVOS ao `CircleEvent`):
+ * o cliente aplica como patch local (`applyNotificationPatch`) em vez de re-hidratar o
+ * inbox — o que desfazia o otimista pendente da própria ação (#19).
+ *  - `read`: novo estado de leitura da notificação `id`.
+ *  - `snoozedUntil`: ISO do adiamento vigente, ou null ao desfazer.
+ *  - `all`: `markAllRead` — vale para TODAS as notificações do destinatário (`id` é o
+ *    do destinatário, legado).
+ * Evento sem nenhum desses campos (ex.: `created`) segue pedindo hidratação.
+ */
+export interface NotificationEventPatch {
+   read?: boolean;
+   snoozedUntil?: string | null;
+   all?: boolean;
+   /** A notificação `id` foi excluída (sai da lista e da contagem). */
+   deleted?: boolean;
 }
 
 async function assemble(db: Db, rows: NotifRow[]): Promise<NotificationDto[]> {
@@ -65,6 +83,18 @@ export interface ListInboxOptions {
    limit?: number;
    /** true = só as adiadas ainda vigentes (aba Snoozed); default/false = exclui as adiadas vigentes. */
    snoozed?: boolean;
+   /**
+    * Cursor opaco da página seguinte (`nextCursor` da anterior): o id da última
+    * notificação vista. A ordem é (createdAt desc, id desc) e a comparação é feita no
+    * banco contra a própria linha — o ISO em ms perderia os microssegundos do createdAt.
+    */
+   cursor?: string;
+}
+
+export interface InboxPage {
+   items: NotificationDto[];
+   /** Cursor para a próxima página, ou null quando esta é a última. */
+   nextCursor: string | null;
 }
 
 /** Condição "adiada ainda vigente" (snoozedUntil > agora). */
@@ -87,20 +117,41 @@ export async function listInbox(
    recipientId: string,
    opts: ListInboxOptions = {}
 ): Promise<NotificationDto[]> {
+   return (await listInboxPage(db, recipientId, opts)).items;
+}
+
+/** Página do inbox (co#3): `limit` itens a partir do `cursor`, mais o cursor seguinte. */
+export async function listInboxPage(
+   db: Db,
+   recipientId: string,
+   opts: ListInboxOptions = {}
+): Promise<InboxPage> {
    const now = new Date();
+   const limit = Math.min(Math.max(opts.limit ?? DEFAULT_INBOX_LIMIT, 1), 500);
    const conds = [eq(notification.recipientId, recipientId)];
    if (opts.read !== undefined) conds.push(eq(notification.read, opts.read));
    if (opts.actorId) conds.push(eq(notification.actorId, opts.actorId));
    if (opts.type?.length) conds.push(inArray(notification.type, opts.type));
    // Snooze: por padrão o inbox esconde as adiadas vigentes; a aba Snoozed pede só elas.
    conds.push(opts.snoozed ? activeSnooze(now) : notSnoozed(now));
+   if (opts.cursor) {
+      conds.push(
+         sql`(${notification.createdAt}, ${notification.id}) < (select c.created_at, c.id from notification c where c.id = ${opts.cursor} and c.recipient_id = ${recipientId})`
+      );
+   }
+   // Um a mais para saber se há próxima página sem um COUNT.
    const rows = await db
       .select()
       .from(notification)
       .where(and(...conds))
-      .orderBy(desc(notification.createdAt))
-      .limit(Math.min(Math.max(opts.limit ?? DEFAULT_INBOX_LIMIT, 1), 500));
-   return assemble(db, rows);
+      .orderBy(desc(notification.createdAt), desc(notification.id))
+      .limit(limit + 1);
+   const hasMore = rows.length > limit;
+   const pageRows = hasMore ? rows.slice(0, limit) : rows;
+   return {
+      items: await assemble(db, pageRows),
+      nextCursor: hasMore ? pageRows[pageRows.length - 1].id : null,
+   };
 }
 
 export async function unreadCount(db: Db, recipientId: string): Promise<number> {
@@ -133,7 +184,10 @@ export async function setSnooze(
       .set({ snoozedUntil: until })
       .where(and(eq(notification.id, id), eq(notification.recipientId, recipientId)))
       .returning({ id: notification.id });
-   if (res.length > 0) publish({ entity: 'notification', action: 'updated', id });
+   if (res.length > 0) {
+      const patch: NotificationEventPatch = { snoozedUntil: until ? until.toISOString() : null };
+      publish({ entity: 'notification', action: 'updated', id, recipientId, ...patch });
+   }
    return res.length > 0;
 }
 
@@ -151,7 +205,27 @@ export async function setRead(
       .returning({ id: notification.id });
    // Propaga por SSE: marcar lido/não-lido sincroniza o badge entre abas/dispositivos
    // (antes só setSnooze publicava — read-state não propagava em tempo real).
-   if (res.length > 0) publish({ entity: 'notification', action: 'updated', id });
+   if (res.length > 0) {
+      const patch: NotificationEventPatch = { read };
+      publish({ entity: 'notification', action: 'updated', id, recipientId, ...patch });
+   }
+   return res.length > 0;
+}
+
+/** Exclui uma notificação, escopada ao destinatário (anti-IDOR). */
+export async function deleteNotification(
+   db: Db,
+   id: string,
+   recipientId: string
+): Promise<boolean> {
+   const res = await db
+      .delete(notification)
+      .where(and(eq(notification.id, id), eq(notification.recipientId, recipientId)))
+      .returning({ id: notification.id });
+   if (res.length > 0) {
+      const patch: NotificationEventPatch = { deleted: true };
+      publish({ entity: 'notification', action: 'deleted', id, recipientId, ...patch });
+   }
    return res.length > 0;
 }
 
@@ -161,7 +235,17 @@ export async function markAllRead(db: Db, recipientId: string): Promise<number> 
       .set({ read: true })
       .where(and(eq(notification.recipientId, recipientId), eq(notification.read, false)))
       .returning({ id: notification.id });
-   if (res.length > 0) publish({ entity: 'notification', action: 'updated', id: recipientId });
+   // `id` aqui é o do destinatário (legado: foram várias notificações).
+   if (res.length > 0) {
+      const patch: NotificationEventPatch = { read: true, all: true };
+      publish({
+         entity: 'notification',
+         action: 'updated',
+         id: recipientId,
+         recipientId,
+         ...patch,
+      });
+   }
    return res.length;
 }
 
@@ -185,6 +269,7 @@ export async function createNotification(db: Db, input: CreateNotificationInput)
       read: false,
       createdAt: new Date(),
    });
-   publish({ entity: 'notification', action: 'created', id });
+   // Só o destinatário recebe (#18): antes todos os clientes refaziam o inbox.
+   publish({ entity: 'notification', action: 'created', id, recipientId: input.recipientId });
    return id;
 }

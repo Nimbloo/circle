@@ -12,8 +12,14 @@ export const dynamic = 'force-dynamic';
 type Params = { params: Promise<{ id: string }> };
 
 const UpdateSchema = z.object({
-   name: z.string().min(1).optional(),
+   name: z
+      .string()
+      .trim()
+      .min(1, 'name é obrigatório')
+      .max(128, 'name deve ter no máximo 128 caracteres')
+      .optional(),
    color: z.string().min(1).optional(),
+   groupId: z.string().max(64).nullish(),
 });
 
 export async function PATCH(req: Request, { params }: Params) {

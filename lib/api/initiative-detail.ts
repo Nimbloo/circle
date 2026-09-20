@@ -3,6 +3,7 @@ import { desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { initiative as initT, initiativeUpdate, appUser } from '@/db/schema';
 import { ApiError } from './errors';
+import { updateHasContent } from './project-detail';
 import { publish } from './events';
 import { getInitiative, type InitiativeDto } from './initiatives';
 import type { UserRef } from './issues';
@@ -57,15 +58,20 @@ async function assertInitiative(db: Db, id: string): Promise<void> {
    if (rows.length === 0) throw new ApiError(404, `Initiative '${id}' não encontrada`);
 }
 
+/** Teto do feed (mais recentes primeiro), igual ao do projeto. */
+export const DEFAULT_INITIATIVE_FEED_LIMIT = 100;
+
 export async function listInitiativeUpdates(
    db: Db,
-   initiativeId: string
+   initiativeId: string,
+   limit = DEFAULT_INITIATIVE_FEED_LIMIT
 ): Promise<InitiativeUpdateDto[]> {
    const rows = await db
       .select()
       .from(initiativeUpdate)
       .where(eq(initiativeUpdate.initiativeId, initiativeId))
-      .orderBy(desc(initiativeUpdate.createdAt));
+      .orderBy(desc(initiativeUpdate.createdAt))
+      .limit(limit);
    const users = await loadUsers(
       db,
       rows.map((r) => r.authorId)
@@ -93,17 +99,22 @@ export async function postInitiativeUpdate(
 ): Promise<{ update: InitiativeUpdateDto; initiative: InitiativeDto }> {
    await assertInitiative(db, initiativeId);
    if (!UPDATE_HEALTHS.includes(input.health)) throw new ApiError(400, 'health inválido');
+   if (!updateHasContent(input.blocks)) throw new ApiError(400, 'update sem conteúdo');
    const id = randomUUID();
    const now = new Date();
-   await db.insert(initiativeUpdate).values({
-      id,
-      initiativeId,
-      authorId,
-      health: input.health,
-      blocks: JSON.stringify(input.blocks ?? []),
-      createdAt: now,
+   // Update e health propagado juntos: sem transação, uma falha no meio deixava o
+   // update gravado com o health antigo na initiative.
+   await db.transaction(async (tx) => {
+      await tx.insert(initiativeUpdate).values({
+         id,
+         initiativeId,
+         authorId,
+         health: input.health,
+         blocks: JSON.stringify(input.blocks ?? []),
+         createdAt: now,
+      });
+      await tx.update(initT).set({ healthId: input.health }).where(eq(initT.id, initiativeId));
    });
-   await db.update(initT).set({ healthId: input.health }).where(eq(initT.id, initiativeId));
    const [users, initiative] = await Promise.all([
       loadUsers(db, [authorId]),
       getInitiative(db, initiativeId),
@@ -120,4 +131,88 @@ export async function postInitiativeUpdate(
       },
       initiative,
    };
+}
+
+/** Health da initiative = health do último update; sem update volta a `no-update`. */
+async function syncInitiativeHealth(tx: Db, initiativeId: string): Promise<void> {
+   const [latest] = await tx
+      .select({ health: initiativeUpdate.health })
+      .from(initiativeUpdate)
+      .where(eq(initiativeUpdate.initiativeId, initiativeId))
+      .orderBy(desc(initiativeUpdate.createdAt))
+      .limit(1);
+   await tx
+      .update(initT)
+      .set({ healthId: latest ? latest.health : 'no-update' })
+      .where(eq(initT.id, initiativeId));
+}
+
+export interface EditInitiativeUpdateInput {
+   health?: InitiativeUpdateHealth;
+   blocks?: ContentBlock[];
+}
+
+/** Edita um update da initiative (pl#11), repropagando o health do mais recente. */
+export async function editInitiativeUpdate(
+   db: Db,
+   initiativeId: string,
+   updateId: string,
+   input: EditInitiativeUpdateInput
+): Promise<{ update: InitiativeUpdateDto; initiative: InitiativeDto }> {
+   const [row] = await db
+      .select()
+      .from(initiativeUpdate)
+      .where(eq(initiativeUpdate.id, updateId))
+      .limit(1);
+   if (!row || row.initiativeId !== initiativeId)
+      throw new ApiError(404, `Update '${updateId}' não encontrado`);
+   if (input.health && !UPDATE_HEALTHS.includes(input.health))
+      throw new ApiError(400, 'health inválido');
+   const blocks = input.blocks ?? parseBlocks(row.blocks);
+   if (!updateHasContent(blocks)) throw new ApiError(400, 'update sem conteúdo');
+   const health = input.health ?? (row.health as InitiativeUpdateHealth);
+
+   await db.transaction(async (tx) => {
+      await tx
+         .update(initiativeUpdate)
+         .set({ health, blocks: JSON.stringify(blocks) })
+         .where(eq(initiativeUpdate.id, updateId));
+      await syncInitiativeHealth(tx as unknown as Db, initiativeId);
+   });
+   const [users, initiative] = await Promise.all([
+      loadUsers(db, [row.authorId]),
+      getInitiative(db, initiativeId),
+   ]);
+   if (!initiative) throw new ApiError(404, `Initiative '${initiativeId}' não encontrada`);
+   publish({ entity: 'initiative', action: 'updated', id: initiativeId });
+   return {
+      update: {
+         id: row.id,
+         author: userRef(users.get(row.authorId)),
+         health,
+         blocks,
+         createdAt: iso(row.createdAt),
+      },
+      initiative,
+   };
+}
+
+/** Exclui um update da initiative; devolve a initiative com o health recalculado. */
+export async function deleteInitiativeUpdate(
+   db: Db,
+   initiativeId: string,
+   updateId: string
+): Promise<InitiativeDto | null> {
+   const [row] = await db
+      .select({ id: initiativeUpdate.id, initiativeId: initiativeUpdate.initiativeId })
+      .from(initiativeUpdate)
+      .where(eq(initiativeUpdate.id, updateId))
+      .limit(1);
+   if (!row || row.initiativeId !== initiativeId) return null;
+   await db.transaction(async (tx) => {
+      await tx.delete(initiativeUpdate).where(eq(initiativeUpdate.id, updateId));
+      await syncInitiativeHealth(tx as unknown as Db, initiativeId);
+   });
+   publish({ entity: 'initiative', action: 'updated', id: initiativeId });
+   return getInitiative(db, initiativeId);
 }

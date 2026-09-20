@@ -19,7 +19,7 @@ export default function HeaderNav() {
 
    return (
       <LocationBar>
-         <HeaderGroup className="ml-2.5">
+         <HeaderGroup>
             <HeaderTitle>Cycles</HeaderTitle>
             <Star className="size-3.5 text-muted-foreground shrink-0 ml-1" />
          </HeaderGroup>

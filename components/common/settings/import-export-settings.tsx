@@ -12,16 +12,18 @@ import {
 import { api } from '@/lib/client';
 import type {
    ImportField,
+   ImportJobDto,
    ImportMapping,
    ImportPreviewDto,
-   ImportResultDto,
    ImportSource,
 } from '@/lib/api/import';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { AlertTriangle, CheckCircle2, Download, FileUp, Upload } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { errorReason } from '@/lib/error-reason';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
+import { ImportJobProgress } from './import-job-progress';
 
 /**
  * Settings → Import/Export (#101).
@@ -54,7 +56,7 @@ const FIELDS = Object.keys(FIELD_LABEL) as ImportField[];
 /** Valor sentinela do select — o Radix não aceita `value=""` num SelectItem. */
 const NONE = '__none__';
 
-type Step = 'upload' | 'mapping' | 'result';
+type Step = 'upload' | 'mapping' | 'running' | 'result';
 
 function Warnings({ items }: { items: string[] }) {
    if (items.length === 0) return null;
@@ -81,11 +83,29 @@ export default function ImportExportSettings() {
    const [mapping, setMapping] = useState<ImportMapping>({});
    const [teamId, setTeamId] = useState('');
    const [createLabels, setCreateLabels] = useState(false);
-   const [result, setResult] = useState<ImportResultDto | null>(null);
+   const [jobId, setJobId] = useState<string | null>(null);
+   const [result, setResult] = useState<ImportJobDto | null>(null);
    const [busy, setBusy] = useState(false);
    const inputRef = useRef<HTMLInputElement>(null);
 
    const [exportTeam, setExportTeam] = useState('');
+
+   // Voltar para a tela no meio de um import (ad#5): o progresso era perdido porque o
+   // jobId só vivia neste componente. Ao montar, procura o job ativo do usuário.
+   useEffect(() => {
+      let alive = true;
+      void api.importIssues
+         .activeJob()
+         .then((job) => {
+            if (!alive || !job) return;
+            setJobId((current) => current ?? job.id);
+            setStep((current) => (current === 'upload' ? 'running' : current));
+         })
+         .catch(() => {});
+      return () => {
+         alive = false;
+      };
+   }, []);
 
    const reset = () => {
       setStep('upload');
@@ -93,6 +113,7 @@ export default function ImportExportSettings() {
       setCsv('');
       setPreview(null);
       setMapping({});
+      setJobId(null);
       setResult(null);
    };
 
@@ -107,8 +128,8 @@ export default function ImportExportSettings() {
          setMapping(dto.mapping);
          setTeamId((current) => current || teams[0]?.id || '');
          setStep('mapping');
-      } catch {
-         toast.error('Não foi possível ler o arquivo (é um CSV válido?)');
+      } catch (err) {
+         toast.error(errorReason(err, 'Não foi possível ler o arquivo (é um CSV válido?)'));
       } finally {
          setBusy(false);
          if (inputRef.current) inputRef.current.value = '';
@@ -119,7 +140,7 @@ export default function ImportExportSettings() {
       if (!preview || !teamId || busy) return;
       setBusy(true);
       try {
-         const dto = await api.importIssues.commit({
+         const { jobId: id } = await api.importIssues.commit({
             // A origem do commit é a do preview (o servidor a ecoa), não o select — o
             // mapeamento confirmado foi calculado para ela.
             source: preview.source,
@@ -128,14 +149,22 @@ export default function ImportExportSettings() {
             mapping,
             createMissingLabels: createLabels,
          });
-         setResult(dto);
-         setStep('result');
-         toast.success(`${dto.created} criada(s), ${dto.updated} atualizada(s)`);
-      } catch {
-         toast.error('Não foi possível importar as issues');
+         // Job em background (#10): a tela acompanha o progresso até o fim.
+         setJobId(id);
+         setStep('running');
+      } catch (err) {
+         toast.error(errorReason(err, 'Não foi possível importar as issues'));
       } finally {
          setBusy(false);
       }
+   };
+
+   const onJobFinished = (job: ImportJobDto) => {
+      setResult(job);
+      setStep('result');
+      if (job.status === 'succeeded')
+         toast.success(`${job.created} criada(s), ${job.updated} atualizada(s)`);
+      else toast.error(job.error ?? 'O import falhou');
    };
 
    const download = (format: 'csv' | 'json') => {
@@ -155,7 +184,7 @@ export default function ImportExportSettings() {
             title="Importar issues"
             description="Nada é gravado antes de você confirmar o mapeamento."
             action={
-               step !== 'upload' ? (
+               step !== 'upload' && step !== 'running' ? (
                   <Button variant="ghost" size="sm" onClick={reset}>
                      Recomeçar
                   </Button>
@@ -320,13 +349,23 @@ export default function ImportExportSettings() {
                </div>
             )}
 
+            {step === 'running' && jobId && (
+               <ImportJobProgress jobId={jobId} onFinished={onJobFinished} />
+            )}
+
             {step === 'result' && result && (
                <div className="flex flex-col gap-3">
                   <SettingsCard>
                      <SettingsRow
-                        icon={<CheckCircle2 className="size-4" />}
-                        title="Import concluído"
-                        description={`${result.created} criada(s) · ${result.updated} atualizada(s) · ${result.skipped} ignorada(s)`}
+                        icon={
+                           result.status === 'succeeded' ? (
+                              <CheckCircle2 className="size-4" />
+                           ) : (
+                              <AlertTriangle className="size-4 text-warning" />
+                           )
+                        }
+                        title={result.status === 'succeeded' ? 'Import concluído' : 'Import falhou'}
+                        description={`${result.created} criada(s) · ${result.updated} atualizada(s) · ${result.skipped} ignorada(s)${result.error ? ` · ${result.error}` : ''}`}
                      />
                   </SettingsCard>
                   <Warnings items={result.errors.map((e) => `Linha ${e.row}: ${e.message}`)} />

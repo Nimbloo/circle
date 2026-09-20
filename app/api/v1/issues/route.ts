@@ -3,7 +3,8 @@ import type { EditorDoc } from '@/lib/editor-doc';
 import { db } from '@/db';
 import { ok } from '@/lib/api/response';
 import { handle, requireEmail, parseIssueListOptions } from '@/lib/api/http';
-import { createIssue, listIssues } from '@/lib/api/issues';
+import { createIssue, listIssueChanges, listIssues } from '@/lib/api/issues';
+import { ApiError } from '@/lib/api/errors';
 import { emailFromRequest } from '@/lib/api/auth';
 import { scopeForEmail } from '@/lib/api/scope';
 
@@ -18,6 +19,15 @@ export async function GET(req: Request) {
       const { opts } = parseIssueListOptions(sp, meEmail);
       // Escopo de Guest (#100): interseção server-side, nunca confiando na query.
       const { teamIds } = await scopeForEmail(db, email);
+      // Resync incremental (#14, aditivo): só o que mudou desde a marca d'água do cliente,
+      // com os ids vivos em `meta.ids` (o que sumiu dali foi apagado ou saiu do escopo).
+      const updatedSince = sp.get('updatedSince');
+      if (updatedSince !== null) {
+         const since = new Date(updatedSince);
+         if (Number.isNaN(since.getTime())) throw new ApiError(400, 'updatedSince inválido');
+         const changes = await listIssueChanges(db, since, { teamIds: teamIds ?? undefined });
+         return ok(changes.issues, { ids: changes.ids, truncated: changes.truncated });
+      }
       if (teamIds) opts.teamIds = teamIds;
       return ok(await listIssues(db, opts));
    }, req);
@@ -33,7 +43,11 @@ const DocSchema = z
 const CreateSchema = z
    .object({
       teamId: z.string().min(1).max(16).optional(),
-      title: z.string().min(1).max(512),
+      title: z
+         .string()
+         .trim()
+         .min(1, 'title é obrigatório')
+         .max(512, 'title deve ter no máximo 512 caracteres'),
       statusId: z.string().min(1).max(64).optional(),
       priorityId: z.string().min(1).max(64).optional(),
       parentId: z.string().max(36).nullish(),

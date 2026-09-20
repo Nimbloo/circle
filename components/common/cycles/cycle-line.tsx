@@ -26,15 +26,27 @@ export function CyclePlayIcon({ className }: { className?: string }) {
 
 interface CycleLineProps {
    cycle: Cycle;
+   /** Ciclo sem rota própria (planned, completed, upcoming que não é o próximo). */
+   expanded?: boolean;
+   onToggle?: () => void;
+   /** `true` quando este é o upcoming que a rota `/cycle/upcoming` mostra. */
+   isNextUpcoming?: boolean;
 }
 
 /** One row of the cycles timeline. */
-export default function CycleLine({ cycle }: CycleLineProps) {
+export default function CycleLine({
+   cycle,
+   expanded = false,
+   onToggle,
+   isNextUpcoming = false,
+}: CycleLineProps) {
    const { orgId } = useParams<{ orgId: string }>();
+   // Só `current` e o PRÓXIMO `upcoming` têm rota própria; os demais (planned,
+   // completed e upcoming mais distante) abrem os detalhes na própria lista (pl#4).
    const href =
       cycle.status === 'current'
          ? `/${orgId}/team/${cycle.teamId}/cycle/active`
-         : cycle.status === 'upcoming'
+         : cycle.status === 'upcoming' && isNextUpcoming
            ? `/${orgId}/team/${cycle.teamId}/cycle/upcoming`
            : undefined;
 
@@ -84,12 +96,22 @@ export default function CycleLine({ cycle }: CycleLineProps) {
                : 'xl:grid-cols-[minmax(0,1fr)_75px_142px_60px_44px]'
          )}
       >
-         {href && (
+         {href ? (
             <Link
                href={href}
                aria-label={`Open ${cycle.name}`}
                className="absolute inset-y-0 left-0 right-14 rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
+         ) : (
+            onToggle && (
+               <button
+                  type="button"
+                  onClick={onToggle}
+                  aria-label={`Open ${cycle.name}`}
+                  aria-expanded={expanded}
+                  className="absolute inset-y-0 left-0 right-14 rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+               />
+            )
          )}
          {content}
          <div className="relative z-10 flex size-11 items-center justify-center">

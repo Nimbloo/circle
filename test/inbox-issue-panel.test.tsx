@@ -13,7 +13,7 @@ import {
    DetailSidePanelTrigger,
 } from '@/components/common/detail-side-panel';
 import type { InboxItem } from '@/data/inbox';
-import { status } from '@/data/status';
+import { status } from './helpers/catalog-fixture';
 import { DEFAULT_DETAIL_PANELS, useDetailPanelStore } from '@/store/detail-panel-store';
 import { useIssuesStore } from '@/store/issues-store';
 
@@ -53,20 +53,15 @@ describe('painel de issue no Inbox', () => {
       const pane = container.firstElementChild as HTMLElement;
       expect(pane.className).toContain('@container');
 
-      const aside = screen.getByRole('complementary', { name: 'Issue details' });
-      expect(aside.className).toContain('@3xl:flex');
-      expect(aside.className).toContain('@5xl:w-80');
-      expect(aside.className).toContain('@7xl:w-[400px]');
-      // Com espaço na frente: `@3xl:flex` também contém "xl:flex".
-      expect(aside.className).not.toContain(' xl:flex');
-      expect(aside.className).not.toContain(' w-[400px]');
+      // Enquanto a issue não está no store o pane mostra o loading do Circle; o painel
+      // de properties (degraus @3xl/@5xl/@7xl) é coberto pelo teste do container abaixo.
+      expect(screen.getByRole('status', { name: 'Carregando' })).toBeTruthy();
 
       // Toggle no cabeçalho do pane, com o degrau do container — e funcional.
       const toggle = screen.getByRole('button', { name: 'Close Issue details' });
       expect(toggle.className).toContain('@3xl:inline-flex');
       expect(toggle.className).not.toContain(' xl:inline-flex');
       await user.click(toggle);
-      expect(screen.queryByRole('complementary', { name: 'Issue details' })).toBeNull();
       expect(useDetailPanelStore.getState().openByKind.issue).toBe(false);
 
       // Trigger do Sheet cobre o vão "viewport xl, pane estreito".
@@ -86,9 +81,9 @@ describe('painel de issue no Inbox', () => {
          </>
       );
 
-      expect(screen.getByRole('complementary', { name: 'Issue details' }).className).toContain(
-         'w-[400px] xl:flex'
-      );
+      const aside = screen.getByRole('complementary', { name: 'Issue details' });
+      expect(aside.className).toContain('xl:flex');
+      expect(aside.className).toContain('w-[400px]');
       expect(screen.getByRole('button', { name: 'Close Issue details' }).className).toContain(
          'xl:inline-flex'
       );

@@ -9,10 +9,12 @@
  * re-import do mesmo arquivo ATUALIZA a issue (título/status/prioridade) em vez de
  * duplicá-la — é o que torna seguro reimportar depois de corrigir o CSV.
  */
-import { and, eq, inArray } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
+import { and, desc, eq, gt, inArray } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    appUser,
+   importJob,
    issueImport,
    label as labelT,
    priority as priorityT,
@@ -20,8 +22,11 @@ import {
    team as teamT,
 } from '@/db/schema';
 import { ApiError } from './errors';
-import { createIssue, updateIssue } from './issues';
+import { createIssue, publishAutoSubscriptions, updateIssue } from './issues';
+import { publish, publishInternal } from './events';
 import { assertCanWriteTeam } from './scope';
+import { withRequestCache } from './auth';
+import { getOrCreateUser } from './users';
 
 export type ImportSource = 'csv' | 'linear' | 'jira';
 
@@ -520,11 +525,28 @@ function slugifyLabel(name: string): string {
  * (guardando `externalId → issueId`), a 2ª liga os pais — assim uma filha que aparece
  * antes do pai no arquivo continua sendo ligada.
  */
-export async function commitImport(
+/** Progresso do lote, reportado linha a linha ao job (#10). */
+export interface ImportProgress {
+   processed: number;
+   created: number;
+   updated: number;
+   skipped: number;
+}
+
+export interface CommitImportOptions {
+   /** Chamado após cada linha (o job decide quando gravar). */
+   onProgress?: (p: ImportProgress) => void | Promise<void>;
+}
+
+/**
+ * Validações síncronas do import (antes de criar o job): origem, mapeamento, limites e
+ * duplicatas do CSV (#24), time existente e escrita permitida. Devolve as linhas.
+ */
+async function prepareImport(
    db: Db,
    input: CommitImportInput,
    actorEmail: string
-): Promise<ImportResultDto> {
+): Promise<{ mapping: ImportMapping; rows: Record<string, string>[] }> {
    if (!IMPORT_SOURCES.includes(input.source)) throw new ApiError(400, 'source inválido');
    const mapping = input.mapping ?? {};
    if (!mapping.title) throw new ApiError(400, 'mapping.title é obrigatório');
@@ -535,7 +557,19 @@ export async function commitImport(
    // O time de destino vem do corpo: sem escopo, o import escrevia em qualquer time.
    await assertCanWriteTeam(db, actorEmail, input.teamId);
 
-   const { rows } = csvToObjects(input.csv);
+   return { mapping, rows: csvToObjects(input.csv).rows };
+}
+
+export async function commitImport(
+   db: Db,
+   input: CommitImportInput,
+   actorEmail: string,
+   opts: CommitImportOptions = {}
+): Promise<ImportResultDto> {
+   const { mapping, rows } = await prepareImport(db, input, actorEmail);
+   const actor = await getOrCreateUser(db, actorEmail);
+   /** Quem foi auto-assinado → uma issue dele, para UM aviso por usuário no fim (#22). */
+   const subscribedBy = new Map<string, string>();
    const cat = await loadCatalogs(db);
    const existingByExternal = await alreadyImported(
       db,
@@ -551,6 +585,7 @@ export async function commitImport(
 
    for (let i = 0; i < rows.length; i++) {
       const raw = rows[i];
+      if (i > 0) await opts.onProgress?.(progressOf(i));
       try {
          const mapped = mapRow(cat, mapping, raw, new Set());
          if (!mapped.title) {
@@ -568,10 +603,13 @@ export async function commitImport(
             if (!input.createMissingLabels) continue;
             const id = slugifyLabel(l.name);
             if (!id) continue;
-            await db
+            const novas = await db
                .insert(labelT)
                .values({ id, name: l.name, color: IMPORTED_LABEL_COLOR, groupId: null })
-               .onConflictDoNothing();
+               .onConflictDoNothing()
+               .returning({ id: labelT.id });
+            // Label criada pelo import entra no catálogo dos outros clientes (#12).
+            if (novas.length > 0) publish({ entity: 'label', action: 'created', id });
             cat.labelByName.set(norm(l.name), id);
             labelIds.push(id);
          }
@@ -593,7 +631,8 @@ export async function commitImport(
                   ...(mapped.dueDate ? { dueDate: mapped.dueDate } : {}),
                   ...(mapped.estimate != null ? { estimate: mapped.estimate } : {}),
                },
-               actorEmail
+               actorEmail,
+               { silent: true, bulk: true }
             );
             issueId = existingId;
             result.updated++;
@@ -611,11 +650,14 @@ export async function commitImport(
                   estimate: mapped.estimate,
                   description: cell(raw, mapping.description) || null,
                },
-               actorEmail
+               actorEmail,
+               { silent: true, bulk: true }
             );
             issueId = created.id;
             result.created++;
+            subscribedBy.set(actor.id, issueId);
          }
+         if (mapped.assigneeId) subscribedBy.set(mapped.assigneeId, issueId);
          result.issueIds.push(issueId);
 
          if (mapped.externalId) {
@@ -647,11 +689,203 @@ export async function commitImport(
       const parentId = idByExternal.get(link.parentExternalId);
       if (!parentId || parentId === link.childId) continue;
       try {
-         await updateIssue(db, link.childId, { parentId }, actorEmail);
+         await updateIssue(db, link.childId, { parentId }, actorEmail, {
+            silent: true,
+            bulk: true,
+         });
       } catch (e) {
          result.errors.push({ row: 0, message: `parent: ${(e as Error).message}` });
       }
    }
 
+   await opts.onProgress?.(progressOf(rows.length));
+
+   // Modo silencioso (#7): em vez de um evento por linha (cada um vira um GET em cada
+   // cliente, e o `pg_notify` disputa o pool), UM evento coarse sem id no fim — o
+   // cliente re-hidrata a lista de issues uma vez. Só SSE (#21): o webhook já saiu por
+   // issue, e um `issue.updated` sem id era entrega vazia para o assinante externo.
+   if (result.created + result.updated > 0) {
+      publishInternal({ entity: 'issue', action: 'updated', teamId: input.teamId, actorEmail });
+      // Auto-assinaturas (#22): um aviso por usuário, não por linha.
+      for (const [uid, issueId] of subscribedBy)
+         publishAutoSubscriptions(issueId, [uid], actorEmail);
+   }
    return result;
+
+   function progressOf(processed: number): ImportProgress {
+      return {
+         processed,
+         created: result.created,
+         updated: result.updated,
+         skipped: result.skipped,
+      };
+   }
+}
+
+/* ------------------------------ Job (#10) -------------------------------- */
+
+export type ImportJobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
+
+export interface ImportJobDto {
+   id: string;
+   teamId: string;
+   source: string;
+   status: ImportJobStatus;
+   total: number;
+   processed: number;
+   created: number;
+   updated: number;
+   skipped: number;
+   errors: { row: number; message: string }[];
+   error: string | null;
+   createdAt: string;
+   finishedAt: string | null;
+}
+
+/** Job `running` sem batimento há este tempo foi interrompido (pod reiniciou). */
+export const IMPORT_JOB_STALE_MS = 5 * 60_000;
+/** Intervalo mínimo entre gravações de progresso. */
+const PROGRESS_WRITE_MS = 500;
+/** Teto de erros por linha guardados no job. */
+const MAX_JOB_ERRORS = 200;
+
+/**
+ * Cria o job e dispara o processamento em background (#10). A validação é SÍNCRONA (400
+ * na hora, sem job); o resto roda fora da request. `finished` resolve quando o job
+ * termina (sucesso ou falha) — a rota ignora, os testes aguardam.
+ */
+export async function startImportJob(
+   db: Db,
+   input: CommitImportInput,
+   actorEmail: string
+): Promise<{ jobId: string; finished: Promise<void> }> {
+   const { rows } = await prepareImport(db, input, actorEmail);
+   const owner = await getOrCreateUser(db, actorEmail);
+   const jobId = randomUUID();
+   await db.insert(importJob).values({
+      id: jobId,
+      ownerId: owner.id,
+      teamId: input.teamId,
+      source: input.source,
+      status: 'queued',
+      total: rows.length,
+   });
+   // Fora do cache da request (que morre com a resposta): o job tem o seu.
+   const finished = withRequestCache(() => runImportJob(db, jobId, owner.id, input, actorEmail));
+   return { jobId, finished };
+}
+
+async function runImportJob(
+   db: Db,
+   jobId: string,
+   ownerId: string,
+   input: CommitImportInput,
+   actorEmail: string
+): Promise<void> {
+   try {
+      await db
+         .update(importJob)
+         .set({ status: 'running', updatedAt: new Date() })
+         .where(eq(importJob.id, jobId));
+      let lastWrite = 0;
+      const result = await commitImport(db, input, actorEmail, {
+         onProgress: async (p) => {
+            const now = Date.now();
+            if (now - lastWrite < PROGRESS_WRITE_MS) return;
+            lastWrite = now;
+            await db
+               .update(importJob)
+               .set({ ...p, updatedAt: new Date() })
+               .where(eq(importJob.id, jobId));
+         },
+      });
+      const now = new Date();
+      await db
+         .update(importJob)
+         .set({
+            status: 'succeeded',
+            processed: result.created + result.updated + result.skipped + result.errors.length,
+            created: result.created,
+            updated: result.updated,
+            skipped: result.skipped,
+            errors: result.errors.slice(0, MAX_JOB_ERRORS),
+            updatedAt: now,
+            finishedAt: now,
+         })
+         .where(eq(importJob.id, jobId));
+   } catch (e) {
+      const now = new Date();
+      await db
+         .update(importJob)
+         .set({
+            status: 'failed',
+            error: (e as Error).message || 'Falha no import',
+            updatedAt: now,
+            finishedAt: now,
+         })
+         .where(eq(importJob.id, jobId))
+         .catch(() => {});
+   } finally {
+      // Aviso ao DONO (só SSE): a tela de import relê o job na hora.
+      publishInternal({
+         entity: 'import',
+         action: 'updated',
+         id: jobId,
+         recipientId: ownerId,
+         teamId: input.teamId,
+      });
+   }
+}
+
+/** Job do DONO (outro usuário → null, vira 404 na rota). */
+export async function getImportJob(
+   db: Db,
+   id: string,
+   ownerId: string
+): Promise<ImportJobDto | null> {
+   const [row] = await db
+      .select()
+      .from(importJob)
+      .where(and(eq(importJob.id, id), eq(importJob.ownerId, ownerId))!)
+      .limit(1);
+   if (!row) return null;
+   const stale =
+      (row.status === 'running' || row.status === 'queued') &&
+      Date.now() - row.updatedAt.getTime() > IMPORT_JOB_STALE_MS;
+   return {
+      id: row.id,
+      teamId: row.teamId,
+      source: row.source,
+      status: stale ? 'failed' : (row.status as ImportJobStatus),
+      total: row.total,
+      processed: row.processed,
+      created: row.created,
+      updated: row.updated,
+      skipped: row.skipped,
+      errors: (row.errors as ImportJobDto['errors']) ?? [],
+      error: stale ? 'Import interrompido (o servidor reiniciou); rode de novo' : row.error,
+      createdAt: row.createdAt.toISOString(),
+      finishedAt: row.finishedAt ? row.finishedAt.toISOString() : null,
+   };
+}
+
+/**
+ * Job de import ATIVO do dono (queued/running com batimento recente), do mais novo para
+ * o mais velho. É o que devolve a tela de import ao progresso depois de sair dela (ad#5).
+ */
+export async function getActiveImportJob(db: Db, ownerId: string): Promise<ImportJobDto | null> {
+   const rows = await db
+      .select({ id: importJob.id })
+      .from(importJob)
+      .where(
+         and(
+            eq(importJob.ownerId, ownerId),
+            inArray(importJob.status, ['queued', 'running']),
+            gt(importJob.updatedAt, new Date(Date.now() - IMPORT_JOB_STALE_MS))
+         )!
+      )
+      .orderBy(desc(importJob.createdAt))
+      .limit(1);
+   if (rows.length === 0) return null;
+   return getImportJob(db, rows[0].id, ownerId);
 }

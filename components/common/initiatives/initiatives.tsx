@@ -2,7 +2,8 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { EmptyState } from '@/components/common/empty-state';
+import { LoadingArea } from '@/components/common/loading-area';
 import {
    Command,
    CommandEmpty,
@@ -23,7 +24,8 @@ import {
 import { cn } from '@/lib/utils';
 import { dayLabel } from '@/lib/initiative-period';
 import { Initiative, INITIATIVE_STATUS_META, InitiativeStatus } from '@/data/initiatives';
-import { health as allHealth } from '@/data/projects';
+import { health as allHealth, type Project } from '@/data/projects';
+import { isProjectCompleted } from '@/lib/project-completion';
 import { usePriorities } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
@@ -54,6 +56,8 @@ import { InlineNewInitiative } from './inline-new-initiative';
 import { InitiativeContextMenu } from './initiative-context-menu';
 import { InitiativeGlyph } from './initiative-glyph';
 import { useInlineInitiativeStore } from '@/store/inline-initiative-store';
+import { HEALTH_COLORS } from '@/components/common/palette';
+import { healthColor } from '@/components/common/projects/progress-colors';
 
 export const INITIATIVE_TABS = ['active', 'planned', 'all'] as const;
 
@@ -323,20 +327,26 @@ export function InitiativesDisplayOptions() {
 
 /* ---------------------------------- rows ---------------------------------- */
 
-const ACTIVE_DOT_COLORS: Record<string, string> = {
-   'no-update': '#95a2b3',
-   'on-track': '#4cb782',
-   'at-risk': '#f2c94c',
-   'off-track': '#eb5757',
-};
+/**
+ * Índice id→projeto memoizado pela referência do array do store: cada linha resolve
+ * só os SEUS projetos (O(k)) em vez de varrer todos (a lista era O(I×P)).
+ */
+const projectIndexCache = new WeakMap<Project[], Map<string, Project>>();
+function useLinkedProjects(projectIds: string[]): Project[] {
+   const allProjects = useWorkspaceStore((s) => s.projects);
+   return useMemo(() => {
+      let index = projectIndexCache.get(allProjects);
+      if (!index) {
+         index = new Map(allProjects.map((p) => [p.id, p]));
+         projectIndexCache.set(allProjects, index);
+      }
+      return projectIds.map((id) => index.get(id)).filter((p): p is Project => Boolean(p));
+   }, [allProjects, projectIds]);
+}
 
 function ActiveProjectDots({ initiative }: { initiative: Initiative }) {
-   // Deriva da fatia assinada: o getter devolve array NOVO a cada leitura, entao nao
-   // pode ir dentro do seletor (referencia nova = re-render infinito).
-   const allProjects = useWorkspaceStore((s) => s.projects);
-   const linked = new Set(initiative.projectIds);
-   const started = allProjects.filter(
-      (project) => linked.has(project.id) && project.status.category === 'started'
+   const started = useLinkedProjects(initiative.projectIds).filter(
+      (project) => project.status.category === 'started'
    );
    const byHealth = new Map<string, number>();
    for (const project of started) {
@@ -348,7 +358,7 @@ function ActiveProjectDots({ initiative }: { initiative: Initiative }) {
             <span key={healthId} className="inline-flex items-center gap-1 text-xs">
                <span
                   className="size-2 rounded-full"
-                  style={{ backgroundColor: ACTIVE_DOT_COLORS[healthId] ?? '#95a2b3' }}
+                  style={{ backgroundColor: HEALTH_COLORS[healthId] ?? HEALTH_COLORS['no-update'] }}
                />
                {count}
             </span>
@@ -367,15 +377,9 @@ function InitiativeRow({
    showStatus: boolean;
 }) {
    const { displayProperties } = useInitiativesDisplayStore();
-   // Deriva da fatia assinada: o getter devolve array NOVO a cada leitura, entao nao
-   // pode ir dentro do seletor (referencia nova = re-render infinito).
-   const allProjects = useWorkspaceStore((s) => s.projects);
-   const linkedIds = new Set(initiative.projectIds);
-   const projects = allProjects.filter((p) => linkedIds.has(p.id));
-   // Mesma regra do `countCompletedProjects` do store, derivada da fatia ja assinada.
-   const completed = projects.filter(
-      (p) => p.status.category === 'completed' || p.percentComplete >= 100
-   ).length;
+   const projects = useLinkedProjects(initiative.projectIds);
+   // Definição única de "concluído" (#41).
+   const completed = projects.filter(isProjectCompleted).length;
 
    return (
       <InitiativeContextMenu initiative={initiative}>
@@ -452,7 +456,7 @@ function InitiativeRow({
                      )}
                      style={
                         initiative.health.id !== 'no-update'
-                           ? { borderColor: initiative.health.color }
+                           ? { borderColor: healthColor(initiative.health.id) }
                            : undefined
                      }
                   />
@@ -580,61 +584,63 @@ export default function Initiatives() {
             </AnimatePresence>
 
             {displayed.length === 0 && !creating && !loaded ? (
-               // Hidratando → skeleton; o empty state "No initiatives yet" só depois
+               // Hidratando → loading; o empty state "No initiatives yet" só depois
                // que o workspace chegou (fim do flash no deep-link frio).
                <div className="py-4">
-                  <ListSkeleton rows={5} />
+                  <LoadingArea rows={5} />
                </div>
             ) : displayed.length === 0 && !creating ? (
-               <div className="flex flex-col items-center justify-center gap-4 py-24 text-center">
-                  <div className="flex size-12 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
-                     <Goal className="size-6" />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                     <p className="text-sm font-medium">
-                        {allInitiatives.length === 0
-                           ? 'No initiatives yet'
-                           : 'No initiatives match this view'}
-                     </p>
-                     <p className="max-w-xs text-sm text-muted-foreground">
-                        {allInitiatives.length === 0
-                           ? 'Initiatives group related projects toward a bigger goal.'
-                           : 'Try switching tabs or clearing the filters.'}
-                     </p>
-                  </div>
-                  {allInitiatives.length === 0 && (
-                     <Button size="sm" onClick={startCreate}>
-                        New initiative
-                     </Button>
-                  )}
-               </div>
-            ) : groups ? (
-               groups.map((group) => (
-                  <div key={group.statusId}>
-                     <div className="flex items-center gap-2 px-6 h-9 text-sm font-medium bg-[color-mix(in_oklab,var(--accent)_30%,var(--container))] border-b border-border/40">
-                        <InitiativeStatusIcon status={group.statusId} />
-                        {INITIATIVE_STATUS_META[group.statusId].label}
-                        <span className="text-xs text-muted-foreground">{group.items.length}</span>
-                     </div>
-                     {group.items.map((initiative) => (
-                        <InitiativeRow
-                           key={initiative.id}
-                           initiative={initiative}
-                           orgId={orgId}
-                           showStatus={showStatus}
-                        />
-                     ))}
-                  </div>
-               ))
-            ) : (
-               displayed.map((initiative) => (
-                  <InitiativeRow
-                     key={initiative.id}
-                     initiative={initiative}
-                     orgId={orgId}
-                     showStatus={showStatus}
+               allInitiatives.length === 0 ? (
+                  <EmptyState
+                     icon={Goal}
+                     title="No initiatives yet"
+                     description="Initiatives group related projects toward a bigger goal."
+                     action={
+                        <Button size="sm" onClick={startCreate}>
+                           New initiative
+                        </Button>
+                     }
                   />
-               ))
+               ) : (
+                  <EmptyState
+                     variant="filtered"
+                     title="No initiatives match this view"
+                     description="Try switching tabs or clearing the filters."
+                  />
+               )
+            ) : groups ? (
+               <div className="content-enter">
+                  {groups.map((group) => (
+                     <div key={group.statusId}>
+                        <div className="flex items-center gap-2 px-6 h-9 text-sm font-medium bg-[color-mix(in_oklab,var(--accent)_30%,var(--container))] border-b border-border/40">
+                           <InitiativeStatusIcon status={group.statusId} />
+                           {INITIATIVE_STATUS_META[group.statusId].label}
+                           <span className="text-xs text-muted-foreground">
+                              {group.items.length}
+                           </span>
+                        </div>
+                        {group.items.map((initiative) => (
+                           <InitiativeRow
+                              key={initiative.id}
+                              initiative={initiative}
+                              orgId={orgId}
+                              showStatus={showStatus}
+                           />
+                        ))}
+                     </div>
+                  ))}
+               </div>
+            ) : (
+               <div className="content-enter">
+                  {displayed.map((initiative) => (
+                     <InitiativeRow
+                        key={initiative.id}
+                        initiative={initiative}
+                        orgId={orgId}
+                        showStatus={showStatus}
+                     />
+                  ))}
+               </div>
             )}
          </div>
          {openPanel === 'initiatives-breakdown' && <InitiativesSidePanel initiatives={displayed} />}

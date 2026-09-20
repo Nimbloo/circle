@@ -41,11 +41,6 @@ describe('My issues › Assigned com colaborador (#96)', () => {
       const out = scopeMyIssues(all, 'assigned', ana.id, new Set());
       expect(out.map((i) => i.id)).toEqual(['B']);
    });
-
-   it('usa o conjunto do filtro servidor quando ele está disponível', () => {
-      const out = scopeMyIssues(all, 'assigned', ana.id, new Set(), undefined, new Set(['A']));
-      expect(out.map((i) => i.id)).toEqual(['A']);
-   });
 });
 
 describe('filtro Assignee casa qualquer responsável', () => {
@@ -74,7 +69,7 @@ describe('filtro Assignee casa qualquer responsável', () => {
 describe('issues-store — responsáveis', () => {
    it('updateIssueAssignee troca o principal e mantém colaboradores; envia o conjunto', async () => {
       const { api } = await import('@/lib/client');
-      useIssuesStore.setState({ issues: [collaborator], issuesByStatus: {} });
+      useIssuesStore.setState({ issues: [collaborator] });
 
       await useIssuesStore.getState().updateIssueAssignee('B', lia);
       const after = useIssuesStore.getState().getIssueById('B')!;
@@ -87,15 +82,5 @@ describe('issues-store — responsáveis', () => {
       const promoted = useIssuesStore.getState().getIssueById('B')!;
       expect(promoted.assignee?.id).toBe(ana.id);
       expect(promoted.assignees.map((a) => a.id)).toEqual([ana.id]);
-   });
-
-   it('filterByAssignee / filterIssues casam colaborador', () => {
-      useIssuesStore.setState({ issues: all, issuesByStatus: {} });
-      const s = useIssuesStore.getState();
-      expect(s.filterByAssignee(ana.id).map((i) => i.id)).toEqual(['B']);
-      expect(s.filterIssues({ assignee: [ana.id, 'unassigned'] }).map((i) => i.id)).toEqual([
-         'B',
-         'C',
-      ]);
    });
 });

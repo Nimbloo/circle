@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { appUser, userAvatar } from '@/db/schema';
+import { requestCacheClear } from './auth';
 import { ApiError } from './errors';
 import { publish } from './events';
 
@@ -120,6 +121,7 @@ export async function setAvatar(
       });
 
    const avatarUrl = avatarEndpoint(userId);
+   requestCacheClear();
    await db.update(appUser).set({ avatarUrl, updatedAt: now }).where(eq(appUser.id, userId));
    // A foto aparece na autoria e na atribuição da tela de todo mundo, não só na sua.
    publish({ entity: 'member', action: 'updated', id: userId });
@@ -149,6 +151,7 @@ export async function deleteAvatar(db: Db, userId: string): Promise<void> {
    if (rows.length === 0) throw new ApiError(404, 'Usuário não encontrado');
 
    await db.delete(userAvatar).where(eq(userAvatar.userId, userId));
+   requestCacheClear();
    await db
       .update(appUser)
       .set({ avatarUrl: null, updatedAt: new Date() })

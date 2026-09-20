@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { asc, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
@@ -69,6 +69,19 @@ export interface ProjectDetailDto {
    resources: ProjectResourceDto[];
    updates: ProjectUpdateDto[];
    activity: ProjectActivityDto[];
+   /**
+    * Versão opaca da descrição (#18, igual à da issue). O cliente a devolve em
+    * `expectedDescriptionVersion` no PATCH; se outra pessoa gravou no meio → 409.
+    */
+   descriptionVersion: string;
+}
+
+/** Hash do que está gravado (projeção + doc): o summary não entra, não gera conflito falso. */
+function descriptionVersionOf(description: string | null | undefined, doc: unknown): string {
+   return createHash('sha1')
+      .update(JSON.stringify([description ?? null, doc ?? null]))
+      .digest('hex')
+      .slice(0, 16);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -132,6 +145,15 @@ async function assertProject(db: Db, projectId: string): Promise<void> {
       .where(eq(projectT.id, projectId))
       .limit(1);
    if (rows.length === 0) throw new ApiError(404, `Project '${projectId}' não encontrado`);
+}
+
+async function projectTeamId(db: Db, projectId: string): Promise<string | undefined> {
+   const [row] = await db
+      .select({ teamId: projectT.teamId })
+      .from(projectT)
+      .where(eq(projectT.id, projectId))
+      .limit(1);
+   return row?.teamId;
 }
 
 async function loadUsers(db: Db, ids: string[]) {
@@ -269,6 +291,10 @@ export async function getProjectDetail(
       resources,
       updates,
       activity,
+      descriptionVersion: descriptionVersionOf(
+         detailRow[0]?.description,
+         detailRow[0]?.descriptionDoc
+      ),
    };
 }
 
@@ -282,6 +308,11 @@ export interface UpdateDetailInput {
    description?: ContentBlock[] | null;
    /** Doc do editor: grava o doc e DERIVA a projeção em blocos. Tem precedência. */
    descriptionDoc?: EditorDoc | null;
+   /**
+    * Concorrência otimista (#18), opcional: a `descriptionVersion` que o cliente viu.
+    * Divergiu do gravado → 409 (nada é gravado). Ausente → last-write-wins.
+    */
+   expectedDescriptionVersion?: string | null;
 }
 
 /** Upsert do summary/description em project_detail. Retorna o detalhe completo. */
@@ -306,17 +337,39 @@ export async function updateProjectDetail(
    }
 
    if (Object.keys(set).length > 0) {
-      await db
-         .insert(projectDetail)
-         .values({
-            projectId,
-            summary: set.summary ?? null,
-            description: set.description ?? null,
-            descriptionDoc: set.descriptionDoc ?? null,
-         })
-         .onConflictDoUpdate({ target: projectDetail.projectId, set });
+      await db.transaction(async (tx) => {
+         if (set.description !== undefined && patch.expectedDescriptionVersion) {
+            // Checagem e gravação atômicas: serializa escritas no mesmo projeto.
+            await tx
+               .select({ id: projectT.id })
+               .from(projectT)
+               .where(eq(projectT.id, projectId))
+               .for('update');
+            const [cur] = await tx
+               .select({ d: projectDetail.description, doc: projectDetail.descriptionDoc })
+               .from(projectDetail)
+               .where(eq(projectDetail.projectId, projectId))
+               .limit(1);
+            if (descriptionVersionOf(cur?.d, cur?.doc) !== patch.expectedDescriptionVersion)
+               throw new ApiError(409, 'A descrição foi alterada por outra pessoa');
+         }
+         await tx
+            .insert(projectDetail)
+            .values({
+               projectId,
+               summary: set.summary ?? null,
+               description: set.description ?? null,
+               descriptionDoc: set.descriptionDoc ?? null,
+            })
+            .onConflictDoUpdate({ target: projectDetail.projectId, set });
+      });
    }
-   publish({ entity: 'project', action: 'updated', id: projectId });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id: projectId,
+      teamId: await projectTeamId(db, projectId),
+   });
    return getProjectDetail(db, projectId);
 }
 
@@ -342,7 +395,12 @@ export async function addMilestone(
       targetDate: input.targetDate ?? null,
       completed: false,
    });
-   publish({ entity: 'project', action: 'updated', id: projectId });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id: projectId,
+      teamId: await projectTeamId(db, projectId),
+   });
    return {
       id,
       name: input.name.trim(),
@@ -381,7 +439,12 @@ export async function updateMilestone(
    if (Object.keys(set).length > 0) {
       await db.update(projectMilestone).set(set).where(eq(projectMilestone.id, milestoneId));
    }
-   publish({ entity: 'project', action: 'updated', id: rows[0].projectId });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id: rows[0].projectId,
+      teamId: await projectTeamId(db, rows[0].projectId),
+   });
    const m = { ...rows[0], ...set };
    return {
       id: m.id,
@@ -432,7 +495,12 @@ export async function deleteMilestone(
       await tx.update(issueT).set({ milestoneId: null }).where(eq(issueT.milestoneId, milestoneId));
       await tx.delete(projectMilestone).where(eq(projectMilestone.id, milestoneId));
    });
-   publish({ entity: 'project', action: 'updated', id: rows[0].projectId });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id: rows[0].projectId,
+      teamId: await projectTeamId(db, rows[0].projectId),
+   });
    return true;
 }
 
@@ -455,7 +523,12 @@ export async function addResource(
    await db
       .insert(projectResource)
       .values({ id, projectId, label: input.label.trim(), url: input.url.trim() });
-   publish({ entity: 'project', action: 'updated', id: projectId });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id: projectId,
+      teamId: await projectTeamId(db, projectId),
+   });
    return { id, label: input.label.trim(), url: input.url.trim() };
 }
 
@@ -478,7 +551,12 @@ export async function updateResource(
       .update(projectResource)
       .set({ label: input.label.trim() })
       .where(eq(projectResource.id, resourceId));
-   publish({ entity: 'project', action: 'updated', id: rows[0].projectId });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id: rows[0].projectId,
+      teamId: await projectTeamId(db, rows[0].projectId),
+   });
    return true;
 }
 
@@ -495,7 +573,125 @@ export async function deleteResource(
    if (rows.length === 0) return false;
    await assertChildOfProject(db, ctx, rows[0].projectId, 'Resource', resourceId);
    await db.delete(projectResource).where(eq(projectResource.id, resourceId));
-   publish({ entity: 'project', action: 'updated', id: rows[0].projectId });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id: rows[0].projectId,
+      teamId: await projectTeamId(db, rows[0].projectId),
+   });
+   return true;
+}
+
+/**
+ * Um update precisa dizer alguma coisa (pl#11): bloco nenhum, ou só espaço em branco,
+ * é update vazio — recusado no post e na edição.
+ */
+export function updateHasContent(blocks: ContentBlock[] | undefined): boolean {
+   return (blocks ?? []).some((block) => {
+      if ('text' in block && typeof block.text === 'string') return block.text.trim() !== '';
+      if ('items' in block && Array.isArray(block.items))
+         return block.items.some((item) =>
+            typeof item === 'string' ? item.trim() !== '' : item.text.trim() !== ''
+         );
+      if (block.type === 'code') return block.code.trim() !== '';
+      return block.type !== 'divider';
+   });
+}
+
+/**
+ * Health do projeto = health do ÚLTIMO update (paridade Linear). Recalculado depois de
+ * editar ou excluir um update; sem update nenhum volta para `no-update`.
+ */
+async function syncProjectHealthFromUpdates(tx: Db, projectId: string): Promise<void> {
+   const [latest] = await tx
+      .select({ health: projectUpdate.health, createdAt: projectUpdate.createdAt })
+      .from(projectUpdate)
+      .where(eq(projectUpdate.projectId, projectId))
+      .orderBy(desc(projectUpdate.createdAt))
+      .limit(1);
+   await tx
+      .update(projectT)
+      .set({
+         healthId: latest ? latest.health : 'no-update',
+         healthUpdatedAt: latest ? latest.createdAt : null,
+      })
+      .where(eq(projectT.id, projectId));
+}
+
+export interface EditUpdateInput {
+   health?: ProjectUpdateHealth;
+   blocks?: ContentBlock[];
+}
+
+/** Edita um update do projeto e repropaga o health quando ele é o mais recente. */
+export async function editProjectUpdate(
+   db: Db,
+   projectId: string,
+   updateId: string,
+   input: EditUpdateInput,
+   actorEmail?: string
+): Promise<ProjectUpdateDto> {
+   if (actorEmail) await assertCanWriteProject(db, actorEmail, projectId);
+   const [row] = await db
+      .select()
+      .from(projectUpdate)
+      .where(eq(projectUpdate.id, updateId))
+      .limit(1);
+   if (!row || row.projectId !== projectId)
+      throw new ApiError(404, `Update '${updateId}' não encontrado`);
+   if (input.health && !UPDATE_HEALTHS.includes(input.health))
+      throw new ApiError(400, 'health inválido');
+   const blocks = input.blocks ?? parseBlocks(row.blocks);
+   if (!updateHasContent(blocks)) throw new ApiError(400, 'update sem conteúdo');
+   const health = input.health ?? (row.health as ProjectUpdateHealth);
+
+   await db.transaction(async (tx) => {
+      await tx
+         .update(projectUpdate)
+         .set({ health, blocks: JSON.stringify(blocks) })
+         .where(eq(projectUpdate.id, updateId));
+      await syncProjectHealthFromUpdates(tx as unknown as Db, projectId);
+   });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id: projectId,
+      teamId: await projectTeamId(db, projectId),
+   });
+   const users = await loadUsers(db, [row.authorId]);
+   return {
+      id: row.id,
+      author: userRef(users.get(row.authorId)),
+      health,
+      blocks,
+      createdAt: iso(row.createdAt),
+   };
+}
+
+/** Exclui um update do projeto; o health volta ao do update anterior (ou `no-update`). */
+export async function deleteProjectUpdate(
+   db: Db,
+   projectId: string,
+   updateId: string,
+   actorEmail?: string
+): Promise<boolean> {
+   if (actorEmail) await assertCanWriteProject(db, actorEmail, projectId);
+   const [row] = await db
+      .select({ id: projectUpdate.id, projectId: projectUpdate.projectId })
+      .from(projectUpdate)
+      .where(eq(projectUpdate.id, updateId))
+      .limit(1);
+   if (!row || row.projectId !== projectId) return false;
+   await db.transaction(async (tx) => {
+      await tx.delete(projectUpdate).where(eq(projectUpdate.id, updateId));
+      await syncProjectHealthFromUpdates(tx as unknown as Db, projectId);
+   });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id: projectId,
+      teamId: await projectTeamId(db, projectId),
+   });
    return true;
 }
 
@@ -515,25 +711,34 @@ export async function postProjectUpdate(
    await assertProject(db, projectId);
    if (actorEmail) await assertCanWriteProject(db, actorEmail, projectId);
    if (!UPDATE_HEALTHS.includes(input.health)) throw new ApiError(400, 'health inválido');
+   if (!updateHasContent(input.blocks)) throw new ApiError(400, 'update sem conteúdo');
    const id = randomUUID();
    const now = new Date();
-   await db.insert(projectUpdate).values({
-      id,
-      projectId,
-      authorId,
-      health: input.health,
-      blocks: JSON.stringify(input.blocks ?? []),
-      createdAt: now,
-   });
    // Paridade Linear: o health do projeto vem do ÚLTIMO update. Os valores do update
    // (on-track/at-risk/off-track) são exatamente ids do catálogo health, então propaga
-   // direto — antes o update era registrado mas o health do projeto não mudava.
-   await db
-      .update(projectT)
-      .set({ healthId: input.health, healthUpdatedAt: now })
-      .where(eq(projectT.id, projectId));
+   // direto. Update e health na mesma transação (falha no meio não deixa os dois
+   // divergentes).
+   await db.transaction(async (tx) => {
+      await tx.insert(projectUpdate).values({
+         id,
+         projectId,
+         authorId,
+         health: input.health,
+         blocks: JSON.stringify(input.blocks ?? []),
+         createdAt: now,
+      });
+      await tx
+         .update(projectT)
+         .set({ healthId: input.health, healthUpdatedAt: now })
+         .where(eq(projectT.id, projectId));
+   });
    const users = await loadUsers(db, [authorId]);
-   publish({ entity: 'project', action: 'updated', id: projectId });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id: projectId,
+      teamId: await projectTeamId(db, projectId),
+   });
    return {
       id,
       author: userRef(users.get(authorId)),

@@ -26,16 +26,17 @@ import {
    AlertDialogFooter,
    AlertDialogHeader,
    AlertDialogTitle,
+   useLatchedTarget,
 } from '@/components/ui/alert-dialog';
-import { api } from '@/lib/client';
+import { api, ApiError } from '@/lib/client';
 import { cn } from '@/lib/utils';
-import { ApiError } from '@/lib/api/errors';
 import type { StatusCategory } from '@/data/status';
 import { useCatalogStore, useStatuses } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { errorReason } from '@/lib/error-reason';
 import { SettingsShell } from './shared';
 
 const CATEGORY_GROUPS: { label: string; categories: StatusCategory[] }[] = [
@@ -99,8 +100,8 @@ function StatusDialog({
          onOpenChange(false);
          onSaved();
          toast.success(editing ? 'Status atualizado' : 'Status criado');
-      } catch {
-         toast.error('Não foi possível salvar o status');
+      } catch (err) {
+         toast.error(errorReason(err, 'Não foi possível salvar o status'));
       } finally {
          setBusy(false);
       }
@@ -166,6 +167,10 @@ export default function ProjectStatusesSettings() {
    const [editing, setEditing] = useState<EditStatus | null>(null);
    const [dialogCategory, setDialogCategory] = useState<StatusCategory>('backlog');
    const [toDelete, setToDelete] = useState<EditStatus | null>(null);
+   const toDeleteLatched = useLatchedTarget(toDelete);
+   // Separado de `toDelete` (ad#4): fechar não pode esvaziar o nome no título durante a
+   // animação de saída — só zera o alvo ao abrir um novo.
+   const [deleteOpen, setDeleteOpen] = useState(false);
    const [deleteBusy, setDeleteBusy] = useState(false);
    /** Índice arrastado, escopado ao grupo — não se reordena entre categorias. */
    const [drag, setDrag] = useState<{ group: string; index: number } | null>(null);
@@ -194,8 +199,8 @@ export default function ProjectStatusesSettings() {
       try {
          useCatalogStore.getState().setStatuses(await api.statuses.reorder(ids));
          toast.success('Ordem atualizada');
-      } catch {
-         toast.error('Não foi possível reordenar');
+      } catch (err) {
+         toast.error(errorReason(err, 'Não foi possível reordenar'));
       }
    };
 
@@ -215,14 +220,14 @@ export default function ProjectStatusesSettings() {
       try {
          await api.statuses.remove(toDelete.id);
          useCatalogStore.getState().removeStatus(toDelete.id);
-         setToDelete(null);
+         setDeleteOpen(false);
          toast.success('Status excluído');
       } catch (e) {
          // 409 = status em uso (mensagem específica do backend)
          const msg =
             e instanceof ApiError && e.status === 409
                ? 'Status em uso — reatribua as issues/projetos antes de excluir.'
-               : 'Não foi possível excluir o status';
+               : errorReason(e, 'Não foi possível excluir o status');
          toast.error(msg);
       } finally {
          setDeleteBusy(false);
@@ -234,7 +239,7 @@ export default function ProjectStatusesSettings() {
          title="Issue statuses"
          description="Os estágios do workflow das issues (por categoria). Vale para todo o workspace. Projetos têm seus próprios status (Backlog/Planned/In Progress/Completed/Canceled)."
       >
-         <div className="rounded-lg border bg-container overflow-hidden">
+         <div className="overflow-hidden rounded-[10px] bg-card">
             {CATEGORY_GROUPS.map((group) => {
                const items = statuses.filter((s) => group.categories.includes(s.category));
                return (
@@ -315,14 +320,15 @@ export default function ProjectStatusesSettings() {
                                     variant="ghost"
                                     className="size-7 text-destructive hover:text-destructive"
                                     aria-label="Excluir status"
-                                    onClick={() =>
+                                    onClick={() => {
                                        setToDelete({
                                           id: s.id,
                                           name: s.name,
                                           color: s.color,
                                           category: s.category,
-                                       })
-                                    }
+                                       });
+                                       setDeleteOpen(true);
+                                    }}
                                  >
                                     <Trash2 className="size-3.5" />
                                  </Button>
@@ -343,10 +349,10 @@ export default function ProjectStatusesSettings() {
             onSaved={() => undefined}
          />
 
-         <AlertDialog open={!!toDelete} onOpenChange={(v) => !v && setToDelete(null)}>
+         <AlertDialog open={deleteOpen} onOpenChange={(v) => !deleteBusy && setDeleteOpen(v)}>
             <AlertDialogContent>
                <AlertDialogHeader>
-                  <AlertDialogTitle>Excluir status “{toDelete?.name}”?</AlertDialogTitle>
+                  <AlertDialogTitle>Excluir status “{toDeleteLatched?.name}”?</AlertDialogTitle>
                   <AlertDialogDescription>
                      Só é possível excluir status que não estejam em uso por nenhuma issue, projeto
                      ou template.

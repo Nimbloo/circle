@@ -4,7 +4,7 @@ import { Issue } from '@/data/issues';
 import { StatusCategory } from '@/data/status';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
-import { useIssuesStore } from '@/store/issues-store';
+import { selectIssuesLoading, useIssuesStore } from '@/store/issues-store';
 import { applyIssueFilters } from './issue-filter-columns';
 import { IssueFilterBar } from './issue-filter-bar';
 import { useRightPanelStore } from '@/store/right-panel-store';
@@ -15,6 +15,7 @@ import { useMemo } from 'react';
 import { GroupedIssuesView } from './grouped-issues-view';
 import dynamic from 'next/dynamic';
 import { SearchIssues } from './search-issues';
+import { SidePanelSlot } from '@/components/common/detail-side-panel';
 
 // Code-split: o painel de insights (pesado, com gráficos) só renderiza quando aberto
 // (openPanel === 'insights'). dynamic() tira o chunk do bundle da página core.
@@ -37,7 +38,7 @@ export default function AllIssues({ categories }: AllIssuesProps) {
    const { filters } = useFilterStore();
    // Selectors granulares: só re-renderiza quando o campo lido muda (não o store inteiro).
    const issues = useIssuesStore((s) => s.issues);
-   const loading = useIssuesStore((s) => s.loading);
+   const loading = useIssuesStore(selectIssuesLoading);
    const error = useIssuesStore((s) => s.error);
    const hydrate = useIssuesStore((s) => s.hydrate);
    const { openPanel } = useRightPanelStore();
@@ -60,14 +61,16 @@ export default function AllIssues({ categories }: AllIssuesProps) {
    const scopedIssues = useMemo<Issue[]>(() => {
       let list = teamId ? issues.filter((issue) => issue.teamId === teamId) : issues;
       if (categories) list = list.filter((issue) => categories.includes(issue.status.category));
-      // Snooze de triage (paridade Linear): issue em triage adiada some da fila até vencer.
-      const now = Date.now();
-      list = list.filter(
-         (issue) =>
-            issue.status.category !== 'triage' ||
-            !issue.snoozedUntil ||
-            new Date(issue.snoozedUntil).getTime() <= now
-      );
+      // Snooze de triage (paridade Linear): issue em triage adiada some SÓ da fila de
+      // triage até vencer (is#23: aplicava sempre, e a issue sumia também de "All
+      // issues", sem jeito de ver/desfazer — o context menu já tem "Remover snooze",
+      // mas só ajuda se a issue continuar visível em algum lugar).
+      if (categories?.includes('triage')) {
+         const now = Date.now();
+         list = list.filter(
+            (issue) => !issue.snoozedUntil || new Date(issue.snoozedUntil).getTime() <= now
+         );
+      }
       return list;
    }, [issues, categories, teamId]);
 
@@ -102,11 +105,15 @@ export default function AllIssues({ categories }: AllIssuesProps) {
                />
             </div>
 
-            {openPanel === 'insights' && (
-               <aside className="hidden lg:flex w-[420px] shrink-0 border-l h-full overflow-hidden bg-container">
-                  <InsightsPanel issues={displayedIssues} />
-               </aside>
-            )}
+            <SidePanelSlot
+               open={openPanel === 'insights'}
+               width={420}
+               label="Insights"
+               className="hidden lg:flex"
+               panelClassName="border-l bg-container"
+            >
+               <InsightsPanel issues={displayedIssues} />
+            </SidePanelSlot>
          </div>
       </div>
    );

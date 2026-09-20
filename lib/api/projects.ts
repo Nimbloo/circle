@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { eq, inArray, count, and, notInArray, sql } from 'drizzle-orm';
+import { eq, inArray, count, and, notInArray, ne, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    project as projectT,
@@ -27,6 +27,7 @@ import { getOrCreateUser } from './users';
 import type { UserRef } from './issues';
 import { teamDescendantIds } from './hierarchy';
 import { assertCanWriteProject, assertCanWriteTeam, assertTeamInScope } from './scope';
+import { publishInitiativeRollups } from './initiatives';
 
 type ProjectRow = typeof projectT.$inferSelect;
 type StatusRow = typeof statusT.$inferSelect;
@@ -212,29 +213,9 @@ export async function listProjects(db: Db, opts: ListProjectsOptions = {}): Prom
            .from(projectT)
            .where(and(...predicates))
       : await db.select().from(projectT);
-   let dtos = await assemble(db, rows, maps);
-
-   if (opts.tab === 'active' || opts.includeClosed === false) {
-      dtos = dtos.filter((d) => !CLOSED_CATEGORIES.has(d.status.category));
-   }
-   if (opts.health?.length) {
-      const set = new Set(opts.health);
-      dtos = dtos.filter((d) => set.has(d.health.id));
-   }
-   if (opts.priority?.length) {
-      const set = new Set(opts.priority);
-      dtos = dtos.filter((d) => set.has(d.priority.id));
-   }
-   // Sub-times (#100): a lista do time pai inclui os projetos dos filhos.
-   if (opts.team) {
-      const expanded = new Set(await teamDescendantIds(db, [opts.team]));
-      dtos = dtos.filter((d) => expanded.has(d.teamId));
-   }
-   if (opts.teamIds) {
-      const scope = new Set(opts.teamIds);
-      dtos = dtos.filter((d) => scope.has(d.teamId));
-   }
-   if (opts.initiative) dtos = dtos.filter((d) => d.initiativeId === opts.initiative);
+   // Filtros (escopo, sub-times, health, priority, initiative, fechados) já vão no SQL
+   // acima — sem refiltrar em memória nem expandir os sub-times duas vezes.
+   const dtos = await assemble(db, rows, maps);
 
    const dir = opts.dir === 'desc' ? -1 : 1;
    const by = opts.sort ?? 'title';
@@ -320,7 +301,8 @@ export async function createProject(
             .onConflictDoNothing();
       }
    });
-   publish({ entity: 'project', action: 'created', id });
+   publish({ entity: 'project', action: 'created', id, teamId: input.teamId });
+   if (input.initiativeId) await publishInitiativeRollups(db, [input.initiativeId]);
    return (await getProject(db, id))!;
 }
 
@@ -337,6 +319,8 @@ export interface UpdateProjectInput {
    initiativeId?: string | null;
    /** Move o projeto para outro time (as issues do projeto NÃO mudam de time). */
    teamId?: string;
+   /** Substitui o conjunto de labels do projeto (pl#2). */
+   labelIds?: string[];
 }
 
 /** Rótulos legíveis dos campos, para o feed de atividade do projeto. */
@@ -350,6 +334,7 @@ const PROJECT_FIELD_LABELS: Partial<Record<keyof UpdateProjectInput, string>> = 
    targetDate: 'target date',
    initiativeId: 'initiative',
    teamId: 'team',
+   labelIds: 'labels',
 };
 
 export async function updateProject(
@@ -359,7 +344,12 @@ export async function updateProject(
    actorEmail?: string
 ): Promise<ProjectDto | null> {
    const existing = await db
-      .select({ id: projectT.id, healthId: projectT.healthId })
+      .select({
+         id: projectT.id,
+         healthId: projectT.healthId,
+         teamId: projectT.teamId,
+         initiativeId: projectT.initiativeId,
+      })
       .from(projectT)
       .where(eq(projectT.id, id))
       .limit(1);
@@ -376,6 +366,27 @@ export async function updateProject(
          .limit(1);
       if (found.length === 0) throw new ApiError(400, `team '${patch.teamId}' inválido`);
       if (scope) assertTeamInScope(scope.teamIds, patch.teamId);
+      if (patch.teamId !== existing[0].teamId) {
+         const [foreignIssue] = await db
+            .select({ id: issueT.id })
+            .from(issueT)
+            .where(and(eq(issueT.projectId, id), ne(issueT.teamId, patch.teamId)))
+            .limit(1);
+         if (foreignIssue)
+            throw new ApiError(
+               409,
+               'Não é possível trocar o time de um projeto com issues de outro time'
+            );
+      }
+   }
+
+   const labelIds = patch.labelIds ? [...new Set(patch.labelIds)] : undefined;
+   if (labelIds?.length) {
+      const found = await db
+         .select({ id: labelT.id })
+         .from(labelT)
+         .where(inArray(labelT.id, labelIds));
+      if (found.length !== labelIds.length) throw new ApiError(400, 'label inválida');
    }
 
    // Resolvido ANTES da transação: o ator exige consulta própria, e consultar `db` de
@@ -406,6 +417,14 @@ export async function updateProject(
       set.healthUpdatedAt = new Date();
    await db.transaction(async (tx) => {
       await tx.update(projectT).set(set).where(eq(projectT.id, id));
+      if (labelIds) {
+         await tx.delete(projectLabel).where(eq(projectLabel.projectId, id));
+         if (labelIds.length) {
+            await tx
+               .insert(projectLabel)
+               .values(labelIds.map((labelId) => ({ projectId: id, labelId })));
+         }
+      }
       // Reconciliação initiative↔project: substitui o vínculo antigo pelo novo.
       if (patch.initiativeId !== undefined) {
          await tx.delete(initiativeProject).where(eq(initiativeProject.projectId, id));
@@ -429,13 +448,29 @@ export async function updateProject(
          });
       }
    });
-   publish({ entity: 'project', action: 'updated', id });
+   publish({
+      entity: 'project',
+      action: 'updated',
+      id,
+      teamId: patch.teamId ?? existing[0].teamId,
+   });
+   // Status/progresso/vínculo mudam o rollup das initiatives (antiga e nova) (#41).
+   if (
+      patch.statusId !== undefined ||
+      patch.percentComplete !== undefined ||
+      patch.initiativeId !== undefined
+   ) {
+      await publishInitiativeRollups(db, [
+         existing[0].initiativeId,
+         patch.initiativeId !== undefined ? patch.initiativeId : null,
+      ]);
+   }
    return getProject(db, id);
 }
 
 export async function deleteProject(db: Db, id: string, actorEmail?: string): Promise<boolean> {
    const existing = await db
-      .select({ id: projectT.id })
+      .select({ id: projectT.id, teamId: projectT.teamId, initiativeId: projectT.initiativeId })
       .from(projectT)
       .where(eq(projectT.id, id))
       .limit(1);
@@ -443,7 +478,10 @@ export async function deleteProject(db: Db, id: string, actorEmail?: string): Pr
    if (actorEmail) await assertCanWriteProject(db, actorEmail, id);
    await db.transaction(async (tx) => {
       // issue.projectId é RESTRICT e nullable: desvincula em vez de deletar as issues.
-      await tx.update(issueT).set({ projectId: null }).where(eq(issueT.projectId, id));
+      await tx
+         .update(issueT)
+         .set({ projectId: null, milestoneId: null })
+         .where(eq(issueT.projectId, id));
       await tx.delete(projectLabel).where(eq(projectLabel.projectId, id));
       await tx.delete(projectUpdate).where(eq(projectUpdate.projectId, id));
       await tx.delete(projectActivity).where(eq(projectActivity.projectId, id));
@@ -457,6 +495,7 @@ export async function deleteProject(db: Db, id: string, actorEmail?: string): Pr
       await tx.delete(projectSnapshot).where(eq(projectSnapshot.projectId, id));
       await tx.delete(projectT).where(eq(projectT.id, id));
    });
-   publish({ entity: 'project', action: 'deleted', id });
+   publish({ entity: 'project', action: 'deleted', id, teamId: existing[0].teamId });
+   await publishInitiativeRollups(db, [existing[0].initiativeId]);
    return true;
 }

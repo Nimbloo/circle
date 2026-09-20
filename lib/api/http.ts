@@ -2,11 +2,12 @@ import { gzip } from 'node:zlib';
 import { promisify } from 'node:util';
 import { z } from 'zod';
 import { db } from '@/db';
-import { identityFromRequest } from './auth';
-import { assertActiveEmail, getOrCreateUser } from './users';
+import { identityFromRequest, withRequestCache } from './auth';
+import { getOrCreateUser } from './users';
 import { problem } from './response';
 import { ApiError } from './errors';
 import { captureServerError } from './observe-error';
+import { CLIENT_ID_HEADER, runWithEventOrigin } from './events';
 import { observeHttp, routePattern } from '@/lib/metrics';
 import { REQUEST_ID_HEADER, currentTraceId, logError, logRequest, requestIdFrom } from './log';
 import type { IssueListOptions } from './issues';
@@ -24,8 +25,9 @@ export async function requireEmail(req?: Request): Promise<string> {
    // Máquina (Bearer do Keycloak): o papel do token manda no `app_user`, igual ao login
    // humano. Sem isto, um service account com role `guest` agiria como o `Member` que
    // ficou gravado no provisionamento da primeira chamada.
-   if (id.machineRole) await getOrCreateUser(db, id.email, id.machineRole, { syncRole: true });
-   await assertActiveEmail(db, id.email);
+   await getOrCreateUser(db, id.email, id.machineRole ?? 'Member', {
+      syncRole: Boolean(id.machineRole),
+   });
    return id.email;
 }
 
@@ -41,6 +43,8 @@ function titleFor(status: number): string {
          return 'Not Found';
       case 409:
          return 'Conflict';
+      case 413:
+         return 'Payload Too Large';
       case 502:
          return 'Bad Gateway';
       case 503:
@@ -180,12 +184,17 @@ export async function handle(fn: () => Promise<Response>, req?: Request): Promis
    const method = req?.method ?? 'UNKNOWN';
    let res: Response;
    try {
-      res = await fn();
+      // Aba de origem (If#16): os eventos publicados na request carregam o `clientId`.
+      res = await runWithEventOrigin(req?.headers.get(CLIENT_ID_HEADER), () =>
+         withRequestCache(fn)
+      );
    } catch (e) {
       if (e instanceof ApiError) {
          res = problem(e.status, titleFor(e.status), e.message);
       } else if (e instanceof z.ZodError) {
          res = problem(400, 'Bad Request', 'Payload inválido', { errors: e.flatten() });
+      } else if (e instanceof SyntaxError) {
+         res = problem(400, 'Bad Request', 'Payload inválido');
       } else {
          const dbMapped = mapDbError(e);
          if (dbMapped) {
@@ -202,6 +211,7 @@ export async function handle(fn: () => Promise<Response>, req?: Request): Promis
          }
       }
    }
+   res = await withProblemRequestId(res, requestId);
    const compressed = await compressJson(res, req);
    const durationMs = Date.now() - start;
    observeHttp(method, compressed.status, durationMs / 1000, route);
@@ -220,6 +230,19 @@ export async function handle(fn: () => Promise<Response>, req?: Request): Promis
       traceId: currentTraceId(),
    });
    return out;
+}
+
+async function withProblemRequestId(res: Response, requestId: string): Promise<Response> {
+   if (!res.headers.get('content-type')?.startsWith('application/problem+json')) return res;
+   try {
+      const body = JSON.parse(await res.text()) as Record<string, unknown>;
+      body.requestId = requestId;
+      const headers = new Headers(res.headers);
+      headers.delete('content-length');
+      return new Response(JSON.stringify(body), { status: res.status, headers });
+   } catch {
+      return res;
+   }
 }
 
 /** Lê um parâmetro multivalorado: repetido (?x=a&x=b) ou CSV (?x=a,b). */

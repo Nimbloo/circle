@@ -10,8 +10,9 @@ import {
 } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import { useDetailPanelStore, type DetailPanelKind } from '@/store/detail-panel-store';
+import { MOTION_MS } from '@/lib/motion';
 import { PanelRight, PanelRightClose, PanelRightOpen } from 'lucide-react';
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { create } from 'zustand';
 
 /**
@@ -42,19 +43,27 @@ export function DetailPanelContainer({
    );
 }
 
-/** Classes responsivas por layout — a única diferença entre os dois modos. */
+/**
+ * Classes responsivas por layout — a única diferença entre os dois modos. `aside` mostra o
+ * painel; `open` é a largura do aside aberto (fechado ele vai a `w-0`, animado pelo
+ * `.motion-panel`) e `content` a largura FIXA do conteúdo, que não reflui na animação.
+ */
 const LAYOUT_CLASSES: Record<
    DetailPanelLayout,
-   { aside: string; trigger: string; toggle: string }
+   { aside: string; open: string; content: string; trigger: string; toggle: string }
 > = {
    viewport: {
-      aside: 'w-[400px] xl:flex',
+      aside: 'xl:flex',
+      open: 'w-[400px]',
+      content: 'w-[400px]',
       trigger: 'xl:hidden',
       toggle: 'xl:inline-flex',
    },
    // Larguras dos degraus medidos no Linear: 16rem (@3xl) → 20rem (@5xl) → 400px (@7xl).
    container: {
-      aside: '@3xl:flex @3xl:w-64 @5xl:w-80 @7xl:w-[400px]',
+      aside: '@3xl:flex',
+      open: '@3xl:w-64 @5xl:w-80 @7xl:w-[400px]',
+      content: 'w-64 @5xl:w-80 @7xl:w-[400px]',
       trigger: '@3xl:hidden',
       toggle: '@3xl:inline-flex',
    },
@@ -89,6 +98,7 @@ interface DetailSidePanelProps {
    title: string;
    description?: string;
    children: ReactNode;
+   /** Classes do contêiner do conteúdo (largura fixa, `flex`). */
    className?: string;
 }
 
@@ -98,6 +108,11 @@ interface DetailSidePanelProps {
  * quando fechado; no mobile vira um Sheet aberto pelo `DetailSidePanelTrigger`. O estado
  * aberto/fechado do desktop é o `detail-panel-store` (por tipo, persistido). Dentro de
  * um `DetailPanelContainer` os degraus são do container, não do viewport.
+ *
+ * O `aside` fica SEMPRE montado: abrir/fechar anima a largura (0 ↔ 400 px, 200 ms,
+ * `.motion-panel`) e o conteúdo, com largura fixa, desliza sem refluir nem remontar
+ * (sem refetch nem pulo ao reabrir). Fechado, sai da árvore acessível (`aria-hidden` +
+ * `inert`).
  */
 export function DetailSidePanel({
    kind,
@@ -123,18 +138,27 @@ export function DetailSidePanel({
             </SheetContent>
          </Sheet>
 
-         {open && (
-            <aside
-               aria-label={title}
+         <aside
+            aria-label={title}
+            aria-hidden={open ? undefined : true}
+            inert={!open}
+            data-state={open ? 'open' : 'closed'}
+            className={cn(
+               'motion-panel hidden h-full shrink-0 overflow-hidden',
+               LAYOUT_CLASSES[layout].aside,
+               open ? LAYOUT_CLASSES[layout].open : 'w-0'
+            )}
+         >
+            <div
                className={cn(
-                  'hidden h-full shrink-0 overflow-hidden pl-1',
-                  LAYOUT_CLASSES[layout].aside,
+                  'flex h-full shrink-0 pl-1',
+                  LAYOUT_CLASSES[layout].content,
                   className
                )}
             >
                {children}
-            </aside>
-         )}
+            </div>
+         </aside>
       </>
    );
 }
@@ -186,5 +210,56 @@ export function DetailPanelToggle({ kind }: { kind: DetailPanelKind }) {
       >
          {open ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
       </Button>
+   );
+}
+
+/**
+ * Painel lateral de lista (insights, breakdowns): mesma animação de largura do
+ * `DetailSidePanel` (`.motion-panel`, 0 ↔ `width` px em 200 ms) com o conteúdo em largura
+ * fixa. Diferente dele, o conteúdo só existe aberto — e durante a saída, até a largura
+ * chegar a 0 —, porque painéis como o de insights recalculam sobre a lista inteira.
+ * `className` vai no aside (ex.: `hidden lg:flex`); `panelClassName`, no conteúdo (borda,
+ * fundo): no aside fechado a borda deixaria uma linha de 1 px.
+ */
+export function SidePanelSlot({
+   open,
+   width,
+   label,
+   className,
+   panelClassName,
+   children,
+}: {
+   open: boolean;
+   width: number;
+   label?: string;
+   className?: string;
+   panelClassName?: string;
+   children: ReactNode;
+}) {
+   const [present, setPresent] = useState(open);
+   if (open && !present) setPresent(true);
+
+   useEffect(() => {
+      if (open || !present) return;
+      const timer = setTimeout(() => setPresent(false), MOTION_MS.modal);
+      return () => clearTimeout(timer);
+   }, [open, present]);
+
+   return (
+      <aside
+         data-slot="side-panel-slot"
+         data-state={open ? 'open' : 'closed'}
+         aria-label={label}
+         aria-hidden={open ? undefined : true}
+         inert={!open}
+         className={cn('motion-panel h-full shrink-0 overflow-hidden', className)}
+         style={{ width: open ? width : 0 }}
+      >
+         {present && (
+            <div className={cn('flex h-full shrink-0', panelClassName)} style={{ width }}>
+               {children}
+            </div>
+         )}
+      </aside>
    );
 }

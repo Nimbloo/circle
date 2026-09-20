@@ -24,11 +24,20 @@ export async function GET(req: Request, { params }: Params) {
 }
 
 const UpdateSchema = z.object({
-   name: z.string().min(1).optional(),
+   name: z
+      .string()
+      .trim()
+      .min(1, 'name é obrigatório')
+      .max(96, 'name deve ter no máximo 96 caracteres')
+      .optional(),
    status: z.enum(['planned', 'upcoming', 'current', 'completed']).optional(),
-   startDate: z.string().min(1).optional(),
-   endDate: z.string().min(1).optional(),
-   capacity: z.number().int().min(0).optional(),
+   startDate: z.string().trim().min(1).optional(),
+   endDate: z.string().trim().min(1).optional(),
+   capacity: z
+      .number({ invalid_type_error: 'capacity deve ser um inteiro maior ou igual a zero' })
+      .int('capacity deve ser um inteiro maior ou igual a zero')
+      .min(0, 'capacity deve ser um inteiro maior ou igual a zero')
+      .optional(),
 });
 
 export async function PATCH(req: Request, { params }: Params) {

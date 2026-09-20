@@ -360,3 +360,64 @@ describe('dismiss e ciclo de vida', () => {
       expect(await db.select().from(issueT).where(eq(issueT.id, target.id))).toEqual([]);
    });
 });
+
+describe('fila e accept sob carga (#28, Co#16)', () => {
+   it('fila resolve as duplicatas de todas as sugestões numa consulta só (sem N+1)', async () => {
+      const db = await setup();
+      const dup = await newTriageIssue(db, 'Login quebrado no Safari');
+      bedrockDown();
+      const ids: string[] = [];
+      for (let i = 0; i < 6; i++)
+         ids.push((await newTriageIssue(db, `Login quebrado no Safari ${i}`)).id);
+      // Deixa as gerações de fundo assentarem e fixa a duplicata de cada card.
+      await listTeamTriageSuggestions(db, 'CORE', { wait: true });
+      for (const id of ids) {
+         await db
+            .update(issueTriageSuggestion)
+            .set({ payload: { duplicates: [{ issueId: dup.id, reason: 'x' }], labelIds: [] } })
+            .where(eq(issueTriageSuggestion.issueId, id));
+      }
+      const spy = vi.spyOn(db, 'select');
+      const list = await listTeamTriageSuggestions(db, 'CORE');
+      const withDup = list.filter((s) => ids.includes(s.issueId));
+      expect(withDup).toHaveLength(6);
+      expect(withDup.every((s) => s.duplicates.some((d) => d.identifier === dup.identifier))).toBe(
+         true
+      );
+      // statuses + fila + sugestões + duplicatas: não cresce com o número de cards.
+      expect(spy.mock.calls.length).toBeLessThanOrEqual(4);
+      spy.mockRestore();
+   });
+
+   it('dois Accepts simultâneos: um aplica, o outro recebe 409, sem efeito duplicado', async () => {
+      const db = await setup();
+      const target = await newTriageIssue(db, 'Aceite concorrente');
+      agentMocks.invokeText.mockResolvedValue(
+         JSON.stringify({
+            teamId: 'DESIGN',
+            priorityId: 'high',
+            labelIds: ['bug'],
+            duplicates: [],
+            summary: '',
+         })
+      );
+      await generateTriageSuggestion(db, target.id, { force: true });
+
+      const results = await Promise.allSettled([
+         acceptTriageSuggestion(db, target.id, ANA),
+         acceptTriageSuggestion(db, target.id, ANA),
+      ]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      const rejected = results.find((r) => r.status === 'rejected') as PromiseRejectedResult;
+      expect(String(rejected.reason)).toMatch(/já aplicada/);
+
+      const acts = await db
+         .select()
+         .from(activityEvent)
+         .where(and(eq(activityEvent.issueId, target.id), eq(activityEvent.event, 'triage')));
+      expect(acts).toHaveLength(1);
+      // Mover de time uma vez só: identifier DESIGN-1, não DESIGN-2.
+      const after = (await getIssue(db, target.id))!;
+      expect(after.identifier).toBe('DESIGN-1');
+   });
+});

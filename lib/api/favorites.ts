@@ -5,6 +5,7 @@ import { favorite, issue as issueT, project as projectT, savedView } from '@/db/
 import { visibleTeamIds } from './scope';
 import { getOrCreateUser } from './users';
 import { ApiError } from './errors';
+import { publish } from './events';
 
 export type FavoriteEntityType = 'issue' | 'project' | 'view';
 const ENTITY_TYPES: FavoriteEntityType[] = ['issue', 'project', 'view'];
@@ -140,7 +141,38 @@ export async function addFavorite(
       .values({ id: randomUUID(), userId: user.id, entityType, entityId, position: nextPos })
       .onConflictDoNothing()
       .returning({ id: favorite.id });
+   // Outras abas/dispositivos do MESMO usuário atualizam a sidebar (só o dono recebe).
+   if (res.length > 0)
+      publish({ entity: 'favorite', action: 'created', id: entityId, recipientId: user.id });
    return { added: res.length > 0 };
+}
+
+/**
+ * Reordena os favoritos do usuario (co#16): `ids` na ordem desejada; os que ficaram de
+ * fora (ou nao sao do usuario) mantem a ordem atual, depois dos enviados.
+ */
+export async function reorderFavorites(
+   db: Db,
+   userEmail: string,
+   ids: string[]
+): Promise<{ reordered: number }> {
+   const user = await getOrCreateUser(db, userEmail);
+   const rows = await db
+      .select({ id: favorite.id })
+      .from(favorite)
+      .where(eq(favorite.userId, user.id))
+      .orderBy(asc(favorite.position), asc(favorite.createdAt));
+   const own = new Set(rows.map((r) => r.id));
+   const wanted = ids.filter((id) => own.has(id));
+   const order = [...wanted, ...rows.map((r) => r.id).filter((id) => !wanted.includes(id))];
+   await Promise.all(
+      order.map((id, index) =>
+         db.update(favorite).set({ position: index }).where(eq(favorite.id, id))
+      )
+   );
+   if (wanted.length > 0)
+      publish({ entity: 'favorite', action: 'updated', id: user.id, recipientId: user.id });
+   return { reordered: wanted.length };
 }
 
 export async function removeFavorite(
@@ -161,5 +193,7 @@ export async function removeFavorite(
          )
       )
       .returning({ id: favorite.id });
+   if (res.length > 0)
+      publish({ entity: 'favorite', action: 'deleted', id: entityId, recipientId: user.id });
    return { removed: res.length > 0 };
 }

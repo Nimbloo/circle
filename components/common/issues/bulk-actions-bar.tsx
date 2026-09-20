@@ -24,7 +24,9 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { usePriorities, useStatuses } from '@/store/catalog-store';
 import { useBulkSelectionStore } from '@/store/bulk-selection-store';
-import { useIssuesStore } from '@/store/issues-store';
+import { ISSUE_MUTATION_TOAST, useIssuesStore } from '@/store/issues-store';
+import { activeUsers } from '@/data/users';
+import { useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { BarChart3, CircleDot, Trash2, User as UserIcon, X } from 'lucide-react';
@@ -37,7 +39,8 @@ import { toast } from 'sonner';
 export function BulkActionsBar() {
    const selected = useBulkSelectionStore((s) => s.selected);
    const clear = useBulkSelectionStore((s) => s.clear);
-   const users = useWorkspaceStore((s) => s.users);
+   const allUsers = useWorkspaceStore((s) => s.users);
+   const users = useMemo(() => activeUsers(allUsers), [allUsers]);
    const allStatus = useStatuses();
    const priorities = usePriorities();
    const { updateIssueStatus, updateIssuePriority, updateIssueAssignee, deleteIssue } =
@@ -49,17 +52,28 @@ export function BulkActionsBar() {
             deleteIssue: s.deleteIssue,
          }))
       );
+   // Popover aberto (controlado): escolher uma opção fecha o seletor.
+   const [open, setOpen] = useState<'status' | 'priority' | 'assignee' | null>(null);
+   const openProps = (key: 'status' | 'priority' | 'assignee') => ({
+      open: open === key,
+      onOpenChange: (next: boolean) => setOpen(next ? key : null),
+   });
 
    const ids = [...selected];
    if (ids.length === 0) return null;
 
-   // Toasta sucesso SÓ quando TODAS as mutações confirmam (Promise.all). O store já
-   // faz rollback + toast.error por issue na falha (fonte única) → sem toast de sucesso
-   // enganoso quando parte do lote falha.
+   // UM toast por lote (#30): sucesso só quando todas confirmam; com falha, um erro
+   // agregado com o mesmo id do toast do store (as falhas por issue colapsam nele).
    const withToast = (ps: Promise<void>[], msg: string) => {
-      void Promise.all(ps)
-         .then(() => toast.success(msg))
-         .catch(() => {});
+      setOpen(null);
+      void Promise.allSettled(ps).then((results) => {
+         const failed = results.filter((r) => r.status === 'rejected').length;
+         if (failed === 0) toast.success(msg);
+         else
+            toast.error(`Falha em ${failed} de ${results.length} issues`, {
+               id: ISSUE_MUTATION_TOAST,
+            });
+      });
    };
 
    const applyStatus = (statusId: string) => {
@@ -99,11 +113,11 @@ export function BulkActionsBar() {
 
    return (
       <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
-         <div className="pointer-events-auto flex items-center gap-1 rounded-lg border bg-container shadow-lg px-2 py-1.5">
+         <div className="motion-rise pointer-events-auto flex items-center gap-1 rounded-lg border bg-container shadow-lg px-2 py-1.5">
             <span className="px-2 text-sm font-medium tabular-nums">{ids.length} selected</span>
             <span className="w-px h-5 bg-border mx-1" />
 
-            <Popover>
+            <Popover {...openProps('status')}>
                <PopoverTrigger asChild>
                   <Button size="xs" variant="ghost">
                      <CircleDot className="size-4" /> Status
@@ -131,7 +145,7 @@ export function BulkActionsBar() {
                </PopoverContent>
             </Popover>
 
-            <Popover>
+            <Popover {...openProps('priority')}>
                <PopoverTrigger asChild>
                   <Button size="xs" variant="ghost">
                      <BarChart3 className="size-4" /> Priority
@@ -159,7 +173,7 @@ export function BulkActionsBar() {
                </PopoverContent>
             </Popover>
 
-            <Popover>
+            <Popover {...openProps('assignee')}>
                <PopoverTrigger asChild>
                   <Button size="xs" variant="ghost">
                      <UserIcon className="size-4" /> Assignee

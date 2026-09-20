@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useNotificationsStore } from '@/store/notifications-store';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useNotificationsStore, type InboxNotification } from '@/store/notifications-store';
+import { useIssuesStore } from '@/store/issues-store';
 import { Button } from '@/components/ui/button';
 import {
    DropdownMenu,
@@ -27,13 +28,16 @@ import {
    Bell,
    CheckCheck,
    CheckIcon,
-   ChevronLeft,
+   Inbox as InboxIcon,
    ChevronRight,
    ListFilter,
    MoreHorizontal,
    SlidersHorizontal,
 } from 'lucide-react';
 import { getNotificationIcon } from '@/lib/notification-utils';
+import { EmptyState } from '@/components/common/empty-state';
+import { ErrorState } from '@/components/common/error-state';
+import { LoadingArea } from '@/components/common/loading-area';
 import type { NotificationType } from '@/data/inbox';
 import NotificationPreview from './issue-preview';
 import IssueLine from './issue-line';
@@ -47,6 +51,15 @@ import {
    useInboxLayoutStore,
 } from '@/store/inbox-layout-store';
 import type { ImperativePanelHandle } from 'react-resizable-panels';
+import { useNow } from '@/lib/relative-time';
+import { isTypingTarget, hasOpenOverlay } from '@/lib/keyboard-guard';
+import { findShortcut } from '@/lib/shortcuts';
+import { CircleLoading } from '@/components/common/circle-loading';
+
+/** Duracao da saida de linha (colapso), alinhada ao `transition` da `IssueLine`. */
+const ROW_EXIT_MS = 150;
+/** Parametro da notificacao aberta na URL (mobile: o "voltar" do navegador fecha). */
+const SELECTED_PARAM = 'n';
 
 /** Rótulos legíveis dos tipos de notificação para o filtro (ordem do Linear). */
 const TYPE_LABELS: { value: NotificationType; label: string }[] = [
@@ -61,22 +74,128 @@ const TYPE_LABELS: { value: NotificationType; label: string }[] = [
    { value: 'upload', label: 'Upload' },
 ];
 
+/**
+ * Linhas do inbox. O mapa identifier→status (vivo) é montado UMA vez por evento aqui —
+ * cada linha fazia `issues.find` por identifier (O(linhas × issues)). Só este bloco
+ * assina as issues; as linhas são `memo` e só a que mudou re-renderiza.
+ */
+function NotificationRows({
+   items,
+   selectedId,
+   leaving,
+   showId,
+   showStatusIcon,
+   onOpen,
+   onSnooze,
+}: {
+   items: { item: InboxNotification; isSnoozed: boolean }[];
+   selectedId: string | undefined;
+   leaving: ReadonlySet<string>;
+   showId: boolean;
+   showStatusIcon: boolean;
+   onOpen: (notification: InboxNotification) => void;
+   onSnooze: (id: string, until: string) => void;
+}) {
+   const issues = useIssuesStore((s) => s.issues);
+   const unsnooze = useNotificationsStore((s) => s.unsnooze);
+   // Um tick por minuto para a lista toda: o "2m" anda sem re-hidratar.
+   const now = useNow();
+   const statusByIdentifier = useMemo(
+      () => new Map(issues.map((issue) => [issue.identifier, issue.status.id])),
+      [issues]
+   );
+
+   return items.map(({ item: notification, isSnoozed }) =>
+      isSnoozed ? (
+         <IssueLine
+            key={notification.id}
+            notification={notification}
+            now={now}
+            statusId={statusByIdentifier.get(notification.identifier)}
+            onUnsnooze={unsnooze}
+            showId={showId}
+            showStatusIcon={showStatusIcon}
+         />
+      ) : (
+         <IssueLine
+            key={notification.id}
+            notification={notification}
+            now={now}
+            statusId={statusByIdentifier.get(notification.identifier)}
+            isSelected={selectedId === notification.id}
+            leaving={leaving.has(notification.id)}
+            onOpen={onOpen}
+            onSnooze={onSnooze}
+            showId={showId}
+            showStatusIcon={showStatusIcon}
+         />
+      )
+   );
+}
+
 export default function Inbox() {
-   const {
-      notifications,
-      selectedNotification,
-      setSelectedNotification,
-      markAsRead,
-      markAsUnread,
-      markAllAsRead,
-      snooze,
-      unsnooze,
-      snoozed,
-      hydrateSnoozed,
-      getUnreadNotifications,
-   } = useNotificationsStore();
+   // Seletores estreitos (não o store inteiro).
+   const notifications = useNotificationsStore((s) => s.notifications);
+   const snoozed = useNotificationsStore((s) => s.snoozed);
+   const selectedNotification = useNotificationsStore((s) => s.selectedNotification);
+   const loaded = useNotificationsStore((s) => s.loaded);
+   const setSelectedNotification = useNotificationsStore((s) => s.setSelectedNotification);
+   const markAsRead = useNotificationsStore((s) => s.markAsRead);
+   const markAsUnread = useNotificationsStore((s) => s.markAsUnread);
+   const markAllAsRead = useNotificationsStore((s) => s.markAllAsRead);
+   const hydrateSnoozed = useNotificationsStore((s) => s.hydrateSnoozed);
+   const snooze = useNotificationsStore((s) => s.snooze);
+   const removeNotification = useNotificationsStore((s) => s.remove);
+   const hasMore = useNotificationsStore((s) => s.hasMore);
+   const loadingMore = useNotificationsStore((s) => s.loadingMore);
+   const loadMore = useNotificationsStore((s) => s.loadMore);
+   // "Mark all as read" segue a contagem do servidor (a lista é capada — #19).
+   const unreadCount = useNotificationsStore((s) => s.unreadCount);
 
    const isMobile = useIsMobile();
+   const mobileRef = useRef(isMobile);
+   mobileRef.current = isMobile;
+   /** O preview aberto no mobile empilhou uma entrada no historico (o voltar a desfaz). */
+   const pushedRef = useRef(false);
+
+   const openNotification = useCallback(
+      (notification: InboxNotification) => {
+         setSelectedNotification(notification);
+         // Padrão Linear: abrir a notificação já a marca como lida.
+         if (!notification.read) markAsRead(notification.id);
+         // Mobile (co#10): a selecao vai para a URL — o "voltar" do navegador volta a
+         // lista em vez de sair do inbox (antes caia em about:blank).
+         if (mobileRef.current && typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            const had = url.searchParams.has(SELECTED_PARAM);
+            url.searchParams.set(SELECTED_PARAM, notification.id);
+            if (had) window.history.replaceState(window.history.state, '', url);
+            else {
+               window.history.pushState(window.history.state, '', url);
+               pushedRef.current = true;
+            }
+         }
+      },
+      [setSelectedNotification, markAsRead]
+   );
+
+   // Voltar do navegador (mobile): sem o parametro na URL, fecha o preview.
+   useEffect(() => {
+      const onPop = () => {
+         if (new URLSearchParams(window.location.search).has(SELECTED_PARAM)) return;
+         pushedRef.current = false;
+         setSelectedNotification(undefined);
+      };
+      window.addEventListener('popstate', onPop);
+      return () => window.removeEventListener('popstate', onPop);
+   }, [setSelectedNotification]);
+
+   const closePreview = useCallback(() => {
+      if (pushedRef.current) window.history.back();
+      else setSelectedNotification(undefined);
+   }, [setSelectedNotification]);
+
+   const loadError = useNotificationsStore((s) => s.loadError);
    const desktopContainerRef = useRef<HTMLDivElement>(null);
    const listPanelRef = useRef<ImperativePanelHandle>(null);
    const [desktopWidth, setDesktopWidth] = useState(0);
@@ -131,9 +250,12 @@ export default function Inbox() {
    // novo + re-sort — a cada render, re-renderizando toda a lista de notificações).
    // Com "Show snoozed" ligado, as adiadas entram na mesma lista (flag isSnoozed) e
    // participam da mesma ordenação — padrão Linear, sem aba separada.
+   const selectedId = selectedNotification?.id;
    const filteredNotifications = useMemo(() => {
       const matches = (notification: (typeof notifications)[number]) => {
-         if (!showRead && notification.read) return false;
+         // A aberta fica na lista mesmo lida (co#2): abrir marca lida, e com "Show read"
+         // desligado ela sumia e o j/k voltava ao topo.
+         if (!showRead && notification.read && notification.id !== selectedId) return false;
          if (typeFilter.size > 0 && !typeFilter.has(notification.type)) return false;
          return true;
       };
@@ -151,7 +273,131 @@ export default function Inbox() {
             ? new Date(b.item.sortAt).getTime() - new Date(a.item.sortAt).getTime()
             : new Date(a.item.sortAt).getTime() - new Date(b.item.sortAt).getTime();
       });
-   }, [notifications, snoozed, showSnoozed, showRead, showUnreadFirst, ordering, typeFilter]);
+   }, [
+      notifications,
+      snoozed,
+      showSnoozed,
+      showRead,
+      showUnreadFirst,
+      ordering,
+      typeFilter,
+      selectedId,
+   ]);
+
+   // Filtro só com os tipos que existem nas notificações carregadas (+ os já marcados):
+   // a lista fixa oferecia tipos que o servidor nunca gera.
+   const availableTypes = useMemo(() => {
+      const present = new Set<NotificationType>([...notifications, ...snoozed].map((n) => n.type));
+      return TYPE_LABELS.filter((t) => present.has(t.value) || typeFilter.has(t.value));
+   }, [notifications, snoozed, typeFilter]);
+
+   // Saida de linha (adiar/excluir): colapsa ~150 ms e so entao sai do store.
+   const [leaving, setLeaving] = useState<ReadonlySet<string>>(() => new Set());
+   const exitThen = useCallback((id: string, action: () => void) => {
+      setLeaving((prev) => new Set(prev).add(id));
+      setTimeout(() => {
+         action();
+         setLeaving((prev) => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+         });
+      }, ROW_EXIT_MS);
+   }, []);
+
+   const navRef = useRef({ filteredNotifications, selectedId });
+   navRef.current = { filteredNotifications, selectedId };
+
+   /** Abre a vizinha da que vai sair da lista (a de baixo; senao a de cima). */
+   const advanceFrom = useCallback(
+      (id: string) => {
+         const openable = navRef.current.filteredNotifications
+            .filter((r) => !r.isSnoozed)
+            .map((r) => r.item);
+         const index = openable.findIndex((n) => n.id === id);
+         const next = openable[index + 1] ?? openable[index - 1];
+         if (next && index !== -1) openNotification(next);
+         else setSelectedNotification(undefined);
+      },
+      [openNotification, setSelectedNotification]
+   );
+
+   const snoozeRow = useCallback(
+      (id: string, until: string) => {
+         if (navRef.current.selectedId === id) advanceFrom(id);
+         exitThen(id, () => snooze(id, until));
+      },
+      [advanceFrom, exitThen, snooze]
+   );
+
+   const deleteRow = useCallback(
+      (id: string) => {
+         if (navRef.current.selectedId === id) advanceFrom(id);
+         exitThen(id, () => void removeNotification(id).catch(() => {}));
+      },
+      [advanceFrom, exitThen, removeNotification]
+   );
+
+   // Menu de adiar do cabecalho do preview (tecla H).
+   const [snoozeMenuOpen, setSnoozeMenuOpen] = useState(false);
+
+   // Rola a selecionada para a vista (co#1): j/k passavam da borda da lista.
+   const listRef = useRef<HTMLDivElement>(null);
+   useEffect(() => {
+      if (!selectedId) return;
+      const id = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(selectedId) : selectedId;
+      listRef.current
+         ?.querySelector<HTMLElement>('[data-notification-id="' + id + '"]')
+         ?.scrollIntoView({ block: 'nearest' });
+   }, [selectedId]);
+
+   // Teclado (paridade Linear), da tabela unica: j/k andam, U lida/nao lida, H adia,
+   // Backspace exclui. Inativo digitando ou com dialog/menu aberto.
+   useEffect(() => {
+      const onKeyDown = (event: KeyboardEvent) => {
+         if (event.defaultPrevented) return;
+         if (isTypingTarget(event.target) || hasOpenOverlay()) return;
+         const shortcut = findShortcut('inbox', event);
+         if (!shortcut) return;
+         const { filteredNotifications: rows, selectedId: current } = navRef.current;
+         const openable = rows.filter((r) => !r.isSnoozed).map((r) => r.item);
+         const selected = openable.find((n) => n.id === current);
+         if (shortcut.id === 'inbox.next' || shortcut.id === 'inbox.prev') {
+            if (openable.length === 0) return;
+            const step = shortcut.id === 'inbox.next' ? 1 : -1;
+            const index = openable.findIndex((n) => n.id === current);
+            const nextIndex =
+               index === -1 ? 0 : Math.min(openable.length - 1, Math.max(0, index + step));
+            event.preventDefault();
+            openNotification(openable[nextIndex]);
+            return;
+         }
+         if (!selected) return;
+         event.preventDefault();
+         if (shortcut.id === 'inbox.toggle-read') {
+            if (selected.read) markAsUnread(selected.id);
+            else markAsRead(selected.id);
+         } else if (shortcut.id === 'inbox.snooze') {
+            setSnoozeMenuOpen(true);
+         } else if (shortcut.id === 'inbox.delete') {
+            deleteRow(selected.id);
+         }
+      };
+      window.addEventListener('keydown', onKeyDown);
+      return () => window.removeEventListener('keydown', onKeyDown);
+   }, [openNotification, markAsRead, markAsUnread, deleteRow]);
+
+   // Carregar mais ao chegar no fim da lista (o botao segue como fallback).
+   const sentinelRef = useRef<HTMLDivElement>(null);
+   useEffect(() => {
+      const el = sentinelRef.current;
+      if (!el || !hasMore || typeof IntersectionObserver === 'undefined') return;
+      const observer = new IntersectionObserver((entries) => {
+         if (entries.some((e) => e.isIntersecting)) void loadMore();
+      });
+      observer.observe(el);
+      return () => observer.disconnect();
+   }, [hasMore, loadMore]);
 
    const listPane = (
       <>
@@ -173,10 +419,7 @@ export default function Inbox() {
                      </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-52">
-                     <DropdownMenuItem
-                        onClick={markAllAsRead}
-                        disabled={getUnreadNotifications().length === 0}
-                     >
+                     <DropdownMenuItem onClick={markAllAsRead} disabled={unreadCount === 0}>
                         <CheckCheck className="size-4 text-muted-foreground" />
                         Mark all as read
                      </DropdownMenuItem>
@@ -237,7 +480,7 @@ export default function Inbox() {
                               </CommandGroup>
                            ) : (
                               <CommandGroup>
-                                 {TYPE_LABELS.map((type) => (
+                                 {availableTypes.map((type) => (
                                     <CommandItem
                                        key={type.value}
                                        onSelect={() => toggleType(type.value)}
@@ -360,57 +603,92 @@ export default function Inbox() {
                </DropdownMenu>
             </div>
          </div>
-         <div className="flex h-[calc(100%-44px)] w-full flex-col items-center justify-start overflow-y-auto py-2">
-            {filteredNotifications.length === 0 && isMobile && (
-               <div className="h-full w-full">
-                  <NotificationPreview />
+         <div
+            ref={listRef}
+            className="flex h-[calc(100%-44px)] w-full flex-col items-center justify-start overflow-y-auto py-2"
+         >
+            {filteredNotifications.length === 0 &&
+               (!loaded ? (
+                  <div className="w-full">
+                     <LoadingArea rows={6} />
+                  </div>
+               ) : loadError && notifications.length === 0 ? (
+                  <ErrorState
+                     title="Couldn't load notifications"
+                     description="Check your connection and try again."
+                     className="my-auto min-h-0"
+                     action={
+                        <Button
+                           variant="outline"
+                           size="sm"
+                           onClick={() => void useNotificationsStore.getState().hydrate()}
+                        >
+                           Try again
+                        </Button>
+                     }
+                  />
+               ) : notifications.length > 0 || snoozed.length > 0 ? (
+                  <EmptyState
+                     variant="filtered"
+                     title="No notifications match"
+                     description="Try adjusting the filter or display options."
+                     className="my-auto"
+                  />
+               ) : (
+                  <EmptyState
+                     variant="activity"
+                     icon={InboxIcon}
+                     title="No notifications"
+                     description="You're all caught up."
+                     className="my-auto"
+                  />
+               ))}
+            {filteredNotifications.length > 0 && (
+               <div className="content-enter w-full">
+                  <NotificationRows
+                     items={filteredNotifications}
+                     selectedId={selectedNotification?.id}
+                     leaving={leaving}
+                     showId={showId}
+                     showStatusIcon={showStatusIcon}
+                     onOpen={openNotification}
+                     onSnooze={snoozeRow}
+                  />
                </div>
             )}
-            {filteredNotifications.length > 0 &&
-               filteredNotifications.map(({ item: notification, isSnoozed }) =>
-                  isSnoozed ? (
-                     <IssueLine
-                        key={notification.id}
-                        notification={notification}
-                        onUnsnooze={() => unsnooze(notification.id)}
-                        showId={showId}
-                        showStatusIcon={showStatusIcon}
-                     />
-                  ) : (
-                     <IssueLine
-                        key={notification.id}
-                        notification={notification}
-                        isSelected={selectedNotification?.id === notification.id}
-                        onClick={() => {
-                           setSelectedNotification(notification);
-                           // Padrão Linear: abrir a notificação já a marca como lida.
-                           if (!notification.read) markAsRead(notification.id);
-                        }}
-                        onSnooze={(hours) => snooze(notification.id, hours)}
-                        showId={showId}
-                        showStatusIcon={showStatusIcon}
-                     />
-                  )
-               )}
+            {/* Paginacao por cursor (co#3): o inbox mostrava so as 100 mais recentes. */}
+            {loaded && hasMore && (
+               <div ref={sentinelRef} className="flex w-full justify-center py-2">
+                  <Button
+                     variant="ghost"
+                     size="xs"
+                     aria-label="Load more"
+                     disabled={loadingMore}
+                     onClick={() => void loadMore()}
+                     className="text-muted-foreground"
+                  >
+                     {loadingMore ? <CircleLoading size="sm" inline /> : 'Load more'}
+                  </Button>
+               </div>
+            )}
          </div>
       </>
    );
 
    if (isMobile) {
+      // Um cabecalho so (co#10): o "voltar" vai no header do preview (eram 88 px).
       return selectedNotification ? (
          <div className="flex flex-col h-full w-full">
-            <button
-               onClick={() => setSelectedNotification(undefined)}
-               className="flex h-11 shrink-0 items-center gap-1 border-b border-border px-4 text-sm text-muted-foreground hover:text-foreground"
-            >
-               <ChevronLeft className="size-4" />
-               Inbox
-            </button>
             <div className="flex-1 min-h-0">
                <NotificationPreview
                   notification={selectedNotification}
                   onMarkAsRead={markAsRead}
                   onMarkAsUnread={markAsUnread}
+                  onSnooze={snoozeRow}
+                  onDelete={deleteRow}
+                  snoozeMenuOpen={snoozeMenuOpen}
+                  onSnoozeMenuOpenChange={setSnoozeMenuOpen}
+                  onBack={closePreview}
                />
             </div>
          </div>
@@ -456,6 +734,10 @@ export default function Inbox() {
                      notification={selectedNotification}
                      onMarkAsRead={markAsRead}
                      onMarkAsUnread={markAsUnread}
+                     onSnooze={snoozeRow}
+                     onDelete={deleteRow}
+                     snoozeMenuOpen={snoozeMenuOpen}
+                     onSnoozeMenuOpenChange={setSnoozeMenuOpen}
                   />
                </section>
             </ResizablePanel>

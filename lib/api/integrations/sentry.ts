@@ -10,6 +10,7 @@ import {
 } from '@/db/schema';
 import { createIssue, getIssueByIdentifier } from '../issues';
 import { ApiError } from '../errors';
+import { publish } from '../events';
 
 /**
  * Integração Sentry → Circle (Integration Platform, UI component `issue-link`).
@@ -75,10 +76,13 @@ async function ensureSentryLabel(db: Db): Promise<string> {
       .where(eq(labelT.id, LABEL_ID))
       .limit(1);
    if (existing.length === 0) {
-      await db
+      const created = await db
          .insert(labelT)
          .values({ id: LABEL_ID, name: 'Sentry', color: 'red' })
-         .onConflictDoNothing();
+         .onConflictDoNothing()
+         .returning({ id: labelT.id });
+      // Label nova entra no catálogo dos clientes abertos (#12).
+      if (created.length > 0) publish({ entity: 'label', action: 'created', id: LABEL_ID });
    }
    return LABEL_ID;
 }

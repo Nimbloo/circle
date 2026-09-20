@@ -142,7 +142,7 @@ describe('cycles', () => {
       expect((await getCycleByStatus(db, 'CORE', 'upcoming'))?.id).toBe('c2');
    });
 
-   it('creates a cycle auto-numbering by team, defaults to planned', async () => {
+   it('creates a cycle auto-numbering by team, defaults to upcoming', async () => {
       const db = await setup(); // já tem c1 (n=1) e c2 (n=2)
       const created = await createCycle(db, {
          teamId: 'CORE',
@@ -151,12 +151,59 @@ describe('cycles', () => {
          endDate: '2026-02-11',
       });
       expect(created.number).toBe(3);
-      expect(created.status).toBe('planned');
+      expect(created.status).toBe('upcoming');
       expect(created.capacity).toBe(0);
       expect(created.scope).toBe(0);
 
       const cycles = await listCyclesByTeam(db, 'CORE');
       expect(cycles[0].number).toBe(3); // ordenado por número desc
+   });
+
+   it('rejects an overlapping cycle and identifies the existing cycle', async () => {
+      const db = await setup();
+
+      await expect(
+         createCycle(db, {
+            teamId: 'CORE',
+            name: 'Sobreposto',
+            startDate: '2026-01-10',
+            endDate: '2026-01-20',
+         })
+      ).rejects.toMatchObject({
+         status: 409,
+         message: expect.stringContaining('Cycle 1'),
+      });
+   });
+
+   it('rejects an overlapping date update', async () => {
+      const db = await setup();
+
+      await expect(
+         updateCycle(db, 'c2', { startDate: '2026-01-10', endDate: '2026-01-20' })
+      ).rejects.toMatchObject({ status: 409 });
+   });
+
+   it('rejects a negative capacity in the service with a clear message', async () => {
+      const db = await setup();
+
+      await expect(
+         createCycle(db, {
+            teamId: 'CORE',
+            name: 'Capacity',
+            startDate: '2026-03-01',
+            endDate: '2026-03-14',
+            capacity: -1,
+         })
+      ).rejects.toMatchObject({
+         status: 400,
+         message: 'capacity deve ser um inteiro maior ou igual a zero',
+      });
+   });
+
+   it('reads a completed cycle by id', async () => {
+      const db = await setup();
+      await updateCycle(db, 'c1', { status: 'completed' });
+      expect(await getCycle(db, 'c1')).toMatchObject({ id: 'c1', status: 'completed' });
    });
 
    it('rejects create for a missing team', async () => {
@@ -173,6 +220,8 @@ describe('cycles', () => {
 
    it('updates status and dates', async () => {
       const db = await setup();
+      // Um current por time (#35): conclui o c1 antes de promover o c2.
+      await updateCycle(db, 'c1', { status: 'completed' });
       const updated = await updateCycle(db, 'c2', {
          status: 'current',
          startDate: '2026-02-01',

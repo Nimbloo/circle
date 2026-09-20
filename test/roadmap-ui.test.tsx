@@ -2,7 +2,7 @@
 
 import './setup-dom';
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RoadmapDto } from '@/lib/client';
 import Roadmap from '@/components/common/roadmap/roadmap';
@@ -22,8 +22,11 @@ vi.mock('@/lib/client', () => ({
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
+const push = vi.hoisted(() => vi.fn());
+
 vi.mock('next/navigation', () => ({
    useParams: () => ({ orgId: 'nimbloo' }),
+   useRouter: () => ({ push }),
 }));
 
 const MOTHER = makeProject({ id: 'p-mother', name: 'Design system' });
@@ -115,6 +118,7 @@ const RENDER_GROUPS: RoadmapRenderGroup[] = [
 
 beforeEach(() => {
    apiMocks.roadmap.mockReset();
+   push.mockClear();
    useWorkspaceStore.setState({ projects: [MOTHER, CHILD, LOOSE], loaded: true });
    useRoadmapDisplayStore.setState({
       zoom: 'quarter',
@@ -212,6 +216,53 @@ describe('Roadmap — marcos, setas e alerta de dependência (#102)', () => {
    });
 });
 
+describe('Roadmap — abrir o projeto e navegação (pl#10)', () => {
+   const renderTimeline = (props: Partial<React.ComponentProps<typeof RoadmapTimeline>> = {}) =>
+      render(
+         <RoadmapTimeline
+            groups={RENDER_GROUPS}
+            milestones={[]}
+            dependencies={[]}
+            zoom="quarter"
+            showDependencies
+            showMilestones
+            showProjectList
+            {...props}
+         />
+      );
+
+   it('clicar na barra (sem arrastar) navega para o projeto', () => {
+      renderTimeline();
+      fireEvent.pointerDown(screen.getByTestId('roadmap-bar-p-mother'), {
+         pointerId: 1,
+         button: 0,
+      });
+      fireEvent.pointerUp(screen.getByTestId('roadmap-bar-p-mother'), { pointerId: 1, button: 0 });
+      expect(push).toHaveBeenCalledWith('/nimbloo/project/p-mother/overview');
+   });
+
+   it('clicar no nome na lista fixa também navega para o projeto', () => {
+      renderTimeline();
+      const button = screen
+         .getAllByText('Icon set')
+         .map((el) => el.closest('button'))
+         .find((el) => el && !el.dataset.testid?.startsWith('roadmap-bar-'));
+      fireEvent.click(button!);
+      expect(push).toHaveBeenCalledWith('/nimbloo/project/p-child/overview');
+   });
+
+   it('o botão "Today" existe e rola até hoje', () => {
+      renderTimeline();
+      expect(screen.getByRole('button', { name: 'Today' })).toBeTruthy();
+   });
+
+   it('zoom "week" mostra o ano em todo mês, não só em janeiro', () => {
+      renderTimeline({ zoom: 'week' });
+      // Fevereiro de 2026 aparece com o ano ao lado (não só "fev.").
+      expect(screen.getAllByText(/fev\.?\s*2026/i).length).toBeGreaterThan(0);
+   });
+});
+
 describe('Gráfico de progresso no tempo (#102)', () => {
    it('desenha uma linha por série com 2+ pontos', () => {
       render(
@@ -253,6 +304,39 @@ describe('Gráfico de progresso no tempo (#102)', () => {
       expect(xs[2]).toBe(100);
    });
 
+   it('pontos são uma parada de Tab só; setas, Home e End movem o foco (Pl#22)', () => {
+      render(
+         <ProjectSnapshotChart
+            points={[
+               { date: '2026-03-01', scope: 10, started: 2, completed: 1 },
+               { date: '2026-03-02', scope: 10, started: 3, completed: 4 },
+               { date: '2026-03-03', scope: 12, started: 1, completed: 8 },
+            ]}
+         />
+      );
+      const point = (day: string) => screen.getByTestId(`snapshot-point-2026-03-0${day}`);
+
+      // Roving tabindex: só o último ponto (o mais recente) entra no Tab.
+      expect(point('1').tabIndex).toBe(-1);
+      expect(point('2').tabIndex).toBe(-1);
+      expect(point('3').tabIndex).toBe(0);
+
+      act(() => point('3').focus());
+      expect(screen.getByRole('tooltip').textContent).toContain('Mar 3');
+
+      fireEvent.keyDown(point('3'), { key: 'ArrowLeft' });
+      expect(document.activeElement).toBe(point('2'));
+      expect(point('2').tabIndex).toBe(0);
+      expect(screen.getByRole('tooltip').textContent).toContain('Mar 2');
+
+      fireEvent.keyDown(point('2'), { key: 'Home' });
+      expect(document.activeElement).toBe(point('1'));
+      fireEvent.keyDown(point('1'), { key: 'ArrowLeft' });
+      expect(document.activeElement).toBe(point('1'));
+      fireEvent.keyDown(point('1'), { key: 'End' });
+      expect(document.activeElement).toBe(point('3'));
+   });
+
    it('com menos de 2 pontos não inventa tendência', () => {
       render(
          <ProjectSnapshotChart
@@ -261,5 +345,47 @@ describe('Gráfico de progresso no tempo (#102)', () => {
       );
       expect(screen.getByTestId('snapshot-chart-empty')).toBeTruthy();
       expect(screen.queryByTestId('snapshot-chart')).toBeNull();
+   });
+});
+
+describe('Roadmap — recarga ao vivo e erro (#40)', () => {
+   it('evento de projeto (dependência/marco) recarrega com debounce, uma vez por rajada', async () => {
+      const { PROJECT_CHANGED_EVENT } = await import('@/lib/use-live-sync');
+      apiMocks.roadmap.mockResolvedValue(roadmapDto());
+      render(<Roadmap />);
+      await waitFor(() => expect(apiMocks.roadmap).toHaveBeenCalledTimes(1));
+
+      for (let i = 0; i < 5; i++)
+         window.dispatchEvent(
+            new CustomEvent(PROJECT_CHANGED_EVENT, { detail: { id: 'p-mother' } })
+         );
+      await waitFor(() => expect(apiMocks.roadmap).toHaveBeenCalledTimes(2));
+      await new Promise((r) => setTimeout(r, 500));
+      expect(apiMocks.roadmap).toHaveBeenCalledTimes(2);
+   });
+
+   it('resposta velha não sobrescreve a mais nova (sequência)', async () => {
+      const { INITIATIVE_CHANGED_EVENT } = await import('@/lib/use-live-sync');
+      let resolveFirst!: (d: RoadmapDto) => void;
+      apiMocks.roadmap
+         .mockImplementationOnce(() => new Promise<RoadmapDto>((r) => (resolveFirst = r)))
+         .mockResolvedValueOnce(roadmapDto());
+      render(<Roadmap />);
+      window.dispatchEvent(new CustomEvent(INITIATIVE_CHANGED_EVENT, { detail: { id: 'mother' } }));
+      await waitFor(() => expect(apiMocks.roadmap).toHaveBeenCalledTimes(2));
+      expect(await screen.findByText('Mother initiative')).toBeTruthy();
+
+      resolveFirst(roadmapDto({ groups: [] }));
+      await new Promise((r) => setTimeout(r, 50));
+      expect(screen.getByText('Mother initiative')).toBeTruthy();
+   });
+
+   it('1ª carga falha → ErrorState com retry (não o vazio)', async () => {
+      apiMocks.roadmap.mockRejectedValueOnce(new Error('rede')).mockResolvedValueOnce(roadmapDto());
+      render(<Roadmap />);
+
+      expect(await screen.findByText('Could not load the roadmap')).toBeTruthy();
+      screen.getByRole('button', { name: 'Try again' }).click();
+      expect(await screen.findByText('Mother initiative')).toBeTruthy();
    });
 });

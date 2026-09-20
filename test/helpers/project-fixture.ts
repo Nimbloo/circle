@@ -1,5 +1,6 @@
 import { Cuboid } from 'lucide-react';
-import { status as statusCatalog, type Status } from '@/data/status';
+import type { Status } from '@/data/status';
+import { status as statusCatalog } from './catalog-fixture';
 import { priorities } from '@/data/priorities';
 import { health, type Project } from '@/data/projects';
 import type { ProjectDto } from '@/lib/api/projects';

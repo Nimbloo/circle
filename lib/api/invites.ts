@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { and, desc, eq, gt, isNull } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { appUser, invite } from '@/db/schema';
 import { ALLOWED_EMAIL_DOMAIN } from '@/auth.config';
@@ -128,7 +128,10 @@ export async function createInvite(
 export async function listInvites(db: Db): Promise<InviteDto[]> {
    const rows = await db.select().from(invite).orderBy(desc(invite.createdAt));
    if (rows.length === 0) return [];
-   const inviters = await db.select().from(appUser);
+   const inviterIds = [...new Set(rows.map((r) => r.invitedById).filter(Boolean) as string[])];
+   const inviters = inviterIds.length
+      ? await db.select().from(appUser).where(inArray(appUser.id, inviterIds))
+      : [];
    const byId = new Map(inviters.map((u) => [u.id, u]));
    return rows.map((r) => toDto(r, r.invitedById ? byId.get(r.invitedById) : undefined));
 }

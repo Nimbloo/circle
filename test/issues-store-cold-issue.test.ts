@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { status } from '@/data/status';
-import { labels } from '@/data/labels';
+import { status } from './helpers/catalog-fixture';
+import { labels } from './helpers/catalog-fixture';
 import { useIssuesStore } from '@/store/issues-store';
+import type { IssueDto } from '@/lib/api/issues';
 
 const apiMocks = vi.hoisted(() => ({
    update: vi.fn(),
@@ -24,28 +25,29 @@ vi.mock('@/lib/client', () => ({
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 /** DTO da issue como o servidor devolve após a mutação (é o que `applyRemote` insere). */
-const dto = (over: Record<string, unknown> = {}) => ({
-   id: 'cold-1',
-   identifier: 'ENG-77',
-   teamId: 'ENG',
-   title: 'Deep link frio',
-   status: { id: status[0].id, name: status[0].name, color: '', category: status[0].category },
-   priority: { id: 'no-priority', name: 'No priority' },
-   assignee: null,
-   createdBy: null,
-   project: null,
-   cycleId: '',
-   labels: [],
-   rank: 'a',
-   dueDate: null,
-   estimate: null,
-   subIssueCount: 0,
-   subIssueDoneCount: 0,
-   snoozedUntil: null,
-   createdAt: '2026-01-01T00:00:00.000Z',
-   updatedAt: '2026-01-01T00:00:00.000Z',
-   ...over,
-});
+const dto = (over: Record<string, unknown> = {}) =>
+   ({
+      id: 'cold-1',
+      identifier: 'ENG-77',
+      teamId: 'ENG',
+      title: 'Deep link frio',
+      status: { id: status[0].id, name: status[0].name, color: '', category: status[0].category },
+      priority: { id: 'no-priority', name: 'No priority' },
+      assignee: null,
+      createdBy: null,
+      project: null,
+      cycleId: '',
+      labels: [],
+      rank: 'a',
+      dueDate: null,
+      estimate: null,
+      subIssueCount: 0,
+      subIssueDoneCount: 0,
+      snoozedUntil: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      ...over,
+   }) as unknown as IssueDto;
 
 /**
  * Issue FORA do store (deep-link frio, ⌘K/context menu antes do hydrate): a mutação
@@ -55,20 +57,22 @@ const dto = (over: Record<string, unknown> = {}) => ({
 describe('issues-store — mutação em issue fora do store', () => {
    beforeEach(() => {
       vi.clearAllMocks();
-      useIssuesStore.setState({ issues: [], issuesByStatus: {} });
+      useIssuesStore.setState({ issues: [] });
    });
 
-   it('updateIssue chama a API e faz upsert via applyRemote', async () => {
+   it('updateIssue chama a API e faz upsert com o DTO da resposta (sem GET, If#16)', async () => {
       apiMocks.update.mockResolvedValue(dto({ title: 'Renomeada' }));
       apiMocks.get.mockResolvedValue(dto({ title: 'Renomeada' }));
 
       await useIssuesStore.getState().updateIssue('cold-1', { title: 'Renomeada' });
 
       expect(apiMocks.update).toHaveBeenCalledWith('cold-1', { title: 'Renomeada' });
-      expect(apiMocks.get).toHaveBeenCalledWith('cold-1');
+      expect(apiMocks.get).not.toHaveBeenCalled();
       const issue = useIssuesStore.getState().getIssueById('cold-1');
       expect(issue?.title).toBe('Renomeada');
-      expect(useIssuesStore.getState().issuesByStatus[status[0].id]).toHaveLength(1);
+      expect(
+         useIssuesStore.getState().issues.filter((i) => i.status.id === status[0].id)
+      ).toHaveLength(1);
    });
 
    it('addIssueLabel não retorna cedo: persiste e insere a issue no store', async () => {
@@ -117,6 +121,11 @@ describe('issues-store — mutação em issue fora do store', () => {
          '500'
       );
       expect(apiMocks.get).not.toHaveBeenCalled();
+      expect(useIssuesStore.getState().issues).toHaveLength(0);
+   });
+
+   it('ignora um DTO remoto sem status sem lançar', () => {
+      expect(() => useIssuesStore.getState().applyDto(dto({ status: undefined }))).not.toThrow();
       expect(useIssuesStore.getState().issues).toHaveLength(0);
    });
 });

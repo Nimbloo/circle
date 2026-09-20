@@ -1,13 +1,14 @@
 'use client';
 
-import { InboxItem } from '@/data/inbox';
+import type { NotificationType } from '@/data/inbox';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
-import { motion } from 'motion/react';
+import { relativeTime } from '@/lib/relative-time';
 import { renderStatusIcon } from '@/lib/status-utils';
 import { getNotificationIcon } from '@/lib/notification-utils';
-import { useIssuesStore } from '@/store/issues-store';
 import { Clock, RotateCcw } from 'lucide-react';
+import { memo } from 'react';
+import { SNOOZE_OPTIONS, snoozeUntilIso } from './snooze-options';
 import {
    DropdownMenu,
    DropdownMenuContent,
@@ -15,24 +16,40 @@ import {
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-interface IssueLineProps {
-   notification: InboxItem;
-   layoutId?: boolean;
-   isSelected?: boolean;
-   onClick?: () => void;
-   onSnooze?: (hours: number) => void;
-   onUnsnooze?: () => void;
-   showId?: boolean;
-   showStatusIcon?: boolean;
+/** O que a linha precisa de uma notificação (o `InboxNotification` do store satisfaz). */
+export interface InboxLineItem {
+   id: string;
+   identifier: string;
+   title: string;
+   read: boolean;
+   type: NotificationType;
+   content: string;
+   user: { name: string; avatarUrl: string };
+   /** Snapshot do status da issue (null quando a issue não está no store). */
+   status?: { id: string } | null;
+   /** ISO da notificação — o tempo relativo é calculado com `now`. */
+   sortAt?: string;
+   /** Relativo pré-calculado (fallback quando não há `sortAt`). */
+   timestamp?: string;
 }
 
-/** Opções de adiamento (paridade Linear): rótulo + horas. */
-const SNOOZE_OPTIONS: { label: string; hours: number }[] = [
-   { label: 'Em 1 hora', hours: 1 },
-   { label: 'Em 4 horas', hours: 4 },
-   { label: 'Amanhã', hours: 24 },
-   { label: 'Próxima semana', hours: 168 },
-];
+interface IssueLineProps<T extends InboxLineItem> {
+   notification: T;
+   /** "Agora" do tick compartilhado (o tempo relativo anda sem re-hidratar). */
+   now?: number;
+   /** Status VIVO da issue (mapa do pai); ausente = snapshot da notificação. */
+   statusId?: string;
+   isSelected?: boolean;
+   /** Handlers ESTÁVEIS que recebem a própria notificação — mantêm o `memo` da linha. */
+   onOpen?: (notification: T) => void;
+   /** Adia até o instante ISO (opções de `snooze-options.ts`). */
+   onSnooze?: (id: string, until: string) => void;
+   onUnsnooze?: (id: string) => void;
+   showId?: boolean;
+   showStatusIcon?: boolean;
+   /** Saindo da lista (adiada/excluída): colapsa a altura antes de sumir. */
+   leaving?: boolean;
+}
 
 /**
  * Linha de notificação — espelho do inbox do Linear: avatar 32px com badge do tipo
@@ -40,29 +57,52 @@ const SNOOZE_OPTIONS: { label: string; hours: number }[] = [
  * identifier + título em 13px (título branco quando não lida, muted quando lida) e
  * ícone de status à direita, linha 2 com o contexto em 12px + timestamp à direita.
  */
-export default function IssueLine({
+function IssueLine<T extends InboxLineItem>({
    notification,
-   layoutId = false,
+   now,
+   statusId: liveStatusId,
    isSelected = false,
-   onClick,
+   onOpen,
    onSnooze,
    onUnsnooze,
    showId = true,
    showStatusIcon = true,
-}: IssueLineProps) {
-   // Status VIVO da issue (store) com fallback pro snapshot da notificação — o ícone
-   // na linha acompanha mudanças de status em tempo real (padrão Linear).
-   const liveStatusId = useIssuesStore(
-      (s) => s.issues.find((i) => i.identifier === notification.identifier)?.status.id
-   );
-   const statusId = liveStatusId ?? notification.status.id;
+   leaving = false,
+}: IssueLineProps<T>) {
+   // Status VIVO da issue com fallback pro snapshot da notificação — o ícone na linha
+   // acompanha mudanças de status em tempo real (padrão Linear).
+   const statusId = liveStatusId ?? notification.status?.id;
+   const when = notification.sortAt
+      ? relativeTime(notification.sortAt, now)
+      : (notification.timestamp ?? '');
    return (
-      <motion.div
-         {...(layoutId && { layoutId: `notification-line-${notification.id}` })}
-         onClick={onClick}
-         className="w-full pl-2.5"
+      <div
+         onClick={onOpen ? () => onOpen(notification) : undefined}
+         aria-hidden={leaving || undefined}
+         // Saída da lista (co#9): a linha tem 55 px fixos, então colapsa a altura + opacity.
+         className={cn(
+            'h-[55px] w-full overflow-hidden pl-2.5 transition-[height,opacity] duration-150 ease-in motion-reduce:transition-none',
+            leaving && 'pointer-events-none h-0 opacity-0'
+         )}
       >
-         <div className="group/inbox-line relative flex h-[55px] w-full cursor-pointer items-center gap-3 rounded-lg px-2">
+         <div
+            data-notification-id={notification.id}
+            // Focável e abrível pelo teclado (co#16); a seleção é anunciada.
+            tabIndex={onOpen ? 0 : -1}
+            aria-current={isSelected || undefined}
+            onKeyDown={
+               onOpen
+                  ? (e) => {
+                       if (e.target !== e.currentTarget) return;
+                       if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onOpen(notification);
+                       }
+                    }
+                  : undefined
+            }
+            className="group/inbox-line relative flex h-[55px] w-full cursor-pointer items-center gap-3 rounded-lg px-2 outline-none focus-visible:ring-1 focus-visible:ring-ring"
+         >
             {/* Realce que DISSIPA nas pontas (Linear): camada de fundo com máscara de
                 gradiente horizontal — o fill some suavemente nas bordas laterais. */}
             <div
@@ -116,7 +156,7 @@ export default function IssueLine({
                         aria-label="Desfazer adiamento"
                         onClick={(e) => {
                            e.stopPropagation();
-                           onUnsnooze();
+                           onUnsnooze(notification.id);
                         }}
                         className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground opacity-0 transition-opacity hover:bg-accent focus:opacity-100 group-hover/inbox-line:opacity-100"
                      >
@@ -139,10 +179,10 @@ export default function IssueLine({
                         <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                            {SNOOZE_OPTIONS.map((opt) => (
                               <DropdownMenuItem
-                                 key={opt.hours}
+                                 key={opt.label}
                                  onClick={(e) => {
                                     e.stopPropagation();
-                                    onSnooze(opt.hours);
+                                    onSnooze(notification.id, snoozeUntilIso(opt));
                                  }}
                               >
                                  <Clock className="size-3.5 text-muted-foreground" />
@@ -153,7 +193,7 @@ export default function IssueLine({
                      </DropdownMenu>
                   )}
 
-                  {showStatusIcon && (
+                  {showStatusIcon && statusId && (
                      <div className="flex shrink-0 items-center">{renderStatusIcon(statusId)}</div>
                   )}
                </div>
@@ -162,12 +202,13 @@ export default function IssueLine({
                   <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                      {notification.content}
                   </p>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                     {notification.timestamp}
-                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{when}</span>
                </div>
             </div>
          </div>
-      </motion.div>
+      </div>
    );
 }
+
+/** Memoizada: evento de outra issue/notificação não re-renderiza as demais linhas. */
+export default memo(IssueLine) as typeof IssueLine;

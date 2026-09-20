@@ -33,11 +33,11 @@ import {
    AlertDialogHeader,
    AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { api } from '@/lib/client';
+import { api, ApiError } from '@/lib/client';
 import { Cycle, CycleStatus, cycleStatusLabel } from '@/data/cycles';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 const STATUS_IDS: CycleStatus[] = ['planned', 'upcoming', 'current', 'completed'];
@@ -59,24 +59,40 @@ function EditCycleDialog({
    const [endDate, setEndDate] = useState(cycle.endDate);
    const [capacity, setCapacity] = useState(String(cycle.capacity));
 
-   // Ressincroniza o form com o cycle atual ao (re)abrir — o useState inicial só
-   // roda no mount, então sem isto reabrir após o apply mostraria valores stale.
+   // Semeia o form com o cycle atual SÓ na transição fechado→aberto (#38): um evento
+   // remoto que troca o objeto `cycle` com o diálogo aberto não apaga o que foi digitado.
+   const cycleRef = useRef(cycle);
+   cycleRef.current = cycle;
    useEffect(() => {
-      if (open) {
-         setName(cycle.name);
-         setStatus(cycle.status);
-         setStartDate(cycle.startDate);
-         setEndDate(cycle.endDate);
-         setCapacity(String(cycle.capacity));
-      }
-   }, [open, cycle]);
+      if (!open) return;
+      const c = cycleRef.current;
+      setName(c.name);
+      setStatus(c.status);
+      setStartDate(c.startDate);
+      setEndDate(c.endDate);
+      setCapacity(String(c.capacity));
+   }, [open]);
+
+   // Guarda por ref: vários Enter seguidos chegam antes do `busy` re-renderizar (pl#18).
+   const savingRef = useRef(false);
 
    const save = async () => {
-      if (!name.trim() || busy) return;
+      if (!name.trim() || savingRef.current) return;
       if (startDate > endDate) {
          toast.error('Start date must be before end date');
          return;
       }
+      // Campo vazio = não mexer na capacidade (antes virava 0 em silêncio).
+      const typed = capacity.trim();
+      const capacityValue = typed === '' ? undefined : Number(typed);
+      if (
+         capacityValue !== undefined &&
+         (!Number.isInteger(capacityValue) || capacityValue < 0 || capacityValue > 1000)
+      ) {
+         toast.error('Capacity must be a whole number of 0 or more');
+         return;
+      }
+      savingRef.current = true;
       setBusy(true);
       try {
          const dto = await api.cycles.update(cycle.id, {
@@ -84,14 +100,16 @@ function EditCycleDialog({
             status,
             startDate,
             endDate,
-            capacity: Number(capacity) || 0,
+            ...(capacityValue === undefined ? {} : { capacity: capacityValue }),
          });
          applyCycle(dto);
          onOpenChange(false);
          toast.success('Cycle updated');
-      } catch {
-         toast.error('Could not update the cycle');
+      } catch (e) {
+         // 409 (outro ciclo em andamento, #35) traz a explicação do servidor.
+         toast.error(e instanceof ApiError ? e.message : 'Could not update the cycle');
       } finally {
+         savingRef.current = false;
          setBusy(false);
       }
    };
@@ -102,7 +120,14 @@ function EditCycleDialog({
             <DialogHeader>
                <DialogTitle>Edit cycle</DialogTitle>
             </DialogHeader>
-            <div className="flex flex-col gap-3">
+            <form
+               id="edit-cycle-form"
+               className="flex flex-col gap-3"
+               onSubmit={(e) => {
+                  e.preventDefault();
+                  void save();
+               }}
+            >
                <div className="flex flex-col gap-1.5">
                   <Label htmlFor="edit-cycle-name">Name</Label>
                   <Input
@@ -129,10 +154,12 @@ function EditCycleDialog({
                   </div>
                   <div className="flex flex-col gap-1.5">
                      <Label htmlFor="edit-cycle-capacity">Capacity (%)</Label>
+                     {/* Sem `min`/`step` no HTML: a recusa é nossa, com mensagem
+                         legível, em vez do balão nativo do navegador (pl#18). */}
                      <Input
                         id="edit-cycle-capacity"
                         type="number"
-                        min={0}
+                        inputMode="numeric"
                         value={capacity}
                         onChange={(e) => setCapacity(e.target.value)}
                      />
@@ -158,9 +185,14 @@ function EditCycleDialog({
                      />
                   </div>
                </div>
-            </div>
+            </form>
             <DialogFooter>
-               <Button size="sm" onClick={() => void save()} disabled={busy || !name.trim()}>
+               <Button
+                  type="submit"
+                  form="edit-cycle-form"
+                  size="sm"
+                  disabled={busy || !name.trim()}
+               >
                   Save changes
                </Button>
             </DialogFooter>

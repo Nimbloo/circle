@@ -12,7 +12,12 @@ export const dynamic = 'force-dynamic';
 type Params = { params: Promise<{ id: string }> };
 
 const UpdateSchema = z.object({
-   name: z.string().min(1).max(128).optional(),
+   name: z
+      .string()
+      .trim()
+      .min(1, 'name é obrigatório')
+      .max(128, 'name deve ter no máximo 128 caracteres')
+      .optional(),
    color: z.string().min(1).max(16).optional(),
    category: z.string().min(1).max(32).optional(),
 });

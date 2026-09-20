@@ -1,15 +1,15 @@
 'use client';
 
 import ProjectsTimeline from '@/components/common/projects/projects-timeline';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { EmptyState } from '@/components/common/empty-state';
+import { LoadingArea } from '@/components/common/loading-area';
 import { ProjectGroup } from '@/components/common/projects/projects';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Initiative, INITIATIVE_STATUS_META, type InitiativeStatus } from '@/data/initiatives';
-import { useLabels, usePriorities } from '@/store/catalog-store';
-import { Project } from '@/data/projects';
+import { Initiative } from '@/data/initiatives';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { initiativeWithDescendants } from '@/lib/initiative-tree';
 import { api } from '@/lib/client';
+import { INITIATIVE_CHANGED_EVENT, useLiveReload } from '@/lib/use-live-sync';
 import {
    Command,
    CommandEmpty,
@@ -24,12 +24,20 @@ import {
    Boxes,
    CalendarClock,
    ChevronDown,
+   MoreHorizontal,
    Network,
+   Pencil,
    PenLine,
    Plus,
-   UserRound,
+   Trash2,
    X,
 } from 'lucide-react';
+import {
+   DropdownMenu,
+   DropdownMenuContent,
+   DropdownMenuItem,
+   DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { format, parseISO } from 'date-fns';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -43,61 +51,61 @@ import type { InitiativeActivityDto } from '@/lib/api/initiatives';
 import { ProgressHistory } from '@/components/common/projects/progress-history';
 import { InitiativeProgressPanel } from './initiative-progress-panel';
 import { InitiativeProjectRow } from './initiative-project-row';
-import { InitiativeStatusIcon } from './initiative-status-icon';
+import { groupInitiativeProjects } from './initiative-project-groups';
 import { InitiativeIconPicker } from './initiative-icon-picker';
-import { InitiativeLabelPicker } from './initiative-label-picker';
-import { InitiativeTargetPicker } from './initiative-target-picker';
+import { InitiativePropertiesPanel } from './initiative-properties-panel';
+import { useInitiativePatch } from './use-initiative-patch';
 import { DetailSidePanel, DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
+import { healthColor } from '@/components/common/projects/progress-colors';
+import { blocksToMarkdown, markdownToBlocks } from '@/components/common/projects/update-blocks';
+import { ContentBlocks } from '@/components/common/issues/details/content-blocks';
+import {
+   AlertDialog,
+   AlertDialogAction,
+   AlertDialogCancel,
+   AlertDialogContent,
+   AlertDialogDescription,
+   AlertDialogFooter,
+   AlertDialogHeader,
+   AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
-const TABS = ['overview', 'activity', 'projects'] as const;
+const TABS = ['overview', 'projects', 'activity'] as const;
 const formatDay = (iso: string) => format(parseISO(iso), 'MMM d, yyyy');
 
 /* ------------------------------ projects table ---------------------------- */
 
-const GROUP_ORDER: { key: string; label: string; match: (project: Project) => boolean }[] = [
-   { key: 'in-progress', label: 'In Progress', match: (p) => p.status.category === 'started' },
-   { key: 'planned', label: 'Planned', match: (p) => p.status.category === 'unstarted' },
-   {
-      key: 'backlog',
-      label: 'Backlog',
-      match: (p) => p.status.category === 'backlog' || p.status.category === 'triage',
-   },
-   { key: 'completed', label: 'Completed', match: (p) => p.status.category === 'completed' },
-];
-
 function ProjectsSection({ initiative }: { initiative: Initiative }) {
    const { orgId } = useParams<{ orgId: string }>();
    const allProjects = useWorkspaceStore((s) => s.projects);
-   const applyInitiative = useWorkspaceStore((s) => s.applyInitiative);
    // Derivados memoizados: só recalculam quando os projetos do workspace ou os
    // vínculos da iniciativa mudam (não a cada re-render da página).
    const { groups, available } = useMemo(() => {
       const linked = new Set(initiative.projectIds);
       const projects = allProjects.filter((p) => linked.has(p.id));
       return {
-         groups: GROUP_ORDER.map((group) => ({
-            ...group,
-            projects: projects.filter(group.match),
-         })).filter((group) => group.projects.length > 0),
+         groups: groupInitiativeProjects(projects),
          available: allProjects.filter((p) => !linked.has(p.id)),
       };
    }, [allProjects, initiative.projectIds]);
 
    const [pickerOpen, setPickerOpen] = useState(false);
+   const patch = useInitiativePatch(initiative.id);
 
-   const setProjects = async (projectIds: string[]) => {
-      try {
-         applyInitiative(await api.initiatives.update(initiative.id, { projectIds }));
-      } catch {
-         toast.error('Could not update the projects');
-      }
+   // Lê o conjunto ATUAL do store (já com cliques otimistas anteriores) e serializa o
+   // PATCH: cliques rápidos não perdem seleção (#46).
+   const setProjects = (next: (ids: string[]) => string[]) => {
+      const current =
+         useWorkspaceStore.getState().getInitiativeById(initiative.id)?.projectIds ??
+         initiative.projectIds;
+      const projectIds = next(current);
+      void patch({ projectIds }, { projectIds }, { error: 'Could not update the projects' });
    };
    const addProject = (id: string) => {
       setPickerOpen(false);
-      void setProjects([...initiative.projectIds, id]);
+      setProjects((ids) => (ids.includes(id) ? ids : [...ids, id]));
    };
-   const removeProject = (id: string) =>
-      void setProjects(initiative.projectIds.filter((x) => x !== id));
+   const removeProject = (id: string) => setProjects((ids) => ids.filter((x) => x !== id));
 
    return (
       <section className="mx-0.5 flex flex-col gap-2">
@@ -308,290 +316,7 @@ function SubInitiativesSection({ initiative }: { initiative: Initiative }) {
    );
 }
 
-/**
- * Picker "Parent initiative" (#100). Esconde a própria initiative e sua subárvore —
- * o servidor recusa ciclo com 400, a UI só evita oferecer a opção inválida.
- */
-function ParentInitiativePicker({ initiative }: { initiative: Initiative }) {
-   const initiatives = useWorkspaceStore((s) => s.initiatives);
-   const applyInitiative = useWorkspaceStore((s) => s.applyInitiative);
-   const [open, setOpen] = useState(false);
-
-   const forbidden = new Set(initiativeWithDescendants(initiatives, initiative.id));
-   const options = initiatives.filter((i) => !forbidden.has(i.id));
-   const parent = initiative.parentId
-      ? initiatives.find((i) => i.id === initiative.parentId)
-      : undefined;
-
-   const setParent = async (parentId: string | null) => {
-      setOpen(false);
-      try {
-         applyInitiative(await api.initiatives.update(initiative.id, { parentId }));
-         toast.success(parentId ? 'Parent initiative definida' : 'Parent initiative removida');
-      } catch {
-         toast.error('Não foi possível atualizar a parent initiative');
-      }
-   };
-
-   return (
-      <Popover open={open} onOpenChange={setOpen}>
-         <PopoverTrigger asChild>
-            <PropertyButton>
-               <Network className="size-3.5 text-muted-foreground" />
-               <span className={parent ? undefined : 'text-muted-foreground'}>
-                  {parent?.name ?? 'No parent'}
-               </span>
-            </PropertyButton>
-         </PopoverTrigger>
-         <PopoverContent align="start" className="w-64 p-0">
-            <Command>
-               <CommandInput placeholder="Iniciativa pai…" />
-               <CommandList>
-                  <CommandEmpty>No initiatives.</CommandEmpty>
-                  <CommandGroup>
-                     <CommandItem value="No parent" onSelect={() => void setParent(null)}>
-                        No parent
-                     </CommandItem>
-                     {options.map((candidate) => (
-                        <CommandItem
-                           key={candidate.id}
-                           value={candidate.name}
-                           onSelect={() => void setParent(candidate.id)}
-                        >
-                           {candidate.name}
-                        </CommandItem>
-                     ))}
-                  </CommandGroup>
-               </CommandList>
-            </Command>
-         </PopoverContent>
-      </Popover>
-   );
-}
-
 /* ------------------------------- overview tab ----------------------------- */
-
-function PropertyRow({ label, children }: { label: string; children: React.ReactNode }) {
-   return (
-      <div className="flex items-center gap-2 text-[13px]">
-         <span className="w-24 shrink-0 text-[13px] text-muted-foreground">{label}</span>
-         {children}
-      </div>
-   );
-}
-
-/** Botão discreto que abre o popover de edição de uma propriedade. */
-function PropertyButton({ children }: { children: React.ReactNode }) {
-   return (
-      <button
-         type="button"
-         className="inline-flex items-center gap-1.5 rounded px-1 -mx-1 py-0.5 hover:bg-accent transition-colors text-left"
-      >
-         {children}
-      </button>
-   );
-}
-
-const STATUS_IDS = Object.keys(INITIATIVE_STATUS_META) as InitiativeStatus[];
-
-/**
- * Painel de propriedades EDITÁVEL. Antes eram `<span>` estáticos — o backend já
- * aceitava status/priority/owner/target, mas nada na tela os enviava, então a página
- * de detalhe era read-only e só a lista (via context menu) editava.
- */
-function PropertiesPanel({ initiative }: { initiative: Initiative }) {
-   const applyInitiative = useWorkspaceStore((s) => s.applyInitiative);
-   const users = useWorkspaceStore((s) => s.users);
-   const priorities = usePriorities();
-   const labels = useLabels();
-   // Deriva da fatia assinada: assinar `countCompletedProjects` (funcao, referencia
-   // estavel) nao acorda o painel quando um projeto e vinculado ou concluido.
-   const allProjects = useWorkspaceStore((s) => s.projects);
-   const linked = new Set(initiative.projectIds);
-   const completed = allProjects.filter(
-      (p) => linked.has(p.id) && (p.status.category === 'completed' || p.percentComplete >= 100)
-   ).length;
-
-   const patch = async (body: Parameters<typeof api.initiatives.update>[1], msg: string) => {
-      try {
-         const dto = await api.initiatives.update(initiative.id, body);
-         applyInitiative(dto);
-         toast.success(msg);
-      } catch {
-         toast.error('Não foi possível atualizar a initiative');
-      }
-   };
-
-   return (
-      <div className="flex flex-col gap-3">
-         <span className="text-[13px] font-medium leading-4">Properties</span>
-
-         <PropertyRow label="Status">
-            <Popover>
-               <PopoverTrigger asChild>
-                  <PropertyButton>
-                     <InitiativeStatusIcon status={initiative.status} />
-                     {INITIATIVE_STATUS_META[initiative.status].label}
-                  </PropertyButton>
-               </PopoverTrigger>
-               <PopoverContent align="start" className="w-52 p-1">
-                  {STATUS_IDS.map((s) => (
-                     <button
-                        key={s}
-                        type="button"
-                        onClick={() =>
-                           void patch({ status: s }, `Status → ${INITIATIVE_STATUS_META[s].label}`)
-                        }
-                        className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-accent"
-                     >
-                        <InitiativeStatusIcon status={s} />
-                        {INITIATIVE_STATUS_META[s].label}
-                     </button>
-                  ))}
-               </PopoverContent>
-            </Popover>
-         </PropertyRow>
-
-         <PropertyRow label="Priority">
-            <Popover>
-               <PopoverTrigger asChild>
-                  <PropertyButton>
-                     <initiative.priority.icon className="size-4 text-muted-foreground" />
-                     <span className="text-muted-foreground">{initiative.priority.name}</span>
-                  </PropertyButton>
-               </PopoverTrigger>
-               <PopoverContent align="start" className="w-52 p-1">
-                  {priorities.map((p) => (
-                     <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => void patch({ priorityId: p.id }, `Prioridade → ${p.name}`)}
-                        className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-accent"
-                     >
-                        <p.icon className="size-4 text-muted-foreground" />
-                        {p.name}
-                     </button>
-                  ))}
-               </PopoverContent>
-            </Popover>
-         </PropertyRow>
-
-         <PropertyRow label="Owner">
-            <Popover>
-               <PopoverTrigger asChild>
-                  <PropertyButton>
-                     {initiative.owner ? (
-                        <>
-                           <Avatar className="size-4">
-                              <AvatarImage
-                                 src={initiative.owner.avatarUrl || undefined}
-                                 alt={initiative.owner.name}
-                              />
-                              <AvatarFallback className="text-[8px]">
-                                 {initiative.owner.name[0]}
-                              </AvatarFallback>
-                           </Avatar>
-                           {initiative.owner.name}
-                        </>
-                     ) : (
-                        <span className="text-muted-foreground inline-flex items-center gap-1.5">
-                           <UserRound className="size-4" /> Add owner
-                        </span>
-                     )}
-                  </PropertyButton>
-               </PopoverTrigger>
-               <PopoverContent align="start" className="w-60 p-0">
-                  <Command>
-                     <CommandInput placeholder="Buscar pessoa…" />
-                     <CommandList>
-                        <CommandEmpty>Ninguém encontrado.</CommandEmpty>
-                        <CommandGroup>
-                           {initiative.owner && (
-                              <CommandItem
-                                 value="__none__"
-                                 onSelect={() => void patch({ ownerId: null }, 'Owner removido')}
-                              >
-                                 <X className="size-4 text-muted-foreground" />
-                                 Sem owner
-                              </CommandItem>
-                           )}
-                           {users.map((u) => (
-                              <CommandItem
-                                 key={u.id}
-                                 value={u.name}
-                                 onSelect={() => void patch({ ownerId: u.id }, `Owner → ${u.name}`)}
-                              >
-                                 <Avatar className="size-4">
-                                    <AvatarImage src={u.avatarUrl || undefined} alt={u.name} />
-                                    <AvatarFallback className="text-[8px]">
-                                       {u.name[0]}
-                                    </AvatarFallback>
-                                 </Avatar>
-                                 <span className="truncate">{u.name}</span>
-                              </CommandItem>
-                           ))}
-                        </CommandGroup>
-                     </CommandList>
-                  </Command>
-               </PopoverContent>
-            </Popover>
-         </PropertyRow>
-
-         <PropertyRow label="Start">
-            <InitiativeTargetPicker
-               kind="start"
-               date={initiative.startDate ?? null}
-               onChange={({ date }) =>
-                  void patch(
-                     { startDate: date },
-                     date ? `Start → ${formatDay(date)}` : 'Start removido'
-                  )
-               }
-            />
-         </PropertyRow>
-
-         <PropertyRow label="Target">
-            <InitiativeTargetPicker
-               label={initiative.target ?? null}
-               date={initiative.targetDate ?? null}
-               onChange={({ label, date }) =>
-                  void patch(
-                     { target: label, targetDate: date },
-                     label ? `Target → ${label}` : 'Target removido'
-                  )
-               }
-            />
-         </PropertyRow>
-
-         <PropertyRow label="Labels">
-            <InitiativeLabelPicker
-               labels={labels}
-               value={initiative.labels.map((label) => label.id)}
-               onChange={(labelIds) => void patch({ labelIds }, 'Labels atualizadas')}
-            />
-         </PropertyRow>
-
-         <PropertyRow label="Parent">
-            <ParentInitiativePicker initiative={initiative} />
-         </PropertyRow>
-
-         <PropertyRow label="Projects">
-            <span className="text-muted-foreground text-xs">
-               {completed} / {initiative.projectIds.length} completed
-            </span>
-         </PropertyRow>
-
-         {initiative.childIds.length > 0 && (
-            <PropertyRow label="Rollup">
-               <span className="text-muted-foreground text-xs">
-                  {initiative.rollupCompletedProjectCount} / {initiative.rollupProjectCount} with
-                  sub-initiatives
-               </span>
-            </PropertyRow>
-         )}
-      </div>
-   );
-}
 
 /**
  * Período da initiative acima da timeline de projetos: usa `startDate`/`targetDate`
@@ -647,7 +372,7 @@ function InitiativeSidePanelContent({ initiative }: { initiative: Initiative }) 
    return (
       <div className="flex h-full w-full flex-col gap-2 overflow-y-auto">
          <div className="rounded-[10px] border bg-card p-3 pb-[22.5px]">
-            <PropertiesPanel initiative={initiative} />
+            <InitiativePropertiesPanel initiative={initiative} />
          </div>
 
          {initiative.projectIds.length > 0 && (
@@ -671,16 +396,10 @@ function InitiativeSidePanelContent({ initiative }: { initiative: Initiative }) 
 }
 
 function Overview({ initiative }: { initiative: Initiative }) {
-   const applyInitiative = useWorkspaceStore((state) => state.applyInitiative);
-
-   const updateIcon = async (body: Parameters<typeof api.initiatives.update>[1]) => {
-      try {
-         const dto = await api.initiatives.update(initiative.id, body);
-         applyInitiative(dto);
-         toast.success('Initiative icon updated');
-      } catch {
-         toast.error('Could not update the initiative icon');
-      }
+   const patch = useInitiativePatch(initiative.id);
+   const messages = {
+      success: 'Initiative icon updated',
+      error: 'Could not update the initiative icon',
    };
 
    return (
@@ -690,8 +409,8 @@ function Overview({ initiative }: { initiative: Initiative }) {
                <InitiativeIconPicker
                   icon={initiative.icon}
                   color={initiative.iconColor ?? 'gray'}
-                  onIconChange={(icon) => void updateIcon({ icon })}
-                  onColorChange={(iconColor) => void updateIcon({ iconColor })}
+                  onIconChange={(icon) => void patch({ icon }, { icon }, messages)}
+                  onColorChange={(iconColor) => void patch({ iconColor }, { iconColor }, messages)}
                />
                <div className="flex items-center gap-1.5">
                   <DetailSidePanelTrigger kind="initiative" />
@@ -760,16 +479,23 @@ function ActivityFeed({ initiativeId }: { initiativeId: string }) {
          active = false;
       };
    }, [initiativeId]);
+   // Mudança de OUTRO usuário: recarrega em silêncio (falha mantém o feed atual).
+   useLiveReload(INITIATIVE_CHANGED_EVENT, { id: initiativeId }, () =>
+      api.initiatives
+         .activity(initiativeId)
+         .then(setEntries)
+         .catch(() => {})
+   );
 
    return (
       <div className="flex flex-col gap-3">
          <span className="text-[13px] font-medium leading-4">Activity</span>
          {entries === null ? (
-            <p className="text-xs text-muted-foreground">Carregando…</p>
+            <LoadingArea rows={3} />
          ) : entries.length === 0 ? (
             <p className="text-xs text-muted-foreground">No activity recorded yet.</p>
          ) : (
-            <ul className="flex flex-col gap-2.5">
+            <ul className="content-enter flex flex-col gap-2.5">
                {entries.map((e) => (
                   <li key={e.id} className="flex items-start gap-2 text-xs">
                      <Avatar className="size-5 shrink-0 mt-0.5">
@@ -799,15 +525,165 @@ function ActivityFeed({ initiativeId }: { initiativeId: string }) {
 /* ------------------------------- activity tab ----------------------------- */
 
 const UPDATE_HEALTHS = [
-   { id: 'on-track', label: 'On track', color: 'var(--chart-2)' },
-   { id: 'at-risk', label: 'At risk', color: 'var(--chart-4)' },
-   { id: 'off-track', label: 'Off track', color: 'var(--destructive)' },
+   { id: 'on-track', label: 'On track', color: healthColor('on-track') },
+   { id: 'at-risk', label: 'At risk', color: healthColor('at-risk') },
+   { id: 'off-track', label: 'Off track', color: healthColor('off-track') },
 ] as const;
+
+/** Card de update da initiative, com editar e excluir (pl#11). */
+function InitiativeUpdateCard({
+   initiativeId,
+   update,
+   onChanged,
+}: {
+   initiativeId: string;
+   update: InitiativeUpdateDto;
+   onChanged: (next: InitiativeUpdateDto | null, removed: boolean) => void;
+}) {
+   const applyInitiative = useWorkspaceStore((s) => s.applyInitiative);
+   const [draft, setDraft] = useState<string | null>(null);
+   const [confirmOpen, setConfirmOpen] = useState(false);
+   const [busy, setBusy] = useState(false);
+   const meta = UPDATE_HEALTHS.find((x) => x.id === update.health);
+
+   const save = async () => {
+      if (draft === null || draft.trim() === '' || busy) return;
+      setBusy(true);
+      try {
+         const result = await api.initiatives.updateUpdate(initiativeId, update.id, {
+            blocks: markdownToBlocks(draft),
+         });
+         applyInitiative(result.initiative);
+         onChanged(result.update, false);
+         setDraft(null);
+         toast.success('Update editado');
+      } catch {
+         toast.error('Não foi possível editar o update');
+      } finally {
+         setBusy(false);
+      }
+   };
+
+   const remove = async () => {
+      if (busy) return;
+      setBusy(true);
+      try {
+         applyInitiative(await api.initiatives.removeUpdate(initiativeId, update.id));
+         onChanged(null, true);
+         setConfirmOpen(false);
+         toast.success('Update excluído');
+      } catch {
+         toast.error('Não foi possível excluir o update');
+      } finally {
+         setBusy(false);
+      }
+   };
+
+   return (
+      <div className="rounded-lg border border-border/60 bg-container p-3">
+         <div className="mb-1.5 flex items-center gap-2 text-sm">
+            <span
+               className="size-2 rounded-full"
+               style={{ backgroundColor: meta?.color ?? 'var(--muted-foreground)' }}
+            />
+            <span className="font-medium">{meta?.label ?? update.health}</span>
+            <span className="text-xs text-muted-foreground">
+               {update.author?.name ?? 'Alguém'} · {new Date(update.createdAt).toLocaleDateString()}
+            </span>
+            {draft === null && (
+               <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                     <Button
+                        size="icon"
+                        variant="ghost"
+                        className="ml-auto size-7"
+                        aria-label="Update actions"
+                     >
+                        <MoreHorizontal className="size-4 text-muted-foreground" />
+                     </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                     <DropdownMenuItem onSelect={() => setDraft(blocksToMarkdown(update.blocks))}>
+                        <Pencil className="size-4" />
+                        Editar
+                     </DropdownMenuItem>
+                     <DropdownMenuItem
+                        variant="destructive"
+                        onSelect={(event) => {
+                           event.preventDefault();
+                           setConfirmOpen(true);
+                        }}
+                     >
+                        <Trash2 className="size-4" />
+                        Excluir
+                     </DropdownMenuItem>
+                  </DropdownMenuContent>
+               </DropdownMenu>
+            )}
+         </div>
+         {draft === null ? (
+            <div className="text-sm">
+               <ContentBlocks blocks={update.blocks} />
+            </div>
+         ) : (
+            <div>
+               <textarea
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  aria-label="Editar update"
+                  autoFocus
+                  className="min-h-20 w-full resize-y rounded-md border bg-transparent p-2 text-sm outline-none"
+               />
+               <div className="mt-2 flex items-center gap-2">
+                  <Button
+                     size="xs"
+                     onClick={() => void save()}
+                     disabled={busy || draft.trim() === ''}
+                     aria-label="Salvar update"
+                  >
+                     Salvar
+                  </Button>
+                  <Button size="xs" variant="ghost" onClick={() => setDraft(null)}>
+                     Cancelar
+                  </Button>
+               </div>
+            </div>
+         )}
+
+         <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <AlertDialogContent>
+               <AlertDialogHeader>
+                  <AlertDialogTitle>Excluir este update?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                     O update sai da timeline e o health da initiative volta para o update anterior.
+                     Não dá para desfazer.
+                  </AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter>
+                  <AlertDialogCancel disabled={busy}>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction
+                     aria-label="Excluir update"
+                     disabled={busy}
+                     onClick={(event) => {
+                        event.preventDefault();
+                        void remove();
+                     }}
+                  >
+                     Excluir
+                  </AlertDialogAction>
+               </AlertDialogFooter>
+            </AlertDialogContent>
+         </AlertDialog>
+      </div>
+   );
+}
 
 /** Activity da initiative: composer de update (health + texto) + feed. O health do
  * último update propaga pro health da initiative (paridade Linear). */
 function Activity({ initiativeId }: { initiativeId: string }) {
    const [updates, setUpdates] = useState<InitiativeUpdateDto[]>([]);
+   // Primeira carga do feed: vazio só depois de uma resposta real, nunca na carga/falha.
+   const [feed, setFeed] = useState<'loading' | 'ready' | 'error'>('loading');
    const [health, setHealth] = useState<'on-track' | 'at-risk' | 'off-track'>('on-track');
    const [text, setText] = useState('');
    const [busy, setBusy] = useState(false);
@@ -815,20 +691,39 @@ function Activity({ initiativeId }: { initiativeId: string }) {
 
    useEffect(() => {
       let active = true;
+      setFeed('loading');
       api.initiatives
          .updates(initiativeId)
-         .then((u) => active && setUpdates(u))
-         .catch(() => active && setUpdates([]));
+         .then((u) => {
+            if (!active) return;
+            setUpdates(u);
+            setFeed('ready');
+         })
+         .catch(() => {
+            if (!active) return;
+            setUpdates([]);
+            setFeed('error');
+         });
       return () => {
          active = false;
       };
    }, [initiativeId]);
+   useLiveReload(INITIATIVE_CHANGED_EVENT, { id: initiativeId }, () =>
+      api.initiatives
+         .updates(initiativeId)
+         .then((u) => {
+            setUpdates(u);
+            setFeed('ready');
+         })
+         .catch(() => {})
+   );
 
    const post = async () => {
       if (busy) return;
+      if (text.trim() === '') return; // update vazio não vira registro (pl#11)
       setBusy(true);
       try {
-         const blocks = text.trim() ? [{ type: 'paragraph' as const, text: text.trim() }] : [];
+         const blocks = markdownToBlocks(text);
          const { update, initiative } = await api.initiatives.postUpdate(initiativeId, {
             health,
             blocks,
@@ -875,46 +770,39 @@ function Activity({ initiativeId }: { initiativeId: string }) {
                className="w-full resize-none bg-transparent outline-none text-sm placeholder:text-muted-foreground disabled:opacity-60"
             />
             <div className="flex justify-end">
-               <Button size="xs" onClick={() => void post()} disabled={busy}>
+               <Button size="xs" onClick={() => void post()} disabled={busy || !text.trim()}>
                   {busy ? 'Publicando…' : 'Publicar update'}
                </Button>
             </div>
          </div>
 
-         {updates.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhum update ainda.</p>
+         {feed === 'loading' && updates.length === 0 ? (
+            <LoadingArea rows={3} />
+         ) : feed === 'error' && updates.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Não foi possível carregar os updates.</p>
+         ) : updates.length === 0 ? (
+            <EmptyState
+               variant="activity"
+               title="Nenhum update ainda"
+               description="Publique o primeiro para registrar o andamento."
+               className="py-8"
+            />
          ) : (
-            <div className="flex flex-col gap-3">
-               {updates.map((u) => {
-                  const h = UPDATE_HEALTHS.find((x) => x.id === u.health);
-                  return (
-                     <div
-                        key={u.id}
-                        className="rounded-lg border border-border/60 bg-container p-3"
-                     >
-                        <div className="flex items-center gap-2 mb-1.5 text-sm">
-                           <span
-                              className="size-2 rounded-full"
-                              style={{
-                                 backgroundColor: h?.color ?? 'var(--muted-foreground)',
-                              }}
-                           />
-                           <span className="font-medium">{h?.label ?? u.health}</span>
-                           <span className="text-xs text-muted-foreground">
-                              {u.author?.name ?? 'Alguém'} ·{' '}
-                              {new Date(u.createdAt).toLocaleDateString()}
-                           </span>
-                        </div>
-                        {u.blocks.map((b, i) =>
-                           b.type === 'paragraph' ? (
-                              <p key={i} className="text-sm text-ink-2">
-                                 {b.text}
-                              </p>
-                           ) : null
-                        )}
-                     </div>
-                  );
-               })}
+            <div className="content-enter flex flex-col gap-3">
+               {updates.map((u) => (
+                  <InitiativeUpdateCard
+                     key={u.id}
+                     initiativeId={initiativeId}
+                     update={u}
+                     onChanged={(next, removed) => {
+                        setUpdates((prev) =>
+                           removed
+                              ? prev.filter((item) => item.id !== u.id)
+                              : prev.map((item) => (item.id === u.id ? next! : item))
+                        );
+                     }}
+                  />
+               ))}
             </div>
          )}
       </div>
@@ -950,18 +838,20 @@ export default function InitiativeDetails({ initiativeId }: { initiativeId: stri
    }, [initiative, allProjects]);
 
    if (!initiative) {
-      // Hidratando → skeleton; not-found só como estado final (fim do flash no deep-link frio).
+      // Hidratando → loading; not-found só como estado final (fim do flash no deep-link frio).
       if (!loaded) {
          return (
             <div className="p-8">
-               <ListSkeleton rows={6} />
+               <LoadingArea rows={6} />
             </div>
          );
       }
       return (
-         <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">
-            Initiative not found
-         </div>
+         <EmptyState
+            variant="search"
+            title="Initiative not found"
+            description="It may have been deleted or you don't have access to it."
+         />
       );
    }
 
@@ -980,7 +870,7 @@ export default function InitiativeDetails({ initiativeId }: { initiativeId: stri
       );
 
    return (
-      <div className="flex h-full w-full overflow-hidden">
+      <div className="content-enter flex h-full w-full overflow-hidden">
          <div className="min-w-0 flex-1 overflow-hidden">{content}</div>
          <DetailSidePanel
             kind="initiative"

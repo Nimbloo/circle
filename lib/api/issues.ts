@@ -6,6 +6,7 @@ import {
    gt,
    inArray,
    isNull,
+   ne,
    notInArray,
    or,
    sql,
@@ -41,12 +42,20 @@ import { issueAttachmentUrls, removeAttachmentObjects } from './attachments';
 import { applySla } from './slas';
 import { runAutomations } from './automations';
 import { getOrCreateUser } from './users';
-import { rankAfter, firstRank, rankBetween } from './rank';
+import {
+   rankAfter,
+   firstRank,
+   rankBetween,
+   needsRankRebalance,
+   rebalanceTeamRanksInTransaction,
+   ISSUE_RANK_LOCK_KEY,
+} from './rank';
 import { ApiError } from './errors';
 import { assertAssignableUsers } from './members';
 import { dispatchNotification } from './notify';
 import { getCachedCatalogs } from './catalogs';
-import { publish } from './events';
+import { dispatchWebhooksOnly, publish } from './events';
+import { parseIssueCursor } from '@/lib/issue-cursor';
 import { notifySlackEvent } from './integrations/slack';
 import { projectDescriptionDoc } from './description-doc';
 import type { EditorDoc } from '@/lib/editor-doc';
@@ -62,6 +71,43 @@ import {
 
 /** Teto default de linhas nas listagens (proteção; paginação por cursor fica p/ depois). */
 const DEFAULT_LIST_LIMIT = 500;
+
+/**
+ * Chave do advisory lock que serializa o cálculo do rank de append (#25): sem ele, duas
+ * criações concorrentes liam o MESMO maior rank e gravavam o mesmo rank.
+ */
+/** Opções de mutação de issue. */
+export interface IssueMutationOptions {
+   /**
+    * Não publica eventos de tempo real (#7). Para lotes (import): o chamador publica UM
+    * evento coarse no fim, em vez de um por linha (cada evento custa um GET por cliente).
+    */
+   silent?: boolean;
+   /**
+    * Lote em background (import, #10): além do `silent`, não dispara efeitos POR LINHA —
+    * Slack, notificações de atribuição, automações do time e triagem por IA. Webhooks
+    * seguem por issue (contrato externo).
+    */
+   bulk?: boolean;
+}
+
+/**
+ * Rollups que dependem da issue (#8): `percentComplete`/`issueCount` do projeto e o
+ * escopo do ciclo são calculados no servidor — sem este aviso ficavam velhos no cliente.
+ * Publica para os ids antigos E novos (sem repetir). Projeto e ciclo são do mesmo time
+ * da issue (validado na escrita), então o `teamId` é o dela.
+ */
+function publishRollups(
+   teamId: string,
+   projectIds: (string | null | undefined)[],
+   cycleIds: (string | null | undefined)[],
+   actorEmail?: string
+): void {
+   for (const id of new Set(projectIds.filter((v): v is string => Boolean(v))))
+      publish({ entity: 'project', action: 'updated', id, teamId, actorEmail });
+   for (const id of new Set(cycleIds.filter((v): v is string => Boolean(v))))
+      publish({ entity: 'cycle', action: 'updated', id, teamId, actorEmail });
+}
 
 // ── Tipos de DTO (espelham o tipo Issue do frontend) ────────────────
 type StatusRow = typeof statusT.$inferSelect;
@@ -144,7 +190,11 @@ export interface IssueListOptions extends IssueFilter {
    orderBy?: 'rank' | 'priority' | 'created' | 'title';
    /** Tamanho da página. Default = DEFAULT_LIST_LIMIT (compat com chamadas sem paginação). */
    limit?: number;
-   /** Cursor keyset = o `rank` do último item da página anterior (só na ordem default asc(rank)). */
+   /**
+    * Cursor keyset (só na ordem default asc(rank)). Formato atual `rank~id` (ver
+    * `lib/issue-cursor.ts`) → `(rank, id) > cursor`, que não pula empates de rank. O
+    * formato antigo (só o `rank`) continua aceito, com a semântica antiga `rank > cursor`.
+    */
    cursor?: string;
 }
 
@@ -448,7 +498,17 @@ function listOrder(orderBy: IssueListOptions['orderBy'], cat: CatalogMaps): SQL[
          ? [sql`(case ${sql.join(whens, sql` `)} else 999 end) asc`, asc(issue.rank)]
          : [asc(issue.rank)];
    }
-   return [asc(issue.rank)];
+   return [asc(issue.rank), asc(issue.id)];
+}
+
+/** Condição keyset do cursor (#25): `(rank, id) > cursor`; cursor legado = só rank. */
+function keysetAfter(cursor: string): SQL {
+   const parsed = parseIssueCursor(cursor);
+   if (!parsed.id) return gt(issue.rank, parsed.rank);
+   return or(
+      gt(issue.rank, parsed.rank),
+      and(eq(issue.rank, parsed.rank), gt(issue.id, parsed.id))
+   ) as SQL;
 }
 
 // ── Operações ───────────────────────────────────────────────────────
@@ -478,10 +538,10 @@ export async function listIssues(
       opts = { ...opts, team: undefined, teamIds: intersectScopes(opts.teamIds, expanded) };
    }
    const where = buildWhere(db, opts, cat.statuses, meId);
-   // Keyset por rank: só na ordem default asc(rank) (o board). Cursor = último rank
-   // da página anterior → `rank > cursor`. Em outras ordens, sem cursor (cai no limit).
+   // Keyset por (rank, id): só na ordem default asc(rank) (o board). Em outras ordens,
+   // sem cursor (cai no limit).
    const rankOrder = !opts.orderBy || opts.orderBy === 'rank';
-   const keyset = opts.cursor && rankOrder ? gt(issue.rank, opts.cursor) : undefined;
+   const keyset = opts.cursor && rankOrder ? keysetAfter(opts.cursor) : undefined;
    const finalWhere = keyset ? (where ? and(where, keyset) : keyset) : where;
    const rows = await db
       .select()
@@ -491,6 +551,57 @@ export async function listIssues(
       .limit(opts.limit ?? DEFAULT_LIST_LIMIT);
    const dtos = await assemble(db, rows, cat);
    return orderRows(dtos, opts.orderBy);
+}
+
+/** Resultado do resync incremental (#14). */
+export interface IssueChanges {
+   /** Issues que mudaram desde `since` (DTO completo). */
+   issues: IssueDto[];
+   /** Ids de TODAS as issues visíveis: o que o cliente tem e não está aqui foi apagado. */
+   ids: string[];
+   /** Mudanças demais para um delta: o cliente faz a hidratação completa. */
+   truncated: boolean;
+}
+
+/** Teto do delta: acima disso a hidratação completa (paginada) sai mais barata. */
+const MAX_CHANGES = 1000;
+
+/**
+ * Resync incremental (#14): em vez de re-hidratar tudo na reconexão, o cliente pede só
+ * o que mudou desde a sua marca d'água. Conta como mudança da issue, além do próprio
+ * `updated_at`: filha alterada (rollup), projeto renomeado e usuário (responsável,
+ * colaborador ou autor) alterado — tudo o que aparece embutido no DTO da lista.
+ * Apagadas não deixam linha: as lápides são as ausências em `ids`.
+ */
+export async function listIssueChanges(
+   db: Db,
+   since: Date,
+   opts: { teamIds?: string[]; limit?: number } = {}
+): Promise<IssueChanges> {
+   const cat = await loadCatalogs(db);
+   const scope = buildWhere(db, { teamIds: opts.teamIds }, cat.statuses);
+   const limit = opts.limit ?? MAX_CHANGES;
+   const changed = or(
+      gt(issue.updatedAt, since),
+      sql`${issue.id} in (select child.parent_id from issue child where child.updated_at > ${since} and child.parent_id is not null)`,
+      sql`${issue.projectId} in (select p.id from project p where p.updated_at > ${since})`,
+      sql`(${issue.assigneeId} in (select u.id from app_user u where u.updated_at > ${since}) or ${issue.createdById} in (select u.id from app_user u where u.updated_at > ${since}) or ${issue.id} in (select ia.issue_id from issue_assignee ia join app_user u on u.id = ia.user_id where u.updated_at > ${since}))`
+   )!;
+   const [rows, visible] = await Promise.all([
+      db
+         .select()
+         .from(issue)
+         .where(scope ? and(scope, changed) : changed)
+         .orderBy(asc(issue.rank), asc(issue.id))
+         .limit(limit + 1),
+      db.select({ id: issue.id }).from(issue).where(scope),
+   ]);
+   if (rows.length > limit) return { issues: [], ids: [], truncated: true };
+   return {
+      issues: await assemble(db, rows, cat),
+      ids: visible.map((r) => r.id),
+      truncated: false,
+   };
 }
 
 export async function getIssue(db: Db, id: string): Promise<IssueDto | null> {
@@ -563,6 +674,31 @@ async function assertProjectOfTeam(db: Db, projectId: string, teamId: string): P
       throw new ApiError(400, `Project '${projectId}' é de outro time (${row.teamId})`);
 }
 
+/**
+ * Labels do create (Is#20): sem repetição, todas existentes (400 em vez do 500 da FK) e
+ * no máximo uma por grupo exclusivo — a mesma regra que `addLabel` aplica depois.
+ */
+async function validateCreateLabels(db: Db, requested: string[]): Promise<string[]> {
+   const ids = [...new Set(requested)];
+   if (ids.length === 0) return ids;
+   const rows = await db
+      .select({ id: labelT.id, groupId: labelT.groupId })
+      .from(labelT)
+      .where(inArray(labelT.id, ids));
+   const found = new Map(rows.map((r) => [r.id, r.groupId]));
+   const missing = ids.filter((labelId) => !found.has(labelId));
+   if (missing.length) throw new ApiError(400, `Label '${missing[0]}' não existe`);
+   const groups = new Set<string>();
+   for (const labelId of ids) {
+      const groupId = found.get(labelId);
+      if (!groupId) continue;
+      if (groups.has(groupId))
+         throw new ApiError(400, `Só uma label do grupo '${groupId}' por issue`);
+      groups.add(groupId);
+   }
+   return ids;
+}
+
 function assertParentOfTeam(parent: typeof issue.$inferSelect, teamId: string): void {
    if (parent.teamId !== teamId)
       throw new ApiError(400, `Issue-pai '${parent.id}' é de outro time (${parent.teamId})`);
@@ -572,7 +708,8 @@ function assertParentOfTeam(parent: typeof issue.$inferSelect, teamId: string): 
 export async function createIssue(
    db: Db,
    input: CreateIssueInput,
-   actorEmail: string
+   actorEmail: string,
+   opts: IssueMutationOptions = {}
 ): Promise<IssueDto> {
    const actor = await getOrCreateUser(db, actorEmail);
    const catalogs = await loadCatalogs(db);
@@ -630,6 +767,7 @@ export async function createIssue(
    const startCat = statusRow.category;
    if (!catalogs.priorities.get(priorityId))
       throw new ApiError(400, `Priority '${priorityId}' não existe`);
+   const labelIds = await validateCreateLabels(db, input.labelIds ?? []);
 
    // Descrição: o doc do editor (derivando a projeção em texto, 400 se inválido) ou o
    // texto puro do cliente antigo.
@@ -652,6 +790,8 @@ export async function createIssue(
    const principalId = assigneeIds[0] ?? null;
 
    // Atômico: incremento do contador + issue + content + labels + evento.
+   let rebalanced = false;
+   let newSubscriberIds: string[] = [];
    await db.transaction(async (tx) => {
       // identifier: incremento atômico do contador do time
       const seqRes = await tx
@@ -661,10 +801,13 @@ export async function createIssue(
          .returning({ seq: teamT.issueSeq });
       const identifier = `${teamId}-${seqRes[0].seq}`;
 
-      // rank: após o maior rank existente
+      // rank: após o maior rank existente — sob lock (liberado no commit), senão duas
+      // criações concorrentes leem o mesmo máximo e repetem o rank (#25).
+      await tx.execute(sql`select pg_advisory_xact_lock(${ISSUE_RANK_LOCK_KEY})`);
       const maxRankRows = await tx
          .select({ r: issue.rank })
          .from(issue)
+         .where(eq(issue.teamId, teamId))
          .orderBy(sql`${issue.rank} DESC`)
          .limit(1);
       const rank = maxRankRows.length ? rankAfter(maxRankRows[0].r) : firstRank();
@@ -691,6 +834,10 @@ export async function createIssue(
          createdAt: now,
          updatedAt: now,
       });
+      if (needsRankRebalance(rank)) {
+         await rebalanceTeamRanksInTransaction(tx, teamId);
+         rebalanced = true;
+      }
 
       if (content.text) {
          await tx.insert(issueContent).values({
@@ -700,10 +847,10 @@ export async function createIssue(
             milestone: null,
          });
       }
-      if (input.labelIds?.length) {
+      if (labelIds.length) {
          await tx
             .insert(issueLabel)
-            .values(input.labelIds.map((labelId) => ({ issueId: id, labelId })))
+            .values(labelIds.map((labelId) => ({ issueId: id, labelId })))
             .onConflictDoNothing();
       }
       const events = [{ event: 'created', text: 'created the issue' }];
@@ -730,14 +877,17 @@ export async function createIssue(
 
       // auto-subscribe (Linear-style): criador + todos os responsáveis iniciais
       const subscribers = new Set<string>([actor.id, ...assigneeIds]);
-      await tx
-         .insert(issueSubscription)
-         .values([...subscribers].map((userId) => ({ issueId: id, userId })))
-         .onConflictDoNothing();
+      newSubscriberIds = (
+         await tx
+            .insert(issueSubscription)
+            .values([...subscribers].map((userId) => ({ issueId: id, userId })))
+            .onConflictDoNothing()
+            .returning({ userId: issueSubscription.userId })
+      ).map((r) => r.userId);
    });
 
    // Automações do time (#97): issue que nasce em Triage.
-   if (startCat === 'triage') {
+   if (startCat === 'triage' && !opts.bulk) {
       await runAutomations(db, 'issue.created_in_triage', id, {
          actorId: actor.id,
          actorEmail,
@@ -747,17 +897,32 @@ export async function createIssue(
       void import('./triage').then((m) => m.scheduleTriageSuggestion(db, id));
    }
 
-   publish({ entity: 'issue', action: 'created', id, actorEmail });
-   // O rollup do pai mudou (nova filha) → o board atualiza a linha dele.
-   if (parent) publish({ entity: 'issue', action: 'updated', id: parent.id, actorEmail });
+   if (!opts.silent) {
+      publish({ entity: 'issue', action: 'created', id, actorEmail, teamId });
+      publishAutoSubscriptions(id, newSubscriberIds, actorEmail);
+      if (rebalanced) publish({ entity: 'issue', action: 'updated', teamId });
+      // O rollup do pai mudou (nova filha) → o board atualiza a linha dele.
+      if (parent)
+         publish({
+            entity: 'issue',
+            action: 'updated',
+            id: parent.id,
+            actorEmail,
+            teamId: parent.teamId,
+         });
+      publishRollups(teamId, [projectId], [cycleId], actorEmail);
+   } else {
+      dispatchWebhooksOnly({ entity: 'issue', action: 'created', id, actorEmail, teamId });
+   }
    const created = (await getIssue(db, id))!;
    // Notificação Slack (best-effort, fire-and-forget — não acopla latência à request).
-   void notifySlackEvent(db, {
-      type: 'issue.created',
-      identifier: created.identifier,
-      title: created.title,
-      actor: actor.name,
-   });
+   if (!opts.bulk)
+      void notifySlackEvent(db, {
+         type: 'issue.created',
+         identifier: created.identifier,
+         title: created.title,
+         actor: actor.name,
+      });
    return created;
 }
 
@@ -785,165 +950,264 @@ export async function updateIssue(
    db: Db,
    id: string,
    patch: UpdateIssueInput,
-   actorEmail: string
+   actorEmail: string,
+   opts: IssueMutationOptions = {}
 ): Promise<IssueDto | null> {
-   const existing = await db.select().from(issue).where(eq(issue.id, id)).limit(1);
-   if (existing.length === 0) return null;
    const actor = await getOrCreateUser(db, actorEmail);
-   const prev = existing[0];
-
-   // Escopo de escrita: a issue de ORIGEM e os alvos do movimento (projeto e pai) têm
-   // que estar no escopo — mover para dentro/fora do próprio time é a escalação clássica.
-   const scope: ActorScope = { user: actor, teamIds: await visibleTeamIds(db, actor) };
-   assertTeamInScope(scope.teamIds, prev.teamId);
-   if (patch.projectId) {
-      await assertCanWriteProject(db, scope, patch.projectId);
-      await assertProjectOfTeam(db, patch.projectId, prev.teamId);
-   }
-   if (patch.parentId) await assertCanWriteIssue(db, scope, patch.parentId);
-
-   // Responsáveis (#96): `assigneeIds` substitui o conjunto; `assigneeId` sozinho troca só
-   // o principal e mantém os colaboradores (`""` → sem principal, como cycleId). O
-   // principal gravado em `issue.assignee_id` é SEMPRE o 1º do conjunto resultante.
+   let prev!: typeof issue.$inferSelect;
    let nextAssigneeIds: string[] | null = null;
    let prevAssigneeIds: string[] = [];
-   if (patch.assigneeIds !== undefined || patch.assigneeId !== undefined) {
-      const links = await db
-         .select({ userId: issueAssignee.userId })
-         .from(issueAssignee)
-         .where(eq(issueAssignee.issueId, id))
-         .orderBy(asc(issueAssignee.createdAt));
-      prevAssigneeIds = normalizeAssigneeIds([prev.assigneeId, ...links.map((l) => l.userId)]);
-      nextAssigneeIds =
-         patch.assigneeIds !== undefined
-            ? normalizeAssigneeIds(patch.assigneeIds)
-            : normalizeAssigneeIds([
-                 patch.assigneeId || null,
-                 ...prevAssigneeIds.filter((u) => u !== prev.assigneeId),
-              ]);
-   }
-   const addedAssigneeIds = nextAssigneeIds
-      ? nextAssigneeIds.filter((u) => !prevAssigneeIds.includes(u))
-      : [];
-   const removedAssigneeIds = nextAssigneeIds
-      ? prevAssigneeIds.filter((u) => !nextAssigneeIds!.includes(u))
-      : [];
-   const nextPrincipalId = nextAssigneeIds ? (nextAssigneeIds[0] ?? null) : prev.assigneeId;
-   const principalChanged = nextPrincipalId !== prev.assigneeId;
-
-   const set: Record<string, unknown> = { updatedAt: new Date() };
-   if (patch.title !== undefined) set.title = patch.title;
-   if (patch.statusId !== undefined) set.statusId = patch.statusId;
-   if (patch.priorityId !== undefined) set.priorityId = patch.priorityId;
-   if (nextAssigneeIds) {
-      await assertAssignableUsers(db, nextAssigneeIds);
-      set.assigneeId = nextPrincipalId;
-   }
-   // `""` (limpar o campo) → null, consistente com cycleId: senão a FK vira 404
-   // "recurso não existe" em vez de desvincular.
-   if (patch.projectId !== undefined) set.projectId = patch.projectId || null;
-   if (patch.cycleId !== undefined) {
-      if (patch.cycleId) await assertCycleOfTeam(db, patch.cycleId, prev.teamId);
-      set.cycleId = patch.cycleId || null;
-   }
-   // Due date manual desliga o SLA da issue (o indicador só vale para o prazo automático).
-   if (patch.dueDate !== undefined) {
-      set.dueDate = patch.dueDate;
-      set.slaAppliedAt = null;
-   }
-   if (patch.estimate !== undefined) set.estimate = patch.estimate;
-   if (patch.snoozedUntil !== undefined)
-      set.snoozedUntil = patch.snoozedUntil ? new Date(patch.snoozedUntil) : null;
-   if (patch.milestoneId !== undefined) {
-      if (patch.milestoneId) {
-         // valida que a milestone pertence ao projeto da issue (após aplicar o patch de projeto)
-         const projectId = patch.projectId !== undefined ? patch.projectId || null : prev.projectId;
-         const [m] = await db
-            .select({ projectId: projectMilestoneT.projectId })
-            .from(projectMilestoneT)
-            .where(eq(projectMilestoneT.id, patch.milestoneId))
-            .limit(1);
-         if (!m) throw new ApiError(400, 'Milestone inválida');
-         if (m.projectId !== projectId)
-            throw new ApiError(400, 'Milestone não pertence ao projeto da issue');
-      }
-      set.milestoneId = patch.milestoneId || null;
-   } else if (patch.projectId !== undefined && (patch.projectId || null) !== prev.projectId) {
-      // Trocou/removeu o projeto SEM tocar em milestone: a milestone atual pertence ao
-      // projeto ANTIGO → limpa (senão fica órfã, inflando progresso e aparecendo em issue
-      // de outro projeto). project_milestone não tem FK cascade, então é app-level.
-      if (prev.milestoneId) set.milestoneId = null;
-   }
-
-   // Pai (#95): "" limpa como os demais FKs; guarda de auto-pai e de ciclo em resolveParent.
-   const nextParentId = patch.parentId !== undefined ? patch.parentId || null : undefined;
+   let addedAssigneeIds: string[] = [];
+   let removedAssigneeIds: string[] = [];
+   let nextPrincipalId: string | null = null;
+   let principalChanged = false;
+   let set: Record<string, unknown> = {};
+   let newSubscriberIds: string[] = [];
    let newParent: typeof issue.$inferSelect | null = null;
-   if (nextParentId !== undefined && nextParentId !== prev.parentId) {
-      if (nextParentId) newParent = await resolveParent(db, id, nextParentId);
-      if (newParent) assertParentOfTeam(newParent, prev.teamId);
-      set.parentId = nextParentId;
-   }
-
-   // SLA (#97): trocar a prioridade recalcula o prazo — mas só quando a issue NÃO tem
-   // due date manual (sem data, ou com data que veio do próprio SLA) e o patch não está
-   // definindo uma data explicitamente.
    let appliedSla: { hours: number; dueDate: string } | null = null;
-   if (
-      patch.priorityId !== undefined &&
-      patch.priorityId !== prev.priorityId &&
-      patch.dueDate === undefined &&
-      (prev.dueDate === null || prev.slaAppliedAt !== null)
-   ) {
-      const sla = await applySla(db, prev.teamId, patch.priorityId, set.updatedAt as Date);
-      if (sla) {
-         set.dueDate = sla.dueDate;
-         set.slaAppliedAt = sla.slaAppliedAt;
-         appliedSla = { hours: sla.hours, dueDate: sla.dueDate };
-      }
-   }
-
-   // Transição de status: marcos temporais (cycle/lead time) + auto-add ao cycle.
    let enteredCompleted = false;
-   const prevCategory = (await loadCatalogs(db)).statuses.get(prev.statusId)?.category;
-   let nextCategory = prevCategory;
-   if (patch.statusId !== undefined && patch.statusId !== prev.statusId) {
-      const cat = (await loadCatalogs(db)).statuses.get(patch.statusId)?.category;
-      nextCategory = cat;
-      const now = set.updatedAt as Date;
-      enteredCompleted = cat === 'completed';
-      // startedAt: 1ª entrada em "started" (sticky — não sobrescreve).
-      if (cat === 'started' && !prev.startedAt) set.startedAt = now;
-      // completedAt: entra em "completed" grava; sai de "completed" (reabriu) limpa.
-      if (cat === 'completed') {
-         set.completedAt = now;
-         // Pulou direto p/ done sem passar por started: cycle time ~0 (consistente c/ create).
-         if (!prev.startedAt) set.startedAt = now;
-      } else if (prev.completedAt) {
-         set.completedAt = null;
+   let prevCategory: string | undefined;
+   let nextCategory: string | undefined;
+   let statusChanged = false;
+   let estimateChanged = false;
+
+   const committed = await db.transaction(async (tx) => {
+      const txDb = tx as unknown as Db;
+      const locked = await tx.select().from(issue).where(eq(issue.id, id)).for('update').limit(1);
+      if (locked.length === 0) return false;
+      prev = locked[0];
+
+      // Escopo de escrita: a issue de ORIGEM e os alvos do movimento (projeto e pai) têm
+      // que estar no escopo — mover para dentro/fora do próprio time é a escalação clássica.
+      const scope: ActorScope = { user: actor, teamIds: await visibleTeamIds(txDb, actor) };
+      assertTeamInScope(scope.teamIds, prev.teamId);
+      if (patch.projectId) {
+         await assertCanWriteProject(txDb, scope, patch.projectId);
+         await assertProjectOfTeam(txDb, patch.projectId, prev.teamId);
+      }
+      if (patch.parentId) await assertCanWriteIssue(txDb, scope, patch.parentId);
+
+      // Responsáveis (#96): `assigneeIds` substitui o conjunto; `assigneeId` sozinho troca só
+      // o principal e mantém os colaboradores (`""` → sem principal, como cycleId). O
+      // principal gravado em `issue.assignee_id` é SEMPRE o 1º do conjunto resultante.
+      if (patch.assigneeIds !== undefined || patch.assigneeId !== undefined) {
+         const links = await txDb
+            .select({ userId: issueAssignee.userId })
+            .from(issueAssignee)
+            .where(eq(issueAssignee.issueId, id))
+            .orderBy(asc(issueAssignee.createdAt));
+         prevAssigneeIds = normalizeAssigneeIds([prev.assigneeId, ...links.map((l) => l.userId)]);
+         nextAssigneeIds =
+            patch.assigneeIds !== undefined
+               ? normalizeAssigneeIds(patch.assigneeIds)
+               : normalizeAssigneeIds([
+                    patch.assigneeId || null,
+                    ...prevAssigneeIds.filter((u) => u !== prev!.assigneeId),
+                 ]);
+      }
+      addedAssigneeIds = nextAssigneeIds
+         ? nextAssigneeIds.filter((u) => !prevAssigneeIds.includes(u))
+         : [];
+      removedAssigneeIds = nextAssigneeIds
+         ? prevAssigneeIds.filter((u) => !nextAssigneeIds!.includes(u))
+         : [];
+      nextPrincipalId = nextAssigneeIds ? (nextAssigneeIds[0] ?? null) : prev.assigneeId;
+      principalChanged = nextPrincipalId !== prev.assigneeId;
+
+      set = { updatedAt: new Date() };
+      if (patch.title !== undefined) set.title = patch.title;
+      if (patch.statusId !== undefined) set.statusId = patch.statusId;
+      if (patch.priorityId !== undefined) set.priorityId = patch.priorityId;
+      if (nextAssigneeIds) {
+         await assertAssignableUsers(txDb, nextAssigneeIds);
+         set.assigneeId = nextPrincipalId;
+      }
+      // `""` (limpar o campo) → null, consistente com cycleId: senão a FK vira 404
+      // "recurso não existe" em vez de desvincular.
+      if (patch.projectId !== undefined) set.projectId = patch.projectId || null;
+      if (patch.cycleId !== undefined) {
+         if (patch.cycleId) await assertCycleOfTeam(txDb, patch.cycleId, prev.teamId);
+         set.cycleId = patch.cycleId || null;
+      }
+      // Due date manual desliga o SLA da issue (o indicador só vale para o prazo automático).
+      if (patch.dueDate !== undefined) {
+         set.dueDate = patch.dueDate;
+         set.slaAppliedAt = null;
+      }
+      if (patch.estimate !== undefined) set.estimate = patch.estimate;
+      if (patch.snoozedUntil !== undefined)
+         set.snoozedUntil = patch.snoozedUntil ? new Date(patch.snoozedUntil) : null;
+      if (patch.milestoneId !== undefined) {
+         if (patch.milestoneId) {
+            // valida que a milestone pertence ao projeto da issue (após aplicar o patch de projeto)
+            const projectId =
+               patch.projectId !== undefined ? patch.projectId || null : prev.projectId;
+            const [m] = await txDb
+               .select({ projectId: projectMilestoneT.projectId })
+               .from(projectMilestoneT)
+               .where(eq(projectMilestoneT.id, patch.milestoneId))
+               .limit(1);
+            if (!m) throw new ApiError(400, 'Milestone inválida');
+            if (m.projectId !== projectId)
+               throw new ApiError(400, 'Milestone não pertence ao projeto da issue');
+         }
+         set.milestoneId = patch.milestoneId || null;
+      } else if (patch.projectId !== undefined && (patch.projectId || null) !== prev.projectId) {
+         // Trocou/removeu o projeto SEM tocar em milestone: a milestone atual pertence ao
+         // projeto ANTIGO → limpa (senão fica órfã, inflando progresso e aparecendo em issue
+         // de outro projeto). project_milestone não tem FK cascade, então é app-level.
+         if (prev.milestoneId) set.milestoneId = null;
       }
 
-      // Auto-add ao cycle atual (paridade Linear): issue que ENTRA em "started" e não tem
-      // cycle é atribuída ao cycle corrente do time — a menos que o cycle esteja sendo
-      // setado explicitamente neste patch.
-      if (cat === 'started' && patch.cycleId === undefined && !prev.cycleId) {
-         const [cur] = await db
-            .select({ id: cycleT.id })
-            .from(cycleT)
-            .where(and(eq(cycleT.teamId, prev.teamId), eq(cycleT.status, 'current')))
-            .limit(1);
-         if (cur) set.cycleId = cur.id;
+      // Pai (#95): "" limpa como os demais FKs; guarda de auto-pai e de ciclo em resolveParent.
+      const nextParentId = patch.parentId !== undefined ? patch.parentId || null : undefined;
+      if (nextParentId !== undefined && nextParentId !== prev.parentId) {
+         if (nextParentId) newParent = await resolveParent(txDb, id, nextParentId);
+         if (newParent) assertParentOfTeam(newParent, prev.teamId);
+         set.parentId = nextParentId;
       }
-   }
 
-   // O auto-add acima é uma das MAIORES fontes de crescimento de escopo do ciclo, e
-   // era completamente invisível no histórico: o evento de `cycle` só é emitido quando
-   // `patch.cycleId` vem preenchido, e aqui ele vem `undefined`.
-   const autoAddedCycleId =
-      set.cycleId !== undefined && patch.cycleId === undefined ? (set.cycleId as string) : null;
+      // SLA (#97): trocar a prioridade recalcula o prazo — mas só quando a issue NÃO tem
+      // due date manual (sem data, ou com data que veio do próprio SLA) e o patch não está
+      // definindo uma data explicitamente.
+      if (
+         patch.priorityId !== undefined &&
+         patch.priorityId !== prev.priorityId &&
+         patch.dueDate === undefined &&
+         (prev.dueDate === null || prev.slaAppliedAt !== null)
+      ) {
+         const sla = await applySla(txDb, prev.teamId, patch.priorityId, set.updatedAt as Date);
+         if (sla) {
+            set.dueDate = sla.dueDate;
+            set.slaAppliedAt = sla.slaAppliedAt;
+            appliedSla = { hours: sla.hours, dueDate: sla.dueDate };
+         }
+      }
 
-   // Atômico com a junção de responsáveis: o principal em `issue` e o conjunto em
-   // `issue_assignee` nunca ficam inconsistentes entre si.
-   await db.transaction(async (tx) => {
+      // Transição de status: marcos temporais (cycle/lead time) + auto-add ao cycle.
+      prevCategory = (await loadCatalogs(txDb)).statuses.get(prev.statusId)?.category;
+      nextCategory = prevCategory;
+      if (patch.statusId !== undefined && patch.statusId !== prev.statusId) {
+         const cat = (await loadCatalogs(txDb)).statuses.get(patch.statusId)?.category;
+         nextCategory = cat;
+         const now = set.updatedAt as Date;
+         enteredCompleted = cat === 'completed';
+         // startedAt: 1ª entrada em "started" (sticky — não sobrescreve).
+         if (cat === 'started' && !prev.startedAt) set.startedAt = now;
+         // completedAt: entra em "completed" grava; sai de "completed" (reabriu) limpa.
+         if (cat === 'completed') {
+            set.completedAt = now;
+            // Pulou direto p/ done sem passar por started: cycle time ~0 (consistente c/ create).
+            if (!prev.startedAt) set.startedAt = now;
+         } else if (prev.completedAt) {
+            set.completedAt = null;
+         }
+
+         // Auto-add ao cycle atual (paridade Linear): issue que ENTRA em "started" e não tem
+         // cycle é atribuída ao cycle corrente do time — a menos que o cycle esteja sendo
+         // setado explicitamente neste patch.
+         if (cat === 'started' && patch.cycleId === undefined && !prev.cycleId) {
+            const [cur] = await txDb
+               .select({ id: cycleT.id })
+               .from(cycleT)
+               .where(and(eq(cycleT.teamId, prev.teamId), eq(cycleT.status, 'current')))
+               .limit(1);
+            if (cur) set.cycleId = cur.id;
+         }
+      }
+
+      // O auto-add acima é uma das MAIORES fontes de crescimento de escopo do ciclo, e
+      // era completamente invisível no histórico: o evento de `cycle` só é emitido quando
+      // `patch.cycleId` vem preenchido, e aqui ele vem `undefined`.
+      const autoAddedCycleId =
+         set.cycleId !== undefined && patch.cycleId === undefined ? (set.cycleId as string) : null;
+
+      // Nomes p/ o histórico "added/removed assignee X" (um SELECT só quando houve mudança).
+      const changedAssigneeIds = [...addedAssigneeIds, ...removedAssigneeIds];
+      const assigneeNames = new Map<string, string>(
+         changedAssigneeIds.length
+            ? (
+                 await txDb
+                    .select({ id: appUser.id, name: appUser.name })
+                    .from(appUser)
+                    .where(inArray(appUser.id, changedAssigneeIds))
+              ).map((u) => [u.id, u.name])
+            : []
+      );
+
+      // eventos de atividade para transições relevantes
+      statusChanged = patch.statusId !== undefined && patch.statusId !== prev.statusId;
+      const events: { event: string; text: string }[] = [];
+      // De/para pelo nome (is#8): "changed status" sozinho não dizia o que mudou.
+      const priorityChanged =
+         patch.priorityId !== undefined && patch.priorityId !== prev.priorityId;
+      const names = statusChanged || priorityChanged ? await loadCatalogs(txDb) : null;
+      if (statusChanged)
+         events.push({
+            event: 'status',
+            text: `changed status from ${names?.statuses.get(prev.statusId)?.name ?? 'none'} to ${
+               names?.statuses.get(patch.statusId as string)?.name ?? 'none'
+            }`,
+         });
+      if (priorityChanged)
+         events.push({
+            event: 'priority',
+            text: `changed priority from ${names?.priorities.get(prev.priorityId)?.name ?? 'none'} to ${
+               names?.priorities.get(patch.priorityId as string)?.name ?? 'none'
+            }`,
+         });
+      // De/para no texto: sem isso o histórico não permite reconstruir o escopo de um
+      // ciclo ao longo do tempo — foi o que bloqueou o `scopeDelta` real (#24).
+      if (patch.cycleId !== undefined && (patch.cycleId || null) !== prev.cycleId)
+         events.push({
+            event: 'cycle',
+            text: `changed cycle from ${prev.cycleId ?? 'none'} to ${patch.cycleId ?? 'none'}`,
+         });
+      if (autoAddedCycleId)
+         events.push({
+            event: 'cycle',
+            text: `added to cycle ${autoAddedCycleId} on start`,
+         });
+      // Entradas/saídas do conjunto têm evento por pessoa; "changed assignee" fica só para
+      // a troca de principal sem ninguém entrar/sair (ex.: promover um colaborador).
+      if (principalChanged && !addedAssigneeIds.length && !removedAssigneeIds.length)
+         events.push({ event: 'assignee', text: `changed assignee` });
+      for (const uid of addedAssigneeIds)
+         events.push({
+            event: 'assignee',
+            text: `added assignee ${assigneeNames.get(uid) ?? uid}`,
+         });
+      for (const uid of removedAssigneeIds)
+         events.push({
+            event: 'assignee',
+            text: `removed assignee ${assigneeNames.get(uid) ?? uid}`,
+         });
+      if (patch.title !== undefined && patch.title !== prev.title)
+         events.push({ event: 'title', text: `renamed the issue` });
+      if (patch.projectId !== undefined && (patch.projectId || null) !== prev.projectId)
+         events.push({ event: 'project', text: `changed project` });
+      estimateChanged = patch.estimate !== undefined && (patch.estimate ?? null) !== prev.estimate;
+      if (estimateChanged)
+         events.push({
+            event: 'estimate',
+            text: `changed estimate from ${prev.estimate ?? 'none'} to ${patch.estimate ?? 'none'}`,
+         });
+      if (patch.dueDate !== undefined && (patch.dueDate ?? null) !== prev.dueDate)
+         events.push({ event: 'dueDate', text: `changed due date` });
+      if (appliedSla)
+         events.push({
+            event: 'sla',
+            text: `applied SLA (${appliedSla.hours}h): due ${appliedSla.dueDate}`,
+         });
+      if (set.parentId !== undefined)
+         events.push({
+            event: 'parent',
+            text: newParent ? `set parent to ${newParent.identifier}` : 'removed parent',
+         });
+
+      // Atômico (#10): a issue, a junção de responsáveis, o histórico e o auto-subscribe
+      // dos novos responsáveis entram juntos — antes o histórico era gravado DEPOIS do
+      // commit, e uma falha ali devolvia erro de uma mutação já aplicada (e sem evento).
       await tx.update(issue).set(set).where(eq(issue.id, id));
       if (removedAssigneeIds.length) {
          await tx
@@ -963,87 +1227,86 @@ export async function updateIssue(
                }))
             )
             .onConflictDoNothing();
+         // Auto-subscribe (Linear-style; inclui auto-atribuição) de CADA novo responsável.
+         newSubscriberIds = (
+            await tx
+               .insert(issueSubscription)
+               .values(addedAssigneeIds.map((userId) => ({ issueId: id, userId })))
+               .onConflictDoNothing()
+               .returning({ userId: issueSubscription.userId })
+         ).map((r) => r.userId);
       }
+      if (events.length) {
+         const now = new Date();
+         await tx.insert(activityEvent).values(
+            events.map((e) => ({
+               id: randomUUID(),
+               issueId: id,
+               actorId: actor.id,
+               event: e.event,
+               text: e.text,
+               createdAt: now,
+            }))
+         );
+      }
+      return true;
    });
 
-   // Nomes p/ o histórico "added/removed assignee X" (um SELECT só quando houve mudança).
-   const changedAssigneeIds = [...addedAssigneeIds, ...removedAssigneeIds];
-   const assigneeNames = new Map<string, string>(
-      changedAssigneeIds.length
-         ? (
-              await db
-                 .select({ id: appUser.id, name: appUser.name })
-                 .from(appUser)
-                 .where(inArray(appUser.id, changedAssigneeIds))
-           ).map((u) => [u.id, u.name])
-         : []
-   );
+   if (!committed) return null;
+   const committedParent = newParent as typeof issue.$inferSelect | null;
 
-   // eventos de atividade para transições relevantes
-   const events: { event: string; text: string }[] = [];
-   if (patch.statusId !== undefined && patch.statusId !== prev.statusId)
-      events.push({ event: 'status', text: `changed status` });
-   if (patch.priorityId !== undefined && patch.priorityId !== prev.priorityId)
-      events.push({ event: 'priority', text: `changed priority` });
-   // De/para no texto: sem isso o histórico não permite reconstruir o escopo de um
-   // ciclo ao longo do tempo — foi o que bloqueou o `scopeDelta` real (#24).
-   if (patch.cycleId !== undefined && (patch.cycleId || null) !== prev.cycleId)
-      events.push({
-         event: 'cycle',
-         text: `changed cycle from ${prev.cycleId ?? 'none'} to ${patch.cycleId ?? 'none'}`,
-      });
-   if (autoAddedCycleId)
-      events.push({
-         event: 'cycle',
-         text: `added to cycle ${autoAddedCycleId} on start`,
-      });
-   // Entradas/saídas do conjunto têm evento por pessoa; "changed assignee" fica só para
-   // a troca de principal sem ninguém entrar/sair (ex.: promover um colaborador).
-   if (principalChanged && !addedAssigneeIds.length && !removedAssigneeIds.length)
-      events.push({ event: 'assignee', text: `changed assignee` });
-   for (const uid of addedAssigneeIds)
-      events.push({ event: 'assignee', text: `added assignee ${assigneeNames.get(uid) ?? uid}` });
-   for (const uid of removedAssigneeIds)
-      events.push({ event: 'assignee', text: `removed assignee ${assigneeNames.get(uid) ?? uid}` });
-   if (patch.title !== undefined && patch.title !== prev.title)
-      events.push({ event: 'title', text: `renamed the issue` });
-   if (patch.projectId !== undefined && (patch.projectId || null) !== prev.projectId)
-      events.push({ event: 'project', text: `changed project` });
-   if (patch.estimate !== undefined && (patch.estimate ?? null) !== prev.estimate)
-      events.push({
-         event: 'estimate',
-         text: `changed estimate from ${prev.estimate ?? 'none'} to ${patch.estimate ?? 'none'}`,
-      });
-   if (patch.dueDate !== undefined && (patch.dueDate ?? null) !== prev.dueDate)
-      events.push({ event: 'dueDate', text: `changed due date` });
-   if (appliedSla)
-      events.push({
-         event: 'sla',
-         text: `applied SLA (${appliedSla.hours}h): due ${appliedSla.dueDate}`,
-      });
-   if (set.parentId !== undefined)
-      events.push({
-         event: 'parent',
-         text: newParent ? `set parent to ${newParent.identifier}` : 'removed parent',
-      });
-   if (events.length) {
-      const now = new Date();
-      await db.insert(activityEvent).values(
-         events.map((e) => ({
-            id: randomUUID(),
-            issueId: id,
-            actorId: actor.id,
-            event: e.event,
-            text: e.text,
-            createdAt: now,
-         }))
+   // ── Depois do commit: primeiro o evento, depois os efeitos colaterais. ──
+   if (!opts.silent) {
+      publish({ entity: 'issue', action: 'updated', id, actorEmail, teamId: prev.teamId });
+      publishAutoSubscriptions(id, newSubscriberIds, actorEmail);
+      // Rollup dos pais (antigo e novo) mudou quando a issue trocou de pai ou de status.
+      const parentsToRefresh = new Set<string>();
+      if (set.parentId !== undefined) {
+         if (prev.parentId) parentsToRefresh.add(prev.parentId);
+         if (committedParent) parentsToRefresh.add(committedParent.id);
+      } else if (prev.parentId && statusChanged) {
+         parentsToRefresh.add(prev.parentId);
+      }
+      for (const pid of parentsToRefresh)
+         publish({ entity: 'issue', action: 'updated', id: pid, teamId: prev.teamId });
+      // Rollups de projeto/ciclo (#8), antigos e novos.
+      const nextProjectId =
+         set.projectId !== undefined ? (set.projectId as string | null) : prev.projectId;
+      const nextCycleId = set.cycleId !== undefined ? (set.cycleId as string | null) : prev.cycleId;
+      const milestoneChanged =
+         set.milestoneId !== undefined && set.milestoneId !== prev.milestoneId;
+      publishRollups(
+         prev.teamId,
+         statusChanged || estimateChanged || milestoneChanged || nextProjectId !== prev.projectId
+            ? [prev.projectId, nextProjectId]
+            : [],
+         statusChanged || estimateChanged || nextCycleId !== prev.cycleId
+            ? [prev.cycleId, nextCycleId]
+            : [],
+         actorEmail
       );
+   } else {
+      dispatchWebhooksOnly({
+         entity: 'issue',
+         action: 'updated',
+         id,
+         actorEmail,
+         teamId: prev.teamId,
+      });
    }
 
-   // CADA novo responsável: auto-subscribe (Linear-style; inclui auto-atribuição) e
-   // notificação (in-app + Slack/Email best-effort) — exceto o próprio ator.
-   for (const uid of addedAssigneeIds) {
-      await subscribeToIssue(db, id, uid);
+   // Efeitos colaterais (#10): a mutação JÁ está gravada e publicada — uma falha aqui é
+   // registrada, nunca devolvida como erro do PATCH.
+   const effect = async (name: string, fn: () => Promise<unknown>): Promise<void> => {
+      try {
+         await fn();
+      } catch (e) {
+         console.warn(`[circle] efeito '${name}' da issue ${id} falhou:`, (e as Error).message);
+      }
+   };
+
+   // Notificação de CADA novo responsável (in-app + Slack/Email) — exceto o próprio ator.
+   for (const uid of opts.bulk ? [] : addedAssigneeIds) {
       if (uid === actor.id) continue;
       // Fire-and-forget: notificação (Slack/SES) não bloqueia a resposta do PATCH.
       // `dispatchNotification` captura os próprios erros (loga, não lança).
@@ -1058,45 +1321,42 @@ export async function updateIssue(
 
    // Automações de sub-issues (#95): só quando o status trocou de CATEGORIA.
    if (prevCategory !== nextCategory && patch.statusId !== undefined) {
-      await applyAutoClose(
-         db,
-         {
-            id,
-            teamId: prev.teamId,
-            statusId: patch.statusId,
-            parentId: set.parentId !== undefined ? (set.parentId as string | null) : prev.parentId,
-         },
-         actor.id,
-         actorEmail
+      const statusId = patch.statusId;
+      await effect('auto-close', () =>
+         applyAutoClose(
+            db,
+            {
+               id,
+               teamId: prev.teamId,
+               statusId,
+               parentId:
+                  set.parentId !== undefined ? (set.parentId as string | null) : prev.parentId,
+            },
+            actor.id,
+            actorEmail,
+            opts
+         )
       );
    }
 
    // Automações do time (#97): status trocado (a categoria de destino filtra as regras).
-   if (patch.statusId !== undefined && patch.statusId !== prev.statusId)
-      await runAutomations(db, 'issue.status_changed', id, {
-         actorId: actor.id,
-         actorEmail,
-         toCategory: nextCategory,
-      });
+   if (statusChanged && !opts.bulk)
+      await effect('automations', () =>
+         runAutomations(db, 'issue.status_changed', id, {
+            actorId: actor.id,
+            actorEmail,
+            toCategory: nextCategory,
+         })
+      );
 
    // Sugestão de triagem (#94): a issue ENTROU na fila agora. Assíncrona (import
    // dinâmico: `triage.ts` alcança `agent.ts`, que importa ESTE módulo).
-   if (nextCategory === 'triage' && prevCategory !== 'triage')
-      void import('./triage').then((m) => m.scheduleTriageSuggestion(db, id));
+   if (nextCategory === 'triage' && prevCategory !== 'triage' && !opts.bulk)
+      void import('./triage').then((m) => m.scheduleTriageSuggestion(db, id)).catch(() => {});
 
-   publish({ entity: 'issue', action: 'updated', id, actorEmail });
-   // Rollup dos pais (antigo e novo) mudou quando a issue trocou de pai ou de status.
-   const parentsToRefresh = new Set<string>();
-   if (set.parentId !== undefined) {
-      if (prev.parentId) parentsToRefresh.add(prev.parentId);
-      if (newParent) parentsToRefresh.add(newParent.id);
-   } else if (prev.parentId && patch.statusId !== undefined && patch.statusId !== prev.statusId) {
-      parentsToRefresh.add(prev.parentId);
-   }
-   for (const pid of parentsToRefresh) publish({ entity: 'issue', action: 'updated', id: pid });
    const dto = await getIssue(db, id);
    // Feed do canal Slack (best-effort, fire-and-forget). Gated pelo slack_config admin.
-   if (dto) {
+   if (dto && !opts.bulk) {
       if (enteredCompleted)
          void notifySlackEvent(db, {
             type: 'issue.completed',
@@ -1126,7 +1386,8 @@ async function applyAutoClose(
    db: Db,
    changed: { id: string; teamId: string; statusId: string; parentId: string | null },
    actorId: string,
-   actorEmail: string
+   actorEmail: string,
+   opts: IssueMutationOptions = {}
 ): Promise<void> {
    const [flags] = await db
       .select({ parent: teamT.autoCloseParent, children: teamT.autoCloseChildren })
@@ -1148,10 +1409,7 @@ async function applyAutoClose(
               .sort((a, b) => a.position - b.position)[0]?.id;
    if (!completedStatusId) return;
 
-   const close = async (
-      target: { id: string; statusId: string; startedAt: Date | null },
-      text: string
-   ) => {
+   const close = async (target: typeof issue.$inferSelect, text: string) => {
       const now = new Date();
       await db
          .update(issue)
@@ -1170,7 +1428,15 @@ async function applyAutoClose(
          text,
          createdAt: now,
       });
-      publish({ entity: 'issue', action: 'updated', id: target.id, actorEmail });
+      if (opts.silent) return;
+      publish({
+         entity: 'issue',
+         action: 'updated',
+         id: target.id,
+         actorEmail,
+         teamId: target.teamId,
+      });
+      publishRollups(target.teamId, [target.projectId], [target.cycleId], actorEmail);
    };
 
    // Sobe: a issue ficou done → se TODAS as irmãs também, conclui o pai; repete acima.
@@ -1208,10 +1474,35 @@ async function applyAutoClose(
 }
 
 export async function deleteIssue(db: Db, id: string, actorEmail?: string): Promise<boolean> {
-   const existing = await db.select({ id: issue.id }).from(issue).where(eq(issue.id, id)).limit(1);
+   const existing = await db
+      .select({
+         id: issue.id,
+         teamId: issue.teamId,
+         parentId: issue.parentId,
+         projectId: issue.projectId,
+         cycleId: issue.cycleId,
+      })
+      .from(issue)
+      .where(eq(issue.id, id))
+      .limit(1);
    if (existing.length === 0) return false;
+   const prev = existing[0];
    if (actorEmail) await assertCanWriteIssue(db, actorEmail, id);
    const children = await db.select({ id: issue.id }).from(issue).where(eq(issue.parentId, id));
+   // Relacionadas (duas direções) perdem a relação no delete: avisa as telas delas (Is#21).
+   const relationRows = await db
+      .select({ issueId: issueRelation.issueId, relatedId: issueRelation.relatedId })
+      .from(issueRelation)
+      .where(or(eq(issueRelation.issueId, id), eq(issueRelation.relatedId, id)));
+   const relatedIds = [
+      ...new Set(relationRows.map((r) => (r.issueId === id ? r.relatedId : r.issueId))),
+   ].filter((rid) => rid !== id);
+   const related = relatedIds.length
+      ? await db
+           .select({ id: issue.id, teamId: issue.teamId })
+           .from(issue)
+           .where(inArray(issue.id, relatedIds))
+      : [];
    // Os anexos (da issue e dos comentários dela) somem por cascade, mas os OBJETOS no
    // S3 ficariam órfãos — guarda as URLs antes e limpa depois do commit (best-effort).
    const attachmentUrls = await issueAttachmentUrls(db, id);
@@ -1251,8 +1542,15 @@ export async function deleteIssue(db: Db, id: string, actorEmail?: string): Prom
       await tx.delete(issue).where(eq(issue.id, id));
    });
    void removeAttachmentObjects(attachmentUrls);
-   publish({ entity: 'issue', action: 'deleted', id });
-   for (const c of children) publish({ entity: 'issue', action: 'updated', id: c.id });
+   publish({ entity: 'issue', action: 'deleted', id, actorEmail, teamId: prev.teamId });
+   for (const c of children)
+      publish({ entity: 'issue', action: 'updated', id: c.id, teamId: prev.teamId });
+   for (const r of related)
+      publish({ entity: 'issue', action: 'updated', id: r.id, actorEmail, teamId: r.teamId });
+   // O pai perdeu uma filha e o projeto/ciclo, uma issue (#8).
+   if (prev.parentId)
+      publish({ entity: 'issue', action: 'updated', id: prev.parentId, teamId: prev.teamId });
+   publishRollups(prev.teamId, [prev.projectId], [prev.cycleId], actorEmail);
    return true;
 }
 
@@ -1269,6 +1567,34 @@ export async function subscribeToIssue(
 ): Promise<void> {
    if (actorEmail) await assertCanWriteIssue(db, actorEmail, id);
    await db.insert(issueSubscription).values({ issueId: id, userId }).onConflictDoNothing();
+   publishSubscriptionChanged(id, userId, actorEmail);
+}
+
+/**
+ * A assinatura vive em `me.subscribedIssueIds` (#35): avisa SÓ o próprio usuário (as
+ * outras abas/dispositivos dele), com a issue em `issueId`.
+ */
+function publishSubscriptionChanged(issueId: string, userId: string, actorEmail?: string): void {
+   publish({
+      entity: 'member',
+      action: 'updated',
+      id: userId,
+      recipientId: userId,
+      issueId,
+      actorEmail,
+   });
+}
+
+/**
+ * Auto-assinatura (criar/atribuir/import, #22): avisa a aba de CADA usuário que passou a
+ * seguir a issue. Chamar DEPOIS do commit, só com quem foi realmente inserido.
+ */
+export function publishAutoSubscriptions(
+   issueId: string,
+   userIds: readonly string[],
+   actorEmail?: string
+): void {
+   for (const uid of new Set(userIds)) publishSubscriptionChanged(issueId, uid, actorEmail);
 }
 
 /** Cancela a assinatura de uma issue. */
@@ -1282,9 +1608,24 @@ export async function unsubscribeFromIssue(
    await db
       .delete(issueSubscription)
       .where(and(eq(issueSubscription.issueId, id), eq(issueSubscription.userId, userId)));
+   publishSubscriptionChanged(id, userId, actorEmail);
 }
 
 /** Ids das issues assinadas pelo usuário (alimenta a aba Subscribed do My issues). */
+/** O usuário segue esta issue? (issue fechada fica fora do `me.subscribedIssueIds`.) */
+export async function isSubscribedToIssue(
+   db: Db,
+   issueId: string,
+   userId: string
+): Promise<boolean> {
+   const rows = await db
+      .select({ issueId: issueSubscription.issueId })
+      .from(issueSubscription)
+      .where(and(eq(issueSubscription.issueId, issueId), eq(issueSubscription.userId, userId)))
+      .limit(1);
+   return rows.length > 0;
+}
+
 export async function listSubscribedIssueIds(db: Db, userId: string): Promise<string[]> {
    const rows = await db
       .select({ issueId: issueSubscription.issueId })
@@ -1302,21 +1643,53 @@ export async function reorderIssue(
    actorEmail?: string
 ): Promise<IssueDto | null> {
    if (actorEmail) await assertCanWriteIssue(db, actorEmail, id);
-   const getRank = async (rid?: string | null) => {
-      if (!rid) return null;
-      const r = await db.select({ r: issue.rank }).from(issue).where(eq(issue.id, rid)).limit(1);
-      return r.length ? r[0].r : null;
-   };
-   const before = await getRank(beforeId);
-   const after = await getRank(afterId);
-   const newRank = rankBetween(before, after);
-   const res = await db
-      .update(issue)
-      .set({ rank: newRank, updatedAt: new Date() })
-      .where(eq(issue.id, id))
-      .returning({ id: issue.id });
+   let rebalanced = false;
+   const res = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(${ISSUE_RANK_LOCK_KEY})`);
+      const [target] = await tx
+         .select({ rank: issue.rank, teamId: issue.teamId })
+         .from(issue)
+         .where(eq(issue.id, id))
+         .for('update')
+         .limit(1);
+      if (!target) return [];
+
+      const getRank = async (rid?: string | null) => {
+         if (!rid) return null;
+         const r = await tx.select({ r: issue.rank }).from(issue).where(eq(issue.id, rid)).limit(1);
+         return r.length ? r[0].r : null;
+      };
+      const before = await getRank(beforeId);
+      const after = await getRank(afterId);
+      let newRank: string;
+      if (before && after && before >= after) {
+         // Vizinhos empatados ou invertidos (#25) — dois drags concorrentes ou lista velha no
+         // cliente. `LexoRank.between` lançava (500); ancora logo depois de `before`, entre
+         // ele e o próximo rank ESTRITAMENTE maior (sem contar a própria issue).
+         const [next] = await tx
+            .select({ r: issue.rank })
+            .from(issue)
+            .where(and(gt(issue.rank, before), ne(issue.id, id)))
+            .orderBy(asc(issue.rank))
+            .limit(1);
+         newRank = rankBetween(before, next?.r ?? null);
+      } else {
+         newRank = rankBetween(before, after);
+      }
+      const updated = await tx
+         .update(issue)
+         .set({ rank: newRank, updatedAt: new Date() })
+         .where(eq(issue.id, id))
+         .returning({ id: issue.id, teamId: issue.teamId });
+      if (updated.length && needsRankRebalance(newRank)) {
+         await rebalanceTeamRanksInTransaction(tx, target.teamId);
+         rebalanced = true;
+      }
+      return updated;
+   });
    if (res.length === 0) return null;
-   publish({ entity: 'issue', action: 'updated', id });
+   publish({ entity: 'issue', action: 'updated', id, actorEmail, teamId: res[0].teamId });
+   if (rebalanced) publish({ entity: 'issue', action: 'updated', teamId: res[0].teamId });
    return getIssue(db, id);
 }
 
@@ -1327,7 +1700,11 @@ export async function addLabel(
    actorEmail: string
 ): Promise<IssueDto | null> {
    // valida issue e label antes do insert (senão a FK estoura como 500)
-   const issueRows = await db.select({ id: issue.id }).from(issue).where(eq(issue.id, id)).limit(1);
+   const issueRows = await db
+      .select({ id: issue.id, teamId: issue.teamId })
+      .from(issue)
+      .where(eq(issue.id, id))
+      .limit(1);
    if (issueRows.length === 0) throw new ApiError(404, `Issue '${id}' não encontrada`);
    await assertCanWriteIssue(db, actorEmail, id);
    const labelRows = await db
@@ -1336,43 +1713,53 @@ export async function addLabel(
       .where(eq(labelT.id, labelId))
       .limit(1);
    if (labelRows.length === 0) throw new ApiError(400, `Label '${labelId}' não existe`);
+   const actor = await getOrCreateUser(db, actorEmail);
 
    // Grupo mutuamente exclusivo (paridade Linear): ao adicionar uma label de um grupo,
    // remove as outras labels do MESMO grupo já na issue (uma por grupo).
    const groupId = labelRows[0].groupId;
-   if (groupId) {
-      const siblings = await db
-         .select({ id: labelT.id })
-         .from(labelT)
-         .where(and(eq(labelT.groupId, groupId), notInArray(labelT.id, [labelId])));
-      const siblingIds = siblings.map((s) => s.id);
+   const siblingIds = groupId
+      ? (
+           await db
+              .select({ id: labelT.id })
+              .from(labelT)
+              .where(and(eq(labelT.groupId, groupId), notInArray(labelT.id, [labelId])))
+        ).map((s) => s.id)
+      : [];
+
+   // Atômico e serializado por issue (#32): o `FOR UPDATE` na linha da issue impede que
+   // dois cliques concorrentes em labels do mesmo grupo deixem as duas gravadas.
+   const inserted = await db.transaction(async (tx) => {
+      await tx.select({ id: issue.id }).from(issue).where(eq(issue.id, id)).for('update');
       if (siblingIds.length) {
-         await db
+         await tx
             .delete(issueLabel)
             .where(and(eq(issueLabel.issueId, id), inArray(issueLabel.labelId, siblingIds)));
       }
-   }
-
-   const inserted = await db
-      .insert(issueLabel)
-      .values({ issueId: id, labelId })
-      .onConflictDoNothing()
-      .returning({ labelId: issueLabel.labelId });
-   // grava no histórico só quando o vínculo é novo (re-add idempotente não gera evento)
-   if (inserted.length > 0) {
-      const actor = await getOrCreateUser(db, actorEmail);
-      await db.insert(activityEvent).values({
-         id: randomUUID(),
-         issueId: id,
-         actorId: actor.id,
-         event: 'label',
-         text: `added label ${labelRows[0].name}`,
-         createdAt: new Date(),
-      });
-      // Automações do time (#97): label adicionada.
+      const rows = await tx
+         .insert(issueLabel)
+         .values({ issueId: id, labelId })
+         .onConflictDoNothing()
+         .returning({ labelId: issueLabel.labelId });
+      // grava no histórico só quando o vínculo é novo (re-add idempotente não gera evento)
+      if (rows.length > 0) {
+         // Label é parte do DTO da lista: conta como mudança da issue (resync incremental, #14).
+         await tx.update(issue).set({ updatedAt: new Date() }).where(eq(issue.id, id));
+         await tx.insert(activityEvent).values({
+            id: randomUUID(),
+            issueId: id,
+            actorId: actor.id,
+            event: 'label',
+            text: `added label ${labelRows[0].name}`,
+            createdAt: new Date(),
+         });
+      }
+      return rows;
+   });
+   publish({ entity: 'issue', action: 'updated', id, actorEmail, teamId: issueRows[0].teamId });
+   // Automações do time (#97): label adicionada — depois do commit (efeito colateral).
+   if (inserted.length > 0)
       await runAutomations(db, 'issue.label_added', id, { actorId: actor.id, actorEmail, labelId });
-   }
-   publish({ entity: 'issue', action: 'updated', id });
    return getIssue(db, id);
 }
 
@@ -1389,6 +1776,7 @@ export async function removeLabel(
       .returning({ labelId: issueLabel.labelId });
    // grava no histórico só quando havia vínculo (delete no-op não gera evento)
    if (deleted.length > 0) {
+      await db.update(issue).set({ updatedAt: new Date() }).where(eq(issue.id, id));
       const labelRows = await db
          .select({ name: labelT.name })
          .from(labelT)
@@ -1404,6 +1792,11 @@ export async function removeLabel(
          createdAt: new Date(),
       });
    }
-   publish({ entity: 'issue', action: 'updated', id });
+   const [row] = await db
+      .select({ teamId: issue.teamId })
+      .from(issue)
+      .where(eq(issue.id, id))
+      .limit(1);
+   publish({ entity: 'issue', action: 'updated', id, actorEmail, teamId: row?.teamId });
    return getIssue(db, id);
 }

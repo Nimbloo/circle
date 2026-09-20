@@ -12,8 +12,8 @@ import type { TeamSlaDto } from '@/lib/api/slas';
 import { useCatalogStore } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { priorities } from '@/data/priorities';
-import { status } from '@/data/status';
-import { labels } from '@/data/labels';
+import { status } from './helpers/catalog-fixture';
+import { labels } from './helpers/catalog-fixture';
 
 // O Select do Radix usa Pointer Capture, que o jsdom não implementa.
 for (const method of ['hasPointerCapture', 'setPointerCapture', 'releasePointerCapture'] as const) {

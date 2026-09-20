@@ -6,9 +6,32 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/client';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { useAgentChatStore } from '@/store/agent-chat-store';
+import { useAgentChatStore, type AgentMessage } from '@/store/agent-chat-store';
 import { ArrowUp, Bot, CalendarClock, ListTodo, Sparkles, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { LoadingArea } from '@/components/common/loading-area';
+
+/** Status HTTP de um erro do cliente da API (sem depender da classe em runtime). */
+function httpStatusOf(error: unknown): number | undefined {
+   if (!(error instanceof Error) || error.name !== 'ApiError') return undefined;
+   const status = (error as { status?: unknown }).status;
+   return typeof status === 'number' ? status : undefined;
+}
+
+/**
+ * Mensagem de falha do Agent (co#12): provedor fora do ar (503) e erro do servidor não
+ * podem culpar a conexão do usuário — só a falha de rede fala de conexão.
+ */
+export function agentErrorMessage(error: unknown): string {
+   const status = httpStatusOf(error);
+   if (status !== undefined) {
+      if (status === 503)
+         return 'O Agent está indisponível agora (o provedor não respondeu). Tente de novo em instantes.';
+      if (status >= 500) return 'O Agent falhou ao responder. Tente de novo em instantes.';
+      return (error as Error).message || 'Não consegui responder agora.';
+   }
+   return 'Não consegui responder agora. Verifique a conexão e tente de novo.';
+}
 
 /** Prompts de exemplo — perguntas reais que o Agent responde consultando o workspace. */
 const agentExamples = [
@@ -35,35 +58,8 @@ const agentExamples = [
    },
 ];
 
-/** Streams the canned reply into the assistant message, word by word. */
-function useStreamReply() {
-   const { appendToMessage, finishMessage } = useAgentChatStore();
-   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-   useEffect(() => {
-      return () => {
-         if (intervalRef.current) clearInterval(intervalRef.current);
-      };
-   }, []);
-
-   return (chatId: string, messageId: string, reply: string) => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      const words = reply.split(/(\s+)/);
-      let index = 0;
-      intervalRef.current = setInterval(() => {
-         if (index >= words.length) {
-            if (intervalRef.current) clearInterval(intervalRef.current);
-            finishMessage(chatId, messageId);
-            return;
-         }
-         appendToMessage(chatId, messageId, words[index]);
-         index += 1;
-      }, 14);
-   };
-}
-
 /** Aviso honesto: respostas são geradas por IA sobre dados reais e podem conter erros. */
-function DemoBadge() {
+function AiNotice() {
    return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
          <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-medium text-primary">
@@ -75,7 +71,14 @@ function DemoBadge() {
    );
 }
 
-function AgentMessageBody({ content, streaming }: { content: string; streaming?: boolean }) {
+/** Memoizada: a resposta chega inteira e só a bolha que mudou re-renderiza. */
+const AgentMessageBody = memo(function AgentMessageBody({
+   content,
+   streaming,
+}: {
+   content: string;
+   streaming?: boolean;
+}) {
    const lines = content.split('\n');
    return (
       <div className="text-sm leading-relaxed flex flex-col gap-1">
@@ -112,7 +115,42 @@ function AgentMessageBody({ content, streaming }: { content: string; streaming?:
          {streaming && <span className="inline-block w-2 h-4 bg-foreground/60 animate-pulse" />}
       </div>
    );
-}
+});
+
+/** Uma bolha do chat; memoizada pela referência da mensagem (o store preserva as demais). */
+const ChatMessage = memo(function ChatMessage({ message }: { message: AgentMessage }) {
+   const avatarUrl = useWorkspaceStore((s) => s.me?.avatarUrl);
+   const name = useWorkspaceStore((s) => s.me?.name) ?? 'You';
+
+   if (message.role === 'user') {
+      return (
+         <div className="content-enter flex justify-end">
+            <div className="flex items-start gap-2.5 max-w-[85%]">
+               <div className="rounded-2xl rounded-tr-sm bg-accent px-4 py-2.5 text-sm">
+                  {message.content}
+               </div>
+               <Avatar className="size-6 mt-1 shrink-0">
+                  <AvatarImage src={avatarUrl ?? undefined} alt={name} />
+                  <AvatarFallback>{name[0]}</AvatarFallback>
+               </Avatar>
+            </div>
+         </div>
+      );
+   }
+   return (
+      <div className="content-enter flex items-start gap-2.5">
+         <span className="mt-1 inline-flex size-6 items-center justify-center rounded-full border bg-container shrink-0">
+            <Bot className="size-3.5" />
+         </span>
+         <div className={cn('min-w-0 flex-1', message.error && 'text-destructive')}>
+            <AgentMessageBody content={message.content} streaming={message.streaming} />
+         </div>
+      </div>
+   );
+});
+
+/** Distância (px) do fim abaixo da qual o chat segue a resposta rolando sozinho. */
+const STICK_TO_BOTTOM_PX = 80;
 
 function ChatComposer({
    onSend,
@@ -169,51 +207,64 @@ function ChatComposer({
 
 /**
  * Página do Agent: pergunte qualquer coisa e obtenha uma resposta de IA REAL
- * (Bedrock/Claude via `api.agent.chat`) sobre os dados vivos do workspace. A resposta
- * é transmitida palavra a palavra na bolha. As conversas vivem num store client e
- * podem ser revisitadas pelo dropdown do header.
+ * (Bedrock/Claude via `api.agent.send`) sobre os dados vivos do workspace. A resposta
+ * aparece inteira quando chega. As conversas são persistidas e podem ser revisitadas
+ * pelo dropdown do header.
  */
 export default function AgentChat() {
-   const { chats, activeChatId, sendMessage, failMessage, hydrate, loadChat, rekeyChat } =
-      useAgentChatStore();
-   const me = useWorkspaceStore((s) => s.me);
-   const stream = useStreamReply();
-   const [bannerDismissed, setBannerDismissed] = useState(false);
+   // Seletores estreitos: `find` devolve a referência guardada (estável entre updates de
+   // outros chats); ações têm referência fixa.
+   const activeChat = useAgentChatStore((s) => s.chats.find((chat) => chat.id === s.activeChatId));
+   const activeChatId = useAgentChatStore((s) => s.activeChatId);
+   const resolveMessage = useAgentChatStore((s) => s.resolveMessage);
+   const failMessage = useAgentChatStore((s) => s.failMessage);
+   const hydrate = useAgentChatStore((s) => s.hydrate);
+   const loadChat = useAgentChatStore((s) => s.loadChat);
+   const rekeyChat = useAgentChatStore((s) => s.rekeyChat);
    const [examplesDismissed, setExamplesDismissed] = useState(false);
    const scrollRef = useRef<HTMLDivElement>(null);
+   // Segue o fim só se o usuário já estava lá (não arranca quem rolou para ler acima).
+   const stickToBottom = useRef(true);
 
-   const activeChat = chats.find((chat) => chat.id === activeChatId);
-   const isStreaming = activeChat?.messages.some((message) => message.streaming) ?? false;
+   const messages = activeChat?.messages;
+   const isStreaming = messages?.some((message) => message.streaming) ?? false;
+   const messageCount = messages?.length ?? 0;
+
+   // Mensagem nova (envio/troca de chat): sempre vai para o fim.
+   useLayoutEffect(() => {
+      stickToBottom.current = true;
+   }, [messageCount, activeChatId]);
 
    useEffect(() => {
-      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-   }, [activeChat?.messages]);
+      const el = scrollRef.current;
+      if (el && stickToBottom.current) el.scrollTo({ top: el.scrollHeight });
+   }, [messages]);
 
    // Carrega a lista de chats persistidos ao montar.
    useEffect(() => {
       void hydrate();
    }, [hydrate]);
 
-   // Ao abrir um chat ainda sem mensagens carregadas, busca do servidor.
+   // Ao abrir um chat persistido ainda não carregado, busca as mensagens do servidor.
+   const needsLoad =
+      !!activeChat?.persisted && !activeChat.loadState && activeChat.messages.length === 0;
    useEffect(() => {
-      if (activeChat && activeChat.messages.length === 0) void loadChat(activeChat.id);
-   }, [activeChat, loadChat]);
+      if (needsLoad && activeChatId) void loadChat(activeChatId);
+   }, [needsLoad, activeChatId, loadChat]);
 
    const handleSend = async (input: string) => {
       if (isStreaming) return;
-      const wasNew = activeChatId === null;
-      const { chatId, assistantMessageId } = sendMessage(input);
+      // Chat ainda não gravado (novo, ou cuja 1ª resposta falhou): o servidor cria.
+      const persisted = activeChat?.persisted ?? false;
+      // Ação que devolve os ids criados: lida no handler, não assinada no render.
+      const { chatId, assistantMessageId } = useAgentChatStore.getState().sendMessage(input);
       try {
          // Persiste no servidor (cria o chat se for novo) e devolve a resposta.
-         const res = await api.agent.send(wasNew ? null : chatId, input);
-         if (wasNew) rekeyChat(chatId, res.chatId, res.title);
-         stream(res.chatId, assistantMessageId, res.reply);
-      } catch {
-         failMessage(
-            chatId,
-            assistantMessageId,
-            'Não consegui responder agora. Verifique a conexão e tente de novo.'
-         );
+         const res = await api.agent.send(persisted ? chatId : null, input);
+         if (!persisted) rekeyChat(chatId, res.chatId, res.title);
+         resolveMessage(res.chatId, assistantMessageId, res.reply);
+      } catch (error) {
+         failMessage(chatId, assistantMessageId, agentErrorMessage(error));
       }
    };
 
@@ -222,19 +273,8 @@ export default function AgentChat() {
       return (
          <div className="w-full h-full flex flex-col items-center overflow-y-auto">
             <div className="w-full flex justify-center border-b bg-container px-4 py-2">
-               <DemoBadge />
+               <AiNotice />
             </div>
-            {!bannerDismissed && (
-               <div className="mt-4 flex items-center gap-3 rounded-full border bg-container shadow-xs px-4 py-1.5 text-sm">
-                  <span>Agent is now your default view</span>
-                  <button
-                     onClick={() => setBannerDismissed(true)}
-                     className="font-medium rounded-full border px-2.5 py-0.5 hover:bg-accent transition-colors"
-                  >
-                     Keep
-                  </button>
-               </div>
-            )}
 
             <div className="flex-1 w-full max-w-2xl px-6 flex flex-col justify-center pb-24">
                <div className="flex justify-center mb-8 text-muted-foreground/30">
@@ -283,40 +323,32 @@ export default function AgentChat() {
    return (
       <div className="w-full h-full flex flex-col overflow-hidden">
          <div className="shrink-0 border-b bg-container px-4 py-2">
-            <DemoBadge />
+            <AiNotice />
          </div>
-         <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
+         <div
+            ref={scrollRef}
+            onScroll={(event) => {
+               const el = event.currentTarget;
+               stickToBottom.current =
+                  el.scrollHeight - el.scrollTop - el.clientHeight < STICK_TO_BOTTOM_PX;
+            }}
+            className="flex-1 min-h-0 overflow-y-auto"
+         >
             <div className="max-w-2xl mx-auto px-6 py-8 flex flex-col gap-6">
-               {activeChat.messages.map((message) =>
-                  message.role === 'user' ? (
-                     <div key={message.id} className="flex justify-end">
-                        <div className="flex items-start gap-2.5 max-w-[85%]">
-                           <div className="rounded-2xl rounded-tr-sm bg-accent px-4 py-2.5 text-sm">
-                              {message.content}
-                           </div>
-                           <Avatar className="size-6 mt-1 shrink-0">
-                              <AvatarImage
-                                 src={me?.avatarUrl ?? undefined}
-                                 alt={me?.name ?? 'You'}
-                              />
-                              <AvatarFallback>{(me?.name ?? 'You')[0]}</AvatarFallback>
-                           </Avatar>
-                        </div>
-                     </div>
-                  ) : (
-                     <div key={message.id} className="flex items-start gap-2.5">
-                        <span className="mt-1 inline-flex size-6 items-center justify-center rounded-full border bg-container shrink-0">
-                           <Bot className="size-3.5" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                           <AgentMessageBody
-                              content={message.content}
-                              streaming={message.streaming}
-                           />
-                        </div>
-                     </div>
-                  )
+               {activeChat.messages.length === 0 && activeChat.loadState === 'loading' && (
+                  <LoadingArea rows={3} label="Carregando conversa…" />
                )}
+               {activeChat.messages.length === 0 && activeChat.loadState === 'error' && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                     <span>Não foi possível carregar a conversa.</span>
+                     <Button variant="outline" size="sm" onClick={() => loadChat(activeChat.id)}>
+                        Tentar de novo
+                     </Button>
+                  </div>
+               )}
+               {activeChat.messages.map((message) => (
+                  <ChatMessage key={message.id} message={message} />
+               ))}
             </div>
          </div>
          <div className="shrink-0 border-t bg-container">

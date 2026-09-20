@@ -26,6 +26,8 @@ export interface ReviewCommit {
    sha: string;
    message: string;
    timeAgo: string;
+   /** ISO do commit: a tela recalcula o tempo relativo a cada minuto (`TimeAgo`). */
+   committedAt?: string | null;
 }
 
 export interface DiffLine {
@@ -98,6 +100,8 @@ export interface Review {
    status: ReviewStatus;
    list: ReviewList;
    timeAgo: string;
+   /** ISO de abertura do PR: a tela recalcula o tempo relativo a cada minuto (`TimeAgo`). */
+   createdAt?: string;
    repo: string;
    prNumber: number;
    targetBranch: string;

@@ -16,6 +16,8 @@ import type { InitiativeDto } from '@/lib/api/initiatives';
 vi.mock('@/lib/client', () => ({ api: {} }));
 
 const { useWorkspaceStore } = await import('@/store/workspace-store');
+const { useIssuesStore } = await import('@/store/issues-store');
+type Issue = import('@/data/issues').Issue;
 
 /* ------------------------------- Fixtures ------------------------------- */
 
@@ -98,7 +100,7 @@ function projectDto(id: string, teamId: string, initiativeId: string | null = nu
    } as unknown as ProjectDto;
 }
 
-function team(id: string, members: User[], projects: Project[] = []): Team {
+function team(id: string, members: User[]): Team {
    return {
       id,
       name: `Team ${id}`,
@@ -111,7 +113,6 @@ function team(id: string, members: User[], projects: Project[] = []): Team {
       autoCloseChildren: false,
       parentId: null,
       members,
-      projects,
    };
 }
 
@@ -207,7 +208,7 @@ function seed() {
    const uBob = user('bob', []);
    const p1 = project('p1', 'ENG', 'i1');
    const p2 = project('p2', 'ENG');
-   const eng: Team = { ...team('ENG', [uMe, uAna], [p1, p2]), joined: true };
+   const eng: Team = { ...team('ENG', [uMe, uAna]), joined: true };
    const ops = team('OPS', []);
    const initiative = {
       id: 'i1',
@@ -264,13 +265,13 @@ describe('workspace-store — splice por entidade', () => {
          expect(created.name).toBe('Team NEW');
          expect(created.joined).toBe(true);
          expect(created.members.map((m) => m.id)).toEqual(['me']);
-         expect(created.projects).toEqual([]);
+         expect('projects' in created).toBe(false);
          expect(st().getUserById('me')?.teamIds).toEqual(['ENG', 'NEW']);
          expect(st().me?.teamIds).toEqual(['ENG', 'NEW']);
          expectUntouched(before, ['teams', 'users', 'me']);
       });
 
-      it('applyTeam de um time EXISTENTE preserva members/projects e não mexe em users', () => {
+      it('applyTeam de um time EXISTENTE preserva members e não mexe em users', () => {
          const before = refs();
          st().applyTeam(
             teamDto('ENG', { name: 'Engineering', icon: '🚀', estimateScale: 'tshirt' })
@@ -280,7 +281,6 @@ describe('workspace-store — splice por entidade', () => {
          expect(eng.icon).toBe('🚀');
          expect(eng.estimateScale).toBe('tshirt');
          expect(eng.members).toBe(before.teams[0].members);
-         expect(eng.projects).toBe(before.teams[0].projects);
          expect(st().getTeamById('OPS')).toBe(before.teams[1]);
          expectUntouched(before, ['teams']);
       });
@@ -292,7 +292,44 @@ describe('workspace-store — splice por entidade', () => {
          expect(st().getUserById('me')?.teamIds).toEqual([]);
          expect(st().getUserById('bob')).toBe(before.users[2]); // não era membro: mesma ref
          expect(st().me?.teamIds).toEqual([]);
-         expectUntouched(before, ['teams', 'users', 'me']);
+         // Exclusão em cascata: projetos e ciclos do time saem junto (e da initiative).
+         expectUntouched(before, ['teams', 'users', 'me', 'projects', 'cycles', 'initiatives']);
+      });
+
+      it('removeTeamLocal poda projetos, ciclos, views e issues do time (cascata)', () => {
+         useWorkspaceStore.setState({
+            projects: [...st().projects, project('p3', 'OPS')],
+            views: [
+               ...st().views,
+               { id: 'v2', name: 'V2', teamId: 'ENG', filter: {} } as unknown as View,
+            ],
+         });
+         useIssuesStore.setState({
+            issues: [
+               { id: 'a', teamId: 'ENG', project: { id: 'p1' }, cycleId: 'c1' },
+               { id: 'b', teamId: 'ENG', parentId: 'a', cycleId: '' },
+               {
+                  id: 'c',
+                  teamId: 'OPS',
+                  parentId: 'a',
+                  parentIdentifier: 'ENG-1',
+                  project: { id: 'p2' },
+                  cycleId: 'c1',
+               },
+               { id: 'd', teamId: 'OPS', project: { id: 'p3' }, cycleId: '' },
+            ] as unknown as Issue[],
+         });
+         st().removeTeamLocal('ENG');
+         expect(st().projects.map((p) => p.id)).toEqual(['p3']);
+         expect(st().cycles).toEqual([]);
+         expect(st().views.map((v) => v.id)).toEqual(['v1']);
+         expect(st().initiatives[0].projectIds).toEqual([]);
+         const issues = useIssuesStore.getState().issues;
+         expect(issues.map((i) => i.id)).toEqual(['c', 'd']);
+         // Issue de outro time perde o pai, o projeto e o ciclo que eram do time excluído.
+         expect(issues[0]).toMatchObject({ parentId: null, parentIdentifier: null, cycleId: '' });
+         expect(issues[0].project).toBeUndefined();
+         expect(issues[1].project?.id).toBe('p3');
       });
 
       it('applyTeamMembers substitui a lista: quem entrou ganha o time, quem saiu perde', () => {
@@ -413,17 +450,16 @@ describe('workspace-store — splice por entidade', () => {
    });
 
    describe('project / initiative — cópias derivadas', () => {
-      it('applyProject novo entra em teams[].projects e no projectIds da initiative', () => {
+      it('applyProject novo entra em projects e no projectIds da initiative (teams intacto)', () => {
          const before = refs();
          st().applyProject(projectDto('p3', 'ENG', 'i1'));
          expect(
             st()
-               .getTeamById('ENG')
-               ?.projects.map((p) => p.id)
+               .getProjectsByTeam('ENG')
+               .map((p) => p.id)
          ).toEqual(['p1', 'p2', 'p3']);
          expect(st().getInitiativeById('i1')?.projectIds).toEqual(['p1', 'p3']);
-         expect(st().getTeamById('OPS')).toBe(before.teams[1]);
-         expectUntouched(before, ['projects', 'teams', 'initiatives']);
+         expectUntouched(before, ['projects', 'initiatives']);
       });
 
       it('applyProject que desvincula a initiative tira o id do projectIds', () => {
@@ -447,14 +483,32 @@ describe('workspace-store — splice por entidade', () => {
          st().removeProjectLocal('p1');
          expect(
             st()
-               .getTeamById('ENG')
-               ?.projects.map((p) => p.id)
+               .getProjectsByTeam('ENG')
+               .map((p) => p.id)
          ).toEqual(['p2']);
          expect(st().getInitiativeById('i1')?.projectIds).toEqual([]);
          st().applyInitiative(initiativeDto('i1', null, ['p2']));
          st().removeInitiativeLocal('i1');
          expect(st().initiatives).toEqual([]);
          expect(st().getProjectById('p2')?.initiative).toBeUndefined();
+      });
+   });
+
+   describe('referências nas issues (#13)', () => {
+      it('removeProjectLocal / removeCycleLocal limpam project/cycleId das issues', () => {
+         useIssuesStore.setState({
+            issues: [
+               { id: 'a', project: { id: 'p1' }, cycleId: 'c1' },
+               { id: 'b', project: { id: 'p2' }, cycleId: 'c9' },
+            ] as unknown as Issue[],
+         });
+         st().removeProjectLocal('p1');
+         st().removeCycleLocal('c1');
+         const [a, b] = useIssuesStore.getState().issues;
+         expect(a.project).toBeUndefined();
+         expect(a.cycleId).toBe('');
+         expect(b.project?.id).toBe('p2');
+         expect(b.cycleId).toBe('c9');
       });
    });
 });

@@ -203,6 +203,7 @@ export async function createAutomation(
       createdAt: new Date(),
    };
    await db.insert(teamAutomation).values(row);
+   publish({ entity: 'automation', action: 'created', id: row.id, teamId });
    return toDto(row);
 }
 
@@ -223,6 +224,7 @@ export async function updateAutomation(
    if (patch.enabled !== undefined) set.enabled = patch.enabled;
    if (patch.position !== undefined) set.position = patch.position;
    await db.update(teamAutomation).set(set).where(eq(teamAutomation.id, id));
+   publish({ entity: 'automation', action: 'updated', id, teamId: prev.teamId });
    return toDto({ ...prev, ...set });
 }
 
@@ -230,7 +232,9 @@ export async function deleteAutomation(db: Db, id: string): Promise<boolean> {
    const deleted = await db
       .delete(teamAutomation)
       .where(eq(teamAutomation.id, id))
-      .returning({ id: teamAutomation.id });
+      .returning({ id: teamAutomation.id, teamId: teamAutomation.teamId });
+   if (deleted.length > 0)
+      publish({ entity: 'automation', action: 'deleted', id, teamId: deleted[0].teamId });
    return deleted.length > 0;
 }
 
@@ -257,8 +261,12 @@ interface TargetIssue {
    priorityId: string;
    assigneeId: string | null;
    startedAt: Date | null;
+   completedAt: Date | null;
    dueDate: string | null;
    slaAppliedAt: Date | null;
+   parentId: string | null;
+   projectId: string | null;
+   cycleId: string | null;
 }
 
 async function loadIssue(db: Db, id: string): Promise<TargetIssue | null> {
@@ -270,8 +278,12 @@ async function loadIssue(db: Db, id: string): Promise<TargetIssue | null> {
          priorityId: issueT.priorityId,
          assigneeId: issueT.assigneeId,
          startedAt: issueT.startedAt,
+         completedAt: issueT.completedAt,
          dueDate: issueT.dueDate,
          slaAppliedAt: issueT.slaAppliedAt,
+         parentId: issueT.parentId,
+         projectId: issueT.projectId,
+         cycleId: issueT.cycleId,
       })
       .from(issueT)
       .where(eq(issueT.id, id))
@@ -394,6 +406,33 @@ async function runAutomationsUnsafe(
    return applied;
 }
 
+/**
+ * Status mudou por automação: o rollup do pai, do projeto e do ciclo mudou junto (Ad#28),
+ * como no `updateIssue`. Sem repetir ids.
+ */
+function publishStatusRollups(
+   teamId: string,
+   rows: { parentId?: string | null; projectId: string | null; cycleId: string | null }[],
+   actorEmail?: string
+): void {
+   const emit = (entity: 'issue' | 'project' | 'cycle', ids: (string | null | undefined)[]) => {
+      for (const id of new Set(ids.filter((v): v is string => Boolean(v))))
+         publish({ entity, action: 'updated', id, teamId, actorEmail });
+   };
+   emit(
+      'issue',
+      rows.map((r) => r.parentId)
+   );
+   emit(
+      'project',
+      rows.map((r) => r.projectId)
+   );
+   emit(
+      'cycle',
+      rows.map((r) => r.cycleId)
+   );
+}
+
 /** Executa a ação da regra. Devolve false quando não havia nada a fazer (idempotente). */
 async function applyAction(
    db: Db,
@@ -423,7 +462,7 @@ async function applyAction(
             .returning({ labelId: issueLabel.labelId });
          if (inserted.length === 0) return false;
          await logRun(db, rule, issueId, ctx, `added label ${labelId}`);
-         publish({ entity: 'issue', action: 'updated', id: issueId });
+         publish({ entity: 'issue', action: 'updated', id: issueId, teamId: target.teamId });
          await runAutomations(db, 'issue.label_added', issueId, {
             ...ctx,
             labelId,
@@ -443,10 +482,20 @@ async function applyAction(
          if (next.category === 'completed') {
             set.completedAt = now;
             if (!target.startedAt) set.startedAt = now;
+         } else if (target.completedAt) {
+            // Saiu de "completed" (reabriu): limpa, como o `updateIssue` (Ad#28).
+            set.completedAt = null;
          }
          await db.update(issueT).set(set).where(eq(issueT.id, issueId));
          await logRun(db, rule, issueId, ctx, `set status to ${next.name}`);
-         publish({ entity: 'issue', action: 'updated', id: issueId, actorEmail: ctx.actorEmail });
+         publish({
+            entity: 'issue',
+            action: 'updated',
+            id: issueId,
+            actorEmail: ctx.actorEmail,
+            teamId: target.teamId,
+         });
+         publishStatusRollups(target.teamId, [target], ctx.actorEmail);
          await runAutomations(db, 'issue.status_changed', issueId, {
             ...ctx,
             toCategory: next.category,
@@ -476,7 +525,13 @@ async function applyAction(
          }
          await db.update(issueT).set(set).where(eq(issueT.id, issueId));
          await logRun(db, rule, issueId, ctx, `set priority to ${next.name}`);
-         publish({ entity: 'issue', action: 'updated', id: issueId, actorEmail: ctx.actorEmail });
+         publish({
+            entity: 'issue',
+            action: 'updated',
+            id: issueId,
+            actorEmail: ctx.actorEmail,
+            teamId: target.teamId,
+         });
          return true;
       }
       case 'set_assignee': {
@@ -494,7 +549,13 @@ async function applyAction(
             .values({ issueId, userId: assigneeId, createdAt: now })
             .onConflictDoNothing();
          await logRun(db, rule, issueId, ctx, `assigned to ${user.name}`);
-         publish({ entity: 'issue', action: 'updated', id: issueId, actorEmail: ctx.actorEmail });
+         publish({
+            entity: 'issue',
+            action: 'updated',
+            id: issueId,
+            actorEmail: ctx.actorEmail,
+            teamId: target.teamId,
+         });
          return true;
       }
       case 'close_sub_issues': {
@@ -503,7 +564,13 @@ async function applyAction(
          const { statuses } = await getCachedCatalogs(db);
          const categoryOf = new Map(statuses.map((s) => [s.id, s.category]));
          const children = await db
-            .select({ id: issueT.id, statusId: issueT.statusId, startedAt: issueT.startedAt })
+            .select({
+               id: issueT.id,
+               statusId: issueT.statusId,
+               startedAt: issueT.startedAt,
+               projectId: issueT.projectId,
+               cycleId: issueT.cycleId,
+            })
             .from(issueT)
             .where(eq(issueT.parentId, issueId));
          const open = children.filter((c) => {
@@ -524,9 +591,11 @@ async function applyAction(
             if (!child.startedAt)
                await db.update(issueT).set({ startedAt: now }).where(eq(issueT.id, child.id));
             await logRun(db, rule, child.id, ctx, 'closed with the parent issue');
-            publish({ entity: 'issue', action: 'updated', id: child.id });
+            publish({ entity: 'issue', action: 'updated', id: child.id, teamId: target.teamId });
          }
-         publish({ entity: 'issue', action: 'updated', id: issueId });
+         publish({ entity: 'issue', action: 'updated', id: issueId, teamId: target.teamId });
+         // Projeto/ciclo das filhas fechadas (o pai já foi publicado acima).
+         publishStatusRollups(target.teamId, open, ctx.actorEmail);
          return true;
       }
       default:

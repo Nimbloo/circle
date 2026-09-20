@@ -4,8 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { api } from '@/lib/client';
-import { ApiError } from '@/lib/api/errors';
+import { api, ApiError } from '@/lib/client';
 import type { InviteDto } from '@/lib/api/invites';
 import {
    Select,
@@ -20,6 +19,7 @@ const INVITABLE_ROLES = ['Member', 'Guest'];
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Check, Copy, Link2, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { errorReason } from '@/lib/error-reason';
 
 const DOMAIN = '@nimbloo.ai';
 
@@ -41,6 +41,8 @@ export function InvitePanel() {
    /** Link do convite recém-criado — o token só volta uma vez, então fica na tela. */
    const [freshLink, setFreshLink] = useState<{ email: string; url: string } | null>(null);
    const [copied, setCopied] = useState(false);
+   /** Convite com a revogação aberta para confirmar na própria linha (ad#13). */
+   const [confirmRevoke, setConfirmRevoke] = useState<string | null>(null);
 
    const refresh = useCallback(async () => {
       if (!isAdmin) {
@@ -58,8 +60,14 @@ export function InvitePanel() {
       void refresh();
    }, [refresh]);
 
+   // Clipboard pode ser negado (permissão/contexto inseguro): o link segue na tela.
    const copy = async (url: string) => {
-      await navigator.clipboard.writeText(url);
+      try {
+         await navigator.clipboard.writeText(url);
+      } catch {
+         toast.error('Não foi possível copiar — copie o link manualmente');
+         return;
+      }
       setCopied(true);
       toast.success('Link copiado');
       setTimeout(() => setCopied(false), 1600);
@@ -71,11 +79,13 @@ export function InvitePanel() {
       setBusy(true);
       try {
          const dto = await api.invites.create(value, role);
+         // O popover fica ABERTO: é nele que o link (que só volta uma vez) aparece.
          setFreshLink({ email: dto.email, url: dto.url });
-         setEmail('');
-         setOpen(false);
-         await refresh();
-         await copy(dto.url);
+         // Só limpa se o campo ainda tem o e-mail enviado: o que foi digitado enquanto
+         // o convite salvava é o próximo convite, não pode sumir (ad#9).
+         setEmail((current) => (current.trim().toLowerCase() === value ? '' : current));
+         void refresh();
+         void copy(dto.url);
       } catch (e) {
          const msg =
             e instanceof ApiError && (e.status === 400 || e.status === 409)
@@ -91,11 +101,12 @@ export function InvitePanel() {
       setBusy(true);
       try {
          await api.invites.revoke(id);
+         setConfirmRevoke(null);
          if (freshLink?.email === who) setFreshLink(null);
          await refresh();
          toast.success(`Convite de ${who} revogado`);
-      } catch {
-         toast.error('Não foi possível revogar');
+      } catch (err) {
+         toast.error(errorReason(err, 'Não foi possível revogar'));
       } finally {
          setBusy(false);
       }
@@ -197,19 +208,45 @@ export function InvitePanel() {
                               Guest
                            </span>
                         )}
-                        <span className="shrink-0 text-xs text-muted-foreground">
-                           {i.invitedBy?.name ?? 'Unknown'}
-                        </span>
-                        <Button
-                           size="icon"
-                           variant="ghost"
-                           className="size-6 shrink-0"
-                           aria-label={`Revoke invite for ${i.email}`}
-                           disabled={busy}
-                           onClick={() => void revoke(i.id, i.email)}
-                        >
-                           <X className="size-3.5" />
-                        </Button>
+                        {confirmRevoke === i.id ? (
+                           <>
+                              <Button
+                                 size="xs"
+                                 variant="ghost"
+                                 className="shrink-0"
+                                 disabled={busy}
+                                 onClick={() => setConfirmRevoke(null)}
+                              >
+                                 Cancel
+                              </Button>
+                              <Button
+                                 size="xs"
+                                 variant="destructive"
+                                 className="shrink-0"
+                                 aria-label="Confirm revoke"
+                                 disabled={busy}
+                                 onClick={() => void revoke(i.id, i.email)}
+                              >
+                                 Revoke
+                              </Button>
+                           </>
+                        ) : (
+                           <>
+                              <span className="shrink-0 text-xs text-muted-foreground">
+                                 {i.invitedBy?.name ?? 'Unknown'}
+                              </span>
+                              <Button
+                                 size="icon"
+                                 variant="ghost"
+                                 className="size-6 shrink-0"
+                                 aria-label={`Revoke invite for ${i.email}`}
+                                 disabled={busy}
+                                 onClick={() => setConfirmRevoke(i.id)}
+                              >
+                                 <X className="size-3.5" />
+                              </Button>
+                           </>
+                        )}
                      </div>
                   ))}
                </div>

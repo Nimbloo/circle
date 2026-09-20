@@ -24,15 +24,34 @@ export async function GET(req: Request, { params }: Params) {
 const CreateSchema = z.discriminatedUnion('kind', [
    z.object({
       kind: z.literal('folder'),
-      name: z.string().min(1),
-      icon: z.string().nullish(),
+      name: z
+         .string()
+         .trim()
+         .min(1, 'name é obrigatório')
+         .max(128, 'name deve ter no máximo 128 caracteres'),
+      icon: z.string().max(16).nullish(),
       id: z.string().optional(),
    }),
    z.object({
       kind: z.literal('document'),
-      folderId: z.string().min(1),
-      name: z.string().min(1),
-      icon: z.string().nullish(),
+      // `folderId` OU `newFolder` (Ad#37, aditivo): pasta nova criada junto, atômica.
+      folderId: z.string().min(1).optional(),
+      newFolder: z
+         .object({
+            name: z
+               .string()
+               .trim()
+               .min(1, 'name é obrigatório')
+               .max(128, 'name deve ter no máximo 128 caracteres'),
+            icon: z.string().max(16).nullish(),
+         })
+         .optional(),
+      name: z
+         .string()
+         .trim()
+         .min(1, 'name é obrigatório')
+         .max(128, 'name deve ter no máximo 128 caracteres'),
+      icon: z.string().max(16).nullish(),
       pinned: z.boolean().optional(),
    }),
 ]);
@@ -61,6 +80,7 @@ export async function POST(req: Request, { params }: Params) {
             db,
             {
                folderId: input.folderId,
+               newFolder: input.newFolder,
                teamId: teamKey,
                name: input.name,
                icon: input.icon ?? null,

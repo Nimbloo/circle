@@ -1,10 +1,11 @@
 'use client';
 
 import type { Issue } from '@/data/issues';
+import { cn } from '@/lib/utils';
 import type { IssueDetail } from '@/data/issue-details';
-import { adaptIssueDetail, textToBlocks } from '@/lib/adapters-issue-detail';
+import { adaptActivity, adaptIssueDetail, textToBlocks } from '@/lib/adapters-issue-detail';
 import { adaptIssues } from '@/lib/adapters';
-import { api } from '@/lib/client';
+import { api, ApiError } from '@/lib/client';
 import { blocksToDoc, type EditorDoc } from '@/lib/editor-doc';
 import { ISSUE_CHANGED_EVENT } from '@/lib/use-live-sync';
 import { useIssuesStore } from '@/store/issues-store';
@@ -12,18 +13,18 @@ import { useCurrentIssueStore } from '@/store/current-issue-store';
 import { useStatuses } from '@/store/catalog-store';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Plus } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DetailSidePanel, DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 import { BlockEditor } from '@/components/common/editor/block-editor';
-import { ActivityFeed } from './activity-feed';
+import { ActivityFeed, type CommentPatch } from './activity-feed';
 import { AttachmentsSection } from './attachments-section';
 import { useAttachmentUploader } from './use-attachment-uploader';
 import { filesOf, isImageFile } from '@/lib/attachments-client';
 import { IssuePropertiesPanel } from './issue-properties-panel';
-import { IssueDetailSkeleton } from './issue-detail-skeleton';
+import { LoadingArea, useEnterFade } from '@/components/common/loading-area';
 import { IssuePicker } from './issue-picker';
 import { useParentCandidatesExclusion, useSetParent } from './parent-issue';
 import { SubIssueCreate } from './sub-issue-create';
@@ -91,9 +92,22 @@ function AddExistingSubIssue({
  * aberto/fechado pelo `detail-panel-store`), o mesmo de initiative e project; o
  * conteúdo ocupa a largura restante, centralizado nos 791px medidos no Linear.
  */
-export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailViewProps) {
+export function IssueDetailView(props: IssueDetailViewProps) {
+   // Uma instância por issue (#26): trocar A→B remonta — sem frame com o detail de A sob
+   // B nem refs de versão da descrição compartilhados (409 falso ao navegar).
+   return <IssueDetailBody key={props.issue.id} {...props} />;
+}
+
+/** Janela em que uma mudança remota desta issue é tratada como eco da própria ação. */
+const OWN_ECHO_MS = 2000;
+/** Janela que junta uma rajada de comentários remotos numa única recarga do feed. */
+const ACTIVITY_COALESCE_MS = 150;
+
+function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps) {
    const { orgId } = useParams<{ orgId: string }>();
    const inStore = useIssuesStore((s) => s.issues.some((i) => i.id === issue.id));
+   // Troca de irmão (aba, item, layout) não pisca: só a primeira chegada de conteúdo.
+   const fade = useEnterFade('issue-detail');
    const statuses = useStatuses();
 
    const [detail, setDetail] = useState<IssueDetail | null>(null);
@@ -105,34 +119,52 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
    // conversão da projeção em texto (`textToBlocks` → `blocksToDoc`).
    const [editingTitle, setEditingTitle] = useState(false);
    const [titleDraft, setTitleDraft] = useState('');
+   // Autosize: a caixa nasce e cresce na altura do conteúdo (navegador sem
+   // `field-sizing` continua sem o salto).
+   const autosizeTitle = useCallback((el: HTMLTextAreaElement | null) => {
+      if (!el) return;
+      const fit = () => {
+         if (!el.scrollHeight) return;
+         el.style.height = 'auto';
+         el.style.height = `${el.scrollHeight}px`;
+      };
+      fit();
+      el.addEventListener('input', fit);
+   }, []);
    const [descriptionDoc, setDescriptionDoc] = useState<EditorDoc | null>(null);
    // Override local do título para issue FORA do store (deep-link frio): o objeto vem
    // do pai e não flui de volta — o override exibe o valor salvo até o store assumir.
    const [localTitle, setLocalTitle] = useState<string | null>(null);
+   // Concorrência otimista da descrição (#36): a versão que este editor viu, os saves em
+   // fila (um de cada vez, sempre com a versão mais recente) e a época do editor — trocá-la
+   // remonta o editor com a versão do servidor depois de um conflito.
+   const descriptionVersion = useRef<string | null>(null);
+   const saveQueue = useRef<Promise<void>>(Promise.resolve());
+   const conflict = useRef(false);
+   const [editorEpoch, setEditorEpoch] = useState(0);
+   const descriptionBox = useRef<HTMLDivElement>(null);
 
-   // Ao trocar DE issue, volta ao skeleton. Depende do id (não do objeto): o splice do
-   // SSE (applyRemote) troca a referência da issue no store e antes disparava um
-   // refetch + skeleton em tela cheia a cada update — o "refresh completo" da página.
+   // O fetch depende do id (não do objeto): o splice do SSE (applyRemote) troca a
+   // referência da issue no store e não deve refazer o GET. A troca DE issue remonta
+   // (key no `IssueDetailView`), então o estado já nasce limpo.
    const detailIssueId = issue.id;
-   useEffect(() => {
-      setDetail(null);
-      setLoading(true);
-      setLocalTitle(null);
-      setEditingTitle(false);
-      setDescriptionDoc(null);
-   }, [detailIssueId]);
 
    useEffect(() => {
       if (!detailIssueId) return;
       let active = true;
       // Refetch silencioso (stale-while-revalidate): o conteúdo atual permanece na tela
-      // enquanto o novo detail chega — skeleton só na primeira carga (detail === null).
+      // enquanto o novo detail chega — loading só na primeira carga (detail === null).
       Promise.all([api.issues.detail(detailIssueId), api.issues.activity(detailIssueId)])
          .then(([detailDto, activity]) => {
             if (active) {
                const adapted = adaptIssueDetail(detailDto, activity);
                setDetail(adapted);
                onDetailLoaded?.(adapted);
+               // O editor com foco NÃO adota o doc recarregado (preserva a digitação): aí a
+               // versão também não avança, e o próximo save acusa o conflito (409).
+               const typing = descriptionBox.current?.contains(document.activeElement) ?? false;
+               if (!typing || descriptionVersion.current === null)
+                  descriptionVersion.current = detailDto.descriptionVersion ?? null;
                setDescriptionDoc(
                   detailDto.descriptionDoc ?? blocksToDoc(textToBlocks(detailDto.description))
                );
@@ -150,16 +182,90 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
       // eslint-disable-next-line react-hooks/exhaustive-deps -- onDetailLoaded é callback estável do pai
    }, [detailIssueId, reloadKey]);
 
+   // Só o feed (#27): comentário novo/removido não precisa do detail inteiro.
+   const activitySeq = useRef(0);
+   const reloadActivity = useCallback(() => {
+      const seq = ++activitySeq.current;
+      api.issues
+         .activity(detailIssueId)
+         .then((list) => {
+            if (seq !== activitySeq.current) return;
+            const activity = adaptActivity(list);
+            setDetail((d) => (d ? { ...d, activity } : d));
+         })
+         .catch(() => {
+            // mantém o feed atual; o próximo evento/reload reconcilia
+         });
+   }, [detailIssueId]);
+   const reloadActivityRef = useRef(reloadActivity);
+   reloadActivityRef.current = reloadActivity;
+
+   // Patch otimista de comentário (reação/edição/resolve) aplicado no feed local.
+   const patchComment = useCallback((id: string, patch: CommentPatch) => {
+      setDetail((d) =>
+         d
+            ? {
+                 ...d,
+                 activity: d.activity.map((it) =>
+                    it.kind === 'comment' && it.id === id ? { ...it, ...patch } : it
+                 ),
+              }
+            : d
+      );
+   }, []);
+
+   // Eco da própria ação: o SSE avisa esta aba também. Com `own` no evento (clientId da
+   // aba, If#16), o eco é reconhecido; sem ele, dentro da janela da ação, recarrega só o feed no fim dela
+   // (um evento de outra pessoa no mesmo intervalo não se perde).
+   const ownActionUntil = useRef(0);
+   const echoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+   const activityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+   const markOwnAction = useCallback(() => {
+      ownActionUntil.current = Date.now() + OWN_ECHO_MS;
+   }, []);
+   useEffect(
+      () => () => {
+         if (echoTimer.current) clearTimeout(echoTimer.current);
+         if (activityTimer.current) clearTimeout(activityTimer.current);
+      },
+      []
+   );
+
    // Realtime: quando o SSE avisa que esta issue mudou (comment/reaction/relation de
    // OUTRO usuário), refaz o fetch do detail/feed. Sem isso, o painel aberto fica stale.
    useEffect(() => {
       const onChanged = (e: Event) => {
-         const id = (e as CustomEvent<{ id?: string }>).detail?.id;
-         if (!id || id === detailIssueId) setReloadKey((k) => k + 1);
+         const d =
+            (e as CustomEvent<{ id?: string; own?: boolean; scope?: 'activity' }>).detail ?? {};
+         if (d.id && d.id !== detailIssueId) return;
+         const remaining = ownActionUntil.current - Date.now();
+         if (remaining > 0) {
+            if (d.own) return;
+            echoTimer.current ??= setTimeout(() => {
+               echoTimer.current = null;
+               reloadActivityRef.current();
+            }, remaining);
+            return;
+         }
+         // Comentário/reação de outra pessoa: só o feed mudou (#27).
+         if (d.scope === 'activity') {
+            activityTimer.current ??= setTimeout(() => {
+               activityTimer.current = null;
+               reloadActivityRef.current();
+            }, ACTIVITY_COALESCE_MS);
+            return;
+         }
+         setReloadKey((k) => k + 1);
       };
       window.addEventListener(ISSUE_CHANGED_EVENT, onChanged);
       return () => window.removeEventListener(ISSUE_CHANGED_EVENT, onChanged);
    }, [detailIssueId]);
+
+   // Depois do remount pós-conflito, o editor novo volta a salvar (o flush do editor
+   // antigo, no unmount, já foi descartado).
+   useEffect(() => {
+      conflict.current = false;
+   }, [editorEpoch]);
 
    const displayTitle = inStore ? issue.title : (localTitle ?? issue.title);
 
@@ -174,11 +280,21 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
       filesOf(list).filter((f) => !isImageFile(f));
 
    if (loading || !detail) {
-      // Loading → skeleton; erro real (não-loading, sem detail) → mensagem.
-      if (loading) return <IssueDetailSkeleton />;
+      // Loading → CircleLoading; erro real (não-loading, sem detail) → mensagem com retry.
+      if (loading) return <LoadingArea className="h-full" />;
       return (
-         <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-            Could not load issue details.
+         <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+            <span>Could not load issue details.</span>
+            <button
+               type="button"
+               onClick={() => {
+                  setLoading(true);
+                  setReloadKey((k) => k + 1);
+               }}
+               className="rounded-md border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-accent/50"
+            >
+               Try again
+            </button>
          </div>
       );
    }
@@ -191,6 +307,9 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
       (s) => statusById.get(s.statusId)?.category === 'completed'
    ).length;
 
+   // Quebras de linha (colar de outro lugar) viram espaço: o título é uma linha só.
+   const singleLine = (text: string) => text.replace(/\s*\n+\s*/g, ' ');
+
    // Persiste o título: pelo store (optimistic+rollback) quando a issue está no board,
    // ou direto na API + override local quando é deep-link frio (fora do store).
    const applyTitle = async () => {
@@ -198,7 +317,11 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
       setEditingTitle(false);
       if (!next || next === displayTitle) return;
       if (inStore) {
-         useIssuesStore.getState().updateIssue(issue.id, { title: next });
+         // Store reverte + toast no erro; sem rejeição solta (Is#13).
+         void useIssuesStore
+            .getState()
+            .updateIssue(issue.id, { title: next })
+            .catch(() => undefined);
       } else {
          setLocalTitle(next);
          try {
@@ -212,16 +335,41 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
 
    // O editor já mostra o que o usuário digitou; só o erro precisa de feedback (sem
    // toast de sucesso — o save é contínuo, com debounce).
-   const saveDescription = async (doc: EditorDoc) => {
-      try {
-         await api.issues.updateDetail(issue.id, { descriptionDoc: doc });
-      } catch {
-         toast.error('Falha ao salvar a descrição');
-      }
+   const saveDescription = (doc: EditorDoc) => {
+      if (conflict.current) return;
+      saveQueue.current = saveQueue.current.then(async () => {
+         if (conflict.current) return;
+         try {
+            const dto = await api.issues.updateDetail(issue.id, {
+               descriptionDoc: doc,
+               expectedDescriptionVersion: descriptionVersion.current,
+            });
+            descriptionVersion.current = dto.descriptionVersion ?? null;
+         } catch (e) {
+            if (!(e instanceof ApiError && e.status === 409)) {
+               toast.error('Falha ao salvar a descrição');
+               return;
+            }
+            // Outra pessoa gravou no meio: carrega a versão dela em vez de sobrescrever.
+            conflict.current = true;
+            toast.warning(
+               'A descrição foi alterada por outra pessoa. Carregamos a versão mais recente.'
+            );
+            try {
+               const fresh = await api.issues.detail(issue.id);
+               descriptionVersion.current = fresh.descriptionVersion ?? null;
+               setDescriptionDoc(
+                  fresh.descriptionDoc ?? blocksToDoc(textToBlocks(fresh.description))
+               );
+            } finally {
+               setEditorEpoch((n) => n + 1);
+            }
+         }
+      });
    };
 
    return (
-      <div className="flex h-full w-full overflow-hidden">
+      <div className={cn(fade && 'content-enter', 'flex h-full w-full overflow-hidden')}>
          {/* Main column — conteúdo centralizado nos 791px medidos no Linear. */}
          <article className="h-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-8 sm:px-8 sm:py-10 xl:pt-[59px]">
             <div className="mx-auto w-full max-w-[791px]">
@@ -238,13 +386,18 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
                   />
                )}
                {editingTitle ? (
+                  // is#11: título é uma linha lógica — Enter (com ou sem Shift) salva e
+                  // quebras coladas viram espaço; a caixa cresce com o texto em vez de
+                  // saltar 64 px (`field-sizing-content` + autosize por JS no fallback).
                   <textarea
                      autoFocus
+                     aria-label="Issue title"
+                     ref={autosizeTitle}
                      value={titleDraft}
-                     onChange={(e) => setTitleDraft(e.target.value)}
+                     onChange={(e) => setTitleDraft(singleLine(e.target.value))}
                      onBlur={() => void applyTitle()}
                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
+                        if (e.key === 'Enter') {
                            e.preventDefault();
                            void applyTitle();
                         } else if (e.key === 'Escape') {
@@ -252,7 +405,7 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
                         }
                      }}
                      rows={1}
-                     className="w-full resize-none bg-transparent text-2xl font-semibold leading-8 outline-none"
+                     className="field-sizing-content w-full resize-none overflow-hidden bg-transparent text-2xl font-semibold leading-8 outline-none"
                   />
                ) : (
                   <h1
@@ -269,6 +422,7 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
                {/* Colar/soltar arquivo que NÃO é imagem na descrição vira anexo da issue; o
                    editor só trata imagens (o evento sobe até aqui sem ser consumido). */}
                <div
+                  ref={descriptionBox}
                   className="mt-6 min-h-8"
                   onPaste={(e) => {
                      const files = nonImageFiles(e.clipboardData?.files);
@@ -286,7 +440,7 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
                   }}
                >
                   <BlockEditor
-                     key={issue.id}
+                     key={`${issue.id}:${editorEpoch}`}
                      doc={descriptionDoc}
                      placeholder="Add a description…"
                      onSave={saveDescription}
@@ -361,7 +515,10 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
                      projectId: issue.project?.id ?? null,
                      assigneeId: issue.assignee?.id ?? null,
                   }}
-                  onCommentAdded={reload}
+                  onCommentAdded={reloadActivity}
+                  onCommentPatch={patchComment}
+                  onOwnAction={markOwnAction}
+                  onIssueChanged={reload}
                />
             </div>
          </article>
@@ -390,14 +547,13 @@ export function IssueDetailView({ issue, banner, onDetailLoaded }: IssueDetailVi
  */
 export default function IssueDetails() {
    const { orgId, issueId } = useParams<{ orgId: string; issueId: string }>();
-   const issues = useIssuesStore((s) => s.issues);
    const setCurrent = useCurrentIssueStore((s) => s.setCurrent);
    const clearCurrent = useCurrentIssueStore((s) => s.clear);
 
-   // Issue do store (se já hidratado) — reusa sem request.
-   const storeIssue = useMemo(
-      () => issues.find((candidate) => candidate.identifier === issueId),
-      [issues, issueId]
+   // Issue do store (se já hidratado) — reusa sem request. `find` DENTRO do seletor
+   // (referência estável): evento de outra issue não re-renderiza a página.
+   const storeIssue = useIssuesStore((s) =>
+      s.issues.find((candidate) => candidate.identifier === issueId)
    );
    // Fallback: se o deep-link foi aberto direto (store ainda vazio), busca a issue por
    // identifier na API — sem esperar o board inteiro hidratar (fim do waterfall de ~500).
@@ -433,8 +589,8 @@ export default function IssueDetails() {
    }, [issueId, storeIssue]);
 
    if (!issue) {
-      // Ainda resolvendo o deep-link → skeleton (não "not found" prematuro).
-      if (resolvingIssue) return <IssueDetailSkeleton />;
+      // Ainda resolvendo o deep-link → loading (não "not found" prematuro).
+      if (resolvingIssue) return <LoadingArea className="h-full" />;
       return (
          <div className="flex flex-col items-center justify-center h-full gap-2 text-sm text-muted-foreground">
             <p>Issue {issueId} not found.</p>

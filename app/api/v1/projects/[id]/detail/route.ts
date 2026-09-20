@@ -32,6 +32,7 @@ const PatchSchema = z.object({
    summary: z.string().max(1024).nullish(),
    description: z.array(z.unknown()).nullish(),
    descriptionDoc: DocSchema.nullish(),
+   expectedDescriptionVersion: z.string().max(64).nullish(),
 });
 
 export async function PATCH(req: Request, { params }: Params) {
@@ -46,6 +47,7 @@ export async function PATCH(req: Request, { params }: Params) {
             summary: patch.summary,
             description: patch.description as ContentBlock[] | null | undefined,
             descriptionDoc: patch.descriptionDoc,
+            expectedDescriptionVersion: patch.expectedDescriptionVersion,
          },
          email
       );

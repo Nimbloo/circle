@@ -9,9 +9,11 @@ import {
    jsonb,
    primaryKey,
    index,
+   uniqueIndex,
    unique,
    type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 // ─────────────────────────────────────────────────────────────
 // Catálogos (semeados; fixos no produto) — DESIGN §3
@@ -38,6 +40,16 @@ export const label = pgTable('label', {
    // Grupo de labels (paridade Linear): labels no mesmo grupo são mutuamente exclusivas
    // por issue. NULL = label solta. O nome do grupo é a chave (ex.: 'kind', 'area').
    groupId: varchar('group_id', { length: 64 }),
+});
+
+// Grupo de labels (paridade Linear): cadastro do `label.group_id` (antes só uma chave
+// solta). Sem FK no `label.group_id` — excluir o grupo solta as labels (app-level,
+// `deleteLabelGroup`), como os outros vínculos soltos do catálogo.
+export const labelGroup = pgTable('label_group', {
+   id: varchar('id', { length: 64 }).primaryKey(),
+   name: varchar('name', { length: 128 }).notNull(),
+   color: varchar('color', { length: 32 }).notNull().default('gray'),
+   position: integer('position').notNull().default(0),
 });
 
 export const health = pgTable('health', {
@@ -311,6 +323,9 @@ export const cycle = pgTable(
    },
    (t) => [
       index('idx_cycle_team').on(t.teamId),
+      uniqueIndex('cycle_team_current_unique')
+         .on(t.teamId)
+         .where(sql`${t.status} = 'current'`),
       // Nº de cycle é único por time — barra colisão sob concorrência (dois inserts
       // computando max(number)+1 ao mesmo tempo). O 2º insert falha em vez de duplicar.
       unique('cycle_team_id_number_unique').on(t.teamId, t.number),
@@ -353,12 +368,16 @@ export const issue = pgTable(
       createdById: varchar('created_by_id', { length: 36 }).references(() => appUser.id),
       projectId: varchar('project_id', { length: 36 }).references(() => project.id),
       cycleId: varchar('cycle_id', { length: 36 }).references(() => cycle.id),
-      rank: varchar('rank', { length: 64 }).notNull(), // lexorank
+      rank: text('rank').notNull(), // lexorank
       dueDate: date('due_date'),
       estimate: integer('estimate'), // pontos de estimativa (nullable = sem estimativa)
       // Milestone estruturada (paridade Linear): FK p/ project_milestone. Substitui o
       // texto livre issue_content.milestone. NULL = sem milestone.
-      milestoneId: varchar('milestone_id', { length: 36 }),
+      milestoneId: varchar('milestone_id', { length: 36 }).references(
+         // eslint-disable-next-line @typescript-eslint/no-use-before-define
+         (): AnyPgColumn => projectMilestone.id,
+         { onDelete: 'set null' }
+      ),
       // Snooze da issue (paridade Linear/triage): enquanto > now, some da fila de triage.
       snoozedUntil: timestamp('snoozed_until'),
       // Marcos temporais p/ métricas (cycle/lead time). startedAt = 1ª entrada em status
@@ -393,6 +412,7 @@ export const issue = pgTable(
       index('idx_issue_assignee').on(t.assigneeId),
       index('idx_issue_created_by').on(t.createdById),
       index('idx_issue_rank').on(t.rank),
+      index('idx_issue_milestone').on(t.milestoneId),
       unique('issue_sentry_issue_id_unique').on(t.sentryIssueId),
    ]
 );
@@ -441,14 +461,18 @@ export const issueRelation = pgTable(
    ]
 );
 
-export const issuePrLink = pgTable('issue_pr_link', {
-   id: varchar('id', { length: 36 }).primaryKey(),
-   issueId: varchar('issue_id', { length: 36 })
-      .notNull()
-      .references(() => issue.id),
-   title: varchar('title', { length: 512 }).notNull(),
-   status: varchar('status', { length: 16 }).notNull(), // open|merged|draft
-});
+export const issuePrLink = pgTable(
+   'issue_pr_link',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      issueId: varchar('issue_id', { length: 36 })
+         .notNull()
+         .references(() => issue.id),
+      title: varchar('title', { length: 512 }).notNull(),
+      status: varchar('status', { length: 16 }).notNull(), // open|merged|draft
+   },
+   (t) => [index('idx_issue_pr_link_issue').on(t.issueId)]
+);
 
 // Assinatura de issue (Linear-style): quem recebe atualizações e vê a issue na
 // aba "Subscribed"/"Activity" do My issues. Auto-assinada em create/assign/comment/
@@ -531,7 +555,11 @@ export const comment = pgTable(
       resolvedAt: timestamp('resolved_at'),
       resolvedById: varchar('resolved_by_id', { length: 36 }).references(() => appUser.id),
    },
-   (t) => [index('idx_comment_issue').on(t.issueId), index('idx_comment_parent').on(t.parentId)]
+   (t) => [
+      index('idx_comment_issue').on(t.issueId),
+      index('idx_comment_parent').on(t.parentId),
+      index('idx_comment_author_created_at').on(t.authorId, t.createdAt),
+   ]
 );
 
 // Anexo de issue ou de comentário (#98). O arquivo vive no S3/CDN (`url`); a linha guarda
@@ -586,7 +614,10 @@ export const activityEvent = pgTable(
       text: varchar('text', { length: 1024 }),
       createdAt: timestamp('created_at').notNull().defaultNow(),
    },
-   (t) => [index('idx_activity_issue').on(t.issueId)]
+   (t) => [
+      index('idx_activity_issue').on(t.issueId),
+      index('idx_activity_actor_created_at').on(t.actorId, t.createdAt),
+   ]
 );
 
 // ─────────────────────────────────────────────────────────────
@@ -629,7 +660,14 @@ export const notification = pgTable(
       snoozedUntil: timestamp('snoozed_until'),
       createdAt: timestamp('created_at').notNull().defaultNow(),
    },
-   (t) => [index('idx_notification_recipient').on(t.recipientId)]
+   (t) => [
+      index('idx_notification_issue').on(t.issueId),
+      index('idx_notification_recipient').on(t.recipientId),
+      index('idx_notification_recipient_created_at').on(t.recipientId, t.createdAt.desc()),
+      index('idx_notification_unread_recipient')
+         .on(t.recipientId)
+         .where(sql`${t.read} = false`),
+   ]
 );
 
 // Audit log append-only no nível workspace (paridade Linear): quem fez o quê nas
@@ -829,7 +867,7 @@ export const review = pgTable(
       // Guia de review gerado a partir do diff: JSON { sections, generatedAt, model }.
       guide: text('guide'),
    },
-   (t) => [index('idx_review_status').on(t.status)]
+   (t) => [index('idx_review_status').on(t.status), index('idx_review_created_at').on(t.createdAt)]
 );
 
 /**
@@ -904,6 +942,9 @@ export const teamDocument = pgTable('team_document', {
       .notNull()
       .references(() => appUser.id),
    pinned: boolean('pinned').notNull().default(false),
+   // Corpo do documento: JSON do ProseMirror do editor de blocos (igual à descrição da
+   // issue/projeto). NULL = documento sem corpo.
+   descriptionDoc: jsonb('description_doc').$type<Record<string, unknown>>(),
    createdAt: timestamp('created_at').notNull().defaultNow(),
    updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
@@ -1067,6 +1108,41 @@ export const issueImport = pgTable(
       primaryKey({ columns: [t.source, t.externalId] }),
       index('idx_issue_import_issue').on(t.issueId),
    ]
+);
+
+// ── Import em background (#10, frente F4) ──
+/**
+ * Job de import de CSV: `POST /import/commit` grava a linha e devolve o id na hora; o
+ * processamento roda no servidor atualizando `processed`/contadores, e o dono consulta em
+ * `GET /import/jobs/:id`. `updated_at` é o batimento: job `running` sem batimento há
+ * minutos foi interrompido (pod reiniciou) e é reportado como falho.
+ */
+export const importJob = pgTable(
+   'import_job',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      ownerId: varchar('owner_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      teamId: varchar('team_id', { length: 16 })
+         .notNull()
+         .references(() => team.id, { onDelete: 'cascade' }),
+      source: varchar('source', { length: 32 }).notNull(), // csv|linear|jira
+      status: varchar('status', { length: 16 }).notNull(), // queued|running|succeeded|failed
+      total: integer('total').notNull().default(0),
+      processed: integer('processed').notNull().default(0),
+      created: integer('created').notNull().default(0),
+      updated: integer('updated').notNull().default(0),
+      skipped: integer('skipped').notNull().default(0),
+      /** Erros por linha `{ row, message }[]` (limitado), sem abortar o lote. */
+      errors: jsonb('errors').notNull().default([]),
+      /** Falha do job inteiro (não de uma linha). */
+      error: text('error'),
+      createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+      updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+      finishedAt: timestamp('finished_at', { withTimezone: true }),
+   },
+   (t) => [index('idx_import_job_owner').on(t.ownerId, t.createdAt)]
 );
 
 // ── Roadmap: dependências entre projetos e histórico de progresso (#102) ──

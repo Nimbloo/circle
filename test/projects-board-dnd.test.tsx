@@ -10,6 +10,7 @@ import type { ProjectGroup } from '@/components/common/projects/projects';
 import type { Project } from '@/data/projects';
 import type { Team } from '@/data/teams';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { useIssuesStore } from '@/store/issues-store';
 import { lastTestBackend } from './helpers/dnd-test-backend';
 import { makeProject, statusOf, toProjectDto } from './helpers/project-fixture';
 
@@ -111,8 +112,8 @@ describe('ProjectsBoard — drag and drop entre colunas', () => {
    });
 });
 
-/** Times mínimos do store; `projects` é a cópia derivada que precisa seguir o projeto. */
-function makeTeam(id: string, name: string, projects: Project[] = []): Team {
+/** Times mínimos do store (projetos por time vêm de `projects`, pelo teamId). */
+function makeTeam(id: string, name: string): Team {
    return {
       id,
       name,
@@ -125,7 +126,6 @@ function makeTeam(id: string, name: string, projects: Project[] = []): Team {
       autoCloseChildren: false,
       parentId: null,
       members: [],
-      projects,
    };
 }
 
@@ -149,11 +149,11 @@ describe('ProjectsBoard — agrupado por time', () => {
       const alpha = makeProject({ id: 'p1', name: 'Alpha', teamId: 'CORE' });
       useWorkspaceStore.setState({
          projects: [alpha],
-         teams: [makeTeam('CORE', 'Core', [alpha]), makeTeam('DESIGN', 'Design')],
+         teams: [makeTeam('CORE', 'Core'), makeTeam('DESIGN', 'Design')],
       });
    });
 
-   it('soltar o card na coluna de outro time faz PATCH do teamId e mantém teams[].projects coerente', async () => {
+   it('soltar o card na coluna de outro time faz PATCH do teamId', async () => {
       apiMocks.update.mockImplementation(async (_id: string, body: { teamId: string }) =>
          toProjectDto(makeProject({ id: 'p1', name: 'Alpha', teamId: body.teamId }))
       );
@@ -169,9 +169,6 @@ describe('ProjectsBoard — agrupado por time', () => {
       expect(apiMocks.update).toHaveBeenCalledWith('p1', { teamId: 'DESIGN' });
 
       await waitFor(() => expect(useWorkspaceStore.getState().projects[0].teamId).toBe('DESIGN'));
-      const teams = useWorkspaceStore.getState().teams;
-      expect(teams.find((t) => t.id === 'CORE')?.projects).toHaveLength(0);
-      expect(teams.find((t) => t.id === 'DESIGN')?.projects.map((p) => p.id)).toEqual(['p1']);
       expect(toast.error).not.toHaveBeenCalled();
    });
 
@@ -185,9 +182,6 @@ describe('ProjectsBoard — agrupado por time', () => {
       await waitFor(() => expect(within(column('Core')).getByText('Alpha')).toBeTruthy());
       expect(within(column('Design')).queryByText('Alpha')).toBeNull();
       expect(useWorkspaceStore.getState().projects[0].teamId).toBe('CORE');
-      expect(
-         useWorkspaceStore.getState().teams.find((t) => t.id === 'CORE')?.projects
-      ).toHaveLength(1);
       expect(toast.error).toHaveBeenCalledTimes(1);
    });
 
@@ -198,5 +192,24 @@ describe('ProjectsBoard — agrupado por time', () => {
       expect(apiMocks.update).not.toHaveBeenCalled();
       const hint = document.getElementById(card.getAttribute('aria-describedby')!);
       expect(hint?.textContent).toContain('change its team');
+   });
+
+   it('projeto com issues de outro time não aceita drop em outro time (evita o 409, #43)', () => {
+      useIssuesStore.setState({
+         issues: [{ id: 'i1', teamId: 'CORE', project: { id: 'p1' } } as never],
+      });
+      render(<TeamHarness />);
+      act(() => lastTestBackend!.simulateDragDrop(cardIn('Core'), column('Design')));
+      expect(apiMocks.update).not.toHaveBeenCalled();
+      expect(within(column('Core')).getByText('Alpha')).toBeTruthy();
+      useIssuesStore.setState({ issues: [] });
+   });
+
+   it('erro da API mostra a mensagem do servidor', async () => {
+      const err = Object.assign(new Error('Não é possível trocar o time'), { status: 409 });
+      apiMocks.update.mockRejectedValue(err);
+      render(<TeamHarness />);
+      act(() => lastTestBackend!.simulateDragDrop(cardIn('Core'), column('Design')));
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Não é possível trocar o time'));
    });
 });

@@ -1,48 +1,29 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import {
-   Command,
-   CommandEmpty,
-   CommandGroup,
-   CommandInput,
-   CommandItem,
-   CommandList,
-} from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { useIssuesStore } from '@/store/issues-store';
 import { Status } from '@/data/status';
 import { useStatuses } from '@/store/catalog-store';
-import { CheckIcon } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
+import { StatusOptions } from '@/components/common/issues/property-options';
 
 interface StatusSelectorProps {
    status: Status;
    onChange: (status: Status) => void;
 }
 
+/** Seletor de status do modal de criação: trigger próprio, lista compartilhada (R1). */
 export function StatusSelector({ status, onChange }: StatusSelectorProps) {
    const id = useId();
    const [open, setOpen] = useState<boolean>(false);
-   const [value, setValue] = useState<string>(status.id);
-
    const allStatus = useStatuses();
-   // Conta derivada da fatia assinada: assinar `filterByStatus` (funcao, referencia
-   // estavel) deixaria o contador do dropdown parado quando as issues mudam.
-   const allIssues = useIssuesStore((s) => s.issues);
-
-   useEffect(() => {
-      setValue(status.id);
-   }, [status.id]);
+   // Deriva do prop (o modal é o dono do valor).
+   const selected = allStatus.find((s) => s.id === status.id) ?? status;
 
    const handleStatusChange = (statusId: string) => {
-      setValue(statusId);
       setOpen(false);
-
       const newStatus = allStatus.find((s) => s.id === statusId);
-      if (newStatus) {
-         onChange(newStatus);
-      }
+      if (newStatus) onChange(newStatus);
    };
 
    return (
@@ -57,46 +38,15 @@ export function StatusSelector({ status, onChange }: StatusSelectorProps) {
                   role="combobox"
                   aria-expanded={open}
                >
-                  {(() => {
-                     const selectedItem = allStatus.find((item) => item.id === value);
-                     if (selectedItem) {
-                        const Icon = selectedItem.icon;
-                        return <Icon />;
-                     }
-                     return null;
-                  })()}
-                  <span>{value ? allStatus.find((s) => s.id === value)?.name : 'To do'}</span>
+                  <selected.icon />
+                  <span>{selected.name}</span>
                </Button>
             </PopoverTrigger>
             <PopoverContent
                className="border-input w-full min-w-[var(--radix-popper-anchor-width)] p-0"
                align="start"
             >
-               <Command>
-                  <CommandInput placeholder="Set status..." />
-                  <CommandList>
-                     <CommandEmpty>No status found.</CommandEmpty>
-                     <CommandGroup>
-                        {allStatus.map((item) => (
-                           <CommandItem
-                              key={item.id}
-                              value={item.id}
-                              onSelect={() => handleStatusChange(item.id)}
-                              className="flex items-center justify-between"
-                           >
-                              <div className="flex items-center gap-2">
-                                 <item.icon />
-                                 {item.name}
-                              </div>
-                              {value === item.id && <CheckIcon size={16} className="ml-auto" />}
-                              <span className="text-muted-foreground text-xs">
-                                 {allIssues.filter((i) => i.status.id === item.id).length}
-                              </span>
-                           </CommandItem>
-                        ))}
-                     </CommandGroup>
-                  </CommandList>
-               </Command>
+               <StatusOptions value={status.id} onSelect={handleStatusChange} />
             </PopoverContent>
          </Popover>
       </div>

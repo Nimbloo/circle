@@ -15,6 +15,7 @@ import { useLabels, usePriorities, useStatuses } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { CheckIcon, ListFilter, UserRound } from 'lucide-react';
 import type { ComponentType, CSSProperties } from 'react';
+import { labelColor } from '@/components/common/palette';
 
 type IconCmp = ComponentType<{ className?: string; style?: CSSProperties }>;
 
@@ -194,7 +195,7 @@ export function ViewFilterEditor({
                                  >
                                     <span
                                        className="size-2.5 rounded-full"
-                                       style={{ backgroundColor: l.color }}
+                                       style={{ backgroundColor: labelColor(l.color) }}
                                     />
                                     {l.name}
                                     {filter.labelIds?.includes(l.id) && (

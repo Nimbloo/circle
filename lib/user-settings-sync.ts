@@ -1,12 +1,16 @@
 /**
  * Sincroniza as preferências por-usuário (tema + notificações + preferences + layout)
  * com o servidor. O localStorage (zustand persist) segue como cache/no-flash; a
- * FONTE DA VERDADE por-usuário é o banco (GET/PUT /api/v1/settings).
+ * FONTE DA VERDADE por-usuário é o banco (GET/PATCH /api/v1/settings).
  *
  * - Boot: carrega do servidor e aplica nos stores (servidor vence o localStorage),
- *   DEPOIS assina os stores.
- * - Change: grava no servidor (PUT) com debounce.
+ *   DEPOIS assina os stores. Sem um GET bem-sucedido NADA é gravado (#15): antes, um
+ *   GET falho liberava a gravação e o 1º toggle apagava as settings do servidor. O GET
+ *   é retentado com backoff.
+ * - Change: grava SÓ a seção alterada (PATCH com merge no servidor, #15), com debounce.
+ *   Falha fica exposta (`getSettingsSyncError`) e a seção é reenviada.
  */
+import { useSyncExternalStore } from 'react';
 import { api } from '@/lib/client';
 import { MAX_SETTINGS_BYTES } from '@/lib/settings-limits';
 import {
@@ -60,9 +64,42 @@ interface SettingsBlob {
    layout?: LayoutBlob;
 }
 
+type Section = keyof SettingsBlob;
+export type SettingsSyncError = 'load' | 'save' | null;
+
 let started = false;
 let ready = false;
+/** Aplicando o que veio do servidor: as assinaturas não devem regravar (ad#14). */
+let applying = false;
 let timer: ReturnType<typeof setTimeout> | null = null;
+let loadAttempts = 0;
+/** Seções alteradas desde a última gravação confirmada. */
+const dirty = new Set<Section>();
+
+let syncError: SettingsSyncError = null;
+const errorListeners = new Set<() => void>();
+function setSyncError(next: SettingsSyncError) {
+   if (next === syncError) return;
+   syncError = next;
+   errorListeners.forEach((fn) => fn());
+}
+
+/** Último erro de sincronização (`load`: GET falhou; `save`: PATCH falhou), ou null. */
+export function getSettingsSyncError(): SettingsSyncError {
+   return syncError;
+}
+
+/** Hook do erro de sincronização, para a UI de Settings avisar. */
+export function useSettingsSyncError(): SettingsSyncError {
+   return useSyncExternalStore(
+      (fn) => {
+         errorListeners.add(fn);
+         return () => errorListeners.delete(fn);
+      },
+      getSettingsSyncError,
+      () => null
+   );
+}
 
 function themeSlice(): ThemeSlice {
    const t = useThemeStore.getState();
@@ -137,30 +174,58 @@ function fitToCap(blob: SettingsBlob): SettingsBlob {
    return trimmed;
 }
 
-function snapshot(): SettingsBlob {
+function notificationsSlice(): Partial<NotificationPrefs> {
    const n = useNotificationPrefsStore.getState();
-   return fitToCap({
-      theme: themeSlice(),
-      notifications: {
-         emailNotifications: n.emailNotifications,
-         slackNotifications: n.slackNotifications,
-         showUpdatesInSidebar: n.showUpdatesInSidebar,
-         changelogNewsletter: n.changelogNewsletter,
-         marketing: n.marketing,
-         inviteAccepted: n.inviteAccepted,
-         privacyLegal: n.privacyLegal,
-      },
-      preferences: preferencesSlice(),
-      layout: layoutSlice(),
-   });
+   return {
+      emailNotifications: n.emailNotifications,
+      slackNotifications: n.slackNotifications,
+      showUpdatesInSidebar: n.showUpdatesInSidebar,
+      changelogNewsletter: n.changelogNewsletter,
+      marketing: n.marketing,
+      inviteAccepted: n.inviteAccepted,
+      privacyLegal: n.privacyLegal,
+   };
 }
 
-function scheduleSave() {
-   if (!ready) return;
+/** Só as seções pedidas (as outras o servidor preserva no merge). */
+function sectionsSnapshot(sections: Iterable<Section>): SettingsBlob {
+   const blob: SettingsBlob = {};
+   for (const section of sections) {
+      if (section === 'theme') blob.theme = themeSlice();
+      else if (section === 'notifications') blob.notifications = notificationsSlice();
+      else if (section === 'preferences') blob.preferences = preferencesSlice();
+      else blob.layout = layoutSlice();
+   }
+   return fitToCap(blob);
+}
+
+const SAVE_DEBOUNCE_MS = 800;
+const SAVE_RETRY_MS = 5_000;
+
+function scheduleSave(section: Section, delay = SAVE_DEBOUNCE_MS) {
+   // Sem GET bem-sucedido não grava (#15): o blob local sobrescreveria o do servidor.
+   if (!ready || applying) return;
+   dirty.add(section);
    if (timer) clearTimeout(timer);
-   timer = setTimeout(() => {
-      void api.settings.put(snapshot() as Record<string, unknown>).catch(() => undefined);
-   }, 800);
+   timer = setTimeout(flush, delay);
+}
+
+function flush() {
+   timer = null;
+   if (!ready || dirty.size === 0) return;
+   const sections = [...dirty];
+   dirty.clear();
+   api.settings
+      .patch(sectionsSnapshot(sections) as Record<string, unknown>)
+      .then(() => {
+         if (dirty.size === 0) setSyncError(null);
+      })
+      .catch(() => {
+         setSyncError('save');
+         // Reenvia as mesmas seções (junto com o que mudou nesse meio-tempo).
+         sections.forEach((section) => dirty.add(section));
+         if (!timer) timer = setTimeout(flush, SAVE_RETRY_MS);
+      });
 }
 
 function applyTheme(theme: Partial<ThemeSlice> | undefined) {
@@ -196,6 +261,36 @@ function applyLayout(layout: LayoutBlob | undefined) {
    }
 }
 
+/** Backoff do GET inicial: 5 s, 10 s, 20 s… até 60 s. */
+function loadRetryDelay(): number {
+   return Math.min(5_000 * 2 ** (loadAttempts - 1), 60_000);
+}
+
+async function load(): Promise<void> {
+   loadAttempts += 1;
+   try {
+      const data = (await api.settings.get()) as SettingsBlob;
+      // Aplicar dispara as assinaturas dos stores; sem esta trava, o que acabou de vir
+      // do servidor seria regravado (e, entre abas, viraria ping-pong de PATCHes).
+      applying = true;
+      try {
+         applyTheme(data.theme);
+         if (data.notifications)
+            useNotificationPrefsStore.getState().hydratePrefs(data.notifications);
+         if (data.preferences) usePreferencesStore.getState().hydratePrefs(data.preferences);
+         applyLayout(data.layout);
+      } finally {
+         applying = false;
+      }
+      ready = true;
+      setSyncError(null);
+   } catch {
+      // Sem GET não há gravação (#15): tenta de novo, e a UI mostra o erro.
+      setSyncError('load');
+      setTimeout(() => void load(), loadRetryDelay());
+   }
+}
+
 /**
  * Carrega as settings do servidor e liga a gravação automática. Idempotente:
  * chamável várias vezes (só o primeiro boot roda). Nunca lança.
@@ -203,24 +298,25 @@ function applyLayout(layout: LayoutBlob | undefined) {
 export async function startUserSettingsSync(): Promise<void> {
    if (started) return;
    started = true;
-   try {
-      const data = (await api.settings.get()) as SettingsBlob;
-      applyTheme(data.theme);
-      if (data.notifications) useNotificationPrefsStore.getState().hydratePrefs(data.notifications);
-      if (data.preferences) usePreferencesStore.getState().hydratePrefs(data.preferences);
-      applyLayout(data.layout);
-   } catch {
-      // sem sessão / sem settings ainda — segue com os defaults locais.
-   }
-   ready = true;
-   // Assina DEPOIS de aplicar, pra não regravar o que acabou de carregar.
-   useThemeStore.subscribe(scheduleSave);
-   useNotificationPrefsStore.subscribe(scheduleSave);
-   usePreferencesStore.subscribe(scheduleSave);
-   useDisplaySettingsStore.subscribe(scheduleSave);
-   useViewTypeStore.subscribe(scheduleSave);
-   useSidebarTeamsStore.subscribe(scheduleSave);
-   useSidebarPrefsStore.subscribe(scheduleSave);
-   useDetailPanelStore.subscribe(scheduleSave);
-   useInboxLayoutStore.subscribe(scheduleSave);
+   await load();
+   // Assina DEPOIS de aplicar, pra não regravar o que acabou de carregar. Enquanto o
+   // GET não der certo, `scheduleSave` ignora as mudanças.
+   useThemeStore.subscribe(() => scheduleSave('theme'));
+   useNotificationPrefsStore.subscribe(() => scheduleSave('notifications'));
+   usePreferencesStore.subscribe(() => scheduleSave('preferences'));
+   useDisplaySettingsStore.subscribe(() => scheduleSave('layout'));
+   useViewTypeStore.subscribe(() => scheduleSave('layout'));
+   useSidebarTeamsStore.subscribe(() => scheduleSave('layout'));
+   useSidebarPrefsStore.subscribe(() => scheduleSave('layout'));
+   useDetailPanelStore.subscribe(() => scheduleSave('layout'));
+   useInboxLayoutStore.subscribe(() => scheduleSave('layout'));
+}
+
+/**
+ * Relê as settings do servidor e aplica nos stores (sem regravar). É o que a aba faz
+ * quando OUTRA aba do mesmo usuário grava uma preferência (evento `settings`, ad#14).
+ */
+export async function reloadUserSettings(): Promise<void> {
+   if (!started) return;
+   await load();
 }

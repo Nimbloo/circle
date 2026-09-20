@@ -38,9 +38,13 @@ export async function GET(req: Request) {
 }
 
 const CreateTeamSchema = z.object({
-   id: z.string().min(2),
-   name: z.string().min(1),
-   icon: z.string().nullish(),
+   id: z.string().trim().min(2).max(16),
+   name: z
+      .string()
+      .trim()
+      .min(1, 'name é obrigatório')
+      .max(128, 'name deve ter no máximo 128 caracteres'),
+   icon: z.string().max(16).nullish(),
    color: z.string().nullish(),
    parentId: z.string().max(16).nullish(),
 });

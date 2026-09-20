@@ -1,6 +1,6 @@
 'use client';
 
-import { DetailSidePanel } from '@/components/common/detail-side-panel';
+import { DetailSidePanel, SidePanelSlot } from '@/components/common/detail-side-panel';
 import { applyIssueFilters } from '@/components/common/issues/issue-filter-columns';
 import { GroupedIssuesView } from '@/components/common/issues/grouped-issues-view';
 import dynamic from 'next/dynamic';
@@ -22,7 +22,7 @@ import { Issue } from '@/data/issues';
 import { statusUserColors, User } from '@/data/users';
 import { useDisplayOrderedStatuses, useLabels, usePriorities } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
-import { useIssuesStore } from '@/store/issues-store';
+import { selectIssuesLoading, useIssuesStore } from '@/store/issues-store';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useSearchStore } from '@/store/search-store';
 import { useViewStore } from '@/store/view-store';
@@ -31,6 +31,7 @@ import { formatDistanceToNowStrict } from 'date-fns';
 import { parseAsString, useQueryState } from 'nuqs';
 import { useEffect, useMemo, useState } from 'react';
 import { RoleControl } from './role-control';
+import { labelColor } from '@/components/common/palette';
 
 const presenceLabel: Record<User['status'], string> = {
    online: 'Online now',
@@ -53,6 +54,21 @@ function countBy(issues: Issue[], keyOf: (issue: Issue) => string[]): Map<string
       }
    }
    return map;
+}
+
+/**
+ * Issues exibidas por time, maior primeiro (Ad#38: antes toda linha repetia o total).
+ * Entram os times das issues, como nos breakdowns de label/prioridade/projeto.
+ */
+export function teamBreakdownCounts<T extends { id: string }>(
+   issues: Issue[],
+   teams: T[]
+): (T & { count: number })[] {
+   const counts = countBy(issues, (issue) => (issue.teamId ? [issue.teamId] : []));
+   return teams
+      .filter((team) => counts.has(team.id))
+      .map((team) => ({ ...team, count: counts.get(team.id) ?? 0 }))
+      .sort((a, b) => b.count - a.count);
 }
 
 function BreakdownList({ rows }: { rows: BreakdownRow[] }) {
@@ -112,6 +128,9 @@ function useClientTimes(member: User) {
  */
 export default function MemberProfile({ member }: { member: User }) {
    const issues = useIssuesStore((s) => s.issues);
+   const issuesLoading = useIssuesStore(selectIssuesLoading);
+   const issuesError = useIssuesStore((s) => s.error);
+   const hydrateIssues = useIssuesStore((s) => s.hydrate);
    const [activeTab] = useQueryState('tab', parseAsString.withDefault('assigned'));
    const { localTime, joinedAgo } = useClientTimes(member);
    const { isSearchOpen, searchQuery } = useSearchStore();
@@ -168,7 +187,7 @@ export default function MemberProfile({ member }: { member: User }) {
             leading: (
                <span
                   className="size-2.5 rounded-full shrink-0"
-                  style={{ backgroundColor: label.color }}
+                  style={{ backgroundColor: labelColor(label.color) }}
                />
             ),
             count: counts.get(label.id) ?? 0,
@@ -204,13 +223,13 @@ export default function MemberProfile({ member }: { member: User }) {
 
    const teamRows = useMemo<BreakdownRow[]>(
       () =>
-         memberTeams.map((team) => ({
+         teamBreakdownCounts(displayedIssues, teams).map((team) => ({
             key: team.id,
             label: team.name,
             leading: <span className="text-sm shrink-0">{team.icon}</span>,
-            count: displayedIssues.length,
+            count: team.count,
          })),
-      [memberTeams, displayedIssues.length]
+      [teams, displayedIssues]
    );
 
    if (isSearching) {
@@ -224,7 +243,7 @@ export default function MemberProfile({ member }: { member: User }) {
    }
 
    return (
-      <div className="w-full h-full flex flex-col overflow-hidden">
+      <div className="content-enter w-full h-full flex flex-col overflow-hidden">
          <IssueFilterBar />
          <div className="flex-1 min-h-0 w-full flex overflow-hidden">
             {/* Issues */}
@@ -234,14 +253,21 @@ export default function MemberProfile({ member }: { member: User }) {
                   totalIssues={scopedIssues}
                   statuses={displayOrderedStatus}
                   isViewTypeGrid={isViewTypeGrid}
+                  loading={issuesLoading}
+                  error={issuesError}
+                  onRetry={() => hydrateIssues()}
                />
             </div>
 
-            {openPanel === 'insights' && (
-               <aside className="hidden lg:flex w-[420px] shrink-0 border-l h-full overflow-hidden bg-container">
-                  <InsightsPanel issues={displayedIssues} />
-               </aside>
-            )}
+            <SidePanelSlot
+               open={openPanel === 'insights'}
+               width={420}
+               label="Insights"
+               className="hidden lg:flex"
+               panelClassName="border-l bg-container"
+            >
+               <InsightsPanel issues={displayedIssues} />
+            </SidePanelSlot>
 
             {/* Profile panel */}
             {openPanel !== 'insights' && (
@@ -291,7 +317,7 @@ export default function MemberProfile({ member }: { member: User }) {
                         </div>
                         <div className="flex items-center justify-between gap-4">
                            <span className="text-muted-foreground shrink-0">Role</span>
-                           <RoleControl userId={member.id} role={member.role} />
+                           <RoleControl role={member.role} />
                         </div>
                         <div className="flex items-start justify-between gap-4">
                            <span className="text-muted-foreground shrink-0 pt-0.5">Teams</span>

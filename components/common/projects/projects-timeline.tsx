@@ -1,5 +1,6 @@
 'use client';
 
+import { useKeyboardReschedule } from '@/components/common/projects/use-keyboard-reschedule';
 import { CapacityRing } from '@/components/common/cycles/capacity-ring';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -9,12 +10,11 @@ import {
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { isValidProjectDate, projectDateRangeLabel } from '@/lib/project-dates';
+import { isValidProjectDate, localTodayIso, projectDateRangeLabel } from '@/lib/project-dates';
 import {
    type DateRange,
    type RescheduleMode,
    daysFromPixels,
-   keyboardRescheduleDelta,
    rescheduleRange,
    sameRange,
 } from '@/lib/timeline-reschedule';
@@ -36,9 +36,20 @@ import { useProjectsDisplayStore } from '@/store/projects-display-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
 import { ArrowLeft, ArrowRight, Check, ChevronDown } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+   createContext,
+   memo,
+   useCallback,
+   useContext,
+   useEffect,
+   useRef,
+   useState,
+   useSyncExternalStore,
+} from 'react';
 import { ProjectPeekPanel } from './project-peek-panel';
 import { ProjectGroup } from './projects';
+import { useEnterFade } from '@/components/common/loading-area';
+import { healthColor } from './progress-colors';
 
 interface ProjectsTimelineProps {
    groups: ProjectGroup[];
@@ -65,30 +76,69 @@ interface Viewport {
 }
 
 /**
+ * Viewport horizontal FORA do estado do React: o scroll atualiza este store e só quem
+ * depende dele (indicador "fora da tela" e o marcador de hoje) re-renderiza — a escala,
+ * as grades e as linhas ficam paradas durante o scroll.
+ */
+function createViewportStore() {
+   let value: Viewport | null = null;
+   const listeners = new Set<() => void>();
+   return {
+      get: () => value,
+      set: (next: Viewport) => {
+         value = next;
+         listeners.forEach((listener) => listener());
+      },
+      subscribe: (listener: () => void) => {
+         listeners.add(listener);
+         return () => {
+            listeners.delete(listener);
+         };
+      },
+   };
+}
+type ViewportStore = ReturnType<typeof createViewportStore>;
+const ViewportContext = createContext<ViewportStore | null>(null);
+
+/** Deriva um valor PRIMITIVO do viewport: só re-renderiza quando ele muda. */
+function useViewportValue<T extends string | boolean | null>(
+   derive: (viewport: Viewport | null) => T
+): T {
+   const store = useContext(ViewportContext)!;
+   return useSyncExternalStore(
+      store.subscribe,
+      () => derive(store.get()),
+      () => derive(null)
+   );
+}
+
+/**
  * "← Jul 15 - Aug 28" indicator shown when a bar is outside the viewport.
  * Pinned with position: sticky (pure CSS) so it never drifts during fast
  * scrolling — JS is only used to decide which side to show.
  */
 function OutOfViewIndicator({
    project,
-   viewport,
    listOffset,
    monthWidth,
    onJump,
 }: {
    project: Project;
-   viewport: Viewport;
    listOffset: number;
    monthWidth: number;
    onJump: (contentX: number) => void;
 }) {
    const { left, right } = barBounds(project, monthWidth);
-   const visibleLeft = viewport.left + listOffset;
-   const visibleRight = viewport.left + viewport.width;
+   const side = useViewportValue((viewport) => {
+      if (!viewport) return null;
+      const visibleLeft = viewport.left + listOffset;
+      const visibleRight = viewport.left + viewport.width;
+      if (right >= visibleLeft + 4 && left <= visibleRight - 4) return null;
+      return right < visibleLeft + 4 ? 'past' : 'future';
+   });
+   if (side === null) return null;
 
-   if (right >= visibleLeft + 4 && left <= visibleRight - 4) return null;
-
-   const isPast = right < visibleLeft + 4;
+   const isPast = side === 'past';
    const label = projectDateRangeLabel(project.startDate, project.targetDate);
    if (label === null) return null;
 
@@ -106,6 +156,21 @@ function OutOfViewIndicator({
          {label}
          {!isPast && <ArrowRight className="size-3.5" />}
       </button>
+   );
+}
+
+/** Today marker (hidden while it overlaps the sticky project list). */
+function TodayMarker({ todayOffset, listOffset }: { todayOffset: number; listOffset: number }) {
+   const overlapsList = useViewportValue(
+      (viewport) => viewport !== null && todayOffset < viewport.left + listOffset + 28
+   );
+   if (overlapsList) return null;
+   return (
+      // z abaixo das barras (z-[5]): a linha de hoje não corta mais o texto (pl#17).
+      <div
+         className="absolute top-8 bottom-0 w-px bg-primary z-[2]"
+         style={{ left: todayOffset }}
+      />
    );
 }
 
@@ -139,7 +204,7 @@ function TimelineBar({
    onSelect: (projectId: string) => void;
    onReschedule: (project: Project, next: DateRange) => void;
 }) {
-   const { displayProperties } = useProjectsDisplayStore();
+   const displayProperties = useProjectsDisplayStore((s) => s.displayProperties);
    const reschedulable = isValidProjectDate(project.targetDate);
    const base: DateRange = {
       startDate: project.startDate,
@@ -160,7 +225,11 @@ function TimelineBar({
    const range = draft ?? base;
    const left = offsetFor(range.startDate, monthWidth);
    const right = offsetFor(range.targetDate, monthWidth);
-   const width = Math.max(right - left, 130);
+   // A barra respeita a duração real; 130px de mínimo distorciam as datas (pl#17). Barra
+   // curta mostra o nome FORA dela, à direita.
+   const span = right - left;
+   const width = Math.max(span, 14);
+   const narrow = span < 120;
    const dayWidth = dayWidthOf(monthWidth);
    const rangeLabel = projectDateRangeLabel(range.startDate, range.targetDate) ?? range.startDate;
 
@@ -185,19 +254,28 @@ function TimelineBar({
       if (!drag || drag.pointerId !== event.pointerId) return;
       dragRef.current = null;
       wrapperRef.current?.releasePointerCapture?.(event.pointerId);
-      suppressClickRef.current = drag.moved;
       const next = draftRef.current;
       setDraft(null);
       if (commit && drag.moved && next && !sameRange(next, base)) onReschedule(project, next);
+      // Clique (ponteiro parado): a captura no wrapper desvia o `click` do botão, então
+      // é aqui que o peek abre (pl#1). O `click` que ainda possa chegar é descartado.
+      if (commit && !drag.moved) onSelect(project.id);
+      suppressClickRef.current = true;
+      // O `click` do mesmo gesto vem antes de qualquer timer; depois disso a supressão
+      // não pode sobrar para o próximo clique (nem para o Enter no botão focado).
+      setTimeout(() => {
+         suppressClickRef.current = false;
+      }, 0);
    };
 
-   const onKeyDown = (event: React.KeyboardEvent) => {
-      if (!reschedulable) return;
-      const delta = keyboardRescheduleDelta(event);
-      if (delta === null) return;
-      event.preventDefault();
-      onReschedule(project, rescheduleRange(base, 'move', delta));
-   };
+   // Teclado: rascunho + 1 commit (#39).
+   const keyboard = useKeyboardReschedule({
+      base,
+      enabled: reschedulable,
+      draftRef,
+      setDraft,
+      onCommit: (next) => onReschedule(project, next),
+   });
 
    const onClick = () => {
       if (suppressClickRef.current) {
@@ -211,17 +289,19 @@ function TimelineBar({
       <div className="absolute inset-0">
          <div
             ref={wrapperRef}
-            className={cn('group absolute top-5 h-8', draft !== null && 'select-none')}
+            className={cn('group absolute top-3 h-8', draft !== null && 'select-none')}
             style={{ left, width }}
             onPointerMove={onPointerMove}
             onPointerUp={(event) => endDrag(event, true)}
             onPointerCancel={(event) => endDrag(event, false)}
          >
             <button
+               ref={keyboard.ref}
                type="button"
                onClick={onClick}
                onPointerDown={beginDrag('move')}
-               onKeyDown={onKeyDown}
+               onKeyDown={keyboard.onKeyDown}
+               onBlur={keyboard.onBlur}
                aria-label={`${project.name}, ${rangeLabel}`}
                aria-describedby={reschedulable ? RESCHEDULE_HINT_ID : undefined}
                aria-keyshortcuts={
@@ -237,8 +317,8 @@ function TimelineBar({
                   draft !== null && 'border-primary/60 bg-accent'
                )}
             >
-               <span className="truncate font-medium">{project.name}</span>
-               {displayProperties.lead && project.lead && (
+               {!narrow && <span className="truncate font-medium">{project.name}</span>}
+               {!narrow && displayProperties.lead && project.lead && (
                   <Avatar className="size-4 shrink-0">
                      <AvatarImage
                         src={project.lead.avatarUrl || undefined}
@@ -247,10 +327,18 @@ function TimelineBar({
                      <AvatarFallback>{project.lead.name[0]}</AvatarFallback>
                   </Avatar>
                )}
-               {displayProperties.status && (
+               {!narrow && displayProperties.status && (
                   <span className="text-muted-foreground shrink-0">{project.percentComplete}%</span>
                )}
             </button>
+            {narrow && (
+               <span className="pointer-events-none absolute inset-y-0 left-full ml-2 flex items-center gap-1.5 whitespace-nowrap text-xs">
+                  <span className="font-medium">{project.name}</span>
+                  {displayProperties.status && (
+                     <span className="text-muted-foreground">{project.percentComplete}%</span>
+                  )}
+               </span>
+            )}
             {reschedulable && (
                <>
                   <span
@@ -280,6 +368,163 @@ function TimelineBar({
    );
 }
 
+/** Month scale: month names, weekly ticks and date labels (independe do scroll). */
+const TimelineScale = memo(function TimelineScale({
+   monthWidth,
+   zoom,
+   showWeekNumbers,
+   todayOffset,
+   todayLabel,
+}: {
+   monthWidth: number;
+   zoom: TimelineZoom;
+   showWeekNumbers: boolean;
+   todayOffset: number | null;
+   todayLabel: string | null;
+}) {
+   /** Date labels: every other Monday zoomed out, every Monday zoomed in. */
+   const scaleDates = zoom === 'year' ? BIWEEKLY_DATES : WEEKLY_DATES;
+   return (
+      <div className="sticky top-0 z-20 bg-container select-none">
+         <div className="relative flex h-4">
+            {MONTHS.map((month) => (
+               <div
+                  key={month.key}
+                  style={{ width: month.days * dayWidthOf(monthWidth) }}
+                  className="h-4 shrink-0 text-xs leading-4 font-medium text-muted-foreground uppercase whitespace-nowrap overflow-hidden"
+               >
+                  {month.label}
+               </div>
+            ))}
+            {/* Weekly tick marks */}
+            <div className="absolute inset-x-0 bottom-0 pointer-events-none">
+               {WEEKLY_DATES.map((date) => (
+                  <span
+                     key={date.time}
+                     className="absolute bottom-0 h-1 w-px bg-muted-foreground/30"
+                     style={{ left: offsetForTime(date.time, monthWidth) }}
+                  />
+               ))}
+            </div>
+         </div>
+         {/* Date labels (every other Monday at the Year zoom, weekly beyond) */}
+         <div className="relative h-4">
+            {scaleDates.map((date) => {
+               const left = offsetForTime(date.time, monthWidth);
+               if (todayOffset !== null && Math.abs(left - todayOffset) < 30) return null;
+               return (
+                  <span
+                     key={date.time}
+                     className="absolute top-0 -translate-x-1/2 text-[10px] text-muted-foreground/80 whitespace-nowrap"
+                     style={{ left }}
+                  >
+                     {showWeekNumbers ? `W${date.week}` : date.day}
+                  </span>
+               );
+            })}
+            {/* Today pill, pinned to the scale */}
+            {todayOffset !== null && (
+               <span
+                  className="absolute -top-0.5 -translate-x-1/2 text-[10px] font-semibold bg-primary text-primary-foreground rounded-full px-1.5 py-px uppercase whitespace-nowrap pointer-events-none z-10"
+                  style={{ left: todayOffset }}
+               >
+                  {todayLabel}
+               </span>
+            )}
+         </div>
+      </div>
+   );
+});
+
+/** Month grid lines. */
+const MonthGrid = memo(function MonthGrid({ monthWidth }: { monthWidth: number }) {
+   return (
+      <div className="absolute inset-0 top-8 flex pointer-events-none">
+         {MONTHS.map((month) => (
+            <div
+               key={month.key}
+               style={{ width: month.days * dayWidthOf(monthWidth) }}
+               className="shrink-0 border-r border-border/25 h-full"
+            />
+         ))}
+      </div>
+   );
+});
+
+/** Linha do projeto: barra + lista fixa + indicador (só este acompanha o scroll). */
+const TimelineRow = memo(function TimelineRow({
+   project,
+   monthWidth,
+   selected,
+   showProjectList,
+   listOffset,
+   onToggle,
+   onReschedule,
+   onJump,
+}: {
+   project: Project;
+   monthWidth: number;
+   selected: boolean;
+   showProjectList: boolean;
+   listOffset: number;
+   onToggle: (projectId: string) => void;
+   onReschedule: (project: Project, next: DateRange) => void;
+   onJump: (contentX: number) => void;
+}) {
+   const displayProperties = useProjectsDisplayStore((s) => s.displayProperties);
+   const hasStart = isValidProjectDate(project.startDate);
+   return (
+      <div className="relative h-14 flex items-center">
+         {hasStart && (
+            <TimelineBar
+               project={project}
+               monthWidth={monthWidth}
+               selected={selected}
+               onSelect={onToggle}
+               onReschedule={onReschedule}
+            />
+         )}
+         {showProjectList && (
+            <div className="sticky left-0 z-10 flex h-14 w-[312px] shrink-0 items-center gap-1 px-[13px] pr-[10px] bg-container/95 backdrop-blur-sm text-[13px] leading-4 font-medium border-r border-border/40">
+               <span className="inline-flex size-7 items-center justify-center rounded-md shrink-0">
+                  <project.icon className="size-4" />
+               </span>
+               <span className="truncate flex-1">{project.name}</span>
+               {displayProperties.health && (
+                  <span
+                     className="size-2 rounded-full shrink-0"
+                     style={{ backgroundColor: healthColor(project.health.id) }}
+                  />
+               )}
+               {displayProperties.status && (
+                  <CapacityRing value={project.percentComplete} color="var(--primary)" />
+               )}
+               {displayProperties.priority && (
+                  <project.priority.icon className={cn('size-3 shrink-0 text-muted-foreground')} />
+               )}
+               {displayProperties.lead && project.lead && (
+                  <Avatar className="size-4 shrink-0">
+                     <AvatarImage
+                        src={project.lead.avatarUrl || undefined}
+                        alt={project.lead.name}
+                     />
+                     <AvatarFallback>{project.lead.name[0]}</AvatarFallback>
+                  </Avatar>
+               )}
+            </div>
+         )}
+         {hasStart && (
+            <OutOfViewIndicator
+               project={project}
+               listOffset={listOffset}
+               monthWidth={monthWidth}
+               onJump={onJump}
+            />
+         )}
+      </div>
+   );
+});
+
 /**
  * Projects "Timeline" view (the default): month scale, grouped rows,
  * date-positioned bars and a Today marker. The left project list, week
@@ -287,10 +532,13 @@ function TimelineBar({
  * (Year / Quarter / Month / Week, with Y/Q/M/W shortcuts) changes the zoom.
  */
 export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
-   const { showProjectList, showWeekNumbers, displayProperties } = useProjectsDisplayStore();
+   // Troca de irmão (aba, item, layout) não pisca: só a primeira chegada de conteúdo.
+   const fade = useEnterFade('projects-view');
+   const showProjectList = useProjectsDisplayStore((s) => s.showProjectList);
+   const showWeekNumbers = useProjectsDisplayStore((s) => s.showWeekNumbers);
    const patchProject = useWorkspaceStore((s) => s.patchProject);
    const [todayIso, setTodayIso] = useState<string | null>(null);
-   const [viewport, setViewport] = useState<Viewport | null>(null);
+   const [viewportStore] = useState(createViewportStore);
    const [zoom, setZoom] = useState<TimelineZoom>('year');
    const [peekProjectId, setPeekProjectId] = useState<string | null>(null);
    const scrollRef = useRef<HTMLDivElement>(null);
@@ -301,16 +549,14 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
    const listOffset = showProjectList ? LIST_WIDTH : 0;
    const todayOffset = todayIso !== null ? offsetFor(todayIso, monthWidth) : null;
    const todayLabel = todayIso !== null ? format(parseISO(todayIso), 'MMM d').toUpperCase() : null;
-   /** The line would sit on the sticky project list → hide it (the pill stays on the scale). */
-   const todayOverlapsList =
-      viewport !== null && todayOffset !== null && todayOffset < viewport.left + listOffset + 28;
-   /** Date labels: every other Monday zoomed out, every Monday zoomed in. */
-   const scaleDates = zoom === 'year' ? BIWEEKLY_DATES : WEEKLY_DATES;
 
    const syncViewport = useCallback(() => {
       if (!scrollRef.current) return;
-      setViewport({ left: scrollRef.current.scrollLeft, width: scrollRef.current.clientWidth });
-   }, []);
+      viewportStore.set({
+         left: scrollRef.current.scrollLeft,
+         width: scrollRef.current.clientWidth,
+      });
+   }, [viewportStore]);
 
    const handleScroll = useCallback(() => {
       if (frameRef.current !== null) return;
@@ -321,7 +567,7 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
    }, [syncViewport]);
 
    useEffect(() => {
-      const iso = new Date().toISOString().slice(0, 10);
+      const iso = localTodayIso();
       setTodayIso(iso);
       // Bring today into view on mount (centered, but always
       // clear of the sticky project list so the line stays visible).
@@ -360,6 +606,8 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
    useEffect(() => {
       const onKeyDown = (event: KeyboardEvent) => {
          if (event.metaKey || event.ctrlKey || event.altKey) return;
+         // Com dialog/palette aberto a tecla é da camada de cima, não do zoom (pl#19).
+         if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
          const target = event.target as HTMLElement | null;
          if (
             target &&
@@ -390,6 +638,12 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
       [listOffset]
    );
 
+   const togglePeek = useCallback(
+      (projectId: string) =>
+         setPeekProjectId((current) => (current === projectId ? null : projectId)),
+      []
+   );
+
    const reschedule = useCallback(
       (project: Project, next: DateRange) => {
          // O store já fez rollback + toast; a rejeição re-lançada não tem mais o que tratar.
@@ -411,195 +665,94 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
    };
 
    return (
-      <div className="relative w-full h-full">
-         {peekProjectId !== null && (
-            <ProjectPeekPanel projectId={peekProjectId} onClose={() => setPeekProjectId(null)} />
-         )}
-         {/* Floating scale controls (Linear-style) */}
-         <div className="absolute top-[5px] right-[10px] z-30 flex items-center gap-1">
-            <button
-               type="button"
-               onClick={scrollToToday}
-               className="h-6 px-2 rounded-full border border-transparent bg-secondary text-xs font-medium hover:bg-accent transition-colors"
-            >
-               Today
-            </button>
-            <DropdownMenu>
-               <DropdownMenuTrigger className="h-6 px-2 rounded-full border border-transparent bg-secondary text-xs font-medium hover:bg-accent transition-colors inline-flex items-center gap-0.5 outline-none">
-                  {ZOOM_LEVELS.find((level) => level.id === zoom)!.label}
-                  <ChevronDown className="size-3 text-muted-foreground" />
-               </DropdownMenuTrigger>
-               <DropdownMenuContent align="end" className="w-40">
-                  {ZOOM_LEVELS.map((level) => (
-                     <DropdownMenuItem
-                        key={level.id}
-                        onClick={() => setZoomLevel(level.id)}
-                        className="flex items-center gap-2 text-sm"
-                     >
-                        <span className="flex-1">{level.label}</span>
-                        {zoom === level.id && <Check className="size-3.5" />}
-                        <span className="text-xs text-muted-foreground">{level.shortcut}</span>
-                     </DropdownMenuItem>
-                  ))}
-               </DropdownMenuContent>
-            </DropdownMenu>
-         </div>
-
-         <p id={RESCHEDULE_HINT_ID} className="sr-only">
-            Drag the bar to move the project, drag its edges to change one date. With the bar
-            focused, use the arrow keys to move by one day and Shift + arrow keys by one week.
-         </p>
-         <div ref={scrollRef} onScroll={handleScroll} className="w-full h-full overflow-auto">
-            <div style={{ width: totalWidth }} className="relative min-h-full">
-               {/* Month scale: month names, weekly ticks and date labels */}
-               <div className="sticky top-0 z-20 bg-container select-none">
-                  <div className="relative flex h-4">
-                     {MONTHS.map((month) => (
-                        <div
-                           key={month.key}
-                           style={{ width: month.days * dayWidthOf(monthWidth) }}
-                           className="h-4 shrink-0 text-xs leading-4 font-medium text-muted-foreground uppercase whitespace-nowrap overflow-hidden"
+      <ViewportContext.Provider value={viewportStore}>
+         <div className={cn(fade && 'content-enter', 'relative w-full h-full')}>
+            {peekProjectId !== null && (
+               <ProjectPeekPanel projectId={peekProjectId} onClose={() => setPeekProjectId(null)} />
+            )}
+            {/* Floating scale controls (Linear-style) */}
+            <div className="absolute top-[5px] right-[10px] z-30 flex items-center gap-1">
+               <button
+                  type="button"
+                  onClick={scrollToToday}
+                  className="h-6 px-2 rounded-full border border-transparent bg-secondary text-xs font-medium hover:bg-accent transition-colors"
+               >
+                  Today
+               </button>
+               <DropdownMenu>
+                  <DropdownMenuTrigger className="h-6 px-2 rounded-full border border-transparent bg-secondary text-xs font-medium hover:bg-accent transition-colors inline-flex items-center gap-0.5 outline-none">
+                     {ZOOM_LEVELS.find((level) => level.id === zoom)!.label}
+                     <ChevronDown className="size-3 text-muted-foreground" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40">
+                     {ZOOM_LEVELS.map((level) => (
+                        <DropdownMenuItem
+                           key={level.id}
+                           onClick={() => setZoomLevel(level.id)}
+                           className="flex items-center gap-2 text-sm"
                         >
-                           {month.label}
+                           <span className="flex-1">{level.label}</span>
+                           {zoom === level.id && <Check className="size-3.5" />}
+                           <span className="text-xs text-muted-foreground">{level.shortcut}</span>
+                        </DropdownMenuItem>
+                     ))}
+                  </DropdownMenuContent>
+               </DropdownMenu>
+            </div>
+
+            <p id={RESCHEDULE_HINT_ID} className="sr-only">
+               Drag the bar to move the project, drag its edges to change one date. With the bar
+               focused, use the arrow keys to move by one day and Shift + arrow keys by one week.
+            </p>
+            <div ref={scrollRef} onScroll={handleScroll} className="w-full h-full overflow-auto">
+               <div style={{ width: totalWidth }} className="relative min-h-full">
+                  <TimelineScale
+                     monthWidth={monthWidth}
+                     zoom={zoom}
+                     showWeekNumbers={showWeekNumbers}
+                     todayOffset={todayOffset}
+                     todayLabel={todayLabel}
+                  />
+                  <MonthGrid monthWidth={monthWidth} />
+                  {/* The line would sit on the sticky project list → hidden (the pill stays on the scale). */}
+                  {todayOffset !== null && (
+                     <TodayMarker todayOffset={todayOffset} listOffset={listOffset} />
+                  )}
+
+                  {/* Groups */}
+                  <div className="relative z-[5] pb-8">
+                     {groups.map((group) => (
+                        <div key={group.id}>
+                           {group.id !== 'all' && (
+                              <div className="sticky left-0 flex items-center gap-2 px-4 h-9 text-sm font-medium bg-[color-mix(in_oklab,var(--accent)_30%,var(--container))] border-y border-border/40 w-screen max-w-full">
+                                 {group.icon && <span>{group.icon}</span>}
+                                 {group.name}
+                                 <span className="text-xs text-muted-foreground">
+                                    {group.projects.length}
+                                 </span>
+                              </div>
+                           )}
+                           <div className={cn(group.id !== 'all' && 'py-1')}>
+                              {group.projects.map((project) => (
+                                 <TimelineRow
+                                    key={project.id}
+                                    project={project}
+                                    monthWidth={monthWidth}
+                                    selected={peekProjectId === project.id}
+                                    showProjectList={showProjectList}
+                                    listOffset={listOffset}
+                                    onToggle={togglePeek}
+                                    onReschedule={reschedule}
+                                    onJump={jumpTo}
+                                 />
+                              ))}
+                           </div>
                         </div>
                      ))}
-                     {/* Weekly tick marks */}
-                     <div className="absolute inset-x-0 bottom-0 pointer-events-none">
-                        {WEEKLY_DATES.map((date) => (
-                           <span
-                              key={date.time}
-                              className="absolute bottom-0 h-1 w-px bg-muted-foreground/30"
-                              style={{ left: offsetForTime(date.time, monthWidth) }}
-                           />
-                        ))}
-                     </div>
                   </div>
-                  {/* Date labels (every other Monday at the Year zoom, weekly beyond) */}
-                  <div className="relative h-4">
-                     {scaleDates.map((date) => {
-                        const left = offsetForTime(date.time, monthWidth);
-                        if (todayOffset !== null && Math.abs(left - todayOffset) < 30) return null;
-                        return (
-                           <span
-                              key={date.time}
-                              className="absolute top-0 -translate-x-1/2 text-[10px] text-muted-foreground/80 whitespace-nowrap"
-                              style={{ left }}
-                           >
-                              {showWeekNumbers ? `W${date.week}` : date.day}
-                           </span>
-                        );
-                     })}
-                     {/* Today pill, pinned to the scale */}
-                     {todayOffset !== null && (
-                        <span
-                           className="absolute -top-0.5 -translate-x-1/2 text-[10px] font-semibold bg-primary text-primary-foreground rounded-full px-1.5 py-px uppercase whitespace-nowrap pointer-events-none z-10"
-                           style={{ left: todayOffset }}
-                        >
-                           {todayLabel}
-                        </span>
-                     )}
-                  </div>
-               </div>
-
-               {/* Month grid lines */}
-               <div className="absolute inset-0 top-8 flex pointer-events-none">
-                  {MONTHS.map((month) => (
-                     <div
-                        key={month.key}
-                        style={{ width: month.days * dayWidthOf(monthWidth) }}
-                        className="shrink-0 border-r border-border/25 h-full"
-                     />
-                  ))}
-               </div>
-
-               {/* Today marker (hidden while it overlaps the sticky project list) */}
-               {todayOffset !== null && !todayOverlapsList && (
-                  <div
-                     className="absolute top-8 bottom-0 w-px bg-primary z-10"
-                     style={{ left: todayOffset }}
-                  />
-               )}
-
-               {/* Groups */}
-               <div className="relative z-[5] pb-8">
-                  {groups.map((group) => (
-                     <div key={group.id}>
-                        {group.id !== 'all' && (
-                           <div className="sticky left-0 flex items-center gap-2 px-4 h-9 text-sm font-medium bg-[color-mix(in_oklab,var(--accent)_30%,var(--container))] border-y border-border/40 w-screen max-w-full">
-                              {group.icon && <span>{group.icon}</span>}
-                              {group.name}
-                              <span className="text-xs text-muted-foreground">
-                                 {group.projects.length}
-                              </span>
-                           </div>
-                        )}
-                        <div className={cn(group.id !== 'all' && 'py-1')}>
-                           {group.projects.map((project) => (
-                              <div key={project.id} className="relative h-[72px] flex items-center">
-                                 {isValidProjectDate(project.startDate) && (
-                                    <TimelineBar
-                                       project={project}
-                                       monthWidth={monthWidth}
-                                       selected={peekProjectId === project.id}
-                                       onSelect={(projectId) =>
-                                          setPeekProjectId((current) =>
-                                             current === projectId ? null : projectId
-                                          )
-                                       }
-                                       onReschedule={reschedule}
-                                    />
-                                 )}
-                                 {showProjectList && (
-                                    <div className="sticky left-0 z-10 flex h-[72px] w-[312px] shrink-0 items-center gap-1 px-[13px] pr-[10px] bg-container/95 backdrop-blur-sm text-[13px] leading-4 font-medium border-r border-border/40">
-                                       <span className="inline-flex size-7 items-center justify-center rounded-md shrink-0">
-                                          <project.icon className="size-4" />
-                                       </span>
-                                       <span className="truncate flex-1">{project.name}</span>
-                                       {displayProperties.health && (
-                                          <span
-                                             className="size-2 rounded-full shrink-0"
-                                             style={{ backgroundColor: project.health.color }}
-                                          />
-                                       )}
-                                       {displayProperties.status && (
-                                          <CapacityRing
-                                             value={project.percentComplete}
-                                             color="var(--primary)"
-                                          />
-                                       )}
-                                       {displayProperties.priority && (
-                                          <project.priority.icon
-                                             className={cn('size-3 shrink-0 text-muted-foreground')}
-                                          />
-                                       )}
-                                       {displayProperties.lead && project.lead && (
-                                          <Avatar className="size-4 shrink-0">
-                                             <AvatarImage
-                                                src={project.lead.avatarUrl || undefined}
-                                                alt={project.lead.name}
-                                             />
-                                             <AvatarFallback>{project.lead.name[0]}</AvatarFallback>
-                                          </Avatar>
-                                       )}
-                                    </div>
-                                 )}
-                                 {viewport && isValidProjectDate(project.startDate) && (
-                                    <OutOfViewIndicator
-                                       project={project}
-                                       viewport={viewport}
-                                       listOffset={listOffset}
-                                       monthWidth={monthWidth}
-                                       onJump={jumpTo}
-                                    />
-                                 )}
-                              </div>
-                           ))}
-                        </div>
-                     </div>
-                  ))}
                </div>
             </div>
          </div>
-      </div>
+      </ViewportContext.Provider>
    );
 }

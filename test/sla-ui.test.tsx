@@ -9,7 +9,7 @@ import { applyIssueFilters } from '@/components/common/issues/issue-filter-colum
 import type { FiltersState } from '@/components/data-table-filter/core/types';
 import type { Issue } from '@/data/issues';
 import { priorities } from '@/data/priorities';
-import { status } from '@/data/status';
+import { status } from './helpers/catalog-fixture';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 

@@ -1,7 +1,6 @@
 import { db } from '@/db';
 import { handle, requireEmail, multi } from '@/lib/api/http';
-import { listIssues } from '@/lib/api/issues';
-import { exportIssuesJson } from '@/lib/api/export';
+import { exportIssueRows, exportIssuesJson } from '@/lib/api/export';
 import { scopeForEmail } from '@/lib/api/scope';
 
 export const runtime = 'nodejs';
@@ -32,7 +31,6 @@ export async function GET(req: Request) {
          project: multi(sp, 'project'),
          labels: multi(sp, 'labels'),
          q: sp.get('q') ?? undefined,
-         limit: 5000,
       };
       if (sp.get('format') === 'json') {
          const bundle = await exportIssuesJson(db, filters);
@@ -40,10 +38,11 @@ export async function GET(req: Request) {
             headers: {
                'Content-Type': 'application/json; charset=utf-8',
                'Content-Disposition': 'attachment; filename="issues.json"',
+               'X-Export-Truncated': String(bundle.truncated),
             },
          });
       }
-      const issues = await listIssues(db, filters);
+      const { issues, truncated } = await exportIssueRows(db, filters);
       const header = [
          'identifier',
          'title',
@@ -82,6 +81,8 @@ export async function GET(req: Request) {
          headers: {
             'Content-Type': 'text/csv; charset=utf-8',
             'Content-Disposition': 'attachment; filename="issues.csv"',
+            // CSV não tem onde dizer "incompleto" no corpo sem quebrar o formato: header.
+            'X-Export-Truncated': String(truncated),
          },
       });
    }, req);

@@ -88,6 +88,51 @@ describe('PATCH descriptionDoc (issue) #16', () => {
    });
 });
 
+/**
+ * Concorrência otimista da descrição (#36): antes era last-write-wins — duas pessoas
+ * editando, a última apagava a outra em silêncio. O detalhe expõe `descriptionVersion`;
+ * o PATCH que manda `expectedDescriptionVersion` divergente recebe 409. Sem o campo, o
+ * comportamento é o de sempre (retrocompatível).
+ */
+describe('descrição com concorrência otimista (#36)', () => {
+   const OUTRO: EditorDoc = {
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'de outra pessoa' }] }],
+   };
+
+   it('versão confere → grava e devolve a versão nova', async () => {
+      const { db, issue } = await anIssue();
+      const antes = (await getIssueDetail(db, issue.id))!;
+      expect(antes.descriptionVersion).toBeTruthy();
+      const dto = await updateIssueContent(db, issue.id, {
+         descriptionDoc: DOC,
+         expectedDescriptionVersion: antes.descriptionVersion,
+      });
+      expect(dto?.descriptionVersion).not.toBe(antes.descriptionVersion);
+      expect(dto?.descriptionDoc).toEqual(DOC);
+   });
+
+   it('versão divergente → 409 e nada é gravado', async () => {
+      const { db, issue } = await anIssue();
+      const antes = (await getIssueDetail(db, issue.id))!;
+      await updateIssueContent(db, issue.id, { descriptionDoc: OUTRO });
+      const err = await updateIssueContent(db, issue.id, {
+         descriptionDoc: DOC,
+         expectedDescriptionVersion: antes.descriptionVersion,
+      }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ApiError);
+      expect((err as ApiError).status).toBe(409);
+      expect((await getIssueDetail(db, issue.id))!.descriptionDoc).toEqual(OUTRO);
+   });
+
+   it('sem o campo, last-write-wins como antes', async () => {
+      const { db, issue } = await anIssue();
+      await updateIssueContent(db, issue.id, { descriptionDoc: OUTRO });
+      const dto = await updateIssueContent(db, issue.id, { descriptionDoc: DOC });
+      expect(dto?.descriptionDoc).toEqual(DOC);
+   });
+});
+
 describe('POST descriptionDoc (create issue) #16', () => {
    const base = { teamId: 'CORE', statusId: 'to-do', priorityId: 'low' };
 

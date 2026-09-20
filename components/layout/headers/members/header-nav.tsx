@@ -14,7 +14,7 @@ export default function HeaderNav() {
    const users = useWorkspaceStore((s) => s.users);
    return (
       <LocationBar>
-         <HeaderGroup className="gap-2 pl-2.5">
+         <HeaderGroup className="gap-2">
             <HeaderTitle>Members</HeaderTitle>
             <span className="text-xs font-[450] leading-[normal] text-muted-foreground">
                {users.length}

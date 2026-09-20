@@ -1,7 +1,8 @@
 'use client';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/common/empty-state';
+import { LoadingArea, useEnterFade } from '@/components/common/loading-area';
 import { cn } from '@/lib/utils';
 import { Issue, sortIssuesByPriority } from '@/data/issues';
 import { Status } from '@/data/status';
@@ -9,14 +10,20 @@ import { usePriorities, useLabels } from '@/store/catalog-store';
 import { useDisplaySetting } from '@/store/display-settings-store';
 import { useFilterStore } from '@/store/filter-store';
 import { useBulkSelectionStore } from '@/store/bulk-selection-store';
-import { Box, ChevronDown, Tag, User, X } from 'lucide-react';
+import { useIssueNavigationStore, type IssueNavItem } from '@/store/issue-navigation-store';
+import { Box, ChevronDown, Layers, Tag, User, X } from 'lucide-react';
 import { FC, useEffect, useMemo, useState } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { GroupIssues, IssueGroupDescriptor } from './group-issues';
 import { VirtualIssueList } from './virtual-issue-list';
 import { CustomDragLayer } from './issue-grid';
+import { IssueLineDragLayer } from './issue-line';
 import { BulkActionsBar } from './bulk-actions-bar';
+import { useBulkSelectionKeys } from './use-bulk-selection-keys';
+import { useIssueDeleteShortcut } from './use-issue-delete-shortcut';
+import { IssueContextMenuHost } from './issue-context-menu-host';
+import { labelColor } from '@/components/common/palette';
 
 interface GroupedIssuesViewProps {
    /** Issues to display (after the filter bar has been applied). */
@@ -36,7 +43,8 @@ interface GroupedIssuesViewProps {
 
 /**
  * Estado exibido quando não há nenhum grupo/issue para mostrar. Distingue
- * carregando (hidratando) de falha (com retry) de vazio real.
+ * carregando (hidratando) de falha (com retry) de vazio real. Ocupa a área toda:
+ * o loading fica no topo (onde as linhas vão aparecer), erro e vazio centralizados.
  */
 function IssuesEmptyState({
    loading,
@@ -49,7 +57,7 @@ function IssuesEmptyState({
 }) {
    if (error) {
       return (
-         <div className="flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+         <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
             <span>Não foi possível carregar as issues.</span>
             {onRetry && (
                <button
@@ -64,9 +72,21 @@ function IssuesEmptyState({
       );
    }
    if (loading) {
-      return <Skeleton className="h-4 w-16" />;
+      return (
+         <div data-testid="issues-loading" className="h-full w-full pt-1">
+            <LoadingArea rows={8} />
+         </div>
+      );
    }
-   return <span className="text-sm text-muted-foreground">Nenhuma issue</span>;
+   return (
+      <div className="flex h-full items-center justify-center">
+         <EmptyState
+            icon={Layers}
+            title="Nenhuma issue"
+            description="Issues criadas aqui aparecem nesta lista."
+         />
+      </div>
+   );
 }
 
 interface GroupEntry {
@@ -94,7 +114,7 @@ const sortIssues = (issues: Issue[], ordering: string, completedByRecency = fals
                if (!a.dueDate && !b.dueDate) return 0;
                if (!a.dueDate) return 1;
                if (!b.dueDate) return -1;
-               return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+               return a.dueDate.localeCompare(b.dueDate);
             });
          case 'priority':
          default:
@@ -201,6 +221,8 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
    error,
    onRetry,
 }) => {
+   // Troca de irmão (aba, item, layout) não pisca: só a primeira chegada de conteúdo.
+   const fade = useEnterFade('issues-view');
    // Selectors individuais: re-render só quando a chave usada muda (não o store inteiro).
    const grouping = useDisplaySetting('grouping');
    const ordering = useDisplaySetting('ordering');
@@ -213,9 +235,11 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
    const labels = useLabels();
    const hasActiveFilters = filters.length > 0;
 
-   // Limpa a seleção em lote ao desmontar (troca de view).
+   // Limpa a seleção em lote ao desmontar (troca de view) e no Esc (is#10).
    const clearSelection = useBulkSelectionStore((s) => s.clear);
    useEffect(() => () => clearSelection(), [clearSelection]);
+   useBulkSelectionKeys();
+   useIssueDeleteShortcut();
 
    const groups = useMemo<GroupEntry[]>(() => {
       const hideDone = (list: Issue[]) =>
@@ -259,6 +283,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                            ) : (
                               <User className="size-4 text-muted-foreground" />
                            ),
+                           drop: { field: 'assignee', assignee: assignee ?? null },
                         },
                         issues: visible.get(key) ?? [],
                         total: totalGroup.length,
@@ -271,6 +296,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                      id: priority.id,
                      name: priority.name,
                      icon: <priority.icon className="size-4 text-muted-foreground" />,
+                     drop: { field: 'priority', priority },
                   },
                   issues: visibleIssues.filter((issue) => issue.priority.id === priority.id),
                   total: scopeIssues.filter((issue) => issue.priority.id === priority.id).length,
@@ -290,6 +316,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                            id: key,
                            name: project?.name ?? 'No project',
                            icon: <Icon className="size-4 text-muted-foreground" />,
+                           drop: { field: 'project', project },
                         },
                         issues: visible.get(key) ?? [],
                         total: totalGroup.length,
@@ -305,7 +332,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                      icon: (
                         <span
                            className="size-2.5 rounded-full"
-                           style={{ backgroundColor: label.color }}
+                           style={{ backgroundColor: labelColor(label.color) }}
                         />
                      ),
                   },
@@ -347,6 +374,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                      name: statusItem.name,
                      icon: <statusItem.icon />,
                      status: statusItem,
+                     drop: { field: 'status', status: statusItem },
                   },
                   issues: visibleIssues.filter((issue) => issue.status.id === statusItem.id),
                   total: scopeIssues.filter((issue) => issue.status.id === statusItem.id).length,
@@ -372,11 +400,48 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
       showSubIssues,
    ]);
 
-   const hiddenCount = Math.max(0, totalIssues.length - issues.length);
+   // Seleção em lote segue o que está na tela (#30): issue apagada, filtrada ou escondida
+   // (done/sub-issues) sai da seleção — a barra nunca age sobre o que o usuário não vê.
+   const retainSelection = useBulkSelectionStore((s) => s.retain);
+   // A mesma ordem visível vira a lista de origem do detalhe (#33: anterior/próxima, J/K).
+   const setNavOrder = useIssueNavigationStore((s) => s.setOrder);
+   useEffect(() => {
+      const visible = new Set<string>();
+      const order: IssueNavItem[] = [];
+      for (const entry of groups)
+         for (const issue of entry.issues) {
+            if (visible.has(issue.id)) continue; // por label, a issue aparece em vários grupos
+            visible.add(issue.id);
+            order.push({ id: issue.id, identifier: issue.identifier });
+         }
+      retainSelection(visible);
+      setNavOrder(order);
+   }, [groups, retainSelection, setNavOrder]);
+
+   // Is#18: só o que o FILTRO escondeu. Done/sub-issues escondidas pelas opções de display
+   // saem das duas contagens (antes inflavam o rodapé e o faziam aparecer à toa).
+   const hiddenCount = useMemo(() => {
+      const inDisplayScope = (issue: Issue) =>
+         (completedIssues !== 'none' ||
+            (issue.status.category !== 'completed' && issue.status.category !== 'canceled')) &&
+         (showSubIssues || !issue.parentId);
+      return Math.max(
+         0,
+         totalIssues.filter(inDisplayScope).length - issues.filter(inDisplayScope).length
+      );
+   }, [issues, totalIssues, completedIssues, showSubIssues]);
    const showFooter = hasActiveFilters && hiddenCount > 0;
+
+   // Nenhuma issue em grupo algum (e não é filtro que escondeu tudo): carregando, falha
+   // ou vazio real. No board, sem esta guarda, todas as colunas iam para "Hidden columns".
+   const nothingToShow = groups.every((entry) => entry.issues.length === 0) && !showFooter;
 
    /* ------------------------------- Board ------------------------------- */
    if (isViewTypeGrid) {
+      if (nothingToShow && (loading || error || !showEmptyGroups)) {
+         return <IssuesEmptyState loading={loading} error={error} onRetry={onRetry} />;
+      }
+
       // Padrão Linear: TODA coluna vazia (por filtro OU naturalmente sem issues)
       // colapsa em "Hidden columns" — a menos que "Show empty groups" esteja ligado.
       const boardGroups = groups.filter((entry) => showEmptyGroups || entry.issues.length > 0);
@@ -388,24 +453,21 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
          <DndProvider backend={HTML5Backend}>
             <CustomDragLayer />
             <BulkActionsBar />
-            <div className="h-full flex flex-col">
+            <div className={cn(fade && 'content-enter', 'h-full flex flex-col')}>
                <div className="flex-1 min-h-0 overflow-x-auto">
-                  <div className="flex h-full min-w-max gap-0 px-1">
-                     {boardGroups.map((entry) => (
-                        <GroupIssues
-                           key={entry.group.id}
-                           group={entry.group}
-                           issues={entry.issues}
-                           count={entry.issues.length}
-                        />
-                     ))}
-                     {hiddenGroups.length > 0 && <HiddenColumns entries={hiddenGroups} />}
-                     {boardGroups.length === 0 && hiddenGroups.length === 0 && (
-                        <div className="flex items-center justify-center w-full h-40">
-                           <IssuesEmptyState loading={loading} error={error} onRetry={onRetry} />
-                        </div>
-                     )}
-                  </div>
+                  <IssueContextMenuHost>
+                     <div className="flex h-full min-w-max gap-0 px-1">
+                        {boardGroups.map((entry) => (
+                           <GroupIssues
+                              key={entry.group.id}
+                              group={entry.group}
+                              issues={entry.issues}
+                              count={entry.issues.length}
+                           />
+                        ))}
+                        {hiddenGroups.length > 0 && <HiddenColumns entries={hiddenGroups} />}
+                     </div>
+                  </IssueContextMenuHost>
                </div>
                {showFooter && (
                   <div className="shrink-0 border-t bg-container">
@@ -422,17 +484,17 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
 
    return (
       <DndProvider backend={HTML5Backend}>
-         <CustomDragLayer />
+         <IssueLineDragLayer />
          <BulkActionsBar />
          {listGroups.length === 0 && !showFooter ? (
-            <div className="h-full flex items-center justify-center">
-               <IssuesEmptyState loading={loading} error={error} onRetry={onRetry} />
-            </div>
+            <IssuesEmptyState loading={loading} error={error} onRetry={onRetry} />
          ) : (
-            <div className="h-full flex flex-col min-h-0">
+            <div className={cn(fade && 'content-enter', 'h-full flex flex-col min-h-0')}>
                {/* Lista VIRTUALIZADA: só as linhas visíveis vão pro DOM (fluido a 1000+). */}
                <div className="flex-1 min-h-0">
-                  <VirtualIssueList entries={listGroups} />
+                  <IssueContextMenuHost>
+                     <VirtualIssueList entries={listGroups} />
+                  </IssueContextMenuHost>
                </div>
                {showFooter && (
                   <div className="shrink-0 border-t bg-container">

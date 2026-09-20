@@ -30,7 +30,8 @@ export async function GET(req: Request, { params }: Params) {
 
 const CreateSchema = z.object({
    health: z.enum(['on-track', 'at-risk', 'off-track']),
-   blocks: z.array(z.unknown()).default([]),
+   // Teto de blocos por update (texto livre do composer; evita payload gigante).
+   blocks: z.array(z.unknown()).max(500).default([]),
 });
 
 export async function POST(req: Request, { params }: Params) {

@@ -13,7 +13,7 @@ import {
    adaptInitiative,
    adaptView,
 } from '@/lib/adapters-workspace';
-import type { WorkspaceBootstrap, TeamFull } from '@/lib/api/workspace';
+import type { TeamFull } from '@/lib/api/workspace';
 import type { MeDto } from '@/lib/api/users';
 import type { ProjectDto, UpdateProjectInput } from '@/lib/api/projects';
 import type { InitiativeDto } from '@/lib/api/initiatives';
@@ -22,15 +22,19 @@ import type { MemberDto } from '@/lib/api/members';
 import type { CycleDto } from '@/lib/api/cycles';
 import type { ViewDto } from '@/lib/api/views';
 import { useCatalogStore } from '@/store/catalog-store';
+// Import circular (issues-store também lê este store), seguro: os dois só se usam dentro de ações.
+import { useIssuesStore } from '@/store/issues-store';
 import { api } from '@/lib/client';
 import { toast } from 'sonner';
 
-/** Team das rotas de escrita (TeamDto, sem members/projects) ou do bootstrap (TeamFull). */
-export type TeamLike = TeamDto & Partial<Pick<TeamFull, 'members' | 'projects'>>;
+/** Team das rotas de escrita (TeamDto, sem members) ou do bootstrap (TeamFull). */
+export type TeamLike = TeamDto & Partial<Pick<TeamFull, 'members'>>;
 
 interface WorkspaceState {
    loaded: boolean;
    loading: boolean;
+   /** O último bootstrap falhou: o shell troca o skeleton por erro com retry (#16). */
+   loadError: boolean;
    me: MeDto | null;
    projects: Project[];
    teams: Team[];
@@ -43,8 +47,7 @@ interface WorkspaceState {
 
    /** Splice de UMA entidade a partir do DTO do servidor (após uma mutação), em vez de
     * re-hidratar o workspace inteiro — mesmo padrão do issues-store. Cada apply/remove
-    * também mantém as CÓPIAS derivadas coerentes (`teams[].projects`,
-    * `initiatives[].projectIds`, `projects[].initiative`, membership em `teams[].members`,
+    * também mantém as CÓPIAS derivadas coerentes (`initiatives[].projectIds`, `projects[].initiative`, membership em `teams[].members`,
     * `owner` de initiatives/views), sem tocar nas demais coleções. */
    applyProject: (dto: ProjectDto) => void;
    /** PATCH otimista de um projeto (DnD do board, reschedule da timeline): aplica `local`
@@ -69,6 +72,11 @@ interface WorkspaceState {
 
    /** Segue/deixa de seguir uma issue (otimista + rollback). Reflete em me.subscribedIssueIds. */
    toggleSubscription: (issueId: string) => void;
+   /**
+    * Issue fechada fica fora do `me.subscribedIssueIds` (bootstrap enxuto): consulta a
+    * assinatura dela e, se seguida, inclui na lista local (o toggle segue funcionando).
+    */
+   ensureSubscriptionKnown: (issueId: string) => Promise<void>;
    isSubscribed: (issueId: string) => boolean;
 
    // Helpers (mesmos nomes dos mocks)
@@ -89,6 +97,57 @@ interface WorkspaceState {
 /** Fetch do bootstrap em voo e a repetição única agendada (ver `hydrate`). */
 let inFlight: Promise<void> | null = null;
 let queued: Promise<void> | null = null;
+
+/* ------------------------- Reconciliação do bootstrap ------------------------- */
+
+/**
+ * If#15: re-hidratar o bootstrap NÃO recria o que não mudou. Guardamos o JSON do último
+ * DTO de cada item; igual → o item adaptado atual (mesma referência) é reaproveitado, e
+ * a lista inteira também quando nada mudou — sem re-render à toa. `apply*`/`remove*`
+ * ganham um selo de sequência: o que foi aplicado DEPOIS de o bootstrap começar é mais
+ * novo que o snapshot dele e vence.
+ */
+type Kind = 'project' | 'team' | 'user' | 'cycle' | 'initiative' | 'view';
+const lastJson = new Map<string, string>();
+const touchedAt = new Map<string, number>();
+let touchSeq = 0;
+const touch = (kind: Kind, id: string) => touchedAt.set(`${kind}:${id}`, ++touchSeq);
+const remember = (kind: Kind, id: string, dto: unknown) =>
+   lastJson.set(`${kind}:${id}`, JSON.stringify(dto));
+
+function reconcile<D extends { id: string }, T extends { id: string }>(
+   kind: Kind,
+   dtos: D[],
+   current: T[],
+   since: number,
+   adapt: (d: D) => T,
+   stillValid: (cur: T) => boolean = () => true
+): T[] {
+   const byId = new Map(current.map((x) => [x.id, x]));
+   const out: T[] = [];
+   for (const d of dtos) {
+      const key = `${kind}:${d.id}`;
+      const cur = byId.get(d.id);
+      // Mexido localmente depois do início do fetch: o local é mais novo que o snapshot.
+      if ((touchedAt.get(key) ?? 0) > since) {
+         if (cur) out.push(cur);
+         continue;
+      }
+      const json = JSON.stringify(d);
+      if (cur && lastJson.get(key) === json && stillValid(cur)) {
+         out.push(cur);
+         continue;
+      }
+      lastJson.set(key, json);
+      out.push(adapt(d));
+   }
+   // Criado localmente depois do início do fetch (ainda fora do snapshot): fica.
+   for (const cur of current)
+      if (!dtos.some((d) => d.id === cur.id) && (touchedAt.get(`${kind}:${cur.id}`) ?? 0) > since)
+         out.push(cur);
+   const same = out.length === current.length && out.every((x, i) => x === current[i]);
+   return same ? current : out;
+}
 
 /* ------------------------------ Helpers de splice ------------------------------ */
 
@@ -149,6 +208,7 @@ const dropId = (ids: string[], id: string) => ids.filter((x) => x !== id);
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
    loaded: false,
    loading: false,
+   loadError: false,
    me: null,
    projects: [],
    teams: [],
@@ -172,27 +232,47 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       }
       inFlight = (async () => {
          set({ loading: true });
+         const since = touchSeq;
          try {
             // Só o boot da página pede rollover (escrita); refetches ficam na leitura.
             const data = await api.workspace({ rollover: opts?.rollover });
             // Catálogos (status/priority/label/health) já vêm no bootstrap — populamos
             // o catalog-store a partir daqui, sem fetch duplicado.
             useCatalogStore.getState().setCatalogs(data);
-            const users = data.members.map(adaptMemberToUser);
+            const s = get();
+            const users = reconcile('user', data.members, s.users, since, adaptMemberToUser);
             const usersById = new Map(users.map((u) => [u.id, u]));
+            // Initiative/view carregam o User do dono: só reaproveita se ele não mudou.
+            const ownerOk = (owner: User | undefined, id: string | undefined) =>
+               !id || owner === usersById.get(id);
             set({
-               me: data.me,
-               projects: data.projects.map(adaptProject),
-               teams: data.teams.map(adaptTeam),
+               me: s.me && JSON.stringify(s.me) === JSON.stringify(data.me) ? s.me : data.me,
+               projects: reconcile('project', data.projects, s.projects, since, adaptProject),
+               teams: reconcile('team', data.teams, s.teams, since, adaptTeam),
                users,
-               cycles: data.cycles.map(adaptCycle),
-               initiatives: data.initiatives.map((i) => adaptInitiative(i, usersById)),
-               views: data.views.map((v) => adaptView(v, usersById)),
+               cycles: reconcile('cycle', data.cycles, s.cycles, since, adaptCycle),
+               initiatives: reconcile(
+                  'initiative',
+                  data.initiatives,
+                  s.initiatives,
+                  since,
+                  (i) => adaptInitiative(i, usersById),
+                  (cur) => ownerOk(cur.owner, cur.owner?.id)
+               ),
+               views: reconcile(
+                  'view',
+                  data.views,
+                  s.views,
+                  since,
+                  (v) => adaptView(v, usersById),
+                  (cur) => ownerOk(cur.owner, cur.owner?.id)
+               ),
                loaded: true,
                loading: false,
+               loadError: false,
             });
          } catch {
-            set({ loading: false });
+            set({ loading: false, loadError: true });
          } finally {
             inFlight = null;
          }
@@ -201,18 +281,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
    },
 
    applyProject: (dto) => {
+      touch('project', dto.id);
+      remember('project', dto.id, dto);
       const adapted = adaptProject(dto);
       set((s) => ({
          projects: upsert(s.projects, adapted),
-         // `teams[].projects` só alimenta contagens: mantém a PERTINÊNCIA (entra no time
-         // do DTO, sai dos outros) sem trocar o objeto a cada edição, o que re-renderizaria
-         // todo assinante de `teams` à toa.
-         teams: mapIfChanged(s.teams, (t) => {
-            const has = t.projects.some((p) => p.id === adapted.id);
-            if (t.id === adapted.teamId)
-               return has ? t : { ...t, projects: [...t.projects, adapted] };
-            return has ? { ...t, projects: t.projects.filter((p) => p.id !== adapted.id) } : t;
-         }),
          // Vínculo relacional: o projeto entra no `projectIds` da initiative nova e sai da antiga.
          initiatives: mapIfChanged(s.initiatives, (i) => {
             const linked = i.projectIds.includes(adapted.id);
@@ -225,17 +298,40 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
    patchProject: (id, local, body) => {
       const prev = get().projects.find((p) => p.id === id);
       if (!prev) return Promise.resolve();
+      touch('project', id);
       set((s) => ({ projects: s.projects.map((p) => (p.id === id ? { ...p, ...local } : p)) }));
+      const keys = Object.keys(local) as (keyof Project)[];
       return api.projects
          .update(id, body)
          .then((dto) => get().applyProject(dto))
          .catch((e) => {
-            set((s) => ({ projects: s.projects.map((p) => (p.id === id ? prev : p)) }));
-            toast.error('Could not update the project');
+            // Rollback POR CAMPO (#17): só o que ainda está com o valor otimista volta;
+            // o que um evento remoto trocou no meio fica.
+            set((s) => ({
+               projects: mapIfChanged(s.projects, (p) => {
+                  if (p.id !== id) return p;
+                  const back: Record<string, unknown> = { ...p };
+                  let changed = false;
+                  for (const k of keys) {
+                     if (p[k] !== local[k]) continue;
+                     back[k] = prev[k];
+                     changed = true;
+                  }
+                  return changed ? (back as unknown as Project) : p;
+               }),
+            }));
+            // Erro de API (tem `status`) traz a explicação do servidor, ex.: 409 (F2, #43).
+            const apiMessage =
+               e instanceof Error && typeof (e as { status?: unknown }).status === 'number'
+                  ? e.message
+                  : null;
+            toast.error(apiMessage || 'Could not update the project');
             throw e;
          });
    },
    applyInitiative: (dto) => {
+      touch('initiative', dto.id);
+      remember('initiative', dto.id, dto);
       const usersById = new Map(get().users.map((u) => [u.id, u]));
       const adapted = adaptInitiative(dto, usersById);
       const linked = new Set(adapted.projectIds);
@@ -249,38 +345,34 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
          }),
       }));
    },
-   removeProjectLocal: (id) =>
+   removeProjectLocal: (id) => {
+      touch('project', id);
+      // Issues que apontavam pro projeto removido perdem a referência (#13).
+      useIssuesStore.getState().detachProject(id);
       set((s) => ({
          projects: s.projects.filter((p) => p.id !== id),
-         teams: mapIfChanged(s.teams, (t) =>
-            t.projects.some((p) => p.id === id)
-               ? { ...t, projects: t.projects.filter((p) => p.id !== id) }
-               : t
-         ),
          initiatives: mapIfChanged(s.initiatives, (i) =>
             i.projectIds.includes(id) ? { ...i, projectIds: dropId(i.projectIds, id) } : i
          ),
-      })),
-   removeInitiativeLocal: (id) =>
+      }));
+   },
+   removeInitiativeLocal: (id) => {
+      touch('initiative', id);
       set((s) => ({
          initiatives: s.initiatives.filter((i) => i.id !== id),
          projects: mapIfChanged(s.projects, (p) =>
             p.initiative === id ? { ...p, initiative: undefined } : p
          ),
-      })),
+      }));
+   },
 
-   applyTeam: (dto) =>
+   applyTeam: (dto) => {
+      touch('team', dto.id);
       set((s) => {
          const prev = s.teams.find((t) => t.id === dto.id);
-         const adapted = adaptTeam({
-            ...dto,
-            members: dto.members ?? [],
-            projects: dto.projects ?? [],
-         });
-         // Rotas de escrita devolvem TeamDto sem members/projects: preserva as cópias do store.
+         const adapted = adaptTeam({ ...dto, members: dto.members ?? [] });
+         // Rotas de escrita devolvem TeamDto sem members: preserva a cópia do store.
          if (!dto.members) adapted.members = prev?.members ?? [];
-         if (!dto.projects)
-            adapted.projects = prev?.projects ?? s.projects.filter((p) => p.teamId === dto.id);
          const base: UserSlices = { ...s, teams: upsert(s.teams, adapted) };
          // Time recém-criado: `createTeam` já insere quem criou como membro e o DTO só
          // sinaliza `joined` — refletimos a membership sem esperar o bootstrap.
@@ -291,15 +383,39 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
          if (!creator || creator.teamIds.includes(dto.id)) return base;
          const member: User = { ...creator, teamIds: [...creator.teamIds, dto.id] };
          return { ...spliceUser(base, member), me: syncMe(s.me, member) };
-      }),
-   removeTeamLocal: (id) =>
+      });
+   },
+   removeTeamLocal: (id) => {
+      touch('team', id);
+      // A exclusão é em cascata: projetos, ciclos, views e issues do time somem junto.
+      const s0 = get();
+      const projectIds = s0.projects.filter((p) => p.teamId === id).map((p) => p.id);
+      const cycleIds = s0.cycles.filter((c) => c.teamId === id).map((c) => c.id);
+      for (const pid of projectIds) touch('project', pid);
+      for (const cid of cycleIds) touch('cycle', cid);
+      for (const v of s0.views) if (v.teamId === id) touch('view', v.id);
+      useIssuesStore.getState().dropTeam(id, projectIds, cycleIds);
+      const goneProjects = new Set(projectIds);
       set((s) => ({
          teams: s.teams.filter((t) => t.id !== id),
+         projects: projectIds.length ? s.projects.filter((p) => p.teamId !== id) : s.projects,
+         cycles: cycleIds.length ? s.cycles.filter((c) => c.teamId !== id) : s.cycles,
+         views: s.views.some((v) => v.teamId === id)
+            ? s.views.filter((v) => v.teamId !== id)
+            : s.views,
+         initiatives: goneProjects.size
+            ? mapIfChanged(s.initiatives, (i) =>
+                 i.projectIds.some((pid) => goneProjects.has(pid))
+                    ? { ...i, projectIds: i.projectIds.filter((pid) => !goneProjects.has(pid)) }
+                    : i
+              )
+            : s.initiatives,
          users: mapIfChanged(s.users, (u) =>
             u.teamIds.includes(id) ? { ...u, teamIds: dropId(u.teamIds, id) } : u
          ),
          me: s.me?.teamIds.includes(id) ? { ...s.me, teamIds: dropId(s.me.teamIds, id) } : s.me,
-      })),
+      }));
+   },
    applyTeamMembers: (teamId, members) =>
       set((s) => {
          const keep = new Set(members.map((m) => m.id));
@@ -330,18 +446,32 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
          return { ...next, teams, users, me };
       }),
 
-   applyCycle: (dto) => set((s) => ({ cycles: upsert(s.cycles, adaptCycle(dto)) })),
-   removeCycleLocal: (id) => set((s) => ({ cycles: s.cycles.filter((c) => c.id !== id) })),
+   applyCycle: (dto) => {
+      touch('cycle', dto.id);
+      remember('cycle', dto.id, dto);
+      set((s) => ({ cycles: upsert(s.cycles, adaptCycle(dto)) }));
+   },
+   removeCycleLocal: (id) => {
+      touch('cycle', id);
+      useIssuesStore.getState().detachCycle(id); // issues do ciclo removido voltam ao backlog
+      set((s) => ({ cycles: s.cycles.filter((c) => c.id !== id) }));
+   },
 
-   applyView: (dto) =>
+   applyView: (dto) => {
+      touch('view', dto.id);
       set((s) => {
          const usersById = new Map(s.users.map((u) => [u.id, u]));
          return { views: upsert(s.views, adaptView(dto, usersById)) };
-      }),
-   removeViewLocal: (id) => set((s) => ({ views: s.views.filter((v) => v.id !== id) })),
+      });
+   },
+   removeViewLocal: (id) => {
+      touch('view', id);
+      set((s) => ({ views: s.views.filter((v) => v.id !== id) }));
+   },
 
    applyUser: (dto) =>
       set((s) => {
+         touch('user', dto.id);
          const user = adaptMemberToUser(dto);
          return { ...spliceUser(s, user), me: syncMe(s.me, user) };
       }),
@@ -367,6 +497,18 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
    isSubscribed: (issueId) => get().me?.subscribedIssueIds.includes(issueId) ?? false,
 
+   ensureSubscriptionKnown: async (issueId) => {
+      if (get().me?.subscribedIssueIds.includes(issueId)) return;
+      try {
+         const { subscribed } = await api.issues.subscription(issueId);
+         const cur = get().me;
+         if (subscribed && cur && !cur.subscribedIssueIds.includes(issueId))
+            set({ me: { ...cur, subscribedIssueIds: [...cur.subscribedIssueIds, issueId] } });
+      } catch {
+         // Best-effort: sem a consulta o botão só mostra "não seguindo" como antes.
+      }
+   },
+
    toggleSubscription: (issueId) => {
       const me = get().me;
       if (!me) return;
@@ -377,9 +519,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       set({ me: { ...me, subscribedIssueIds: nextIds } });
       const call = currently ? api.issues.unsubscribe(issueId) : api.issues.subscribe(issueId);
       void call.catch(() => {
-         // Rollback: restaura a lista anterior deste usuário.
+         // Rollback SÓ desta issue (#17): a lista pode ter mudado no meio (outra aba).
          const cur = get().me;
-         if (cur) set({ me: { ...cur, subscribedIssueIds: me.subscribedIssueIds } });
+         if (cur) {
+            const has = cur.subscribedIssueIds.includes(issueId);
+            if (currently && !has)
+               set({ me: { ...cur, subscribedIssueIds: [...cur.subscribedIssueIds, issueId] } });
+            else if (!currently && has)
+               set({ me: { ...cur, subscribedIssueIds: dropId(cur.subscribedIssueIds, issueId) } });
+         }
          toast.error(currently ? 'Falha ao deixar de seguir' : 'Falha ao seguir');
       });
    },
@@ -405,8 +553,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
    getCyclesByTeam: (teamId) => get().cycles.filter((c) => c.teamId === teamId),
    getCurrentCycle: (teamId) =>
       get().cycles.find((c) => c.status === 'current' && (!teamId || c.teamId === teamId)),
+   // O PRÓXIMO upcoming (menor startDate): a lista vem por número desc (Pl baixa).
    getUpcomingCycle: (teamId) =>
-      get().cycles.find((c) => c.status === 'upcoming' && (!teamId || c.teamId === teamId)),
+      get()
+         .cycles.filter((c) => c.status === 'upcoming' && (!teamId || c.teamId === teamId))
+         .reduce<Cycle | undefined>((a, c) => (!a || c.startDate < a.startDate ? c : a), undefined),
    getCycleById: (id) => get().cycles.find((c) => c.id === id),
    getViewById: (id) => get().views.find((v) => v.id === id),
 }));

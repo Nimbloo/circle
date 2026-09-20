@@ -75,8 +75,9 @@ describe('botões de opções', () => {
       // Size dinâmico: só ícone quando `showName` é falso → o nome vem do aria-label,
       // que some quando o texto visível já nomeia o botão.
       expect(prioritySelector).toContain("size={showName ? 'sm' : 'icon'}");
-      expect(prioritySelector).toContain(
-         "aria-label={showName ? undefined : `Change priority: ${priority?.name ?? 'none'}`}"
+      // Sem depender da quebra de linha do prettier.
+      expect(prioritySelector.replace(/\s+/g, ' ')).toContain(
+         "showName ? undefined : `Change priority: ${priority?.name ?? 'none'}`"
       );
       expect(labelSelector).toContain("size={selectedLabels.length > 0 ? 'xs' : 'icon'}");
       expect(labelSelector).toContain('aria-label={');

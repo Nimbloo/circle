@@ -20,7 +20,7 @@ import {
    isDefaultDisplaySettings,
    useDisplaySettings,
 } from '@/store/display-settings-store';
-import { useViewStore } from '@/store/view-store';
+import { DEFAULT_VIEW_TYPE, useViewStore } from '@/store/view-store';
 import {
    ArrowUpNarrowWide,
    ArrowUpDown,
@@ -85,8 +85,18 @@ export function DisplayOptions() {
    return (
       <Popover>
          <PopoverTrigger asChild>
-            <Button className="relative gap-1" size="xs" variant="secondary">
-               <SlidersHorizontal className="size-4" />
+            <Button
+               className="relative gap-1"
+               size="xs"
+               variant="secondary"
+               // O ponto azul (opções alteradas) é só visual: o nome acessível o anuncia.
+               aria-label={
+                  !isDefault || viewType === 'grid'
+                     ? 'Display options (modified)'
+                     : 'Display options'
+               }
+            >
+               <SlidersHorizontal className="size-4" aria-hidden />
                Display
                {(!isDefault || viewType === 'grid') && (
                   <span className="absolute right-0 top-0 size-2 rounded-full bg-primary" />
@@ -94,7 +104,7 @@ export function DisplayOptions() {
             </Button>
          </PopoverTrigger>
          <PopoverContent
-            className="min-h-[541px] w-[302px] rounded-xl border-[var(--popover-border)] bg-popover p-0 pt-2 shadow-[var(--popover-shadow)]"
+            className="w-[302px] rounded-xl border-[var(--popover-border)] bg-popover p-0 pt-2 shadow-[var(--popover-shadow)]"
             align="end"
             sideOffset={5}
             style={{ boxShadow: 'var(--popover-shadow)' }}
@@ -200,7 +210,7 @@ export function DisplayOptions() {
                </div>
             </div>
 
-            <div className="flex h-[81px] flex-col gap-3 border-t px-4 py-2.5">
+            <div className="flex flex-col gap-3 border-t px-4 py-2.5">
                <div className="flex items-center justify-between gap-2">
                   <span className="text-xs text-muted-foreground">Completed issues</span>
                   <Select
@@ -274,7 +284,11 @@ export function DisplayOptions() {
 
             <div className="flex h-9 items-center justify-between border-t px-4">
                <button
-                  onClick={resetDisplaySettings}
+                  onClick={() => {
+                     resetDisplaySettings();
+                     // is#24: o Reset zerava grouping/ordering/etc mas deixava o board ligado.
+                     setViewType(DEFAULT_VIEW_TYPE);
+                  }}
                   className="text-xs text-muted-foreground hover:text-foreground"
                >
                   Reset

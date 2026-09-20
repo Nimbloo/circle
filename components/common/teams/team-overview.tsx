@@ -2,7 +2,7 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { adaptFolders } from '@/lib/adapters-documents';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { api } from '@/lib/client';
 import type { TeamDocument } from '@/data/documents';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -10,7 +10,8 @@ import { Box, CopyMinus, Inbox, Layers, Settings } from 'lucide-react';
 import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { DOCUMENT_CHANGED_EVENT, useLiveReload } from '@/lib/use-live-sync';
 
 /**
  * Team Home — "Overview" tab: team identity, pinned resources and
@@ -26,35 +27,43 @@ export default function TeamOverview() {
 
    const [pinnedDocuments, setPinnedDocuments] = useState<TeamDocument[]>([]);
 
+   const loadPinned = useCallback(
+      (isActive: () => boolean = () => true) =>
+         teamId
+            ? api.teams
+                 .documents(teamId)
+                 .then((dtos) => {
+                    if (isActive())
+                       setPinnedDocuments(
+                          adaptFolders(dtos)
+                             .flatMap((folder) => folder.documents)
+                             .filter((doc) => doc.pinned)
+                       );
+                 })
+                 .catch(() => {
+                    if (isActive()) setPinnedDocuments([]);
+                 })
+            : undefined,
+      [teamId]
+   );
+
    useEffect(() => {
-      if (!teamId) return;
       let active = true;
-      api.teams
-         .documents(teamId)
-         .then((dtos) => {
-            if (active) {
-               setPinnedDocuments(
-                  adaptFolders(dtos)
-                     .flatMap((folder) => folder.documents)
-                     .filter((doc) => doc.pinned)
-               );
-            }
-         })
-         .catch(() => {
-            if (active) setPinnedDocuments([]);
-         });
+      void loadPinned(() => active);
       return () => {
          active = false;
       };
-   }, [teamId]);
+   }, [loadPinned]);
+   // #58: documento fixado/criado/apagado por outro usuário reflete no overview.
+   useLiveReload(DOCUMENT_CHANGED_EVENT, { teamId }, () => loadPinned());
 
    if (!team) {
-      // Workspace ainda hidratando → skeleton; "not found" só é estado FINAL
+      // Workspace ainda hidratando → loading; "not found" só é estado FINAL
       // (antes, deep-link frio mostrava "Team not found." por segundos até o hydrate).
       if (!loaded) {
          return (
             <div className="p-8">
-               <ListSkeleton rows={5} />
+               <LoadingArea rows={5} />
             </div>
          );
       }
@@ -62,7 +71,7 @@ export default function TeamOverview() {
    }
 
    const goToLinks = [
-      { label: 'Team settings', icon: Settings, href: `/${orgId}/settings` },
+      { label: 'Team settings', icon: Settings, href: `/${orgId}/settings/teams/${team.id}` },
       { label: 'Issues', icon: CopyMinus, href: `/${orgId}/team/${team.id}/all` },
       { label: 'Triage', icon: Inbox, href: `/${orgId}/team/${team.id}/triage` },
       { label: 'Cycles', icon: CyclePlayIcon, href: `/${orgId}/team/${team.id}/cycles` },
@@ -71,7 +80,7 @@ export default function TeamOverview() {
    ];
 
    return (
-      <div className="w-full max-w-5xl -translate-x-[9px] mx-auto px-8 py-6 flex flex-col lg:flex-row gap-12">
+      <div className="content-enter w-full max-w-5xl -translate-x-[9px] mx-auto px-8 py-6 flex flex-col lg:flex-row gap-12">
          {/* Main column */}
          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3">
@@ -80,10 +89,6 @@ export default function TeamOverview() {
                </div>
                <h1 className="text-2xl font-semibold leading-8">{team.name}</h1>
             </div>
-
-            <p className="mt-5 text-[15px] font-[450] leading-[23px] text-muted-foreground">
-               Add a description...
-            </p>
 
             <div className="mt-[34px]">
                <div className="flex h-7 items-center justify-between">
@@ -99,7 +104,7 @@ export default function TeamOverview() {
                   {pinnedDocuments.map((doc) => (
                      <Link
                         key={doc.id}
-                        href={`/${orgId}/team/${team.id}/documents`}
+                        href={`/${orgId}/team/${team.id}/documents/${doc.id}`}
                         className="flex items-center gap-2 py-1.5 px-2 -mx-2 rounded-md hover:bg-sidebar/50 text-sm"
                      >
                         <span className="text-base leading-none">{doc.icon}</span>

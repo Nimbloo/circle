@@ -1,7 +1,17 @@
 'use client';
 
+import {
+   AlertDialog,
+   AlertDialogAction,
+   AlertDialogCancel,
+   AlertDialogContent,
+   AlertDialogDescription,
+   AlertDialogFooter,
+   AlertDialogHeader,
+   AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
    DropdownMenu,
    DropdownMenuContent,
@@ -9,7 +19,9 @@ import {
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { ActivityItem, CommentReaction } from '@/data/issue-details';
+import type { User } from '@/data/users';
 import { api } from '@/lib/client';
+import { blocksToMarkdown, textToBlocks } from '@/lib/text-blocks';
 import { cn } from '@/lib/utils';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -94,12 +106,49 @@ function EventRow({ item }: { item: Extract<ActivityItem, { kind: 'event' }> }) 
    );
 }
 
-/** Junta os parágrafos de um comentário em texto plano (para edição). */
-function blocksToText(blocks: CommentItem['body']): string {
-   return blocks
-      .map((b) => (b.type === 'paragraph' ? b.text : ''))
-      .filter(Boolean)
-      .join('\n\n');
+/** Patch otimista de um comentário (reação, edição, resolve) aplicado pelo dono do estado. */
+export type CommentPatch = Partial<
+   Pick<CommentItem, 'reactions' | 'body' | 'source' | 'updatedAt' | 'resolvedAt' | 'resolvedBy'>
+>;
+
+/** Reações depois de ligar/desligar `emoji` pelo usuário atual (espelha o servidor). */
+function toggleReaction(
+   list: CommentReaction[],
+   emoji: string,
+   reacted: boolean
+): CommentReaction[] {
+   if (reacted) {
+      return list
+         .map((r) => (r.emoji === emoji ? { ...r, count: r.count - 1, reactedByMe: false } : r))
+         .filter((r) => r.count > 0);
+   }
+   if (list.some((r) => r.emoji === emoji))
+      return list.map((r) =>
+         r.emoji === emoji ? { ...r, count: r.count + 1, reactedByMe: true } : r
+      );
+   return [...list, { emoji, count: 1, reactedByMe: true }];
+}
+
+/**
+ * Texto (markdown) editável do comentário. Parte do original quando o DTO o trouxe; senão
+ * serializa TODOS os blocos — antes só os parágrafos voltavam e salvar apagava listas,
+ * código e citações (is#2).
+ */
+function commentText(item: CommentItem): string {
+   return item.source ?? blocksToMarkdown(item.body);
+}
+
+/** Primeira linha legível do comentário (resumo da thread resolvida). */
+function previewText(item: CommentItem): string {
+   for (const b of item.body) {
+      if ('text' in b && b.text) return b.text;
+      if ('items' in b && b.items.length > 0) {
+         const it = b.items[0];
+         return typeof it === 'string' ? it : it.text;
+      }
+      if (b.type === 'code') return b.code.split('\n')[0];
+   }
+   return '';
 }
 
 function CommentCard({
@@ -114,6 +163,10 @@ function CommentCard({
    replies = [],
    isReply = false,
    onReply,
+   onPatch,
+   onOwnAction,
+   onIssueChanged,
+   meUser = null,
 }: {
    item: CommentItem;
    canManage: boolean;
@@ -128,12 +181,20 @@ function CommentCard({
    isReply?: boolean;
    /** Numa resposta: pede ao pai (raiz) pra abrir o composer de reply. */
    onReply?: () => void;
+   /** Aplica um patch otimista no comentário (sem ele, a ação recarrega via `onChanged`). */
+   onPatch?: (id: string, patch: CommentPatch) => void;
+   /** Avisa o dono que a próxima mudança remota desta issue é eco desta ação. */
+   onOwnAction?: () => void;
+   /** Ação que muda a issue além do feed (ex.: sub-issue criada). */
+   onIssueChanged?: () => void;
+   meUser?: User | null;
 }) {
    const [editing, setEditing] = useState(false);
    const [draft, setDraft] = useState('');
    const [busy, setBusy] = useState(false);
    const [picking, setPicking] = useState(false);
    const [replying, setReplying] = useState(false);
+   const [confirmingDelete, setConfirmingDelete] = useState(false);
    // Respostas: colapsadas por padrão quando > 2 (ou quando a thread está resolvida).
    const [expanded, setExpanded] = useState(false);
    const customEmojis = useCustomEmojis();
@@ -146,9 +207,14 @@ function CommentCard({
    const didReact = (emoji: string) =>
       reactions.find((r) => r.emoji === emoji)?.reactedByMe ?? false;
 
+   // Reação otimista (#27): o chip muda na hora; falha desfaz. Sem `onPatch`, recarrega.
    const react = async (emoji: string) => {
       if (busy) return;
       const reacted = didReact(emoji);
+      const prev = reactions;
+      onOwnAction?.();
+      onPatch?.(item.id, { reactions: toggleReaction(prev, emoji, reacted) });
+      setPicking(false);
       setBusy(true);
       try {
          if (reacted) {
@@ -156,9 +222,9 @@ function CommentCard({
          } else {
             await api.comments.addReaction(item.id, emoji);
          }
-         setPicking(false);
-         onChanged?.(); // refetch do detail → estado reflete o server-truth
+         if (!onPatch) onChanged?.();
       } catch {
+         onPatch?.(item.id, { reactions: prev });
          toast.error(reacted ? 'Could not remove the reaction' : 'Could not add the reaction');
       } finally {
          setBusy(false);
@@ -166,19 +232,34 @@ function CommentCard({
    };
 
    const startEdit = () => {
-      setDraft(blocksToText(item.body));
+      setDraft(commentText(item));
       setEditing(true);
    };
 
    const save = async () => {
       const text = draft.trim();
       if (!text || busy) return;
+      const prev = { body: item.body, source: item.source, updatedAt: item.updatedAt };
+      if (onPatch) {
+         // Otimista: o texto novo aparece na hora; falha volta o anterior e reabre a edição.
+         onOwnAction?.();
+         onPatch(item.id, {
+            body: textToBlocks(text),
+            source: text,
+            updatedAt: new Date().toISOString(),
+         });
+         setEditing(false);
+      }
       setBusy(true);
       try {
          await api.comments.update(item.id, text);
          setEditing(false);
-         onChanged?.();
+         if (!onPatch) onChanged?.();
       } catch {
+         if (onPatch) {
+            onPatch(item.id, prev);
+            setEditing(true);
+         }
          toast.error('Could not save the comment');
       } finally {
          setBusy(false);
@@ -188,6 +269,7 @@ function CommentCard({
    const remove = async () => {
       setBusy(true);
       try {
+         onOwnAction?.();
          await api.comments.remove(item.id);
          onChanged?.();
       } catch {
@@ -199,11 +281,20 @@ function CommentCard({
 
    const toggleResolved = async () => {
       if (busy) return;
+      const prev = { resolvedAt: item.resolvedAt, resolvedBy: item.resolvedBy };
+      onOwnAction?.();
+      onPatch?.(
+         item.id,
+         resolved
+            ? { resolvedAt: null, resolvedBy: null }
+            : { resolvedAt: new Date().toISOString(), resolvedBy: meUser }
+      );
       setBusy(true);
       try {
          await api.comments.resolve(item.id, !resolved);
-         onChanged?.();
+         if (!onPatch) onChanged?.();
       } catch {
+         onPatch?.(item.id, prev);
          toast.error(resolved ? 'Could not reopen the thread' : 'Could not resolve the thread');
       } finally {
          setBusy(false);
@@ -217,7 +308,7 @@ function CommentCard({
     */
    const convertToSubIssue = async () => {
       if (!issueId || !issueContext?.teamId || busy) return;
-      const text = blocksToText(item.body);
+      const text = commentText(item);
       const [firstLine, ...rest] = text.split('\n');
       const title = firstLine.trim().slice(0, 255);
       if (!title) return;
@@ -245,7 +336,7 @@ function CommentCard({
             }
          }
          toast.success(`Sub-issue ${dto.identifier} created`);
-         onChanged?.();
+         (onIssueChanged ?? onChanged)?.();
       } catch {
          toast.error('Could not convert the comment into a sub-issue');
       } finally {
@@ -255,6 +346,7 @@ function CommentCard({
 
    const removeAttachment = async (id: string) => {
       try {
+         onOwnAction?.();
          await api.attachments.remove(id);
          onChanged?.();
       } catch {
@@ -277,7 +369,7 @@ function CommentCard({
       !expanded && (resolved ? replies.length > 0 : replies.length > COLLAPSE_REPLIES_ABOVE);
 
    return (
-      <div className={cn(!isReply && 'my-2')}>
+      <div className={cn(!isReply && 'my-2')} data-comment-id={item.id}>
          {resolved && !isReply && !expanded ? (
             // Raiz resolvida: linha compacta com check verde; clicar expande a thread.
             <button
@@ -289,7 +381,7 @@ function CommentCard({
                <CheckCircle2 className="size-4 shrink-0 text-green-500" />
                <span className="font-medium">{item.actor.name}</span>
                <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                  {blocksToText(item.body).split('\n')[0]}
+                  {previewText(item)}
                </span>
                <span className="shrink-0 text-xs text-muted-foreground">
                   Resolved{item.resolvedBy ? ` by ${item.resolvedBy.name}` : ''}
@@ -349,7 +441,7 @@ function CommentCard({
                               </button>
                               <button
                                  type="button"
-                                 onClick={() => void remove()}
+                                 onClick={() => setConfirmingDelete(true)}
                                  disabled={busy}
                                  aria-label="Delete comment"
                                  className="text-muted-foreground hover:text-destructive disabled:opacity-40"
@@ -399,9 +491,22 @@ function CommentCard({
                {editing ? (
                   <div className="flex flex-col gap-2">
                      <textarea
+                        aria-label="Edit comment"
+                        autoFocus
                         value={draft}
                         onChange={(e) => setDraft(e.target.value)}
-                        rows={2}
+                        onKeyDown={(e) => {
+                           // is#22: mesmos atalhos do composer — Ctrl/⌘+Enter salva, Esc cancela.
+                           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                              e.preventDefault();
+                              void save();
+                           } else if (e.key === 'Escape') {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setEditing(false);
+                           }
+                        }}
+                        rows={Math.min(12, Math.max(2, draft.split('\n').length))}
                         disabled={busy}
                         className="w-full resize-none rounded-md border bg-transparent p-2 text-sm outline-none focus:ring-1 focus:ring-accent disabled:opacity-60"
                      />
@@ -570,6 +675,10 @@ function CommentCard({
                         isAdmin={isAdmin}
                         isReply
                         onReply={openReply}
+                        onPatch={onPatch}
+                        onOwnAction={onOwnAction}
+                        onIssueChanged={onIssueChanged}
+                        meUser={meUser}
                      />
                   ))
                )}
@@ -582,36 +691,73 @@ function CommentCard({
                      onCancel={() => setReplying(false)}
                      onPosted={() => {
                         setReplying(false);
+                        onOwnAction?.();
                         onChanged?.();
                      }}
                   />
                )}
             </div>
          )}
+
+         {/* is#3: excluir pede confirmação — na raiz, as respostas vão junto. */}
+         <AlertDialog open={confirmingDelete} onOpenChange={setConfirmingDelete}>
+            <AlertDialogContent>
+               <AlertDialogHeader>
+                  <AlertDialogTitle>Delete comment?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                     {!isReply && replies.length > 0
+                        ? `This comment and its ${replies.length} ${
+                             replies.length === 1 ? 'reply' : 'replies'
+                          } will be permanently deleted.`
+                        : 'This comment will be permanently deleted.'}
+                  </AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                     className={buttonVariants({ variant: 'destructive' })}
+                     onClick={() => void remove()}
+                  >
+                     Delete
+                  </AlertDialogAction>
+               </AlertDialogFooter>
+            </AlertDialogContent>
+         </AlertDialog>
       </div>
    );
 }
 
 /**
  * Issue activity: interleaved events and comments, plus a comment composer
- * que persiste via api.issues.addComment; após o POST o pai refetch o detail
- * (`onCommentAdded`), então o feed reflete o comentário real.
+ * que persiste via api.issues.addComment; após o POST o pai recarrega o feed
+ * (`onCommentAdded`). Reação, edição e resolve são otimistas via `onCommentPatch`.
  */
 export function ActivityFeed({
    activity,
    issueId,
    issueContext,
    onCommentAdded,
+   onCommentPatch,
+   onOwnAction,
+   onIssueChanged,
 }: {
    activity: ActivityItem[];
    issueId?: string;
    /** Time/projeto/responsável da issue — permissão de resolver e "Convert to sub-issue". */
    issueContext?: ActivityIssueContext;
+   /** Recarrega o feed (comentário novo/removido, anexo). */
    onCommentAdded?: () => void;
+   /** Patch otimista de um comentário; ausente = cada ação recarrega via `onCommentAdded`. */
+   onCommentPatch?: (id: string, patch: CommentPatch) => void;
+   /** A ação partiu desta aba: o eco remoto dela não precisa recarregar o detalhe. */
+   onOwnAction?: () => void;
+   /** Ação que muda a issue além do feed (sub-issue criada a partir do comentário). */
+   onIssueChanged?: () => void;
 }) {
    const items = activity;
    const me = useWorkspaceStore((s) => s.me);
    const meId = me?.id;
+   const meUser = useWorkspaceStore((s) => (meId ? s.users.find((u) => u.id === meId) : undefined));
    const isAdmin = !!me?.admin;
 
    // Threading: separa as respostas (parentId != null) dos itens de topo e as
@@ -652,12 +798,24 @@ export function ActivityFeed({
                      meId={meId}
                      isAdmin={isAdmin}
                      replies={repliesByParent.get(item.id) ?? []}
+                     onPatch={onCommentPatch}
+                     onOwnAction={onOwnAction}
+                     onIssueChanged={onIssueChanged}
+                     meUser={meUser ?? null}
                   />
                )
             )}
          </div>
 
-         {issueId && <CommentComposer issueId={issueId} onPosted={() => onCommentAdded?.()} />}
+         {issueId && (
+            <CommentComposer
+               issueId={issueId}
+               onPosted={() => {
+                  onOwnAction?.();
+                  onCommentAdded?.();
+               }}
+            />
+         )}
       </div>
    );
 }

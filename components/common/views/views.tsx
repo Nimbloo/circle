@@ -2,7 +2,7 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
    Select,
@@ -294,7 +294,7 @@ export default function Views({ teamId }: { teamId?: string }) {
                ))}
                {list.length === 0 && !loaded && (
                   <div className="py-4">
-                     <ListSkeleton rows={4} />
+                     <LoadingArea rows={4} />
                   </div>
                )}
             </div>

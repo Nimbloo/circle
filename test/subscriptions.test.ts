@@ -127,4 +127,24 @@ describe('issue subscriptions (auto-subscribe)', () => {
       await unsubscribeFromIssue(db, i.id, eveId);
       expect(await listSubscribedIssueIds(db, eveId)).not.toContain(i.id);
    });
+
+   it('getMe (bootstrap enxuto) traz só as assinaturas de issues abertas', async () => {
+      const db = await setup();
+      const open = await createIssue(
+         db,
+         { teamId: 'CORE', title: 'Aberta', statusId: 'to-do', priorityId: 'low' },
+         CREATOR
+      );
+      const closed = await createIssue(
+         db,
+         { teamId: 'CORE', title: 'Fechada', statusId: 'done', priorityId: 'low' },
+         CREATOR
+      );
+      const me = await getMe(db, CREATOR);
+      expect(me.subscribedIssueIds).toContain(open.id);
+      expect(me.subscribedIssueIds).not.toContain(closed.id);
+      // a assinatura continua existindo (notificações seguem valendo)
+      const all = await listSubscribedIssueIds(db, (await getMe(db, CREATOR)).id);
+      expect(all).toContain(closed.id);
+   });
 });

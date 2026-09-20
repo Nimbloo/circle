@@ -1,16 +1,14 @@
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { SquarePen } from 'lucide-react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Issue } from '@/data/issues';
 import { usePriorities, useStatuses } from '@/store/catalog-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
 import { toast } from 'sonner';
-import { v4 as uuidv4 } from 'uuid';
 import { StatusSelector } from './status-selector';
 import { PrioritySelector } from './priority-selector';
 import { AssigneeSelector } from './assignee-selector';
@@ -19,6 +17,7 @@ import { LabelSelector } from './label-selector';
 import { EstimateSelector } from './estimate-selector';
 import { DueDateSelector } from './due-date-selector';
 import { TemplateSelector } from './template-selector';
+import { TeamSelector } from './team-selector';
 import { LexoRank } from '@/lib/utils';
 import { DialogTitle } from '@radix-ui/react-dialog';
 import { useParams } from 'next/navigation';
@@ -27,42 +26,68 @@ import type { TemplateDto } from '@/lib/api/templates';
 import { BlockEditor } from '@/components/common/editor/block-editor';
 import { blocksToDoc, EMPTY_DOC } from '@/lib/editor-doc';
 import { textToBlocks } from '@/lib/text-blocks';
+import { ChevronRight } from 'lucide-react';
+import type { GroupDropValue } from '@/components/common/issues/use-issue-drop-target';
+
+/**
+ * Aplica o campo pré-preenchido pelo "+" de uma coluna do board (is#24): antes só
+ * status funcionava — coluna de assignee/priority/project abria o form em branco.
+ */
+function applyGroupDrop(base: Issue, drop: GroupDropValue | null): Issue {
+   if (!drop) return base;
+   switch (drop.field) {
+      case 'status':
+         return { ...base, status: drop.status };
+      case 'priority':
+         return { ...base, priority: drop.priority };
+      case 'assignee':
+         return {
+            ...base,
+            assignee: drop.assignee,
+            assignees: drop.assignee ? [drop.assignee] : [],
+         };
+      case 'project':
+         return { ...base, project: drop.project };
+      default: {
+         const exhaustive: never = drop;
+         return exhaustive;
+      }
+   }
+}
+
+/** Mesmo teto do servidor (frente S) para o título da issue. */
+const TITLE_MAX = 512;
 
 export function CreateNewIssue() {
    const [createMore, setCreateMore] = useState<boolean>(false);
-   const { isOpen, defaultStatus, openModal, closeModal } = useCreateIssueStore();
+   const { isOpen, defaultDrop, openModal, closeModal } = useCreateIssueStore();
    const addIssue = useIssuesStore((s) => s.addIssue);
    const status = useStatuses();
    const priorities = usePriorities();
-   const params = useParams<{ teamId?: string }>();
+   const params = useParams<{ teamId?: string; issueId?: string }>();
    const teams = useWorkspaceStore((s) => s.teams);
-   // Time do contexto (URL /team/[teamId]/...) ou o 1º time do usuário.
-   const teamId = params?.teamId ?? teams[0]?.id ?? '';
-
-   const generateUniqueIdentifier = useCallback(() => {
-      // Leitura imperativa (fora do render): quer o valor FRESCO no momento do clique,
-      // e nao precisa assinar o store para isso.
-      const identifiers = useIssuesStore.getState().issues.map((issue) => issue.identifier);
-      let identifier = Math.floor(Math.random() * 999)
-         .toString()
-         .padStart(3, '0');
-      while (identifiers.includes(`LNUI-${identifier}`)) {
-         identifier = Math.floor(Math.random() * 999)
-            .toString()
-            .padStart(3, '0');
-      }
-      return identifier;
-   }, []);
+   // Time do contexto (is#6): a rota /team/[teamId]/…, ou o time da issue aberta
+   // (/issue/[issueId]) — antes caía no 1º time do workspace; senão o 1º time do usuário.
+   const contextIssueTeam = useIssuesStore((s) =>
+      params?.issueId
+         ? s.issues.find((i) => i.identifier === params.issueId || i.id === params.issueId)?.teamId
+         : undefined
+   );
+   const joinedTeams = teams.filter((t) => t.joined);
+   const pickable = joinedTeams.length > 0 ? joinedTeams : teams;
+   const teamId = params?.teamId ?? contextIssueTeam ?? pickable[0]?.id ?? '';
 
    const createDefaultData = useCallback(() => {
-      const identifier = generateUniqueIdentifier();
-      return {
-         id: uuidv4(),
-         identifier: `LNUI-${identifier}`,
+      const base: Issue = {
+         id: crypto.randomUUID(),
+         // Sem identifier inventado (Is#17): a issue otimista não tem link até o servidor
+         // devolver o real — antes o "LNUI-123" levava a um 404.
+         identifier: '',
          title: '',
          description: '',
          descriptionDoc: null,
-         status: defaultStatus || status.find((s) => s.id === 'to-do')!,
+         // 1º status "unstarted" do catálogo (Is#17), não um id fixo que pode não existir.
+         status: status.find((s) => s.category === 'unstarted') || status[0],
          assignee: null,
          assignees: [],
          priority: priorities.find((p) => p.id === 'no-priority')!,
@@ -77,13 +102,24 @@ export function CreateNewIssue() {
          // Rank otimista; o servidor reatribui o rank real no re-hydrate após o POST.
          rank: new LexoRank('a3c').toString(),
       };
-   }, [defaultStatus, generateUniqueIdentifier, status, priorities, teamId]);
+      return applyGroupDrop(base, defaultDrop);
+   }, [defaultDrop, status, priorities, teamId]);
 
-   const [addIssueForm, setAddIssueForm] = useState<Issue>(createDefaultData());
+   const [addIssueForm, setAddIssueForm] = useState<Issue>(createDefaultData);
 
-   useEffect(() => {
-      setAddIssueForm(createDefaultData());
-   }, [createDefaultData]);
+   // Ao abrir (false→true): rascunho vazio vira formulário novo; rascunho com conteúdo é
+   // preservado (Is#17, como o Linear) — o "+" de uma coluna só aplica o status dela.
+   // Resetar por troca de referência do catálogo apagava o que estava sendo digitado a
+   // cada evento remoto que re-hidrata o workspace; o reset real é após criar.
+   const [wasOpen, setWasOpen] = useState(isOpen);
+   if (isOpen !== wasOpen) {
+      setWasOpen(isOpen);
+      if (isOpen) {
+         const pristine = !addIssueForm.title && !addIssueForm.descriptionDoc;
+         if (pristine) setAddIssueForm(createDefaultData());
+         else if (defaultDrop) setAddIssueForm((f) => applyGroupDrop(f, defaultDrop));
+      }
+   }
 
    const [submitting, setSubmitting] = useState(false);
    // Remonta o editor quando o formulário é trocado por fora (template, reset pós-create).
@@ -106,16 +142,27 @@ export function CreateNewIssue() {
       toast.success(`Template "${t.name}" aplicado`);
    };
 
+   // is#5: título só com espaços não conta; o enviado vai sem espaços nas pontas.
+   const title = addIssueForm.title.trim();
+   const formTeamId = addIssueForm.teamId || teamId;
+
+   const changeTeam = (next: string) => {
+      if (next === formTeamId) return;
+      // Projeto e estimativa são do time: trocar de time limpa os dois (o servidor
+      // recusaria o projeto de outro time).
+      setAddIssueForm((f) => ({ ...f, teamId: next, project: undefined, estimate: undefined }));
+   };
+
    const createIssue = async () => {
       if (submitting) return; // guarda contra double-submit (duplo-clique)
-      if (!addIssueForm.title) {
+      if (!title) {
          toast.error('Title is required');
          return;
       }
       setSubmitting(true);
       try {
          // addIssue faz o set otimista e resolve só após o create + re-hydrate no servidor.
-         await addIssue(addIssueForm);
+         await addIssue({ ...addIssueForm, title, teamId: formTeamId });
          toast.success('Issue created');
          if (!createMore) {
             closeModal();
@@ -132,25 +179,36 @@ export function CreateNewIssue() {
 
    return (
       <Dialog open={isOpen} onOpenChange={(value) => (value ? openModal() : closeModal())}>
-         <DialogTrigger asChild>
-            <Button
-               className="size-7 shrink-0"
-               variant="secondary"
-               size="icon"
-               aria-label="Create new issue"
-            >
-               <SquarePen className="size-3.5" />
-            </Button>
-         </DialogTrigger>
-         <DialogContent className="top-[23.8%] w-full gap-[5.5px] rounded-[21px] bg-card p-0 shadow-xl sm:max-w-[750px]">
-            <DialogHeader>
-               <DialogTitle className="px-4 pt-4 text-base font-medium">New issue</DialogTitle>
+         {/* is#4: ancorado no topo (sem translate-y de centralização) e com altura máxima —
+             descrição longa rola dentro do corpo e o rodapé segue visível. */}
+         <DialogContent
+            className="top-[12vh] flex max-h-[76vh] w-full translate-y-0 flex-col gap-0 p-0 sm:max-w-[750px]"
+            onKeyDown={(e) => {
+               // ⌘Enter / Ctrl+Enter cria de qualquer campo (Is#17, atalho do Linear).
+               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  void createIssue();
+               }
+            }}
+         >
+            <DialogHeader className="shrink-0 px-4 pt-3.5 pb-1">
+               <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <TeamSelector teams={pickable} value={formTeamId} onChange={changeTeam} />
+                  <ChevronRight className="size-3" />
+                  <DialogTitle className="text-xs font-medium text-foreground">
+                     New issue
+                  </DialogTitle>
+               </div>
             </DialogHeader>
 
-            <div className="px-4 pb-0 space-y-3 w-full">
+            <div
+               data-slot="create-issue-body"
+               className="min-h-0 w-full flex-1 space-y-3 overflow-y-auto px-4 pb-3"
+            >
                <Input
                   className="border-none w-full shadow-none outline-none text-2xl font-medium px-0 h-auto focus-visible:ring-0 overflow-hidden text-ellipsis whitespace-normal break-words"
                   placeholder="Título da issue"
+                  maxLength={TITLE_MAX}
                   value={addIssueForm.title}
                   onChange={(e) => setAddIssueForm({ ...addIssueForm, title: e.target.value })}
                />
@@ -164,7 +222,7 @@ export function CreateNewIssue() {
                />
 
                <div className="w-full flex items-center justify-start gap-1.5 flex-wrap">
-                  <TemplateSelector teamId={teamId} onApply={applyTemplate} />
+                  <TemplateSelector teamId={formTeamId} onApply={applyTemplate} />
                   <StatusSelector
                      status={addIssueForm.status}
                      onChange={(newStatus) =>
@@ -189,6 +247,7 @@ export function CreateNewIssue() {
                   />
                   <ProjectSelector
                      project={addIssueForm.project}
+                     teamId={formTeamId}
                      onChange={(newProject) =>
                         setAddIssueForm({ ...addIssueForm, project: newProject })
                      }
@@ -201,7 +260,7 @@ export function CreateNewIssue() {
                   />
                   <EstimateSelector
                      estimate={addIssueForm.estimate}
-                     teamId={teamId}
+                     teamId={formTeamId}
                      onChange={(newEstimate) =>
                         setAddIssueForm({ ...addIssueForm, estimate: newEstimate })
                      }
@@ -214,7 +273,7 @@ export function CreateNewIssue() {
                   />
                </div>
             </div>
-            <div className="flex items-center justify-between py-2.5 px-4 w-full border-t">
+            <div className="flex w-full shrink-0 items-center justify-between border-t px-4 py-2.5">
                <div className="flex items-center gap-2">
                   <div className="flex items-center space-x-2">
                      <Switch
@@ -225,7 +284,7 @@ export function CreateNewIssue() {
                      <Label htmlFor="create-more">Create more</Label>
                   </div>
                </div>
-               <Button size="sm" disabled={submitting || !addIssueForm.title} onClick={createIssue}>
+               <Button size="sm" disabled={submitting || !title} onClick={createIssue}>
                   {submitting ? 'Criando…' : 'Criar issue'}
                </Button>
             </div>

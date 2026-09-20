@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { desc, inArray } from 'drizzle-orm';
+import { desc, inArray, ne } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { auditLog, appUser } from '@/db/schema';
 import type { UserRef } from './issues';
@@ -42,10 +42,18 @@ export async function recordAudit(db: Db, entry: AuditEntry): Promise<void> {
    }
 }
 
+/**
+ * Ações de sistema gravadas no audit mas fora da tela de admin: `automation.run` roda a
+ * cada regra disparada (já fica na atividade da issue) e empurrava as ações de admin para
+ * fora do limite (Ad#22).
+ */
+const SYSTEM_ACTION = 'automation.run';
+
 export async function listAudit(db: Db, limit = 200): Promise<AuditLogDto[]> {
    const rows = await db
       .select()
       .from(auditLog)
+      .where(ne(auditLog.action, SYSTEM_ACTION))
       .orderBy(desc(auditLog.createdAt))
       .limit(Math.min(Math.max(limit, 1), 1000));
    const actorIds = [...new Set(rows.map((r) => r.actorId).filter(Boolean) as string[])];

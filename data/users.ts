@@ -29,8 +29,6 @@ export function activeUsers(list: User[]): User[] {
    return list.filter((u) => !u.deactivatedAt);
 }
 
-const avatarUrl = (seed: string) => `https://api.dicebear.com/9.x/glass/svg?seed=${seed}`;
-
 export const statusUserColors = {
    online: '#00cc66',
    offline: '#969696',

@@ -1,23 +1,25 @@
 'use client';
 
-import { DetailSidePanel, DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
+import { EmptyState } from '@/components/common/empty-state';
+import { cn } from '@/lib/utils';
+import { DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 import { BlockEditor } from '@/components/common/editor/block-editor';
 import { Button } from '@/components/ui/button';
-import { adaptProjectDetail, emptyProjectDetail } from '@/lib/adapters-project-detail';
-import { api } from '@/lib/client';
+import { ErrorState } from '@/components/common/error-state';
+import { api, ApiError } from '@/lib/client';
 import { blocksToDoc, docHeadings, type EditorDoc } from '@/lib/editor-doc';
-import type { ProjectDetail } from '@/data/project-details';
-import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { ChevronDown, PenLine } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { projectUpdateHealthColor, projectUpdateHealthLabel } from '@/data/project-details';
+import { formatPlanDay } from '../format-day';
 import { DocumentOutline, type OutlineItem } from './document-outline';
 import { ProjectResources } from './project-resources';
-import { ProjectSidePanel } from './project-side-panel';
-import { Skeleton } from '@/components/ui/skeleton';
+import { useSharedProjectDetail } from './use-project-detail';
+import { LoadingArea, useEnterFade } from '@/components/common/loading-area';
 
 interface ProjectOverviewProps {
    projectId: string;
@@ -25,43 +27,24 @@ interface ProjectOverviewProps {
 
 /** Project "Overview" tab: description column + properties side panel. */
 export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
+   // Troca de irmão (aba, item, layout) não pisca: só a primeira chegada de conteúdo.
+   const fade = useEnterFade('project-tab');
    const project = useWorkspaceStore((s) => s.getProjectById(projectId));
    const loaded = useWorkspaceStore((s) => s.loaded);
-   const allIssues = useIssuesStore((s) => s.issues);
    const { orgId } = useParams<{ orgId: string }>();
    const scrollRef = useRef<HTMLDivElement>(null);
 
-   const [detail, setDetail] = useState<ProjectDetail>(() => emptyProjectDetail(projectId));
+   // Detalhe compartilhado pelas abas (layout da rota, #45): loading/ready/error, live
+   // reload e refetch que preserva a tela. O editor só monta com `ready` — montar vazio
+   // (1ª carga falha ou em curso) e o autosave apagaria a descrição real (#34).
+   const { status, detail, reload, setDetail, descriptionVersion, setDescriptionVersion } =
+      useSharedProjectDetail(projectId);
+   const detailReady = status === 'ready';
    const [summaryDraft, setSummaryDraft] = useState<string | null>(null);
-   // O editor só monta depois da 1ª carga: montar vazio e receber o doc depois
-   // arriscaria o usuário começar a digitar sobre o vazio e sobrescrever a descrição.
-   const [detailReady, setDetailReady] = useState(false);
-   const reload = useCallback(async () => {
-      try {
-         setDetail(adaptProjectDetail(await api.projects.detail(projectId)));
-      } catch {
-         // Falha de REFETCH não apaga o detail já exibido (antes zerava a tela
-         // com emptyProjectDetail num erro transitório); a 1ª carga tem o próprio
-         // catch no useEffect abaixo.
-      }
-   }, [projectId]);
-   useEffect(() => {
-      let active = true;
-      api.projects
-         .detail(projectId)
-         .then((dto) => {
-            if (active) setDetail(adaptProjectDetail(dto));
-         })
-         .catch(() => {
-            if (active) setDetail(emptyProjectDetail(projectId));
-         })
-         .finally(() => {
-            if (active) setDetailReady(true);
-         });
-      return () => {
-         active = false;
-      };
-   }, [projectId]);
+   // Concorrência otimista da descrição (#18): versão vista + fila de saves + conflito.
+   const versionRef = useRef<string | null>(null);
+   const saveQueue = useRef<Promise<void>>(Promise.resolve());
+   const [editorEpoch, setEditorEpoch] = useState(0);
 
    const handleSaveSummary = async () => {
       if (summaryDraft === null) return;
@@ -77,11 +60,6 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
       }
    };
 
-   const issues = useMemo(
-      () => allIssues.filter((issue) => issue.project?.id === projectId),
-      [allIssues, projectId]
-   );
-
    // Descrição: doc do servidor ou conversão da projeção em blocos. `liveDoc` acompanha o
    // que está no editor (antes do save) para o outline reagir enquanto se digita.
    const doc = useMemo(
@@ -89,6 +67,7 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
       [detail.descriptionDoc, detail.description]
    );
    const [liveDoc, setLiveDoc] = useState<EditorDoc | null>(null);
+   const lastUpdate = detail.updates[0];
    const outlineItems = useMemo<OutlineItem[]>(
       () =>
          docHeadings(liveDoc ?? doc).map((h, index) => ({
@@ -109,48 +88,73 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    }, []);
    useEffect(markHeadings, [markHeadings, outlineItems]);
 
-   const saveDescription = async (next: EditorDoc) => {
-      try {
-         await api.projects.updateDetail(projectId, { descriptionDoc: next });
-      } catch {
-         toast.error('Could not save the description');
-      }
+   // Saves em fila (um por vez) mandando a versão vista; 409 = outra pessoa gravou no
+   // meio: recarrega a versão dela e remonta o editor em vez de sobrescrever.
+   const saveDescription = (next: EditorDoc) => {
+      saveQueue.current = saveQueue.current.then(async () => {
+         try {
+            const dto = await api.projects.updateDetail(projectId, {
+               descriptionDoc: next,
+               expectedDescriptionVersion: versionRef.current,
+            });
+            versionRef.current = dto.descriptionVersion ?? null;
+            setDescriptionVersion(versionRef.current);
+         } catch (e) {
+            if (!(e instanceof ApiError && e.status === 409)) {
+               toast.error('Could not save the description');
+               return;
+            }
+            toast.warning(
+               'The description was changed by someone else. Loaded the latest version.'
+            );
+            versionRef.current = null;
+            await reload();
+            setEditorEpoch((n) => n + 1);
+         }
+      });
    };
+   // Versão vinda de recarga (1ª carga, evento remoto, conflito): só é adotada com o
+   // editor SEM foco — é quando o editor também aceita o doc externo. Digitando, fica a
+   // versão antiga e o próximo save detecta o conflito (409) em vez de sobrescrever.
+   useEffect(() => {
+      if (!descriptionVersion) return;
+      const editing = scrollRef.current
+         ?.querySelector('.ProseMirror')
+         ?.contains(document.activeElement);
+      if (!editing || versionRef.current === null) versionRef.current = descriptionVersion;
+   }, [descriptionVersion]);
+
+   if (project && status === 'error') {
+      return (
+         <ErrorState
+            className="min-h-full"
+            title="Could not load the project"
+            description="Check your connection and try again."
+            action={
+               <Button size="sm" variant="outline" onClick={() => void reload()}>
+                  Try again
+               </Button>
+            }
+         />
+      );
+   }
 
    if (!project) {
-      // Ainda carregando → skeleton; carregado sem projeto → not found.
-      if (!loaded) {
-         return (
-            <div className="flex h-full w-full overflow-hidden">
-               <div className="min-w-0 flex-1 overflow-hidden">
-                  <div className="mx-auto flex max-w-[869px] flex-col gap-5 px-8 pt-16 pb-10">
-                     <Skeleton className="size-8" />
-                     <Skeleton className="h-8 w-1/2" />
-                     <Skeleton className="h-4 w-3/4" />
-                  </div>
-               </div>
-               <DetailSidePanel kind="project" title="Project details" className="flex-col gap-2">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                     <div key={i} className="flex flex-col gap-2 rounded-[10px] border bg-card p-3">
-                        <Skeleton className="h-3 w-16" />
-                        <Skeleton className="h-6 w-32" />
-                     </div>
-                  ))}
-               </DetailSidePanel>
-            </div>
-         );
-      }
+      // Ainda carregando → loading; carregado sem projeto → not found.
+      if (!loaded) return <LoadingArea className="h-full" />;
       return (
-         <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-            Project not found.
-         </div>
+         <EmptyState
+            variant="search"
+            title="Project not found"
+            description="It may have been deleted or you don't have access to it."
+         />
       );
    }
 
    return (
-      <div className="relative w-full h-full flex overflow-hidden">
-         {/* Main column */}
-         <div className="flex-1 min-w-0 h-full relative">
+      <div className={cn(fade && 'content-enter', 'relative h-full w-full overflow-hidden')}>
+         {/* Main column (o sidecar vem do layout do projeto, pl#6) */}
+         <div className="relative h-full min-w-0">
             <DocumentOutline items={outlineItems} scrollRef={scrollRef} />
             <div ref={scrollRef} className="h-full overflow-y-auto">
                <div className="mx-auto max-w-[869px] px-8 pt-16 pb-10">
@@ -200,13 +204,33 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                      />
                   </div>
 
-                  {/* Update CTA */}
+                  {/* Update CTA — com o health do ÚLTIMO update (pl#11) */}
                   <Link
                      href={`/${orgId}/project/${project.id}/activity`}
                      className="-mx-4 mt-4 flex h-[66px] items-center justify-center gap-2 rounded-[10px] border text-sm text-muted-foreground transition-colors hover:bg-accent/30 hover:text-foreground"
                   >
-                     <PenLine className="size-4" />
-                     Write {detail.updates.length === 0 ? 'first ' : ''}project update
+                     {lastUpdate ? (
+                        <>
+                           <span className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium">
+                              <span
+                                 className="size-2 rounded-full"
+                                 style={{
+                                    backgroundColor: projectUpdateHealthColor[lastUpdate.health],
+                                 }}
+                              />
+                              {projectUpdateHealthLabel[lastUpdate.health]}
+                           </span>
+                           <span className="truncate">
+                              Last update on {formatPlanDay(lastUpdate.date)} by{' '}
+                              {lastUpdate.author.name}
+                           </span>
+                        </>
+                     ) : (
+                        <>
+                           <PenLine className="size-4" />
+                           Write first project update
+                        </>
+                     )}
                   </Link>
 
                   {/* Description */}
@@ -217,7 +241,7 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                      </div>
                      {detailReady ? (
                         <BlockEditor
-                           key={projectId}
+                           key={`${projectId}:${editorEpoch}`}
                            doc={doc}
                            placeholder="Add a description…"
                            onChange={setLiveDoc}
@@ -225,21 +249,12 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                            onReady={markHeadings}
                         />
                      ) : (
-                        <Skeleton className="h-4 w-2/3" />
+                        <LoadingArea rows={1} size="sm" className="justify-start" />
                      )}
                   </div>
                </div>
             </div>
          </div>
-
-         {/* Side panel */}
-         <ProjectSidePanel
-            project={project}
-            detail={detail}
-            issues={issues}
-            projectId={projectId}
-            onChanged={reload}
-         />
       </div>
    );
 }

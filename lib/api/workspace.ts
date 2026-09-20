@@ -9,6 +9,7 @@ import {
    listHealthStates,
 } from './catalogs';
 import { listTeams, type TeamDto } from './teams';
+import { listLabelGroups, type LabelGroupDto } from './labels';
 import { listProjects, type ProjectDto } from './projects';
 import { listMembers, type MemberDto } from './members';
 import { listInitiatives, type InitiativeDto } from './initiatives';
@@ -18,9 +19,10 @@ import { getMe, type MeDto } from './users';
 import { visibleTeamIds } from './scope';
 import { snapshotProjects } from './project-snapshots';
 
+/** Time do bootstrap: TeamDto + membros. Projetos NÃO vêm aqui (bootstrap enxuto): o
+ * cliente deriva de `projects` pelo `teamId`, sem a cópia duplicada. */
 export interface TeamFull extends TeamDto {
    members: MemberDto[];
-   projects: ProjectDto[];
 }
 
 export interface WorkspaceBootstrap {
@@ -29,6 +31,8 @@ export interface WorkspaceBootstrap {
    projectStatuses: Awaited<ReturnType<typeof listProjectStatuses>>;
    priorities: Awaited<ReturnType<typeof listPriorities>>;
    labels: Awaited<ReturnType<typeof listLabels>>;
+   /** Grupos de label (aditivo): cada label aponta pelo `groupId`. */
+   labelGroups: LabelGroupDto[];
    healthStates: Awaited<ReturnType<typeof listHealthStates>>;
    teams: TeamFull[];
    projects: ProjectDto[];
@@ -36,6 +40,24 @@ export interface WorkspaceBootstrap {
    cycles: CycleDto[];
    initiatives: InitiativeDto[];
    views: ViewDto[];
+}
+
+const housekeepingDays = new WeakMap<object, Map<string, string>>();
+
+function claimHousekeeping(db: Db, teamId: string, day: string): boolean {
+   let days = housekeepingDays.get(db as object);
+   if (!days) {
+      days = new Map();
+      housekeepingDays.set(db as object, days);
+   }
+   if (days.get(teamId) === day) return false;
+   days.set(teamId, day);
+   return true;
+}
+
+function releaseHousekeeping(db: Db, teamId: string, day: string): void {
+   const days = housekeepingDays.get(db as object);
+   if (days?.get(teamId) === day) days.delete(teamId);
 }
 
 /**
@@ -60,6 +82,7 @@ export async function bootstrapWorkspace(
       projectStatuses,
       priorities,
       labels,
+      labelGroups,
       healthStates,
       teams,
       projects,
@@ -71,6 +94,7 @@ export async function bootstrapWorkspace(
       listProjectStatuses(db),
       listPriorities(db),
       listLabels(db),
+      listLabelGroups(db),
       listHealthStates(db),
       listTeams(db, { teamIds: scopedTeamIds }, me.id),
       listProjects(db, { teamIds: scopedTeamIds }),
@@ -98,16 +122,9 @@ export async function bootstrapWorkspace(
       arr.push(m);
       membersByTeam.set(l.teamId, arr);
    }
-   const projectsByTeam = new Map<string, ProjectDto[]>();
-   for (const p of projects) {
-      const arr = projectsByTeam.get(p.teamId) ?? [];
-      arr.push(p);
-      projectsByTeam.set(p.teamId, arr);
-   }
    const teamsFull: TeamFull[] = teams.map((t) => ({
       ...t,
       members: membersByTeam.get(t.id) ?? [],
-      projects: projectsByTeam.get(t.id) ?? [],
    }));
 
    // Auto-rollover lazy (#24): o app não tem scheduler, então o bootstrap fecha os
@@ -117,18 +134,37 @@ export async function bootstrapWorkspace(
    // escrita a cada evento; o boot da página já cobre.
    const teamIds = teams.map((t) => t.id);
    if (opts.rollover !== false) {
-      await Promise.all(teamIds.map((id) => rolloverCyclesForTeam(db, id)));
+      const day = new Date().toISOString().slice(0, 10);
+      for (const id of teamIds) {
+         if (!claimHousekeeping(db, `${id}:rollover`, day)) continue;
+         try {
+            await rolloverCyclesForTeam(db, id);
+         } catch (error) {
+            releaseHousekeeping(db, `${id}:rollover`, day);
+            throw error;
+         }
+      }
       // Roadmap (#102): o snapshot diário do projeto também é lazy — o boot grava o
-      // dia (upsert idempotente) para o gráfico de progresso ter história sem job.
-      await snapshotProjects(
-         db,
-         projects.map((p) => p.id)
-      );
+      // dia (upsert idempotente) uma vez por time e por pod.
+      const snapshotTeams = teamIds.filter((id) => claimHousekeeping(db, `${id}:snapshot`, day));
+      if (snapshotTeams.length > 0) {
+         try {
+            const scope = new Set(snapshotTeams);
+            await snapshotProjects(
+               db,
+               projects.filter((project) => scope.has(project.teamId)).map((project) => project.id)
+            );
+         } catch (error) {
+            for (const id of snapshotTeams) releaseHousekeeping(db, `${id}:snapshot`, day);
+            throw error;
+         }
+      }
    }
 
    // cycles de todos os times — 2 queries no total (era N+1: 1 chamada por time,
-   // cada uma re-escaneando a tabela status).
-   const cycles: CycleDto[] = await listCyclesForTeams(db, teamIds);
+   // cada uma re-escaneando a tabela status). Burnup só do current (bootstrap enxuto);
+   // o dos demais vem sob demanda em `GET /cycles/:id`.
+   const cycles: CycleDto[] = await listCyclesForTeams(db, teamIds, { burnup: 'current' });
 
    return {
       me,
@@ -136,6 +172,7 @@ export async function bootstrapWorkspace(
       projectStatuses,
       priorities,
       labels,
+      labelGroups,
       healthStates,
       teams: teamsFull,
       projects,

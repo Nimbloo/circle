@@ -77,3 +77,55 @@ describe('deleteTeam limpa a configuração do time', () => {
       ).toEqual([]);
    });
 });
+
+describe('deleteTeam em transação trata templates (#59)', () => {
+   it('templates de issue e projeto são configuração: somem com o time', async () => {
+      const { createTemplate } = await import('@/lib/api/templates');
+      const { createProjectTemplate } = await import('@/lib/api/project-templates');
+      const { issueTemplate, projectTemplate } = await import('@/db/schema');
+      await createTemplate(db, { teamId: 'OPEN', name: 'Bug' });
+      await createProjectTemplate(db, { teamId: 'OPEN', name: 'Launch' });
+
+      expect(await deleteTeam(db, 'OPEN')).toBe(true);
+      expect(await db.select().from(teamT).where(eq(teamT.id, 'OPEN'))).toEqual([]);
+      expect(await db.select().from(issueTemplate).where(eq(issueTemplate.teamId, 'OPEN'))).toEqual(
+         []
+      );
+      expect(
+         await db.select().from(projectTemplate).where(eq(projectTemplate.teamId, 'OPEN'))
+      ).toEqual([]);
+   });
+});
+
+describe('deleteTeam com conteúdo apaga em cascata (paridade Linear)', () => {
+   it('issues e projeto criados pelos serviços somem com o time', async () => {
+      const { createIssue } = await import('@/lib/api/issues');
+      const { createProject } = await import('@/lib/api/projects');
+      const { getTeamDeletionImpact } = await import('@/lib/api/teams');
+      const { issue, project } = await import('@/db/schema');
+      await seedUser(db, { name: 'Ana', email: 'ana@x.com' });
+      await createIssue(
+         db,
+         { teamId: 'OPEN', title: 'A', statusId: 'backlog', priorityId: 'low' },
+         'ana@x.com'
+      );
+      await createIssue(
+         db,
+         { teamId: 'OPEN', title: 'B', statusId: 'backlog', priorityId: 'low' },
+         'ana@x.com'
+      );
+      await createProject(db, {
+         name: 'P',
+         teamId: 'OPEN',
+         statusId: 'proj-in-progress',
+         priorityId: 'high',
+         healthId: 'on-track',
+      });
+      expect(await getTeamDeletionImpact(db, 'OPEN')).toMatchObject({ issues: 2, projects: 1 });
+
+      expect(await deleteTeam(db, 'OPEN')).toBe(true);
+      expect(await db.select().from(teamT).where(eq(teamT.id, 'OPEN'))).toEqual([]);
+      expect(await db.select().from(issue).where(eq(issue.teamId, 'OPEN'))).toEqual([]);
+      expect(await db.select().from(project).where(eq(project.teamId, 'OPEN'))).toEqual([]);
+   });
+});

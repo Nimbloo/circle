@@ -1,7 +1,8 @@
 'use client';
 
 import type { ProjectSnapshotPoint } from '@/lib/client';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { PROGRESS_COLORS } from './progress-colors';
 
 interface ProjectSnapshotChartProps {
    points: ProjectSnapshotPoint[];
@@ -12,9 +13,9 @@ interface ProjectSnapshotChartProps {
 }
 
 const SERIES = [
-   { key: 'scope', label: 'Scope', color: 'var(--muted-foreground)' },
-   { key: 'started', label: 'Started', color: 'var(--chart-4)' },
-   { key: 'completed', label: 'Completed', color: 'var(--primary)' },
+   { key: 'scope', label: 'Scope', color: PROGRESS_COLORS.scope },
+   { key: 'started', label: 'Started', color: PROGRESS_COLORS.started },
+   { key: 'completed', label: 'Completed', color: PROGRESS_COLORS.completed },
 ] as const;
 
 /** `YYYY-MM-DD` → `Mar 5` (sem date-fns: a entrada já é ISO, não há fuso envolvido). */
@@ -39,6 +40,10 @@ export function ProjectSnapshotChart({
    emptyLabel = 'Not enough history yet — the chart appears after two days.',
 }: ProjectSnapshotChartProps) {
    const [hovered, setHovered] = useState<number | null>(null);
+   // Roving tabindex: uma única parada de Tab no gráfico; setas/Home/End percorrem os
+   // pontos (antes cada medição era uma parada — 90 dias = 90 Tabs).
+   const [focusIndex, setFocusIndex] = useState<number | null>(null);
+   const pointRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
    if (points.length < 2) {
       return (
@@ -69,9 +74,28 @@ export function ProjectSnapshotChart({
          .join(' ');
 
    const active = hovered === null ? null : points[hovered];
+   const last = points.length - 1;
+   const tabStop = focusIndex !== null && focusIndex <= last ? focusIndex : last;
+
+   const moveFocus = (event: React.KeyboardEvent, index: number) => {
+      const next =
+         event.key === 'ArrowLeft'
+            ? Math.max(0, index - 1)
+            : event.key === 'ArrowRight'
+              ? Math.min(last, index + 1)
+              : event.key === 'Home'
+                ? 0
+                : event.key === 'End'
+                  ? last
+                  : null;
+      if (next === null) return;
+      event.preventDefault();
+      setFocusIndex(next);
+      pointRefs.current[next]?.focus();
+   };
 
    return (
-      <div className="flex flex-col gap-2" data-testid="snapshot-chart">
+      <div className="content-enter flex flex-col gap-2" data-testid="snapshot-chart">
          <div className="relative" style={{ height }}>
             <svg
                className="absolute inset-0 h-full w-full"
@@ -130,10 +154,18 @@ export function ProjectSnapshotChart({
                         type="button"
                         aria-label={`${shortDay(point.date)}: scope ${point.scope}, started ${point.started}, completed ${point.completed}`}
                         data-testid={`snapshot-point-${point.date}`}
+                        ref={(node) => {
+                           pointRefs.current[index] = node;
+                        }}
+                        tabIndex={index === tabStop ? 0 : -1}
                         onMouseEnter={() => setHovered(index)}
-                        onFocus={() => setHovered(index)}
+                        onFocus={() => {
+                           setFocusIndex(index);
+                           setHovered(index);
+                        }}
                         onBlur={() => setHovered(null)}
-                        className="absolute top-0 h-full cursor-default outline-none"
+                        onKeyDown={(event) => moveFocus(event, index)}
+                        className="absolute top-0 h-full cursor-default rounded-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
                         style={{ left: `${left}%`, width: `${right - left}%` }}
                      />
                   );

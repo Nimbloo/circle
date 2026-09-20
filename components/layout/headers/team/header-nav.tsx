@@ -44,7 +44,7 @@ export default function HeaderNav() {
 
    return (
       <LocationBar>
-         <HeaderGroup className="pl-2.5">
+         <HeaderGroup>
             <div className="inline-flex size-4 bg-muted/50 items-center justify-center rounded shrink-0 text-[10px]">
                {team.icon}
             </div>

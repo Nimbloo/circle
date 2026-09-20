@@ -12,16 +12,36 @@ import { HeaderActions, HeaderGroup, LocationBar } from '@/components/layout/hea
 import { useAgentChatStore } from '@/store/agent-chat-store';
 import { ChevronDown, MessageSquare, Plus } from 'lucide-react';
 
+/** Lista de chats — montada só com o dropdown aberto (não re-renderiza a cada resposta). */
+function ChatList() {
+   const chats = useAgentChatStore((s) => s.chats);
+   const setActiveChat = useAgentChatStore((s) => s.setActiveChat);
+   return (
+      <>
+         {chats.length > 0 && <DropdownMenuSeparator />}
+         {chats.map((chat) => (
+            <DropdownMenuItem key={chat.id} onClick={() => setActiveChat(chat.id)}>
+               <MessageSquare className="size-4" />
+               <span className="truncate">{chat.title}</span>
+            </DropdownMenuItem>
+         ))}
+      </>
+   );
+}
+
 export default function Header() {
-   const { chats, activeChatId, setActiveChat, startNewChat } = useAgentChatStore();
-   const activeChat = chats.find((chat) => chat.id === activeChatId);
+   // Seletores estreitos: o título muda raramente; `chats` muda a cada mensagem.
+   const activeTitle = useAgentChatStore(
+      (s) => s.chats.find((chat) => chat.id === s.activeChatId)?.title
+   );
+   const startNewChat = useAgentChatStore((s) => s.startNewChat);
 
    return (
       <LocationBar>
          <HeaderGroup>
             <DropdownMenu>
                <DropdownMenuTrigger className="flex items-center gap-1 text-sm font-medium outline-none hover:text-foreground min-w-0">
-                  <span className="truncate max-w-64">{activeChat?.title ?? 'New chat'}</span>
+                  <span className="truncate max-w-64">{activeTitle ?? 'New chat'}</span>
                   <ChevronDown className="size-3.5 text-muted-foreground shrink-0" />
                </DropdownMenuTrigger>
                <DropdownMenuContent align="start" className="w-64">
@@ -29,13 +49,7 @@ export default function Header() {
                      <Plus className="size-4" />
                      New chat
                   </DropdownMenuItem>
-                  {chats.length > 0 && <DropdownMenuSeparator />}
-                  {chats.map((chat) => (
-                     <DropdownMenuItem key={chat.id} onClick={() => setActiveChat(chat.id)}>
-                        <MessageSquare className="size-4" />
-                        <span className="truncate">{chat.title}</span>
-                     </DropdownMenuItem>
-                  ))}
+                  <ChatList />
                </DropdownMenuContent>
             </DropdownMenu>
          </HeaderGroup>

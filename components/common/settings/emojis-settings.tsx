@@ -1,7 +1,8 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { EmptyState } from '@/components/common/empty-state';
+import { LoadingArea } from '@/components/common/loading-area';
 import {
    Dialog,
    DialogContent,
@@ -11,8 +12,20 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { SidebarTrigger } from '@/components/ui/sidebar';
+import {
+   AlertDialog,
+   AlertDialogAction,
+   AlertDialogCancel,
+   AlertDialogContent,
+   AlertDialogDescription,
+   AlertDialogFooter,
+   AlertDialogHeader,
+   AlertDialogTitle,
+   useLatchedTarget,
+} from '@/components/ui/alert-dialog';
 import { api } from '@/lib/client';
+import { errorReason } from '@/lib/error-reason';
+import { SettingsCard, SettingsRow, SettingsShell } from './shared';
 import type { EmojiDto } from '@/lib/api/emojis';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Plus, Smile, Trash2, Upload } from 'lucide-react';
@@ -75,10 +88,8 @@ function UploadDialog({
          onOpenChange(false);
          onSaved();
          toast.success('Emoji adicionado');
-      } catch {
-         toast.error(
-            'Não foi possível adicionar o emoji (shortcode duplicado ou imagem inválida?)'
-         );
+      } catch (err) {
+         toast.error(errorReason(err, 'Não foi possível adicionar o emoji'));
       } finally {
          setBusy(false);
       }
@@ -161,9 +172,15 @@ export default function EmojisSettings() {
    const [loading, setLoading] = useState(true);
    const [dialogOpen, setDialogOpen] = useState(false);
    const [query, setQuery] = useState('');
+   // Excluir pede confirmação (ad#13). Alvo e `open` separados: o nome não some do
+   // título durante a animação de saída.
+   const [removing, setRemoving] = useState<EmojiDto | null>(null);
+   const removingLatched = useLatchedTarget(removing);
+   const [removeOpen, setRemoveOpen] = useState(false);
+   const [removeBusy, setRemoveBusy] = useState(false);
 
-   // Skeleton só na primeira carga; o reload pós-mutation (add/remove) é silencioso —
-   // a grade atual fica na tela até a lista nova chegar, sem piscar.
+   // Loading só na primeira carga; o reload pós-mutation (add/remove) é silencioso —
+   // a lista atual fica na tela até a nova chegar, sem piscar.
    const loadedOnceRef = useRef(false);
    const load = useCallback(async () => {
       if (!loadedOnceRef.current) setLoading(true);
@@ -182,13 +199,18 @@ export default function EmojisSettings() {
       void load();
    }, [load]);
 
-   const remove = async (e: EmojiDto) => {
+   const confirmRemove = async () => {
+      if (!removing || removeBusy) return;
+      setRemoveBusy(true);
       try {
-         await api.emojis.remove(e.id);
+         await api.emojis.remove(removing.id);
+         setRemoveOpen(false);
          await load();
          toast.success('Emoji removido');
-      } catch {
-         toast.error('Não foi possível remover o emoji');
+      } catch (err) {
+         toast.error(errorReason(err, 'Não foi possível remover o emoji'));
+      } finally {
+         setRemoveBusy(false);
       }
    };
 
@@ -200,66 +222,90 @@ export default function EmojisSettings() {
    }, [emojis, query]);
 
    return (
-      <div className="h-full w-full overflow-y-auto">
-         <div className="px-14 py-16 pb-20 max-md:px-5 max-md:py-8">
-            <div className="mb-3 flex items-center gap-1.5">
-               <SidebarTrigger className="-ml-1 md:hidden" />
-               <h1 className="text-2xl font-medium leading-8">Emojis</h1>
-            </div>
-            <div className="mb-6 flex items-center justify-between gap-3">
-               <Input
-                  placeholder="Filter by name..."
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  className="h-8 w-[300px] max-w-full"
-               />
-               {isAdmin && (
-                  <Button onClick={() => setDialogOpen(true)} className="gap-1">
-                     <Plus className="size-4" />
-                     Adicionar emoji
-                  </Button>
-               )}
-            </div>
+      <SettingsShell
+         title="Emojis"
+         action={
+            isAdmin ? (
+               <Button size="sm" onClick={() => setDialogOpen(true)} className="gap-1">
+                  <Plus className="size-4" />
+                  Adicionar emoji
+               </Button>
+            ) : undefined
+         }
+      >
+         <div className="flex flex-col gap-4">
+            <Input
+               placeholder="Filter by name..."
+               value={query}
+               onChange={(event) => setQuery(event.target.value)}
+               className="h-8 w-[300px] max-w-full"
+            />
 
             {loading ? (
-               <ListSkeleton rows={4} />
+               <LoadingArea rows={4} />
             ) : visibleEmojis.length === 0 ? (
-               <div className="flex h-[calc(100vh-262px)] min-h-[360px] flex-col items-center justify-center gap-2 text-center">
-                  <Smile className="size-12 text-muted-foreground/40" />
-                  <p className="text-[13px] text-muted-foreground">
-                     {query ? 'Nenhum emoji encontrado' : 'Nenhum emoji customizado'}
-                  </p>
-               </div>
+               query ? (
+                  <EmptyState variant="search" title="Nenhum emoji encontrado" className="py-10" />
+               ) : (
+                  <EmptyState icon={Smile} title="Nenhum emoji customizado" className="py-10" />
+               )
             ) : (
-               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+               <SettingsCard>
                   {visibleEmojis.map((e) => (
-                     <div
+                     <SettingsRow
                         key={e.id}
-                        className="group relative flex flex-col items-center gap-2 rounded-[10px] border bg-card p-4"
-                     >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={e.url} alt={e.shortcode} className="size-10 object-contain" />
-                        <span className="max-w-full truncate text-xs text-muted-foreground">
-                           :{e.shortcode}:
-                        </span>
-                        {isAdmin && (
-                           <Button
-                              size="icon"
-                              variant="ghost"
-                              className="absolute right-1 top-1 size-6 text-destructive opacity-0 hover:text-destructive group-hover:opacity-100"
-                              aria-label="Remover emoji"
-                              onClick={() => void remove(e)}
-                           >
-                              <Trash2 className="size-3.5" />
-                           </Button>
-                        )}
-                     </div>
+                        icon={
+                           // eslint-disable-next-line @next/next/no-img-element
+                           <img src={e.url} alt={e.shortcode} className="size-5 object-contain" />
+                        }
+                        title={`:${e.shortcode}:`}
+                        trailing={
+                           isAdmin ? (
+                              <Button
+                                 size="icon"
+                                 variant="ghost"
+                                 className="size-7 text-muted-foreground hover:text-destructive"
+                                 aria-label={`Remover :${e.shortcode}:`}
+                                 onClick={() => {
+                                    setRemoving(e);
+                                    setRemoveOpen(true);
+                                 }}
+                              >
+                                 <Trash2 className="size-3.5" />
+                              </Button>
+                           ) : undefined
+                        }
+                     />
                   ))}
-               </div>
+               </SettingsCard>
             )}
-
-            <UploadDialog open={dialogOpen} onOpenChange={setDialogOpen} onSaved={load} />
          </div>
-      </div>
+
+         <UploadDialog open={dialogOpen} onOpenChange={setDialogOpen} onSaved={load} />
+
+         <AlertDialog open={removeOpen} onOpenChange={(o) => !removeBusy && setRemoveOpen(o)}>
+            <AlertDialogContent>
+               <AlertDialogHeader>
+                  <AlertDialogTitle>Remover :{removingLatched?.shortcode}:?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                     O emoji customizado é excluído do workspace. Esta ação não pode ser desfeita.
+                  </AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter>
+                  <AlertDialogCancel disabled={removeBusy}>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction
+                     onClick={(ev) => {
+                        ev.preventDefault();
+                        void confirmRemove();
+                     }}
+                     disabled={removeBusy}
+                     className="bg-destructive text-white hover:bg-destructive/90"
+                  >
+                     {removeBusy ? 'Removendo…' : 'Remover'}
+                  </AlertDialogAction>
+               </AlertDialogFooter>
+            </AlertDialogContent>
+         </AlertDialog>
+      </SettingsShell>
    );
 }

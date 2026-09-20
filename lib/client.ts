@@ -19,14 +19,26 @@ import type {
    UpdateMilestoneInput,
    AddResourceInput,
    PostUpdateInput,
+   EditUpdateInput,
 } from '@/lib/api/project-detail';
-import type { InitiativeUpdateDto, PostInitiativeUpdateInput } from '@/lib/api/initiative-detail';
-import type { TeamDto, CreateTeamInput, JoinRequestDto } from '@/lib/api/teams';
+import type {
+   EditInitiativeUpdateInput,
+   InitiativeUpdateDto,
+   PostInitiativeUpdateInput,
+} from '@/lib/api/initiative-detail';
+import type { TeamDto, CreateTeamInput, JoinRequestDto, TeamDeletionImpact } from '@/lib/api/teams';
 import type { MemberDto } from '@/lib/api/members';
+import {
+   DEACTIVATED_LOGIN_URL,
+   DEACTIVATED_MESSAGE,
+   endSession,
+   loginRedirectUrl,
+} from '@/lib/session-redirect';
 import type { CycleDto, CreateCycleInput, UpdateCycleInput } from '@/lib/api/cycles';
 import type { TemplateDto, CreateTemplateInput, UpdateTemplateInput } from '@/lib/api/templates';
 import type { StatusDto, CreateStatusInput, UpdateStatusInput } from '@/lib/api/statuses';
 import type { EmojiDto } from '@/lib/api/emojis';
+import type { LabelDto, LabelGroupDto } from '@/lib/api/labels';
 import type { UploadDto, UploadInput } from '@/lib/api/uploads';
 import type {
    ProjectTemplateDto,
@@ -44,7 +56,12 @@ import type { WorkspaceBootstrap } from '@/lib/api/workspace';
 import type { NotificationDto } from '@/lib/api/notifications';
 import type { ReviewDetailDto, ReviewDto, ReviewGuideDto } from '@/lib/api/reviews';
 import type { AddReviewCommentInput, ReviewCommentDto } from '@/lib/api/review-comments';
-import type { FolderDto, DocumentDto } from '@/lib/api/documents';
+import type {
+   FolderDto,
+   DocumentDto,
+   DocumentDetailDto,
+   UpdateDocumentInput,
+} from '@/lib/api/documents';
 import type {
    IssueDetailDto,
    CommentDto,
@@ -67,12 +84,7 @@ import type {
 } from '@/lib/api/automations';
 import type { SearchEntityType, SearchGroup, SearchItem, SearchResult } from '@/lib/api/search';
 import type { AcceptTriageInput, TriageSuggestionDto } from '@/lib/api/triage';
-import type {
-   ImportMapping,
-   ImportPreviewDto,
-   ImportResultDto,
-   ImportSource,
-} from '@/lib/api/import';
+import type { ImportJobDto, ImportMapping, ImportPreviewDto, ImportSource } from '@/lib/api/import';
 import type { WebhookDeliveryDto, WebhookDto, WebhookEvent } from '@/lib/api/webhooks';
 import type {
    RoadmapDto,
@@ -81,6 +93,7 @@ import type {
    RoadmapMilestone,
 } from '@/lib/api/roadmap';
 import type { ProjectSnapshotPoint } from '@/lib/api/project-snapshots';
+import { CLIENT_ID_HEADER, getClientId } from '@/lib/client-id';
 
 export type { SearchEntityType, SearchGroup, SearchItem, SearchResult };
 export type { RoadmapDto, RoadmapDependency, RoadmapGroup, RoadmapMilestone, ProjectSnapshotPoint };
@@ -118,40 +131,54 @@ export class ApiError extends Error {
    }
 }
 
+/**
+ * Parse ÚNICO da resposta da API (R5): envelope `{data, meta}` no sucesso, ProblemDetail
+ * (RFC 7807) no erro → `ApiError` com `detail`/`title`. Trata o fim de sessão (#12).
+ */
+async function parseResponse(res: Response): Promise<{ data: unknown; meta?: unknown }> {
+   const json = await res.json().catch(() => null);
+   if (!res.ok) {
+      const detail = String((json && (json.detail || json.title)) || res.statusText);
+      if (typeof window !== 'undefined') {
+         if (res.status === 401)
+            endSession(loginRedirectUrl(window.location.pathname, window.location.search));
+         else if (res.status === 403 && detail === DEACTIVATED_MESSAGE)
+            endSession(DEACTIVATED_LOGIN_URL);
+      }
+      throw new ApiError(res.status, detail, json);
+   }
+   return { data: json?.data ?? json, meta: json?.meta };
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
    const res = await fetch(`/api/v1${path}`, {
       method,
-      headers: body !== undefined ? { 'content-type': 'application/json' } : undefined,
+      // Aba de origem (If#16): o servidor carimba no evento SSE e esta aba reconhece o eco.
+      headers: {
+         [CLIENT_ID_HEADER]: getClientId(),
+         ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+      },
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      // DELETE sobrevive ao fechamento da página (exclusão com Undo enviada no `pagehide`).
+      keepalive: method === 'DELETE',
    });
-   const json = await res.json().catch(() => null);
-   if (!res.ok) {
-      const detail = (json && (json.detail || json.title)) || res.statusText;
-      throw new ApiError(res.status, String(detail), json);
-   }
-   return (json?.data ?? json) as T;
+   return (await parseResponse(res)).data as T;
 }
 
 /** Como `request`, mas devolve o envelope inteiro {data, meta} (pra ler `meta.total`). */
 async function requestEnvelope<T>(path: string): Promise<{ data: T; meta?: unknown }> {
-   const res = await fetch(`/api/v1${path}`, { method: 'GET' });
-   const json = await res.json().catch(() => null);
-   if (!res.ok) {
-      const detail = (json && (json.detail || json.title)) || res.statusText;
-      throw new ApiError(res.status, String(detail), json);
-   }
-   return { data: (json?.data ?? json) as T, meta: json?.meta };
+   const { data, meta } = await parseResponse(await fetch(`/api/v1${path}`, { method: 'GET' }));
+   return { data: data as T, meta };
 }
 
 /** POST multipart (upload de arquivo): o navegador define o content-type com o boundary. */
 async function postForm<T>(path: string, form: FormData): Promise<T> {
-   const res = await fetch(`/api/v1${path}`, { method: 'POST', body: form });
-   const json = await res.json().catch(() => null);
-   if (!res.ok) {
-      const detail = (json && (json.detail || json.title)) || res.statusText;
-      throw new ApiError(res.status, String(detail), json);
-   }
-   return (json?.data ?? json) as T;
+   const res = await fetch(`/api/v1${path}`, {
+      method: 'POST',
+      headers: { [CLIENT_ID_HEADER]: getClientId() },
+      body: form,
+   });
+   return (await parseResponse(res)).data as T;
 }
 
 const get = <T>(p: string) => request<T>('GET', p);
@@ -190,6 +217,8 @@ const me = Object.assign(() => get<MeDto>('/me'), {
       post<MeDto>('/me/avatar', { dataUrl, contentType }),
    removeAvatar: () => del<MeDto>('/me/avatar'),
    activity: () => get<MyActivityItemDto[]>('/me/activity'),
+   /** Todas as issues seguidas (abertas e fechadas); o bootstrap só traz as abertas. */
+   subscriptions: () => get<{ issueIds: string[] }>('/me/subscriptions'),
 });
 
 export const api = {
@@ -225,6 +254,9 @@ export const api = {
       get: () => get<Record<string, unknown>>('/settings'),
       put: (data: Record<string, unknown>) =>
          request<Record<string, unknown>>('PUT', '/settings', data),
+      /** Merge por seção no servidor (#15): só as seções enviadas são trocadas. */
+      patch: (sections: Record<string, unknown>) =>
+         patch<Record<string, unknown>>('/settings', sections),
    },
 
    /** Audit log de ações administrativas (só admin). */
@@ -272,12 +304,20 @@ export const api = {
    priorities: () =>
       get<{ id: string; name: string; position: number; sortRank: number }[]>('/priorities'),
    labels: {
-      list: () => get<{ id: string; name: string; color: string }[]>('/labels'),
-      create: (input: { id?: string; name: string; color: string }) =>
-         post<{ id: string; name: string; color: string }>('/labels', input),
-      update: (id: string, body: { name?: string; color?: string }) =>
-         patch<{ id: string; name: string; color: string }>(`/labels/${id}`, body),
+      list: () => get<LabelDto[]>('/labels'),
+      create: (input: { id?: string; name: string; color: string; groupId?: string | null }) =>
+         post<LabelDto>('/labels', input),
+      update: (id: string, body: { name?: string; color?: string; groupId?: string | null }) =>
+         patch<LabelDto>(`/labels/${id}`, body),
       remove: (id: string) => del<{ deleted: boolean }>(`/labels/${id}`),
+   },
+   labelGroups: {
+      list: () => get<LabelGroupDto[]>('/label-groups'),
+      create: (input: { name: string; color?: string }) =>
+         post<LabelGroupDto>('/label-groups', input),
+      update: (id: string, body: { name?: string; color?: string }) =>
+         patch<LabelGroupDto>(`/label-groups/${id}`, body),
+      remove: (id: string) => del<{ deleted: boolean }>(`/label-groups/${id}`),
    },
    healthStates: () =>
       get<{ id: string; name: string; color: string; description: string | null }[]>(
@@ -287,6 +327,14 @@ export const api = {
    issues: {
       list: (opts?: IssueListOptions) => get<IssueDto[]>(`/issues${issueQuery(opts)}`),
       get: (id: string) => get<IssueDto>(`/issues/${id}`),
+      /** Resync incremental (#14): o que mudou desde `since` + ids vivos (lápides por ausência). */
+      changes: (since: string) =>
+         requestEnvelope<IssueDto[]>(
+            `/issues?updatedSince=${encodeURIComponent(since)}`
+         ) as Promise<{
+            data: IssueDto[];
+            meta?: { ids?: string[]; truncated?: boolean };
+         }>,
       create: (input: CreateIssueClientInput) => post<IssueDto>('/issues', input),
       update: (id: string, patchInput: UpdateIssueInput) =>
          patch<IssueDto>(`/issues/${id}`, patchInput),
@@ -306,6 +354,8 @@ export const api = {
          del<IssueDetailDto>(
             `/issues/${id}/relations?relatedId=${encodeURIComponent(relatedId)}&kind=${kind}`
          ),
+      subscription: (id: string) =>
+         get<{ id: string; subscribed: boolean }>(`/issues/${id}/subscription`),
       subscribe: (id: string) =>
          post<{ id: string; subscribed: boolean }>(`/issues/${id}/subscription`, {}),
       unsubscribe: (id: string) =>
@@ -339,6 +389,8 @@ export const api = {
          }
       ) => patch<TeamDto>(`/teams/${key}`, body),
       remove: (key: string) => del<{ deleted: boolean }>(`/teams/${key}`),
+      /** O que a exclusão do time apaga junto (contagens). Só admin. */
+      deletionImpact: (key: string) => get<TeamDeletionImpact>(`/teams/${key}/deletion-impact`),
       members: (key: string) => get<MemberDto[]>(`/teams/${key}/members`),
       addMember: (key: string, email: string) =>
          post<MemberDto[]>(`/teams/${key}/members`, { email }),
@@ -364,7 +416,14 @@ export const api = {
          post<FolderDto>(`/teams/${key}/documents`, { kind: 'folder', ...input }),
       createDocument: (
          key: string,
-         input: { folderId: string; name: string; icon?: string | null; pinned?: boolean }
+         input: {
+            /** Pasta existente, ou `newFolder` para criar a pasta junto (atômico). */
+            folderId?: string;
+            newFolder?: { name: string; icon?: string | null };
+            name: string;
+            icon?: string | null;
+            pinned?: boolean;
+         }
       ) => post<DocumentDto>(`/teams/${key}/documents`, { kind: 'document', ...input }),
       /** Templates de issue do time (CRUD; escrita exige admin). */
       templates: (key: string) => get<TemplateDto[]>(`/teams/${key}/templates`),
@@ -387,9 +446,14 @@ export const api = {
 
    /** Documentos (update/delete por id; escrita exige criador ou admin). */
    documents: {
-      update: (id: string, body: { name?: string; icon?: string | null; pinned?: boolean }) =>
-         patch<{ id: string }>(`/documents/${id}`, body),
+      /** Documento aberto: metadados + corpo (`descriptionDoc`) e `descriptionVersion`. */
+      get: (id: string) => get<DocumentDetailDto>(`/documents/${id}`),
+      update: (id: string, body: UpdateDocumentInput) =>
+         patch<DocumentDetailDto>(`/documents/${id}`, body),
       remove: (id: string) => del<{ deleted: boolean }>(`/documents/${id}`),
+      updateFolder: (id: string, body: { name?: string; icon?: string | null }) =>
+         patch<Omit<FolderDto, 'documents'>>(`/document-folders/${id}`, body),
+      removeFolder: (id: string) => del<{ deleted: boolean }>(`/document-folders/${id}`),
    },
 
    integrations: {
@@ -409,7 +473,6 @@ export const api = {
    members: {
       list: (q = '') => get<MemberDto[]>(`/members${q}`),
       get: (id: string) => get<MemberDto>(`/members/${id}`),
-      updateRole: (id: string, role: string) => patch<MemberDto>(`/members/${id}`, { role }),
       /** Desativa/reativa o membro (#100, admin). Remove de todos os times ao desativar. */
       setDeactivated: (id: string, deactivated: boolean) =>
          patch<MemberDto>(`/members/${id}`, { deactivated }),
@@ -442,6 +505,11 @@ export const api = {
          ),
       postUpdate: (id: string, body: PostUpdateInput) =>
          post<ProjectUpdateDto>(`/projects/${id}/updates`, body),
+      /** Edita um update já postado (pl#11). */
+      updateUpdate: (id: string, updateId: string, body: EditUpdateInput) =>
+         patch<ProjectUpdateDto>(`/projects/${id}/updates/${updateId}`, body),
+      removeUpdate: (id: string, updateId: string) =>
+         del<{ deleted: boolean }>(`/projects/${id}/updates/${updateId}`),
       resources: (id: string) => get<ProjectResourceDto[]>(`/projects/${id}/resources`),
       addResource: (id: string, body: AddResourceInput) =>
          post<ProjectResourceDto>(`/projects/${id}/resources`, body),
@@ -479,6 +547,15 @@ export const api = {
          patch<InitiativeDto>(`/initiatives/${id}`, body),
       remove: (id: string) => del<{ deleted: boolean }>(`/initiatives/${id}`),
       updates: (id: string) => get<InitiativeUpdateDto[]>(`/initiatives/${id}/updates`),
+      /** Edita um update da initiative; devolve o update e a initiative (pl#11). */
+      updateUpdate: (id: string, updateId: string, body: EditInitiativeUpdateInput) =>
+         patch<{ update: InitiativeUpdateDto; initiative: InitiativeDto }>(
+            `/initiatives/${id}/updates/${updateId}`,
+            body
+         ),
+      /** Exclui um update da initiative; devolve a initiative com o health recalculado. */
+      removeUpdate: (id: string, updateId: string) =>
+         del<InitiativeDto>(`/initiatives/${id}/updates/${updateId}`),
       /** Posta um update; devolve o update e a initiative já com o health propagado. */
       postUpdate: (id: string, body: PostInitiativeUpdateInput) =>
          post<{ update: InitiativeUpdateDto; initiative: InitiativeDto }>(
@@ -496,9 +573,12 @@ export const api = {
       update: (id: string, body: UpdateViewInput) => patch<ViewDto>(`/views/${id}`, body),
       remove: (id: string) => del<{ deleted: boolean }>(`/views/${id}`),
       results: (id: string) =>
-         get<{ type: string; issues?: IssueDto[]; projects?: ProjectDto[] }>(
-            `/views/${id}/results`
-         ),
+         get<{
+            type: string;
+            issues?: IssueDto[];
+            projects?: ProjectDto[];
+            truncated?: boolean;
+         }>(`/views/${id}/results`),
    },
 
    inbox: {
@@ -510,6 +590,21 @@ export const api = {
       snooze: (id: string, snoozedUntil: string | null) =>
          patch<{ id: string }>(`/notifications/${id}`, { snoozedUntil }),
       readAll: () => post<{ marked: number }>('/notifications/read-all'),
+      /** Página por cursor (co#3): `cursor` é o `nextCursor` da página anterior. */
+      page: async (opts: { cursor?: string | null; limit?: number; snoozed?: boolean } = {}) => {
+         const sp = new URLSearchParams();
+         if (opts.cursor) sp.set('cursor', opts.cursor);
+         if (opts.limit != null) sp.set('limit', String(opts.limit));
+         if (opts.snoozed) sp.set('snoozed', 'true');
+         const q = sp.toString();
+         const { data, meta } = await requestEnvelope<NotificationDto[]>(
+            `/inbox${q ? `?${q}` : ''}`
+         );
+         const nextCursor =
+            (meta as { nextCursor?: string | null } | undefined)?.nextCursor ?? null;
+         return { items: data, nextCursor };
+      },
+      remove: (id: string) => del<{ id: string; deleted: boolean }>(`/notifications/${id}`),
    },
 
    favorites: {
@@ -518,16 +613,25 @@ export const api = {
          post<{ added: boolean }>('/favorites', { entityType, entityId }),
       remove: (entityType: FavoriteEntityType, entityId: string) =>
          del<{ removed: boolean }>(`/favorites?entityType=${entityType}&entityId=${entityId}`),
+      /** Nova ordem (ids de favorito) da sidebar (co#16). */
+      reorder: (order: string[]) => patch<{ reordered: number }>('/favorites', { order }),
    },
 
    reviews: {
       list: async (
-         opts: { limit?: number; offset?: number; list?: 'created' | 'for-you' } = {}
+         opts: {
+            limit?: number;
+            offset?: number;
+            list?: 'created' | 'for-you';
+            /** Filtro de status no servidor (aditivo): enviado como CSV. */
+            statuses?: string[];
+         } = {}
       ) => {
          const sp = new URLSearchParams();
          if (opts.limit != null) sp.set('limit', String(opts.limit));
          if (opts.offset != null) sp.set('offset', String(opts.offset));
          if (opts.list) sp.set('list', opts.list);
+         if (opts.statuses?.length) sp.set('status', opts.statuses.join(','));
          const qs = sp.toString();
          const { data, meta } = await requestEnvelope<ReviewDto[]>(`/reviews${qs ? `?${qs}` : ''}`);
          const m = (meta ?? {}) as { total?: number; limit?: number; offset?: number };
@@ -619,14 +723,21 @@ export const api = {
          if (mapping) form.set('mapping', JSON.stringify(mapping));
          return postForm<ImportPreviewDto>('/import/preview', form);
       },
-      /** Cria (ou atualiza, em re-import) as issues com o mapeamento confirmado. */
+      /**
+       * Dispara o import em background (#10): devolve o `jobId` na hora; o progresso e o
+       * resumo vêm de `job(jobId)`.
+       */
       commit: (input: {
          source: ImportSource;
          csv: string;
          teamId: string;
          mapping: ImportMapping;
          createMissingLabels?: boolean;
-      }) => post<ImportResultDto>('/import/commit', input),
+      }) => post<{ jobId: string }>('/import/commit', input),
+      /** Progresso/resultado do job de import (só o dono). */
+      job: (id: string) => get<ImportJobDto>(`/import/jobs/${encodeURIComponent(id)}`),
+      /** Job de import ainda rodando do próprio usuário (ou null) — ad#5. */
+      activeJob: () => get<ImportJobDto | null>('/import/jobs'),
    },
 
    /** Webhooks de saída (#101). O segredo só vem no `create`. */

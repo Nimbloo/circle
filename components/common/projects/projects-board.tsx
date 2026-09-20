@@ -6,6 +6,7 @@ import { Project } from '@/data/projects';
 import { cn } from '@/lib/utils';
 import { useProjectsDisplayStore } from '@/store/projects-display-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { useIssuesStore } from '@/store/issues-store';
 import { format, parseISO } from 'date-fns';
 import { Calendar } from 'lucide-react';
 import Link from 'next/link';
@@ -15,6 +16,9 @@ import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { ProjectGroup } from './projects';
 import { ProjectContextMenu } from './project-context-menu';
+import { labelColor } from '@/components/common/palette';
+import { useEnterFade } from '@/components/common/loading-area';
+import { healthColor } from './progress-colors';
 
 export const ProjectDragType = 'PROJECT';
 /** Instrução de DnD lida por leitores de tela (aria-describedby dos cards). */
@@ -63,7 +67,7 @@ function ProjectCard({ project }: { project: Project }) {
                <div className="flex h-7 items-center gap-1.5 text-xs text-muted-foreground">
                   <span
                      className="size-2 rounded-full shrink-0"
-                     style={{ backgroundColor: project.health.color }}
+                     style={{ backgroundColor: healthColor(project.health.id) }}
                   />
                   {project.health.name}
                   {project.healthUpdatedAgoDays !== undefined && (
@@ -81,7 +85,7 @@ function ProjectCard({ project }: { project: Project }) {
                      >
                         <span
                            className="size-1.5 rounded-full"
-                           style={{ backgroundColor: label.color }}
+                           style={{ backgroundColor: labelColor(label.color) }}
                         />
                         {label.name}
                      </span>
@@ -120,6 +124,16 @@ function ProjectCard({ project }: { project: Project }) {
    );
 }
 
+/**
+ * O servidor recusa (409) trocar o time de um projeto que tem issues de outro time;
+ * a coluna nem aceita o drop nesse caso (#43) — antes o card ia e voltava com erro.
+ */
+function hasIssuesOutsideTeam(projectId: string, teamId: string): boolean {
+   return useIssuesStore
+      .getState()
+      .issues.some((issue) => issue.project?.id === projectId && issue.teamId !== teamId);
+}
+
 function BoardColumn({
    group,
    onDropProject,
@@ -135,7 +149,11 @@ function BoardColumn({
       () => ({
          accept: ProjectDragType,
          canDrop: (item: Project) =>
-            status ? item.status.id !== status.id : teamId !== undefined && item.teamId !== teamId,
+            status
+               ? item.status.id !== status.id
+               : teamId !== undefined &&
+                 item.teamId !== teamId &&
+                 !hasIssuesOutsideTeam(item.id, teamId),
          drop: (item: Project) => onDropProject(item, group),
          collect: (monitor) => ({ isOver: monitor.isOver(), canDrop: monitor.canDrop() }),
       }),
@@ -183,6 +201,8 @@ function BoardColumn({
  * rollback + toast no erro). A ordem dentro da coluna segue a ordenação do Display.
  */
 export default function ProjectsBoard({ groups }: { groups: ProjectGroup[] }) {
+   // Troca de irmão (aba, item, layout) não pisca: só a primeira chegada de conteúdo.
+   const fade = useEnterFade('projects-view');
    const patchProject = useWorkspaceStore((s) => s.patchProject);
    const byTeam = groups.some((group) => group.teamId !== undefined);
 
@@ -204,7 +224,7 @@ export default function ProjectsBoard({ groups }: { groups: ProjectGroup[] }) {
 
    return (
       <DndProvider backend={HTML5Backend}>
-         <div className="h-full w-full overflow-x-auto">
+         <div className={cn(fade && 'content-enter', 'h-full w-full overflow-x-auto')}>
             <p id={DRAG_HINT_ID} className="sr-only">
                Drag a project card to another column to change its {byTeam ? 'team' : 'status'}.
             </p>

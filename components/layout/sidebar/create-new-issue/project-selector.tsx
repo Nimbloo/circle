@@ -1,55 +1,28 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import {
-   Command,
-   CommandEmpty,
-   CommandGroup,
-   CommandInput,
-   CommandItem,
-   CommandList,
-} from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Project } from '@/data/projects';
-import { Box, CheckIcon, FolderIcon } from 'lucide-react';
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { Box } from 'lucide-react';
+import { useId, useState, type ReactNode } from 'react';
+import { ProjectOptions } from '@/components/common/issues/property-options';
 
 interface ProjectSelectorProps {
    project: Project | undefined;
    onChange: (project: Project | undefined) => void;
+   /** Time da issue/modal (#32): só projetos dele (o servidor recusa os de outro time). */
+   teamId?: string;
    /** Trigger customizado (badge da linha de issue); default: botão com ícone e nome. */
    children?: ReactNode;
 }
 
-export function ProjectSelector({ project, onChange, children }: ProjectSelectorProps) {
+export function ProjectSelector({ project, teamId, onChange, children }: ProjectSelectorProps) {
    const id = useId();
    const [open, setOpen] = useState<boolean>(false);
-   const [value, setValue] = useState<string | undefined>(project?.id);
-
-   // Conta derivada da fatia assinada: assinar `filterByProject` (funcao, referencia
-   // estavel) deixaria o contador do dropdown parado quando as issues mudam.
-   const allIssues = useIssuesStore((s) => s.issues);
    const projects = useWorkspaceStore((s) => s.projects);
-
-   useEffect(() => {
-      setValue(project?.id);
-   }, [project]);
-
-   const handleProjectChange = (projectId: string) => {
-      if (projectId === 'no-project') {
-         setValue(undefined);
-         onChange(undefined);
-      } else {
-         setValue(projectId);
-         const newProject = projects.find((p) => p.id === projectId);
-         if (newProject) {
-            onChange(newProject);
-         }
-      }
-      setOpen(false);
-   };
+   // Deriva do prop (o dono do valor é quem chama).
+   const value = project?.id;
 
    return (
       <div className="*:not-first:mt-2">
@@ -86,42 +59,14 @@ export function ProjectSelector({ project, onChange, children }: ProjectSelector
                className="border-input w-full min-w-[var(--radix-popper-anchor-width)] p-0"
                align="start"
             >
-               <Command>
-                  <CommandInput placeholder="Set project..." />
-                  <CommandList>
-                     <CommandEmpty>No projects found.</CommandEmpty>
-                     <CommandGroup>
-                        <CommandItem
-                           value="no-project"
-                           onSelect={() => handleProjectChange('no-project')}
-                           className="flex items-center justify-between"
-                        >
-                           <div className="flex items-center gap-2">
-                              <FolderIcon className="size-4" />
-                              No Project
-                           </div>
-                           {value === undefined && <CheckIcon size={16} className="ml-auto" />}
-                        </CommandItem>
-                        {projects.map((project) => (
-                           <CommandItem
-                              key={project.id}
-                              value={project.id}
-                              onSelect={() => handleProjectChange(project.id)}
-                              className="flex items-center justify-between"
-                           >
-                              <div className="flex items-center gap-2">
-                                 <project.icon className="size-4" />
-                                 {project.name}
-                              </div>
-                              {value === project.id && <CheckIcon size={16} className="ml-auto" />}
-                              <span className="text-muted-foreground text-xs">
-                                 {allIssues.filter((i) => i.project?.id === project.id).length}
-                              </span>
-                           </CommandItem>
-                        ))}
-                     </CommandGroup>
-                  </CommandList>
-               </Command>
+               <ProjectOptions
+                  value={project?.id}
+                  teamId={teamId}
+                  onSelect={(next) => {
+                     setOpen(false);
+                     onChange(next);
+                  }}
+               />
             </PopoverContent>
          </Popover>
       </div>

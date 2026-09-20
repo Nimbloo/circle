@@ -33,11 +33,13 @@ const EXEMPT: ReadonlySet<string> = new Set([
    // 1. Dado do PRÓPRIO usuário (o gate é a identidade da sessão, não o time).
    'POST /agent/chats',
    'POST /favorites',
+   'PATCH /favorites',
    'DELETE /favorites',
    'PATCH /me',
    'POST /me/avatar',
    'DELETE /me/avatar',
    'PATCH /notifications/[id]',
+   'DELETE /notifications/[id]',
    'POST /notifications/read-all',
    'POST /uploads',
 
@@ -52,6 +54,7 @@ const EXEMPT: ReadonlySet<string> = new Set([
    'POST /emojis',
    'DELETE /emojis/[id]',
    'PUT /settings',
+   'PATCH /settings',
 
    // 3. Autenticação por HMAC/token de integração (não há sessão nem escopo de time).
    //    `sentry/teams/options` é o form do Sentry: devolve id/nome de time, não escreve.

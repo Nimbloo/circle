@@ -168,7 +168,7 @@ describe('documents', () => {
       expect(folders[0].documents).toHaveLength(1);
       expect(folders[0].documents[0].creator?.email).toBe(ME);
 
-      expect(await updateDocument(db, doc.id, { name: 'RFC v2' }, ME)).toBe(true);
+      expect((await updateDocument(db, doc.id, { name: 'RFC v2' }, ME))?.name).toBe('RFC v2');
       expect(await deleteDocument(db, doc.id, ME)).toBe(true);
       expect((await listTeamDocuments(db, 'CORE'))[0].documents).toHaveLength(0);
    });

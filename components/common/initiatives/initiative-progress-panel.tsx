@@ -5,15 +5,11 @@ import { cn } from '@/lib/utils';
 import { Initiative } from '@/data/initiatives';
 import { health as allHealth } from '@/data/projects';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { isProjectCompleted } from '@/lib/project-completion';
 import { useMemo, useState } from 'react';
+import { PROGRESS_COLORS, healthColor } from '@/components/common/projects/progress-colors';
 
 type BreakdownTab = 'health' | 'status' | 'teams' | 'leads';
-
-const PROGRESS_COLORS = {
-   scope: 'var(--muted-foreground)',
-   started: 'var(--chart-4)',
-   completed: 'var(--primary)',
-};
 
 /** Progress snapshot + Health/Status/Teams/Leads breakdown of an initiative. */
 export function InitiativeProgressPanel({ initiative }: { initiative: Initiative }) {
@@ -29,10 +25,10 @@ export function InitiativeProgressPanel({ initiative }: { initiative: Initiative
 
    const progress = useMemo(() => {
       const total = projects.length;
-      const completed = projects.filter(
-         (project) => project.status.category === 'completed'
+      const completed = projects.filter(isProjectCompleted).length;
+      const started = projects.filter(
+         (project) => !isProjectCompleted(project) && project.status.category === 'started'
       ).length;
-      const started = projects.filter((project) => project.status.category === 'started').length;
       return { total, completed, started, remaining: Math.max(0, total - completed - started) };
    }, [projects]);
 
@@ -81,7 +77,7 @@ export function InitiativeProgressPanel({ initiative }: { initiative: Initiative
          .map((entry) => ({
             key: entry.id,
             label: entry.name,
-            color: entry.color,
+            color: healthColor(entry.id),
             icon: undefined,
             count: projects.filter((project) => project.health.id === entry.id).length,
          }))

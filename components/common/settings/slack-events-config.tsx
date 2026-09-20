@@ -31,15 +31,18 @@ export function SlackEventsConfig() {
       };
    }, []);
 
+   // Otimista e reconciliado POR CAMPO (Ad#36): a resposta ou o revert de um toggle não
+   // desfaz outro toggle em voo.
    const toggle = async (key: keyof SlackConfigDto, value: boolean) => {
       if (!cfg) return;
-      const prev = cfg;
-      setCfg({ ...cfg, [key]: value }); // otimista
+      const prev = cfg[key];
+      setCfg((c) => (c ? { ...c, [key]: value } : c));
       try {
          const next = await api.integrations.updateSlackConfig({ [key]: value });
-         setCfg(next);
+         setCfg((c) => (c ? { ...c, [key]: next[key] } : next));
       } catch {
-         setCfg(prev); // revert
+         // Só reverte se o campo ainda mostra o valor otimista deste toggle.
+         setCfg((c) => (c && c[key] === value ? { ...c, [key]: prev } : c));
          toast.error('Só admin pode mudar as notificações do Slack');
       }
    };
@@ -47,7 +50,7 @@ export function SlackEventsConfig() {
    if (!cfg) return null;
 
    return (
-      <div className="rounded-lg border bg-container divide-y">
+      <div className="divide-y divide-border/60 overflow-hidden rounded-[10px] bg-card">
          <div className="px-4 py-2.5">
             <span className="text-sm font-medium">Notificações no canal</span>
             <p className="text-xs text-muted-foreground">

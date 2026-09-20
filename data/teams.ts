@@ -1,5 +1,4 @@
-import { Project, projects } from './projects';
-import { User, users } from './users';
+import { User } from './users';
 
 export interface Team {
    id: string;
@@ -16,7 +15,6 @@ export interface Team {
    /** Sub-teams (#100): parent team id, or null when top-level. */
    parentId: string | null;
    members: User[];
-   projects: Project[];
 }
 
 export const teams: Team[] = [];

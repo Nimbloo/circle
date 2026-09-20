@@ -3,7 +3,7 @@ import { db } from '@/db';
 import { ok, notFound } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
 import { assertTeamInScope, scopeForEmail } from '@/lib/api/scope';
-import { getView, updateView, deleteView } from '@/lib/api/views';
+import { getView, updateView, deleteView, ViewFilterSchema } from '@/lib/api/views';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,22 +24,17 @@ export async function GET(req: Request, { params }: Params) {
 }
 
 const UpdateSchema = z.object({
-   name: z.string().min(1).optional(),
+   name: z
+      .string()
+      .trim()
+      .min(1, 'name é obrigatório')
+      .max(128, 'name deve ter no máximo 128 caracteres')
+      .optional(),
    // Compartilhamento: time que enxerga a view; `null` a torna pessoal.
    teamId: z.string().max(16).nullish(),
    description: z.string().nullish(),
-   icon: z.string().nullish(),
-   filter: z
-      .object({
-         statusCategories: z.array(z.string()).optional(),
-         statusIds: z.array(z.string()).optional(),
-         labelIds: z.array(z.string()).optional(),
-         priorityIds: z.array(z.string()).optional(),
-         hasProject: z.boolean().optional(),
-         unassigned: z.boolean().optional(),
-         q: z.string().max(200).optional(),
-      })
-      .optional(),
+   icon: z.string().max(16).nullish(),
+   filter: ViewFilterSchema.optional(),
 });
 
 export async function PATCH(req: Request, { params }: Params) {

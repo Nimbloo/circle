@@ -38,8 +38,11 @@ import {
    X,
 } from 'lucide-react';
 import type { ComponentType, CSSProperties } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import { persistNewProject, type CreateProgress } from './create-project-persist';
 import { toast } from 'sonner';
+import { labelColor } from '@/components/common/palette';
+import { InitiativeGlyph } from '@/components/common/initiatives/initiative-glyph';
 
 /** Status icons são uma união (Lucide | Remixicon); o cast expõe className/style. */
 type IconCmp = ComponentType<{ className?: string; style?: CSSProperties }>;
@@ -51,19 +54,30 @@ interface DraftMilestone {
    targetDate: string;
 }
 
-/** Chip clicável (mesma linguagem visual dos chips do New Issue / inline initiative). */
-function Chip({ active, children }: { active?: boolean; children: React.ReactNode }) {
+/**
+ * Chip clicável (mesma linguagem visual dos chips do New Issue / inline initiative).
+ * `button` com ref e props repassados: o `PopoverTrigger asChild` precisa deles para
+ * abrir, e o Tab passa a percorrer as propriedades.
+ */
+const Chip = forwardRef<
+   HTMLButtonElement,
+   { active?: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>
+>(function Chip({ active, className, children, ...props }, ref) {
    return (
-      <span
+      <button
+         ref={ref}
+         type="button"
+         {...props}
          className={cn(
-            'inline-flex items-center gap-1.5 h-7 px-2 rounded-md border text-xs transition-colors cursor-pointer hover:bg-accent/50',
-            active ? 'text-foreground' : 'text-muted-foreground'
+            'inline-flex items-center gap-1.5 h-7 px-2 rounded-md border text-xs transition-colors cursor-pointer hover:bg-accent/50 outline-none focus-visible:ring-1 focus-visible:ring-ring',
+            active ? 'text-foreground' : 'text-muted-foreground',
+            className
          )}
       >
          {children}
-      </span>
+      </button>
    );
-}
+});
 
 /**
  * Modal de criação de projeto no padrão Linear: breadcrumb de time + título grande
@@ -84,6 +98,8 @@ export function CreateProjectButton() {
 
    const [open, setOpen] = useState(false);
    const [busy, setBusy] = useState(false);
+   // Criação que falhou no meio sem conseguir compensar: o retry retoma daqui.
+   const progress = useRef<CreateProgress | null>(null);
 
    const [name, setName] = useState('');
    const [summary, setSummary] = useState('');
@@ -144,6 +160,7 @@ export function CreateProjectButton() {
    };
 
    const reset = () => {
+      progress.current = null;
       setName('');
       setSummary('');
       setDescriptionDoc(null);
@@ -181,33 +198,33 @@ export function CreateProjectButton() {
       }
       setBusy(true);
       try {
-         const project = await api.projects.create({
-            name: name.trim(),
-            teamId,
-            statusId,
-            priorityId,
-            healthId,
-            leadId,
-            startDate: startDate || null,
-            targetDate: targetDate || null,
-            initiativeId,
-            labelIds,
-         });
-         // Conteúdo editorial (summary + description) e milestones em chamadas dedicadas.
+         // Conteúdo editorial (summary + description) e milestones em chamadas dedicadas,
+         // com compensação: falha no meio não deixa projeto duplicado no retry (#42).
          // O servidor deriva a projeção em blocos do doc (e zera quando o doc está vazio).
-         if (summary.trim() || descriptionDoc) {
-            await api.projects.updateDetail(project.id, {
-               summary: summary.trim() || null,
-               descriptionDoc: descriptionDoc ?? null,
-            });
-         }
-         for (const m of milestones) {
-            if (m.name.trim())
-               await api.projects.addMilestone(project.id, {
-                  name: m.name.trim(),
-                  targetDate: m.targetDate || null,
-               });
-         }
+         const project = await persistNewProject(
+            {
+               input: {
+                  name: name.trim(),
+                  teamId,
+                  statusId,
+                  priorityId,
+                  healthId,
+                  leadId,
+                  startDate: startDate || null,
+                  targetDate: targetDate || null,
+                  initiativeId,
+                  labelIds,
+               },
+               detail:
+                  summary.trim() || descriptionDoc
+                     ? { summary: summary.trim() || null, descriptionDoc: descriptionDoc ?? null }
+                     : null,
+               milestones: milestones
+                  .filter((m) => m.name.trim())
+                  .map((m) => ({ name: m.name.trim(), targetDate: m.targetDate || null })),
+            },
+            progress
+         );
          applyProject(project);
          // Fecha PRIMEIRO (o reset durante a animação de fechamento evita o flash
          // do formulário limpo antes do modal sumir).
@@ -225,8 +242,9 @@ export function CreateProjectButton() {
       <Dialog
          open={open}
          onOpenChange={(v) => {
+            // Fechar (Esc ou clique fora) NÃO descarta o rascunho (pl#19): o formulário
+            // volta como estava; `reset()` só depois de criar de verdade.
             setOpen(v);
-            if (!v) reset();
          }}
       >
          <DialogTrigger asChild>
@@ -235,7 +253,17 @@ export function CreateProjectButton() {
                <span className="hidden sm:inline ml-1">Create project</span>
             </Button>
          </DialogTrigger>
-         <DialogContent showCloseButton={false} className="sm:max-w-2xl p-0 gap-0 overflow-hidden">
+         <DialogContent
+            showCloseButton={false}
+            className="sm:max-w-2xl p-0 gap-0 overflow-hidden"
+            onKeyDown={(event) => {
+               // ⌘/Ctrl+Enter cria, como no modal de issue (pl#19).
+               if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                  event.preventDefault();
+                  void create();
+               }
+            }}
+         >
             <DialogTitle className="sr-only">New project</DialogTitle>
 
             {/* Header: breadcrumb do time + fechar */}
@@ -489,7 +517,11 @@ export function CreateProjectButton() {
                         <Chip active={!!initiative}>
                            {initiative ? (
                               <>
-                                 <span className="text-sm leading-none">{initiative.icon}</span>
+                                 <InitiativeGlyph
+                                    icon={initiative.icon}
+                                    color={initiative.iconColor}
+                                    className="size-3.5"
+                                 />
                                  {initiative.name}
                               </>
                            ) : (
@@ -513,7 +545,11 @@ export function CreateProjectButton() {
                                  </CommandItem>
                                  {initiatives.map((i) => (
                                     <CommandItem key={i.id} onSelect={() => setInitiativeId(i.id)}>
-                                       <span className="text-sm leading-none">{i.icon}</span>
+                                       <InitiativeGlyph
+                                          icon={i.icon}
+                                          color={i.iconColor}
+                                          className="size-3.5"
+                                       />
                                        {i.name}
                                        {initiativeId === i.id && (
                                           <CheckIcon className="ml-auto size-3.5" />
@@ -546,7 +582,7 @@ export function CreateProjectButton() {
                                     <CommandItem key={l.id} onSelect={() => toggleLabel(l.id)}>
                                        <span
                                           className="size-2.5 rounded-full"
-                                          style={{ backgroundColor: l.color }}
+                                          style={{ backgroundColor: labelColor(l.color) }}
                                        />
                                        {l.name}
                                        {labelIds.includes(l.id) && (

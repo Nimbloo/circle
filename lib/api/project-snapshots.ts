@@ -12,6 +12,7 @@
 import { asc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { issue as issueT, projectSnapshot as snapshotT, status as statusT } from '@/db/schema';
+import { workspaceDay } from '@/lib/workspace-day';
 
 export interface ProjectSnapshotPoint {
    date: string;
@@ -28,7 +29,8 @@ interface Agg {
 
 const EMPTY_AGG = (): Agg => ({ scope: 0, started: 0, completed: 0 });
 
-export const isoDay = (d: Date): string => d.toISOString().slice(0, 10);
+/** Dia do snapshot no fuso do workspace (o mesmo "hoje" do rollover de ciclos). */
+export const isoDay = (d: Date): string => workspaceDay(d);
 
 /** scope/started/completed atuais por projeto, contando issues. */
 async function aggregatesByProject(db: Db, projectIds: string[]): Promise<Map<string, Agg>> {
@@ -36,22 +38,24 @@ async function aggregatesByProject(db: Db, projectIds: string[]): Promise<Map<st
    for (const id of projectIds) result.set(id, EMPTY_AGG());
    if (projectIds.length === 0) return result;
 
-   const [issues, statuses] = await Promise.all([
-      db
-         .select({ projectId: issueT.projectId, statusId: issueT.statusId })
-         .from(issueT)
-         .where(inArray(issueT.projectId, projectIds)),
-      db.select({ id: statusT.id, category: statusT.category }).from(statusT),
-   ]);
-   const catById = new Map(statuses.map((s) => [s.id, s.category]));
-   for (const row of issues) {
+   const rows = await db
+      .select({
+         projectId: issueT.projectId,
+         scope: sql<number>`count(*)`,
+         started: sql<number>`count(*) filter (where ${statusT.category} = 'started')`,
+         completed: sql<number>`count(*) filter (where ${statusT.category} = 'completed')`,
+      })
+      .from(issueT)
+      .innerJoin(statusT, eq(issueT.statusId, statusT.id))
+      .where(inArray(issueT.projectId, projectIds))
+      .groupBy(issueT.projectId);
+   for (const row of rows) {
       if (!row.projectId) continue;
-      const agg = result.get(row.projectId);
-      if (!agg) continue;
-      agg.scope += 1;
-      const cat = catById.get(row.statusId);
-      if (cat === 'started') agg.started += 1;
-      else if (cat === 'completed') agg.completed += 1;
+      result.set(row.projectId, {
+         scope: Number(row.scope),
+         started: Number(row.started),
+         completed: Number(row.completed),
+      });
    }
    return result;
 }
@@ -89,6 +93,11 @@ export async function snapshotProjects(
             started: sql`excluded.started`,
             completed: sql`excluded.completed`,
          },
+         where: sql`
+             ${snapshotT.scope} IS DISTINCT FROM excluded.scope OR
+             ${snapshotT.started} IS DISTINCT FROM excluded.started OR
+             ${snapshotT.completed} IS DISTINCT FROM excluded.completed
+          `,
       });
 }
 

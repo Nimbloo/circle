@@ -1,20 +1,12 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import {
-   Command,
-   CommandEmpty,
-   CommandGroup,
-   CommandInput,
-   CommandItem,
-   CommandList,
-} from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useIssuesStore } from '@/store/issues-store';
 import { Priority } from '@/data/priorities';
 import { usePriorities } from '@/store/catalog-store';
-import { CheckIcon } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
+import { PriorityOptions } from './property-options';
 
 interface PrioritySelectorProps {
    priority: Priority;
@@ -23,6 +15,8 @@ interface PrioritySelectorProps {
    showName?: boolean;
    /** Trigger de 24px usado na linha de propriedades dos cards do board. */
    compact?: boolean;
+   /** Trigger customizado (linha de propriedade do detalhe); default: botão com o ícone. */
+   children?: ReactNode;
 }
 
 export function PrioritySelector({
@@ -30,6 +24,7 @@ export function PrioritySelector({
    issueId,
    showName = false,
    compact = false,
+   children,
 }: PrioritySelectorProps) {
    const id = useId();
    const [open, setOpen] = useState<boolean>(false);
@@ -37,9 +32,6 @@ export function PrioritySelector({
    const value = priority.id;
 
    const priorities = usePriorities();
-   // Conta derivada da fatia assinada: assinar `filterByPriority` (funcao, referencia
-   // estavel) deixaria o contador do dropdown parado quando as issues mudam.
-   const allIssues = useIssuesStore((s) => s.issues);
    const updateIssuePriority = useIssuesStore((s) => s.updateIssuePriority);
 
    const handlePriorityChange = (priorityId: string) => {
@@ -58,61 +50,41 @@ export function PrioritySelector({
       <div className={compact ? 'h-6 leading-none' : '*:not-first:mt-2'}>
          <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-               <Button
-                  id={id}
-                  className={
-                     showName
-                        ? 'h-7 gap-2 px-1.5 justify-start'
-                        : compact
-                          ? 'h-6 w-[25px] px-[4.5px]'
-                          : 'size-7 flex items-center justify-center'
-                  }
-                  size={showName ? 'sm' : 'icon'}
-                  variant="ghost"
-                  role="combobox"
-                  aria-expanded={open}
-                  aria-label={showName ? undefined : `Change priority: ${priority?.name ?? 'none'}`}
-               >
-                  {(() => {
-                     const selectedItem = priorities.find((item) => item.id === value);
-                     if (selectedItem) {
-                        const Icon = selectedItem.icon;
-                        return <Icon className="text-muted-foreground size-4" />;
+               {children ?? (
+                  <Button
+                     id={id}
+                     className={
+                        showName
+                           ? 'h-7 gap-2 px-1.5 justify-start'
+                           : compact
+                             ? 'h-6 w-[25px] px-[4.5px]'
+                             : 'size-7 flex items-center justify-center'
                      }
-                     return null;
-                  })()}
-                  {showName && <span className="text-sm font-normal">{priority.name}</span>}
-               </Button>
+                     size={showName ? 'sm' : 'icon'}
+                     variant="ghost"
+                     role="combobox"
+                     aria-expanded={open}
+                     aria-label={
+                        showName ? undefined : `Change priority: ${priority?.name ?? 'none'}`
+                     }
+                  >
+                     {(() => {
+                        const selectedItem = priorities.find((item) => item.id === value);
+                        if (selectedItem) {
+                           const Icon = selectedItem.icon;
+                           return <Icon className="text-muted-foreground size-4" />;
+                        }
+                        return null;
+                     })()}
+                     {showName && <span className="text-sm font-normal">{priority.name}</span>}
+                  </Button>
+               )}
             </PopoverTrigger>
             <PopoverContent
                className="border-input w-full min-w-[var(--radix-popper-anchor-width)] p-0"
                align="start"
             >
-               <Command>
-                  <CommandInput placeholder="Set priority..." />
-                  <CommandList>
-                     <CommandEmpty>No priority found.</CommandEmpty>
-                     <CommandGroup>
-                        {priorities.map((item) => (
-                           <CommandItem
-                              key={item.id}
-                              value={item.id}
-                              onSelect={handlePriorityChange}
-                              className="flex items-center justify-between"
-                           >
-                              <div className="flex items-center gap-2">
-                                 <item.icon className="text-muted-foreground size-4" />
-                                 {item.name}
-                              </div>
-                              {value === item.id && <CheckIcon size={16} className="ml-auto" />}
-                              <span className="text-muted-foreground text-xs">
-                                 {allIssues.filter((i) => i.priority.id === item.id).length}
-                              </span>
-                           </CommandItem>
-                        ))}
-                     </CommandGroup>
-                  </CommandList>
-               </Command>
+               <PriorityOptions value={value} onSelect={handlePriorityChange} />
             </PopoverContent>
          </Popover>
       </div>

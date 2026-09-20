@@ -1,9 +1,12 @@
-import { and, eq, inArray, isNull, ne } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { appUser, teamMember } from '@/db/schema';
+import { requestCacheClear } from './auth';
 import { MEMBER_ROLES, type MemberRole } from '@/data/users';
 import { ApiError } from './errors';
 import { publish } from './events';
+
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 type UserRow = typeof appUser.$inferSelect;
 
@@ -44,10 +47,12 @@ function toDto(u: UserRow, teamIds: string[]): MemberDto {
 }
 
 /** Map userId -> lista de teamIds (a contagem deriva do length). */
-async function teamMemberships(db: Db): Promise<Map<string, string[]>> {
-   const rows = await db
+async function teamMemberships(db: Db, teamIds?: string[]): Promise<Map<string, string[]>> {
+   if (teamIds?.length === 0) return new Map();
+   const query = db
       .select({ userId: teamMember.userId, teamId: teamMember.teamId })
       .from(teamMember);
+   const rows = await (teamIds ? query.where(inArray(teamMember.teamId, teamIds)) : query);
    const map = new Map<string, string[]>();
    for (const r of rows) {
       const arr = map.get(r.userId);
@@ -76,7 +81,30 @@ export interface ListMembersOptions {
 }
 
 export async function listMembers(db: Db, opts: ListMembersOptions = {}): Promise<MemberDto[]> {
-   const [users, memberships] = await Promise.all([db.select().from(appUser), teamMemberships(db)]);
+   const scopedUserIds = opts.teamIds
+      ? opts.teamIds.length
+         ? await db
+              .selectDistinct({ id: teamMember.userId })
+              .from(teamMember)
+              .where(inArray(teamMember.teamId, opts.teamIds))
+         : []
+      : null;
+   const [users, memberships] = await Promise.all([
+      scopedUserIds
+         ? scopedUserIds.length
+            ? db
+                 .select()
+                 .from(appUser)
+                 .where(
+                    inArray(
+                       appUser.id,
+                       scopedUserIds.map((row) => row.id)
+                    )
+                 )
+            : Promise.resolve([])
+         : db.select().from(appUser),
+      teamMemberships(db, opts.teamIds),
+   ]);
    let dtos = users.map((u) => toDto(u, memberships.get(u.id) ?? []));
 
    if (!opts.includeDeactivated) dtos = dtos.filter((d) => d.deactivatedAt === null);
@@ -84,11 +112,6 @@ export async function listMembers(db: Db, opts: ListMembersOptions = {}): Promis
       const set = new Set(opts.role);
       dtos = dtos.filter((d) => set.has(d.role));
    }
-   if (opts.teamIds) {
-      const scope = new Set(opts.teamIds);
-      dtos = dtos.filter((d) => d.teamIds.some((t) => scope.has(t)));
-   }
-
    const dir = opts.dir === 'desc' ? -1 : 1;
    const by = opts.sort ?? 'name';
    dtos.sort((a, b) => {
@@ -103,11 +126,57 @@ export async function listMembers(db: Db, opts: ListMembersOptions = {}): Promis
    return dtos;
 }
 
-export async function getMember(db: Db, id: string): Promise<MemberDto | null> {
+/**
+ * Um membro. Com `scope` (Guest, #100) só os times visíveis entram no DTO — os de fora
+ * não vazam por `teamIds`/`teamCount` (Ad#27). `null` = sem restrição.
+ */
+export async function getMember(
+   db: Db,
+   id: string,
+   scope: string[] | null = null
+): Promise<MemberDto | null> {
    const rows = await db.select().from(appUser).where(eq(appUser.id, id)).limit(1);
    if (rows.length === 0) return null;
-   const memberships = await teamMemberships(db);
-   return toDto(rows[0], memberships.get(id) ?? []);
+   const predicates = [eq(teamMember.userId, id)];
+   if (scope !== null) {
+      if (scope.length === 0) return toDto(rows[0], []);
+      predicates.push(inArray(teamMember.teamId, scope));
+   }
+   const teams = await db
+      .select({ teamId: teamMember.teamId })
+      .from(teamMember)
+      .where(and(...predicates));
+   return toDto(
+      rows[0],
+      teams.map((t) => t.teamId)
+   );
+}
+
+/**
+ * Membros de UM time com o DTO completo (#7): as rotas de membros de time devolviam 6
+ * campos tipados como `MemberDto[]` e o store zerava `teamIds` de quem vinha na lista.
+ * `teamIds` traz TODOS os times do membro, não só este.
+ */
+export async function listTeamMemberDtos(db: Db, teamId: string): Promise<MemberDto[]> {
+   const ids = (
+      await db
+         .select({ id: teamMember.userId })
+         .from(teamMember)
+         .where(eq(teamMember.teamId, teamId))
+   ).map((r) => r.id);
+   if (ids.length === 0) return [];
+   const [users, rows] = await Promise.all([
+      db.select().from(appUser).where(inArray(appUser.id, ids)),
+      db
+         .select({ userId: teamMember.userId, teamId: teamMember.teamId })
+         .from(teamMember)
+         .where(inArray(teamMember.userId, ids)),
+   ]);
+   const map = new Map<string, string[]>();
+   for (const r of rows) map.set(r.userId, [...(map.get(r.userId) ?? []), r.teamId]);
+   return users
+      .map((u) => toDto(u, map.get(u.id) ?? []))
+      .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // Fonte única em data/users (módulo puro, compartilhado com o client);
@@ -120,19 +189,15 @@ export { MEMBER_ROLES, type MemberRole };
  * mais consegue gerir papéis, times, tokens ou webhooks — só um `UPDATE` manual no
  * banco reabriria. Só conta admin ativo: desativado não administra nada.
  */
-async function assertNotLastAdmin(db: Db, id: string): Promise<void> {
-   const [target] = await db
-      .select({ role: appUser.role })
-      .from(appUser)
-      .where(eq(appUser.id, id))
-      .limit(1);
-   if (!target || target.role !== 'Admin') return;
-   const others = await db
+async function assertNotLastAdmin(db: Db | Tx, id: string): Promise<void> {
+   const admins = await db
       .select({ id: appUser.id })
       .from(appUser)
-      .where(and(eq(appUser.role, 'Admin'), ne(appUser.id, id), isNull(appUser.deactivatedAt))!)
-      .limit(1);
-   if (others.length === 0)
+      .where(and(eq(appUser.role, 'Admin'), isNull(appUser.deactivatedAt))!)
+      .orderBy(asc(appUser.id))
+      .for('update');
+   if (!admins.some((admin) => admin.id === id)) return;
+   if (admins.length === 1)
       throw new ApiError(409, 'O workspace precisa de pelo menos um administrador ativo');
 }
 
@@ -173,8 +238,11 @@ export async function updateMemberRole(
       .where(eq(appUser.id, id))
       .limit(1);
    if (existing.length === 0) return null;
-   if (role !== 'Admin') await assertNotLastAdmin(db, id);
-   await db.update(appUser).set({ role, updatedAt: new Date() }).where(eq(appUser.id, id));
+   await db.transaction(async (tx) => {
+      if (role !== 'Admin') await assertNotLastAdmin(tx, id);
+      requestCacheClear();
+      await tx.update(appUser).set({ role, updatedAt: new Date() }).where(eq(appUser.id, id));
+   });
    publish({ entity: 'member', action: 'updated', id });
    return getMember(db, id);
 }
@@ -206,20 +274,29 @@ export async function setMemberDeactivated(
    const current = rows[0];
    if (deactivated) {
       if (!current.deactivatedAt) {
-         await assertNotLastAdmin(db, id);
-         await db
-            .update(appUser)
-            .set({ deactivatedAt: new Date(), role: DEACTIVATED_ROLE, updatedAt: new Date() })
-            .where(eq(appUser.id, id));
+         await db.transaction(async (tx) => {
+            await assertNotLastAdmin(tx, id);
+            requestCacheClear();
+            await tx
+               .update(appUser)
+               .set({ deactivatedAt: new Date(), role: DEACTIVATED_ROLE, updatedAt: new Date() })
+               .where(eq(appUser.id, id));
+            await tx.delete(teamMember).where(eq(teamMember.userId, id));
+         });
+         publish({ entity: 'member', action: 'updated', id });
+         return getMember(db, id);
       }
       // Sai dos times: sem isto ele seguiria contando como membro e aparecendo nas
       // listas por time mesmo sem conseguir entrar.
       await db.delete(teamMember).where(eq(teamMember.userId, id));
    } else if (current.deactivatedAt) {
-      await db
-         .update(appUser)
-         .set({ deactivatedAt: null, updatedAt: new Date() })
-         .where(eq(appUser.id, id));
+      await db.transaction(async (tx) => {
+         requestCacheClear();
+         await tx
+            .update(appUser)
+            .set({ deactivatedAt: null, updatedAt: new Date() })
+            .where(eq(appUser.id, id));
+      });
    }
    publish({ entity: 'member', action: 'updated', id });
    return getMember(db, id);
