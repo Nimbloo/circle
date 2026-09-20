@@ -26,6 +26,8 @@ import {
    useSetParent,
 } from '@/components/common/issues/details/parent-issue';
 import { ISSUE_CHANGED_EVENT } from '@/lib/use-live-sync';
+import { deleteIssuesWithUndo } from '@/components/common/issues/delete-with-undo';
+import { useIssueDeleteShortcut } from '@/components/common/issues/use-issue-delete-shortcut';
 import {
    Bell,
    BellOff,
@@ -36,6 +38,7 @@ import {
    MoreHorizontal,
    Star,
    Copy,
+   Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -75,6 +78,8 @@ export default function HeaderNav() {
    const subscribed = useWorkspaceStore((s) =>
       issue ? (s.me?.subscribedIssueIds.includes(issue.id) ?? false) : false
    );
+   // ⌘⌫ exclui a issue aberta (is#16).
+   useIssueDeleteShortcut(issue?.id);
    const toggleSubscription = useWorkspaceStore((s) => s.toggleSubscription);
    const ensureSubscriptionKnown = useWorkspaceStore((s) => s.ensureSubscriptionKnown);
    // Issue fechada não vem nas assinaturas do bootstrap: consulta a dela uma vez.
@@ -130,16 +135,18 @@ export default function HeaderNav() {
                <span className="hidden text-[13px] md:inline">{team.name}</span>
             </Link>
             {cycle && (
-               <>
+               // Chevron e link escondem juntos abaixo de sm (is#18): separados, o link some
+               // e sobra um "›" órfão no breadcrumb mobile (`E › ›`).
+               <span className="hidden shrink-0 items-center gap-1.5 sm:flex">
                   <ChevronRight className="size-3.5 text-muted-foreground shrink-0" />
                   <Link
                      href={`/${orgId}/team/${team.id}/cycles`}
-                     className="hidden shrink-0 items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground sm:flex"
+                     className="flex shrink-0 items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
                   >
                      <CyclePlayIcon className="size-3.5" />
                      {cycle.name}
                   </Link>
-               </>
+               </span>
             )}
             {parent && (
                <>
@@ -175,7 +182,9 @@ export default function HeaderNav() {
                      aria-label={isFavorite ? 'Unfavorite issue' : 'Favorite issue'}
                      aria-pressed={isFavorite}
                   >
-                     <Star className={cn('size-4', isFavorite && 'fill-current text-primary')} />
+                     <Star
+                        className={cn('size-4', isFavorite && 'fill-amber-400 text-amber-400')}
+                     />
                   </Button>
                   <DropdownMenu>
                      <DropdownMenuTrigger asChild>
@@ -221,8 +230,23 @@ export default function HeaderNav() {
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onSelect={() => void toggleFavorite('issue', issue.id)}>
-                           <Star className={cn('size-4', isFavorite && 'fill-current')} />
+                           <Star
+                              className={cn(
+                                 'size-4',
+                                 isFavorite && 'fill-amber-400 text-amber-400'
+                              )}
+                           />
                            {isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        {/* is#16: o detalhe não tinha como excluir; o Undo do toast é a rede. */}
+                        <DropdownMenuItem
+                           variant="destructive"
+                           onSelect={() => deleteIssuesWithUndo([issue.id])}
+                        >
+                           <Trash2 className="size-4" />
+                           Delete
+                           <span className="ml-auto text-xs text-muted-foreground">⌘⌫</span>
                         </DropdownMenuItem>
                      </DropdownMenuContent>
                   </DropdownMenu>

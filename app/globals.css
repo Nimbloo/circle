@@ -4,12 +4,57 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ══ MOTION — tokens e classes (sistema de motion; tokens em `:root` logo abaixo) ══════════
+   Curvas   --ease-out (entradas) · --ease-in (saídas) · --ease-std (mudança de layout).
+            Utilities: `ease-out`, `ease-in`, `ease-std`.
+   Durações --dur-instant 80ms (hover/cor/foco) · --dur-fast 120ms (saída de menu, popover,
+            tooltip e dialog) · --dur-base 160ms (entrada de menu, popover, select, tooltip) ·
+            --dur-modal 200ms (entrada de dialog/palette/toast; layout de painel) ·
+            --dur-sheet 240ms / --dur-sheet-exit 180ms · --dur-content 150ms (conteúdo, saída
+            de toast e de linha). Tailwind: `duration-(--dur-fast)`. Em JS: `lib/motion.ts`.
+   Overlay  `bg-overlay` (rgb(0 0 0 / .4)) é o ÚNICO fundo de modal/sheet.
+   Classes  (os primitivos de components/ui já aplicam; use em superfícies próprias)
+     .motion-pop      conteúdo Radix de menu/popover/select/tooltip: entra 160ms ease-out
+                      (opacity + scale .97 + 4px vindos do trigger, origem no trigger), sai 120ms.
+     .motion-modal    dialog/palette: entra 200ms (scale .98), sai 120ms ease-in.
+     .motion-overlay  overlay do dialog (200/120) · .motion-overlay-sheet (240/180, com o sheet).
+     .motion-sheet    sheet, lado por `data-side`: entra 240ms, sai 180ms.
+     .motion-rise     barra flutuante (ações em lote): fade + translateY 8px em 160ms.
+     .motion-panel    painel que muda o layout: `width` em 200ms ease-std; o conteúdo interno tem
+                      largura FIXA (não reflui). Prontos: `DetailSidePanel` e `SidePanelSlot`.
+     .content-enter   fade de 150ms do CONTAINER que substitui o loading — nunca por linha (na
+                      linha só quando ela chega em tempo real) nem na troca j/k ou de aba
+                      (`useEnterFade`, loading-area.tsx). Não roda sob `.route-enter` em curso.
+     .list-exit       linha saindo da lista (snooze, excluir): colapsa a altura (grid-rows) +
+                      opacity em 150ms. Vai num WRAPPER de filho único da linha; remova o item
+                      no `animationend` (ou após `MOTION_MS.content`).
+   AlertDialog com "alvo travado": título e descrição leem `useLatchedTarget(alvo)`
+   (components/ui/alert-dialog.tsx), não o alvo cru. Ao fechar, o alvo vira null mas o texto
+   mantém o nome até o fim da saída (nada de `Delete label “”?`).
+   `prefers-reduced-motion` zera durações (regra global mais abaixo). */
+
 @theme inline {
    --font-sans: var(--font-inter);
    --font-mono: var(--font-geist-mono);
 }
 
 :root {
+   /* ---- Motion (ver o bloco MOTION acima) ---- */
+   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+   --ease-in: cubic-bezier(0.4, 0, 1, 1);
+   --ease-std: cubic-bezier(0.2, 0, 0, 1);
+   --dur-instant: 80ms;
+   --dur-fast: 120ms;
+   --dur-base: 160ms;
+   --dur-modal: 200ms;
+   --dur-sheet: 240ms;
+   --dur-sheet-exit: 180ms;
+   --dur-content: 150ms;
+   --scale-pop: 0.97;
+   --scale-modal: 0.98;
+   --shift-pop: 4px;
+   --overlay: rgb(0 0 0 / 0.4);
+
    /* ---- Bench de cores Linear — tema LIGHT (default) ---- */
    --card: #ffffff;
    --card-foreground: #202124;
@@ -209,6 +254,10 @@
    --color-sidebar-border: var(--sidebar-border);
    --color-sidebar-ring: var(--sidebar-ring);
    --color-container: var(--container);
+   --color-overlay: var(--overlay);
+   --ease-out: var(--ease-out);
+   --ease-in: var(--ease-in);
+   --ease-std: var(--ease-std);
 }
 
 @layer base {
@@ -417,6 +466,13 @@ html[data-underline-links='true'] .prose a[href],
 html[data-underline-links='true'] a[href]:not([role='button']):not(.no-underline) {
    text-decoration: underline;
 }
+/* Navegação do app (sidebar, barras de header) não é link de conteúdo: sublinhar tudo
+   deixava a sidebar riscada (ad#14). */
+html[data-underline-links='true'] [data-slot^='sidebar'] a[href],
+html[data-underline-links='true'] [data-slot='location-bar'] a[href],
+html[data-underline-links='true'] [data-slot='view-bar'] a[href] {
+   text-decoration: none;
+}
 
 @media (prefers-reduced-motion: reduce) {
    *,
@@ -458,10 +514,10 @@ html[data-underline-links='true'] a[href]:not([role='button']):not(.no-underline
    overflow: hidden;
 }
 [data-slot='collapsible-content'][data-state='open'] {
-   animation: collapsible-down 200ms cubic-bezier(0.2, 0, 0, 1);
+   animation: collapsible-down var(--dur-modal) var(--ease-std);
 }
 [data-slot='collapsible-content'][data-state='closed'] {
-   animation: collapsible-up 200ms cubic-bezier(0.2, 0, 0, 1);
+   animation: collapsible-up var(--dur-modal) var(--ease-std);
 }
 @media (prefers-reduced-motion: reduce) {
    [data-slot='collapsible-content'] {
@@ -492,27 +548,219 @@ html[data-underline-links='true'] a[href]:not([role='button']):not(.no-underline
    animation: circle-loading-spin 900ms linear infinite;
 }
 
-/* Conteúdo que chega depois do loading (e vazio/erro): mesmo fade da rota. Só `opacity`
-   pelo mesmo motivo do `route-enter` (transform deslocaria os `position: fixed`). */
+/* Conteúdo que chega depois do loading (e vazio/erro): um fade por troca, no container. Só
+   `opacity` pelo mesmo motivo do `route-enter` (transform deslocaria os `position: fixed`). */
 @keyframes content-enter {
    from {
       opacity: 0;
    }
 }
 .content-enter {
-   animation: content-enter 180ms cubic-bezier(0.2, 0, 0, 1) backwards;
+   animation: content-enter var(--dur-content) var(--ease-std) backwards;
 }
 
 /* Entrada de rota do workspace ([orgId]/template.tsx). Só `opacity`: `transform` no wrapper,
-   mesmo durante os 180 ms, vira containing block de todo `position: fixed` da página (barra
-   de bulk actions, popovers não portados) e os desloca. */
+   mesmo durante o fade, vira containing block de todo `position: fixed` da página (barra
+   de bulk actions, popovers não portados) e os desloca. O template tira a classe no
+   `animationend`; enquanto ela está lá, o `content-enter` de dentro não roda (não somam). */
 @keyframes route-enter {
    from {
       opacity: 0;
    }
 }
 .route-enter {
-   animation: route-enter 180ms cubic-bezier(0.2, 0, 0, 1) backwards;
+   animation: route-enter var(--dur-content) var(--ease-std) backwards;
+}
+.route-enter .content-enter {
+   /* Delay negativo (e não `animation: none`): o conteúdo que nasce durante o fade da rota
+      entra junto com ele, já opaco, e quando o template tira a classe a animação continua
+      "terminada" — sem um segundo fade. Conteúdo que chega depois disso anima normalmente. */
+   animation-delay: -1s;
+}
+
+/* ── Motion: classes (documentação no bloco MOTION do topo) ─────────────────────────────
+   Seletores diretos (não utilities `animate-*`), pelo mesmo motivo do collapsible. O lado
+   do deslocamento de entrada vem do `data-side` do Radix; a origem, do popper. */
+@keyframes motion-pop-in {
+   from {
+      opacity: 0;
+      transform: translate(var(--motion-shift-x, 0), var(--motion-shift-y, 0))
+         scale(var(--scale-pop));
+   }
+}
+@keyframes motion-pop-out {
+   to {
+      opacity: 0;
+      transform: scale(var(--scale-pop));
+   }
+}
+.motion-pop {
+   transform-origin: var(--radix-popper-transform-origin, center);
+}
+.motion-pop[data-side='bottom'] {
+   --motion-shift-y: calc(-1 * var(--shift-pop));
+}
+.motion-pop[data-side='top'] {
+   --motion-shift-y: var(--shift-pop);
+}
+.motion-pop[data-side='left'] {
+   --motion-shift-x: var(--shift-pop);
+}
+.motion-pop[data-side='right'] {
+   --motion-shift-x: calc(-1 * var(--shift-pop));
+}
+.motion-pop:is([data-state='open'], [data-state='delayed-open'], [data-state='instant-open']) {
+   animation: motion-pop-in var(--dur-base) var(--ease-out);
+}
+.motion-pop[data-state='closed'] {
+   animation: motion-pop-out var(--dur-fast) var(--ease-in) forwards;
+}
+
+@keyframes motion-modal-in {
+   from {
+      opacity: 0;
+      transform: scale(var(--scale-modal));
+   }
+}
+@keyframes motion-modal-out {
+   to {
+      opacity: 0;
+      transform: scale(var(--scale-modal));
+   }
+}
+.motion-modal[data-state='open'] {
+   animation: motion-modal-in var(--dur-modal) var(--ease-out);
+}
+.motion-modal[data-state='closed'] {
+   animation: motion-modal-out var(--dur-fast) var(--ease-in) forwards;
+}
+
+@keyframes motion-fade-in {
+   from {
+      opacity: 0;
+   }
+}
+@keyframes motion-fade-out {
+   to {
+      opacity: 0;
+   }
+}
+.motion-overlay[data-state='open'] {
+   animation: motion-fade-in var(--dur-modal) var(--ease-out);
+}
+.motion-overlay[data-state='closed'] {
+   animation: motion-fade-out var(--dur-fast) var(--ease-in) forwards;
+}
+.motion-overlay-sheet[data-state='open'] {
+   animation: motion-fade-in var(--dur-sheet) var(--ease-out);
+}
+.motion-overlay-sheet[data-state='closed'] {
+   animation: motion-fade-out var(--dur-sheet-exit) var(--ease-in) forwards;
+}
+
+@keyframes motion-sheet-in {
+   from {
+      transform: translate(var(--motion-sheet-x, 0), var(--motion-sheet-y, 0));
+   }
+}
+@keyframes motion-sheet-out {
+   to {
+      transform: translate(var(--motion-sheet-x, 0), var(--motion-sheet-y, 0));
+   }
+}
+.motion-sheet[data-side='right'] {
+   --motion-sheet-x: 100%;
+}
+.motion-sheet[data-side='left'] {
+   --motion-sheet-x: -100%;
+}
+.motion-sheet[data-side='top'] {
+   --motion-sheet-y: -100%;
+}
+.motion-sheet[data-side='bottom'] {
+   --motion-sheet-y: 100%;
+}
+.motion-sheet[data-state='open'] {
+   animation: motion-sheet-in var(--dur-sheet) var(--ease-out);
+}
+.motion-sheet[data-state='closed'] {
+   animation: motion-sheet-out var(--dur-sheet-exit) var(--ease-in) forwards;
+}
+
+@keyframes motion-rise {
+   from {
+      opacity: 0;
+      transform: translateY(8px);
+   }
+}
+.motion-rise {
+   animation: motion-rise var(--dur-base) var(--ease-out) backwards;
+}
+
+.motion-panel {
+   transition: width var(--dur-modal) var(--ease-std);
+}
+
+@keyframes list-exit {
+   from {
+      grid-template-rows: 1fr;
+      opacity: 1;
+   }
+   to {
+      grid-template-rows: 0fr;
+      opacity: 0;
+   }
+}
+.list-exit {
+   display: grid;
+   pointer-events: none;
+   animation: list-exit var(--dur-content) var(--ease-in) forwards;
+}
+.list-exit > * {
+   min-height: 0;
+   overflow: hidden;
+}
+
+/* Toast (sonner) com a pele do popover: cores/raio pelas vars do sonner (ui/sonner.tsx) e,
+   aqui, sombra e tempos. O sonner injeta o CSS dele sem layer: `[data-sonner-toaster]` na
+   frente dá a especificidade para vencer. Entra 200ms (translateY 8px + opacity), sai 150ms. */
+[data-sonner-toaster] [data-sonner-toast] {
+   transition:
+      transform var(--dur-modal) var(--ease-out),
+      opacity var(--dur-modal) var(--ease-out),
+      height var(--dur-modal) var(--ease-std),
+      box-shadow var(--dur-instant);
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'] {
+   box-shadow: var(--popover-shadow);
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-description] {
+   color: var(--muted-foreground);
+}
+[data-sonner-toaster] [data-sonner-toast][data-mounted='false'][data-y-position='bottom'] {
+   --y: translateY(8px);
+}
+[data-sonner-toaster] [data-sonner-toast][data-mounted='false'][data-y-position='top'] {
+   --y: translateY(-8px);
+}
+[data-sonner-toaster] [data-sonner-toast][data-removed='true'] {
+   transition:
+      transform var(--dur-content) var(--ease-in),
+      opacity var(--dur-content) var(--ease-in),
+      height var(--dur-content) var(--ease-in);
+}
+[data-sonner-toaster]
+   [data-sonner-toast][data-removed='true'][data-front='true'][data-swipe-out='false'] {
+   --y: translateY(calc(var(--lift) * -8px));
+}
+[data-sonner-toaster]
+   [data-sonner-toast][data-removed='true'][data-front='false'][data-swipe-out='false'][data-expanded='false'] {
+   transition:
+      transform var(--dur-content) var(--ease-in),
+      opacity var(--dur-content) var(--ease-in);
+}
+[data-sonner-toaster] [data-sonner-toast][data-swiping='true'] {
+   transition: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -750,4 +998,18 @@ html[data-underline-links='true'] a[href]:not([role='button']):not(.no-underline
    width: 100%;
    height: 100%;
    border: 0;
+}
+
+/* Progresso (pl#12, frente P): Scope / Started / Completed com uma cor só em todo
+   gráfico e legenda de planejamento. Derivam de tokens do tema, então seguem light,
+   dark e as variantes. Health usa os `--health-*` já declarados acima. */
+:root {
+   --progress-scope: var(--muted-foreground);
+   --progress-started: var(--cycle-started);
+   --progress-completed: var(--primary);
+}
+@theme inline {
+   --color-progress-scope: var(--progress-scope);
+   --color-progress-started: var(--progress-started);
+   --color-progress-completed: var(--progress-completed);
 }

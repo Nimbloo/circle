@@ -80,3 +80,52 @@ describe('SubIssueCreate (#95)', () => {
       expect(apiMocks.create).not.toHaveBeenCalled();
    });
 });
+
+/**
+ * is#15: falha no meio de uma colagem perdia as linhas restantes e, ao repetir, as já
+ * criadas viravam duplicatas.
+ */
+describe('SubIssueCreate — falha parcial (is#15)', () => {
+   beforeEach(() => {
+      apiMocks.create.mockReset();
+      useIssuesStore.setState({ applyRemote: async () => {} });
+   });
+
+   it('guarda as linhas que faltaram e o retry não recria as que já entraram', async () => {
+      const user = userEvent.setup();
+      apiMocks.create
+         .mockImplementationOnce(async () => ({ id: 'id-1', identifier: 'CORE-1' }))
+         .mockImplementationOnce(async () => {
+            throw new Error('offline');
+         });
+      render(<SubIssueCreate parentId="parent-1" onCreated={vi.fn()} />);
+      await user.click(screen.getByRole('button', { name: /create sub-issue/i }));
+      await user.click(screen.getByRole('textbox', { name: 'Sub-issue title' }));
+      await user.paste('Um\nDois\nTrês');
+
+      const retry = await screen.findByRole('button', { name: /Retry 2/i });
+      apiMocks.create.mockImplementation(async (input: { title: string }) => ({
+         id: `id-${input.title}`,
+         identifier: `CORE-${input.title}`,
+      }));
+      await user.click(retry);
+
+      await waitFor(() => expect(apiMocks.create).toHaveBeenCalledTimes(4));
+      expect(apiMocks.create.mock.calls.map((c) => c[0].title)).toEqual([
+         'Um',
+         'Dois',
+         'Dois',
+         'Três',
+      ]);
+      await waitFor(() => expect(screen.queryByRole('button', { name: /Retry/i })).toBeNull());
+   });
+
+   it('o título da sub-issue tem limite de tamanho', async () => {
+      const user = userEvent.setup();
+      render(<SubIssueCreate parentId="parent-1" onCreated={vi.fn()} />);
+      await user.click(screen.getByRole('button', { name: /create sub-issue/i }));
+      expect(
+         (screen.getByRole('textbox', { name: 'Sub-issue title' }) as HTMLInputElement).maxLength
+      ).toBe(512);
+   });
+});

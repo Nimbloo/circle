@@ -1,5 +1,5 @@
 import type { Db } from './index';
-import { status, priority, label, health, projectStatus } from './schema';
+import { status, priority, label, labelGroup, health, projectStatus } from './schema';
 
 /** Catálogos fixos do produto — valores 1:1 do mock-data (status.tsx, priorities.tsx, labels.ts, projects.ts). */
 
@@ -55,6 +55,9 @@ export const LABEL_SEED = [
    { id: 'internationalization', name: 'Internationalization', color: 'cyan', groupId: null },
 ];
 
+// Cadastro dos grupos usados no LABEL_SEED (o 'kind' aparece como "Type", igual ao Linear).
+export const LABEL_GROUP_SEED = [{ id: 'kind', name: 'Type', color: 'gray', position: 0 }];
+
 export const HEALTH_SEED = [
    { id: 'no-update', name: 'No Update', color: '#8f9299', description: null },
    { id: 'off-track', name: 'Off Track', color: '#eb5757', description: null },
@@ -92,6 +95,12 @@ export async function seedCatalogs(db: Db) {
       [health, HEALTH_SEED],
       [projectStatus, PROJECT_STATUS_SEED],
    ] as const;
+
+   // Os grupos só nascem junto com as labels semeadas: excluir todos os grupos depois
+   // não os ressuscita (a checagem é na tabela de labels).
+   const labelsExist = await db.select({ id: label.id }).from(label).limit(1);
+   if (labelsExist.length === 0)
+      await db.insert(labelGroup).values(LABEL_GROUP_SEED).onConflictDoNothing();
 
    for (const [table, values] of tables) {
       const existing = await db.select({ id: table.id }).from(table).limit(1);

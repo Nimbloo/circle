@@ -1,6 +1,7 @@
 'use client';
 
 import type { Issue } from '@/data/issues';
+import { cn } from '@/lib/utils';
 import type { IssueDetail } from '@/data/issue-details';
 import { adaptActivity, adaptIssueDetail, textToBlocks } from '@/lib/adapters-issue-detail';
 import { adaptIssues } from '@/lib/adapters';
@@ -23,7 +24,7 @@ import { AttachmentsSection } from './attachments-section';
 import { useAttachmentUploader } from './use-attachment-uploader';
 import { filesOf, isImageFile } from '@/lib/attachments-client';
 import { IssuePropertiesPanel } from './issue-properties-panel';
-import { LoadingArea } from '@/components/common/loading-area';
+import { LoadingArea, useEnterFade } from '@/components/common/loading-area';
 import { IssuePicker } from './issue-picker';
 import { useParentCandidatesExclusion, useSetParent } from './parent-issue';
 import { SubIssueCreate } from './sub-issue-create';
@@ -105,6 +106,8 @@ const ACTIVITY_COALESCE_MS = 150;
 function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps) {
    const { orgId } = useParams<{ orgId: string }>();
    const inStore = useIssuesStore((s) => s.issues.some((i) => i.id === issue.id));
+   // Troca de irmão (aba, item, layout) não pisca: só a primeira chegada de conteúdo.
+   const fade = useEnterFade('issue-detail');
    const statuses = useStatuses();
 
    const [detail, setDetail] = useState<IssueDetail | null>(null);
@@ -116,6 +119,18 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
    // conversão da projeção em texto (`textToBlocks` → `blocksToDoc`).
    const [editingTitle, setEditingTitle] = useState(false);
    const [titleDraft, setTitleDraft] = useState('');
+   // Autosize: a caixa nasce e cresce na altura do conteúdo (navegador sem
+   // `field-sizing` continua sem o salto).
+   const autosizeTitle = useCallback((el: HTMLTextAreaElement | null) => {
+      if (!el) return;
+      const fit = () => {
+         if (!el.scrollHeight) return;
+         el.style.height = 'auto';
+         el.style.height = `${el.scrollHeight}px`;
+      };
+      fit();
+      el.addEventListener('input', fit);
+   }, []);
    const [descriptionDoc, setDescriptionDoc] = useState<EditorDoc | null>(null);
    // Override local do título para issue FORA do store (deep-link frio): o objeto vem
    // do pai e não flui de volta — o override exibe o valor salvo até o store assumir.
@@ -292,6 +307,9 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
       (s) => statusById.get(s.statusId)?.category === 'completed'
    ).length;
 
+   // Quebras de linha (colar de outro lugar) viram espaço: o título é uma linha só.
+   const singleLine = (text: string) => text.replace(/\s*\n+\s*/g, ' ');
+
    // Persiste o título: pelo store (optimistic+rollback) quando a issue está no board,
    // ou direto na API + override local quando é deep-link frio (fora do store).
    const applyTitle = async () => {
@@ -351,7 +369,7 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
    };
 
    return (
-      <div className="content-enter flex h-full w-full overflow-hidden">
+      <div className={cn(fade && 'content-enter', 'flex h-full w-full overflow-hidden')}>
          {/* Main column — conteúdo centralizado nos 791px medidos no Linear. */}
          <article className="h-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-8 sm:px-8 sm:py-10 xl:pt-[59px]">
             <div className="mx-auto w-full max-w-[791px]">
@@ -368,13 +386,18 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
                   />
                )}
                {editingTitle ? (
+                  // is#11: título é uma linha lógica — Enter (com ou sem Shift) salva e
+                  // quebras coladas viram espaço; a caixa cresce com o texto em vez de
+                  // saltar 64 px (`field-sizing-content` + autosize por JS no fallback).
                   <textarea
                      autoFocus
+                     aria-label="Issue title"
+                     ref={autosizeTitle}
                      value={titleDraft}
-                     onChange={(e) => setTitleDraft(e.target.value)}
+                     onChange={(e) => setTitleDraft(singleLine(e.target.value))}
                      onBlur={() => void applyTitle()}
                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
+                        if (e.key === 'Enter') {
                            e.preventDefault();
                            void applyTitle();
                         } else if (e.key === 'Escape') {
@@ -382,7 +405,7 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
                         }
                      }}
                      rows={1}
-                     className="w-full resize-none bg-transparent text-2xl font-semibold leading-8 outline-none"
+                     className="field-sizing-content w-full resize-none overflow-hidden bg-transparent text-2xl font-semibold leading-8 outline-none"
                   />
                ) : (
                   <h1

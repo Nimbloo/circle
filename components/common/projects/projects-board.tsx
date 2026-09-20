@@ -17,6 +17,8 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import { ProjectGroup } from './projects';
 import { ProjectContextMenu } from './project-context-menu';
 import { labelColor } from '@/components/common/palette';
+import { useEnterFade } from '@/components/common/loading-area';
+import { healthColor } from './progress-colors';
 
 export const ProjectDragType = 'PROJECT';
 /** Instrução de DnD lida por leitores de tela (aria-describedby dos cards). */
@@ -65,7 +67,7 @@ function ProjectCard({ project }: { project: Project }) {
                <div className="flex h-7 items-center gap-1.5 text-xs text-muted-foreground">
                   <span
                      className="size-2 rounded-full shrink-0"
-                     style={{ backgroundColor: project.health.color }}
+                     style={{ backgroundColor: healthColor(project.health.id) }}
                   />
                   {project.health.name}
                   {project.healthUpdatedAgoDays !== undefined && (
@@ -199,6 +201,8 @@ function BoardColumn({
  * rollback + toast no erro). A ordem dentro da coluna segue a ordenação do Display.
  */
 export default function ProjectsBoard({ groups }: { groups: ProjectGroup[] }) {
+   // Troca de irmão (aba, item, layout) não pisca: só a primeira chegada de conteúdo.
+   const fade = useEnterFade('projects-view');
    const patchProject = useWorkspaceStore((s) => s.patchProject);
    const byTeam = groups.some((group) => group.teamId !== undefined);
 
@@ -220,7 +224,7 @@ export default function ProjectsBoard({ groups }: { groups: ProjectGroup[] }) {
 
    return (
       <DndProvider backend={HTML5Backend}>
-         <div className="content-enter h-full w-full overflow-x-auto">
+         <div className={cn(fade && 'content-enter', 'h-full w-full overflow-x-auto')}>
             <p id={DRAG_HINT_ID} className="sr-only">
                Drag a project card to another column to change its {byTeam ? 'team' : 'status'}.
             </p>

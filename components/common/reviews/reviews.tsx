@@ -87,7 +87,7 @@ function ReviewRow({
          // id = `repo/name#n`: sem encode, `/` vira segmento e `#` vira fragment → 404.
          href={`/${orgId}/review/${encodeURIComponent(review.id)}${listQuery(listTab)}`}
          className={cn(
-            'content-enter h-11 px-[18px] text-[13px] flex items-center gap-2 transition-colors',
+            'h-11 px-[18px] text-[13px] flex items-center gap-2 transition-colors',
             selected ? 'bg-accent/60' : 'hover:bg-accent/40'
          )}
       >
@@ -192,6 +192,10 @@ export default function Reviews({
 }: ReviewsProps) {
    const { orgId } = useParams<{ orgId: string }>();
    const isAdmin = useWorkspaceStore((s) => s.me?.admin ?? false);
+   // O recorte das duas abas depende do handle do GitHub no perfil: sem ele a lista vem
+   // vazia e nada explicava o porquê (co#7).
+   // (só depois do bootstrap: com `me` ainda nulo não dá para afirmar que falta handle)
+   const needsGithub = useWorkspaceStore((s) => !!s.me && !s.me.githubLogin);
    const [reviews, setReviews] = useState<Review[]>([]);
    const [total, setTotal] = useState(0);
    const [loading, setLoading] = useState(true);
@@ -447,34 +451,49 @@ export default function Reviews({
                      title={
                         reviews.length > 0
                            ? 'No reviews match the current filters'
-                           : 'No reviews yet'
+                           : needsGithub
+                             ? 'Configure seu GitHub no perfil'
+                             : 'No reviews yet'
+                     }
+                     description={
+                        reviews.length === 0 && needsGithub
+                           ? 'A lista mostra os PRs do seu usuário do GitHub.'
+                           : undefined
                      }
                      className="py-10"
                   />
                ) : groupByStatus ? (
-                  groups.map((group) => (
-                     <ReviewGroup key={group.label} label={group.label} count={group.items.length}>
-                        {group.items.map((review) => (
-                           <ReviewRow
-                              key={review.id}
-                              review={review}
-                              orgId={orgId}
-                              selected={review.id === selectedReviewId}
-                              listTab={listTab}
-                           />
-                        ))}
-                     </ReviewGroup>
-                  ))
+                  <div className="content-enter">
+                     {groups.map((group) => (
+                        <ReviewGroup
+                           key={group.label}
+                           label={group.label}
+                           count={group.items.length}
+                        >
+                           {group.items.map((review) => (
+                              <ReviewRow
+                                 key={review.id}
+                                 review={review}
+                                 orgId={orgId}
+                                 selected={review.id === selectedReviewId}
+                                 listTab={listTab}
+                              />
+                           ))}
+                        </ReviewGroup>
+                     ))}
+                  </div>
                ) : (
-                  source.map((review) => (
-                     <ReviewRow
-                        key={review.id}
-                        review={review}
-                        orgId={orgId}
-                        selected={review.id === selectedReviewId}
-                        listTab={listTab}
-                     />
-                  ))
+                  <div className="content-enter">
+                     {source.map((review) => (
+                        <ReviewRow
+                           key={review.id}
+                           review={review}
+                           orgId={orgId}
+                           selected={review.id === selectedReviewId}
+                           listTab={listTab}
+                        />
+                     ))}
+                  </div>
                )}
                {!loading && !error && total > 0 && (
                   <ReviewPagination
@@ -510,6 +529,25 @@ export default function Reviews({
                         section={section}
                         listTab={listTab}
                      />
+                  </div>
+               </div>
+            ) : !loading && !error && total === 0 && needsGithub ? (
+               <div className="flex h-full items-center justify-center px-6 text-muted-foreground">
+                  <div className="flex w-full max-w-[540px] flex-col gap-4">
+                     <EmptySketch />
+                     <h3 className="text-[15px] font-semibold leading-[23px] text-foreground">
+                        Configure seu GitHub para ver seus PRs
+                     </h3>
+                     <p className="text-[13px] font-[450] leading-[18.2px]">
+                        As abas &quot;For you&quot; e &quot;Created&quot; filtram pelo seu usuário
+                        do GitHub, e o seu perfil ainda não tem um.
+                     </p>
+                     <Link
+                        href={`/${orgId}/settings/profile`}
+                        className="inline-flex h-7 self-start items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                     >
+                        Abrir o perfil
+                     </Link>
                   </div>
                </div>
             ) : !loading && !error && total === 0 ? (

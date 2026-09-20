@@ -113,3 +113,39 @@ export function textToBlocks(text: string | null | undefined): ContentBlock[] {
    flushPara();
    return blocks;
 }
+
+/**
+ * ContentBlock[] -> markdown: o inverso de `textToBlocks`. Usado para editar um texto
+ * que só existe em blocos (is#2) sem reduzi-lo aos parágrafos.
+ */
+export function blocksToMarkdown(blocks: ContentBlock[]): string {
+   return blocks
+      .map((b) => {
+         switch (b.type) {
+            case 'heading':
+               return `${b.level === 1 ? '#' : '##'} ${b.text}`;
+            case 'paragraph':
+               return b.text;
+            case 'bullet-list':
+               return b.items.map((it) => `- ${it}`).join('\n');
+            case 'numbered-list':
+               return b.items.map((it, i) => `${i + 1}. ${it}`).join('\n');
+            case 'checklist':
+               return b.items.map((it) => `- [${it.checked ? 'x' : ' '}] ${it.text}`).join('\n');
+            case 'code':
+               return `\`\`\`${b.language === 'text' ? '' : b.language}\n${b.code}\n\`\`\``;
+            case 'quote':
+               return `> ${b.text}`;
+            case 'divider':
+               return '---';
+            case 'image':
+               return b.caption ?? b.alt;
+            case 'video':
+               return b.title;
+            case 'issue-ref':
+               return b.note ? `${b.identifier} ${b.note}` : b.identifier;
+         }
+      })
+      .filter(Boolean)
+      .join('\n\n');
+}

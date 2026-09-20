@@ -69,6 +69,8 @@ export type SettingsSyncError = 'load' | 'save' | null;
 
 let started = false;
 let ready = false;
+/** Aplicando o que veio do servidor: as assinaturas não devem regravar (ad#14). */
+let applying = false;
 let timer: ReturnType<typeof setTimeout> | null = null;
 let loadAttempts = 0;
 /** Seções alteradas desde a última gravação confirmada. */
@@ -202,7 +204,7 @@ const SAVE_RETRY_MS = 5_000;
 
 function scheduleSave(section: Section, delay = SAVE_DEBOUNCE_MS) {
    // Sem GET bem-sucedido não grava (#15): o blob local sobrescreveria o do servidor.
-   if (!ready) return;
+   if (!ready || applying) return;
    dirty.add(section);
    if (timer) clearTimeout(timer);
    timer = setTimeout(flush, delay);
@@ -268,10 +270,18 @@ async function load(): Promise<void> {
    loadAttempts += 1;
    try {
       const data = (await api.settings.get()) as SettingsBlob;
-      applyTheme(data.theme);
-      if (data.notifications) useNotificationPrefsStore.getState().hydratePrefs(data.notifications);
-      if (data.preferences) usePreferencesStore.getState().hydratePrefs(data.preferences);
-      applyLayout(data.layout);
+      // Aplicar dispara as assinaturas dos stores; sem esta trava, o que acabou de vir
+      // do servidor seria regravado (e, entre abas, viraria ping-pong de PATCHes).
+      applying = true;
+      try {
+         applyTheme(data.theme);
+         if (data.notifications)
+            useNotificationPrefsStore.getState().hydratePrefs(data.notifications);
+         if (data.preferences) usePreferencesStore.getState().hydratePrefs(data.preferences);
+         applyLayout(data.layout);
+      } finally {
+         applying = false;
+      }
       ready = true;
       setSyncError(null);
    } catch {
@@ -300,4 +310,13 @@ export async function startUserSettingsSync(): Promise<void> {
    useSidebarPrefsStore.subscribe(() => scheduleSave('layout'));
    useDetailPanelStore.subscribe(() => scheduleSave('layout'));
    useInboxLayoutStore.subscribe(() => scheduleSave('layout'));
+}
+
+/**
+ * Relê as settings do servidor e aplica nos stores (sem regravar). É o que a aba faz
+ * quando OUTRA aba do mesmo usuário grava uma preferência (evento `settings`, ad#14).
+ */
+export async function reloadUserSettings(): Promise<void> {
+   if (!started) return;
+   await load();
 }

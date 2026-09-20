@@ -8,6 +8,13 @@ import { IssueLine } from './issue-line';
 import type { IssueGroupContext, IssueGroupDescriptor } from './group-issues';
 import { useGroupDropTarget } from './use-issue-drop-target';
 import { isKeyNavBlocked, navDirectionOf } from '@/store/issue-navigation-store';
+import { useViewKey } from '@/lib/view-key';
+
+/**
+ * Offset do scroll por view (is#14): abrir uma issue e voltar recomeçava a lista do topo.
+ * Fica em memória do módulo — é estado de sessão, não persiste.
+ */
+const scrollOffsets = new Map<string, number>();
 
 interface Entry {
    group: IssueGroupDescriptor;
@@ -106,6 +113,27 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
       },
       overscan: 14,
    });
+
+   // Guarda e restaura a posição do scroll desta view.
+   const viewKey = useViewKey();
+   const restored = useRef(false);
+   const rowCount = rows.length;
+   useEffect(() => {
+      restored.current = false;
+   }, [viewKey]);
+   useEffect(() => {
+      const el = parentRef.current;
+      if (!el) return;
+      // Só dá para restaurar quando já há linhas (antes disso o scroll é preso em 0).
+      if (!restored.current && rowCount > 0) {
+         restored.current = true;
+         const saved = scrollOffsets.get(viewKey);
+         if (saved) el.scrollTop = saved;
+      }
+      const onScroll = () => scrollOffsets.set(viewKey, el.scrollTop);
+      el.addEventListener('scroll', onScroll, { passive: true });
+      return () => el.removeEventListener('scroll', onScroll);
+   }, [viewKey, rowCount]);
 
    // J/K (#33): cursor de teclado pelas linhas de issue; Enter abre a issue do cursor.
    const [activeKey, setActiveKey] = useState<string | null>(null);

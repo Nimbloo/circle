@@ -12,8 +12,13 @@ export const dynamic = 'force-dynamic';
 type Params = { params: Promise<{ teamKey: string; id: string }> };
 
 const UpdateSchema = z.object({
-   name: z.string().min(1).max(128).optional(),
-   title: z.string().max(512).nullish(),
+   name: z
+      .string()
+      .trim()
+      .min(1, 'name é obrigatório')
+      .max(128, 'name deve ter no máximo 128 caracteres')
+      .optional(),
+   title: z.string().trim().max(512).nullish(),
    description: z.string().nullish(),
    statusId: z.string().nullish(),
    priorityId: z.string().nullish(),

@@ -112,21 +112,37 @@ function applyPlan(plan: IssueDropPlan, item: Issue, viewKey: string) {
    }
 }
 
-/** Drop sobre um card/linha: reorder no grupo ou move para o grupo do alvo. */
+/** Pointer acima da metade de cima do alvo → solta antes dele. */
+function pointerAbove(
+   ref: RefObject<HTMLElement | null>,
+   monitor: { getClientOffset(): { y: number } | null }
+) {
+   const rect = ref.current?.getBoundingClientRect();
+   const pointerY = monitor.getClientOffset()?.y ?? 0;
+   return rect ? pointerY < rect.top + rect.height / 2 : false;
+}
+
+/**
+ * Drop sobre um card/linha: reorder no grupo ou move para o grupo do alvo. `isOver`/
+ * `dropAbove` (is#21) alimentam a linha de inserção de 2px na lista — órfãos enquanto
+ * ninguém arrasta sobre o alvo.
+ */
 export function useIssueDropTarget(
    issueId: string,
    getGroup: () => IssueGroupContext,
    ref: RefObject<HTMLElement | null>
 ) {
    const viewKey = useViewKey();
-   const [, drop] = useDrop<Issue, IssueDropResult, unknown>(
+   const [{ isOver, dropAbove }, drop] = useDrop<
+      Issue,
+      IssueDropResult,
+      { isOver: boolean; dropAbove: boolean }
+   >(
       () => ({
          accept: IssueDragType,
          canDrop: (item) => canDropInto(item, getGroup()),
          drop(item, monitor) {
-            const rect = ref.current?.getBoundingClientRect();
-            const pointerY = monitor.getClientOffset()?.y ?? 0;
-            const dropAbove = rect ? pointerY < rect.top + rect.height / 2 : false;
+            const dropAbove = pointerAbove(ref, monitor);
             const plan = planIssueDrop({
                item,
                target: getGroup(),
@@ -137,10 +153,14 @@ export function useIssueDropTarget(
             applyPlan(plan, item, viewKey);
             return { handled: true };
          },
+         collect: (monitor) => {
+            const over = monitor.isOver() && monitor.canDrop();
+            return { isOver: over, dropAbove: over && pointerAbove(ref, monitor) };
+         },
       }),
       [issueId, getGroup, viewKey, ref]
    );
-   return drop;
+   return { drop, isOver, dropAbove };
 }
 
 /** Drop na área do grupo (coluna do board, header da lista), inclusive grupo vazio. */

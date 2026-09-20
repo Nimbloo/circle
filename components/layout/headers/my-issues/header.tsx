@@ -3,6 +3,7 @@
 import {
    MY_ISSUES_TAB_ITEMS,
    scopeMyIssues,
+   useMyIssuesActiveIds,
    useMyIssuesTab,
 } from '@/components/common/my-issues/use-my-issues';
 import { IssueFilterTrigger } from '@/components/common/issues/issue-filter-trigger';
@@ -103,10 +104,12 @@ function HeaderOptions() {
    const subscribedIssueIds = useWorkspaceStore((s) => s.me?.subscribedIssueIds);
 
    const subscribedIds = useMemo(() => new Set(subscribedIssueIds ?? []), [subscribedIssueIds]);
-   const count = scopeMyIssues(issues, tab, meId, subscribedIds).length;
+   const activeIds = useMyIssuesActiveIds(tab);
+   const count = scopeMyIssues(issues, tab, meId, subscribedIds, activeIds).length;
 
    return (
-      <ViewBar>
+      // is#18: sem overflow, o toolbar estourava a largura em telas ~390px.
+      <ViewBar className="overflow-x-auto">
          <div className="flex items-center gap-3">
             <div className="flex items-center gap-1">
                {MY_ISSUES_TAB_ITEMS.map((item) => (

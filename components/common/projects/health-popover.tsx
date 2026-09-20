@@ -2,7 +2,8 @@
 
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CircleCheck, CircleX, AlertCircle, HelpCircle, CheckIcon } from 'lucide-react';
+import { CheckIcon } from 'lucide-react';
+import { HealthIcon } from './health-icon';
 import { Project } from '@/data/projects';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -17,19 +18,12 @@ interface HealthPopoverProps {
 }
 
 export function HealthPopover({ project, onHealthChange }: HealthPopoverProps) {
-   const getHealthIcon = (healthId: string) => {
-      switch (healthId) {
-         case 'on-track':
-            return <CircleCheck className="size-4 text-green-500" />;
-         case 'off-track':
-            return <CircleX className="size-4 text-red-500" />;
-         case 'at-risk':
-            return <AlertCircle className="size-4 text-amber-500" />;
-         case 'no-update':
-         default:
-            return <HelpCircle className="size-4 text-muted-foreground" />;
-      }
-   };
+   const getHealthIcon = (healthId: string) => (
+      <HealthIcon
+         healthId={healthId}
+         className={healthId === 'no-update' ? 'text-muted-foreground' : undefined}
+      />
+   );
 
    const isMobile = useIsMobile();
    const healthStates = useHealthStates();

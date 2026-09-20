@@ -14,7 +14,9 @@ interface ProjectProgressChartProps {
  * nos dois arquivos, então mudar a cor aqui deixava a legenda apontando para a cor
  * antiga — sem nada quebrar, só passando a mentir.
  */
-export const PROGRESS_COLORS = { scope: '#8f9299', started: '#facc15', completed: '#6771c5' };
+import { PROGRESS_COLORS } from '../progress-colors';
+
+export { PROGRESS_COLORS };
 
 const COLORS = PROGRESS_COLORS;
 

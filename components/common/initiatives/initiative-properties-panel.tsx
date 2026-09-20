@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, useState, type ComponentPropsWithoutRef, type ReactNode } from 'react';
+import { useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { Network, UserRound, X } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -15,7 +15,11 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { INITIATIVE_STATUS_META, type Initiative, type InitiativeStatus } from '@/data/initiatives';
 import { initiativeWithDescendants } from '@/lib/initiative-tree';
-import { cn } from '@/lib/utils';
+import {
+   EmptyValue,
+   PropertyButton,
+   PropertyRow,
+} from '@/components/common/projects/project-property-fields';
 import { useLabels, usePriorities } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { InitiativeLabelPicker } from './initiative-label-picker';
@@ -27,39 +31,8 @@ import { isProjectCompleted } from '@/lib/project-completion';
 const formatDay = (iso: string) => format(parseISO(iso), 'MMM d, yyyy');
 const STATUS_IDS = Object.keys(INITIATIVE_STATUS_META) as InitiativeStatus[];
 
-function PropertyRow({ label, children }: { label: string; children: ReactNode }) {
-   return (
-      <div className="flex items-center gap-2 text-[13px]">
-         <span className="w-24 shrink-0 text-[13px] text-muted-foreground">{label}</span>
-         {children}
-      </div>
-   );
-}
-
-/**
- * Botão discreto que abre o popover de edição de uma propriedade. Repassa ref e props:
- * o `PopoverTrigger asChild` injeta `onClick`/`aria-*`/ref no filho — sem isso o
- * popover nunca abria (#5).
- */
-export const PropertyButton = forwardRef<HTMLButtonElement, ComponentPropsWithoutRef<'button'>>(
-   function PropertyButton({ className, children, ...props }, ref) {
-      return (
-         <button
-            ref={ref}
-            type="button"
-            {...props}
-            className={cn(
-               'inline-flex items-center gap-1.5 rounded px-1 -mx-1 py-0.5 hover:bg-accent transition-colors text-left',
-               className
-            )}
-         >
-            {children}
-         </button>
-      );
-   }
-);
-
-const optionClass = 'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-accent';
+const optionClass =
+   'flex h-8 w-full items-center gap-2 rounded-[6px] px-2.5 text-[13px] transition-colors hover:bg-accent';
 
 export function InitiativeStatusPicker({ initiative }: { initiative: Initiative }) {
    const patch = useInitiativePatch(initiative.id);
@@ -105,8 +78,8 @@ export function InitiativePriorityPicker({ initiative }: { initiative: Initiativ
       <Popover open={open} onOpenChange={setOpen}>
          <PopoverTrigger asChild>
             <PropertyButton>
-               <initiative.priority.icon className="size-4 text-muted-foreground" />
-               <span className="text-muted-foreground">{initiative.priority.name}</span>
+               <initiative.priority.icon className="size-3.5 text-muted-foreground" />
+               <span className="truncate">{initiative.priority.name}</span>
             </PropertyButton>
          </PopoverTrigger>
          <PopoverContent align="start" className="w-52 p-1">
@@ -154,7 +127,7 @@ export function InitiativeOwnerPicker({ initiative }: { initiative: Initiative }
             <PropertyButton>
                {initiative.owner ? (
                   <>
-                     <Avatar className="size-4">
+                     <Avatar className="size-4 shrink-0">
                         <AvatarImage
                            src={initiative.owner.avatarUrl || undefined}
                            alt={initiative.owner.name}
@@ -166,9 +139,7 @@ export function InitiativeOwnerPicker({ initiative }: { initiative: Initiative }
                      {initiative.owner.name}
                   </>
                ) : (
-                  <span className="text-muted-foreground inline-flex items-center gap-1.5">
-                     <UserRound className="size-4" /> Add owner
-                  </span>
+                  <EmptyValue icon={UserRound}>Add owner</EmptyValue>
                )}
             </PropertyButton>
          </PopoverTrigger>
@@ -276,8 +247,8 @@ export function InitiativePropertiesPanel({ initiative }: { initiative: Initiati
    const completed = allProjects.filter((p) => linked.has(p.id) && isProjectCompleted(p)).length;
 
    return (
-      <div className="flex flex-col gap-3">
-         <span className="text-[13px] font-medium leading-4">Properties</span>
+      <div className="flex flex-col">
+         <span className="mb-1.5 text-[13px] font-medium leading-4">Properties</span>
 
          <PropertyRow label="Status">
             <InitiativeStatusPicker initiative={initiative} />
@@ -293,6 +264,7 @@ export function InitiativePropertiesPanel({ initiative }: { initiative: Initiati
 
          <PropertyRow label="Start">
             <InitiativeTargetPicker
+               ghost
                kind="start"
                date={initiative.startDate ?? null}
                onChange={({ date }) =>
@@ -307,6 +279,7 @@ export function InitiativePropertiesPanel({ initiative }: { initiative: Initiati
 
          <PropertyRow label="Target">
             <InitiativeTargetPicker
+               ghost
                label={initiative.target ?? null}
                date={initiative.targetDate ?? null}
                onChange={({ label, date }) =>
@@ -321,6 +294,7 @@ export function InitiativePropertiesPanel({ initiative }: { initiative: Initiati
 
          <PropertyRow label="Labels">
             <InitiativeLabelPicker
+               ghost
                labels={labels}
                value={initiative.labels.map((label) => label.id)}
                onChange={(labelIds) =>
@@ -338,14 +312,14 @@ export function InitiativePropertiesPanel({ initiative }: { initiative: Initiati
          </PropertyRow>
 
          <PropertyRow label="Projects">
-            <span className="text-muted-foreground text-xs">
+            <span className="text-[13px] text-muted-foreground">
                {completed} / {initiative.projectIds.length} completed
             </span>
          </PropertyRow>
 
          {initiative.childIds.length > 0 && (
             <PropertyRow label="Rollup">
-               <span className="text-muted-foreground text-xs">
+               <span className="text-[13px] text-muted-foreground">
                   {initiative.rollupCompletedProjectCount} / {initiative.rollupProjectCount} with
                   sub-initiatives
                </span>

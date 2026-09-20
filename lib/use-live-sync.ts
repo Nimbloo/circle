@@ -9,6 +9,7 @@ import {
 } from '@/store/notifications-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useCatalogStore } from '@/store/catalog-store';
+import { reloadUserSettings } from '@/lib/user-settings-sync';
 import { useFavoritesStore } from '@/store/favorites-store';
 import { api, ApiError } from '@/lib/client';
 import { isFromThisTab, isOwnEcho } from '@/lib/client-id';
@@ -480,7 +481,10 @@ export function useLiveSync(): void {
                return;
             case 'document':
                // Documentos não vivem no bootstrap: só a tela aberta recarrega.
-               dispatch(DOCUMENT_CHANGED_EVENT, { id, teamId: parsed.teamId });
+               dispatch(
+                  DOCUMENT_CHANGED_EVENT,
+                  own ? { id, teamId: parsed.teamId, own } : { id, teamId: parsed.teamId }
+               );
                return;
             case 'catalog':
                // #53: só status (sem `kind`) vive no bootstrap (STATUS = colunas do board).
@@ -519,6 +523,11 @@ export function useLiveSync(): void {
                return;
             case 'automation':
                dispatch(AUTOMATION_CHANGED_EVENT, { id, teamId: parsed.teamId });
+               return;
+            case 'settings':
+               // Preferência gravada em OUTRA aba do mesmo usuário (ad#14): esta relê e
+               // aplica. O eco da própria aba não faz nada (ela já tem o estado).
+               if (!own) void reloadUserSettings();
                return;
             default: {
                // Exaustivo: entidade nova no servidor quebra a compilação até ser tratada

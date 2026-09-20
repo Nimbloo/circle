@@ -113,7 +113,7 @@ export function BulkActionsBar() {
 
    return (
       <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
-         <div className="pointer-events-auto flex items-center gap-1 rounded-lg border bg-container shadow-lg px-2 py-1.5">
+         <div className="motion-rise pointer-events-auto flex items-center gap-1 rounded-lg border bg-container shadow-lg px-2 py-1.5">
             <span className="px-2 text-sm font-medium tabular-nums">{ids.length} selected</span>
             <span className="w-px h-5 bg-border mx-1" />
 

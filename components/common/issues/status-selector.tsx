@@ -5,7 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useIssuesStore } from '@/store/issues-store';
 import { Status } from '@/data/status';
 import { useStatuses } from '@/store/catalog-store';
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { renderStatusIcon } from '@/lib/status-utils';
 import { StatusOptions } from './property-options';
 
@@ -16,6 +16,8 @@ interface StatusSelectorProps {
    showName?: boolean;
    /** Trigger de 16px usado dentro dos cards compactos do board. */
    compact?: boolean;
+   /** Trigger customizado (linha de propriedade do detalhe); default: botão com o ícone. */
+   children?: ReactNode;
 }
 
 export function StatusSelector({
@@ -23,6 +25,7 @@ export function StatusSelector({
    issueId,
    showName = false,
    compact = false,
+   children,
 }: StatusSelectorProps) {
    const id = useId();
    const [open, setOpen] = useState<boolean>(false);
@@ -48,24 +51,26 @@ export function StatusSelector({
       <div className={compact ? 'h-3.5 leading-none' : '*:not-first:mt-2'}>
          <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-               <Button
-                  id={id}
-                  className={
-                     showName
-                        ? 'h-7 gap-2 px-1.5 justify-start'
-                        : compact
-                          ? 'size-3.5 p-0'
-                          : 'size-7 flex items-center justify-center'
-                  }
-                  size={showName ? 'sm' : 'icon'}
-                  variant="ghost"
-                  role="combobox"
-                  aria-expanded={open}
-                  aria-label="Set status"
-               >
-                  {renderStatusIcon(value)}
-                  {showName && <span className="text-sm font-normal">{status.name}</span>}
-               </Button>
+               {children ?? (
+                  <Button
+                     id={id}
+                     className={
+                        showName
+                           ? 'h-7 gap-2 px-1.5 justify-start'
+                           : compact
+                             ? 'size-3.5 p-0'
+                             : 'size-7 flex items-center justify-center'
+                     }
+                     size={showName ? 'sm' : 'icon'}
+                     variant="ghost"
+                     role="combobox"
+                     aria-expanded={open}
+                     aria-label="Set status"
+                  >
+                     {renderStatusIcon(value)}
+                     {showName && <span className="text-sm font-normal">{status.name}</span>}
+                  </Button>
+               )}
             </PopoverTrigger>
             <PopoverContent
                className="border-input w-full min-w-[var(--radix-popper-anchor-width)] p-0"

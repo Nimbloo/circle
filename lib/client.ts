@@ -19,9 +19,14 @@ import type {
    UpdateMilestoneInput,
    AddResourceInput,
    PostUpdateInput,
+   EditUpdateInput,
 } from '@/lib/api/project-detail';
-import type { InitiativeUpdateDto, PostInitiativeUpdateInput } from '@/lib/api/initiative-detail';
-import type { TeamDto, CreateTeamInput, JoinRequestDto } from '@/lib/api/teams';
+import type {
+   EditInitiativeUpdateInput,
+   InitiativeUpdateDto,
+   PostInitiativeUpdateInput,
+} from '@/lib/api/initiative-detail';
+import type { TeamDto, CreateTeamInput, JoinRequestDto, TeamDeletionImpact } from '@/lib/api/teams';
 import type { MemberDto } from '@/lib/api/members';
 import {
    DEACTIVATED_LOGIN_URL,
@@ -33,6 +38,7 @@ import type { CycleDto, CreateCycleInput, UpdateCycleInput } from '@/lib/api/cyc
 import type { TemplateDto, CreateTemplateInput, UpdateTemplateInput } from '@/lib/api/templates';
 import type { StatusDto, CreateStatusInput, UpdateStatusInput } from '@/lib/api/statuses';
 import type { EmojiDto } from '@/lib/api/emojis';
+import type { LabelDto, LabelGroupDto } from '@/lib/api/labels';
 import type { UploadDto, UploadInput } from '@/lib/api/uploads';
 import type {
    ProjectTemplateDto,
@@ -50,7 +56,12 @@ import type { WorkspaceBootstrap } from '@/lib/api/workspace';
 import type { NotificationDto } from '@/lib/api/notifications';
 import type { ReviewDetailDto, ReviewDto, ReviewGuideDto } from '@/lib/api/reviews';
 import type { AddReviewCommentInput, ReviewCommentDto } from '@/lib/api/review-comments';
-import type { FolderDto, DocumentDto } from '@/lib/api/documents';
+import type {
+   FolderDto,
+   DocumentDto,
+   DocumentDetailDto,
+   UpdateDocumentInput,
+} from '@/lib/api/documents';
 import type {
    IssueDetailDto,
    CommentDto,
@@ -148,6 +159,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
          ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      // DELETE sobrevive ao fechamento da página (exclusão com Undo enviada no `pagehide`).
+      keepalive: method === 'DELETE',
    });
    return (await parseResponse(res)).data as T;
 }
@@ -291,12 +304,20 @@ export const api = {
    priorities: () =>
       get<{ id: string; name: string; position: number; sortRank: number }[]>('/priorities'),
    labels: {
-      list: () => get<{ id: string; name: string; color: string }[]>('/labels'),
-      create: (input: { id?: string; name: string; color: string }) =>
-         post<{ id: string; name: string; color: string }>('/labels', input),
-      update: (id: string, body: { name?: string; color?: string }) =>
-         patch<{ id: string; name: string; color: string }>(`/labels/${id}`, body),
+      list: () => get<LabelDto[]>('/labels'),
+      create: (input: { id?: string; name: string; color: string; groupId?: string | null }) =>
+         post<LabelDto>('/labels', input),
+      update: (id: string, body: { name?: string; color?: string; groupId?: string | null }) =>
+         patch<LabelDto>(`/labels/${id}`, body),
       remove: (id: string) => del<{ deleted: boolean }>(`/labels/${id}`),
+   },
+   labelGroups: {
+      list: () => get<LabelGroupDto[]>('/label-groups'),
+      create: (input: { name: string; color?: string }) =>
+         post<LabelGroupDto>('/label-groups', input),
+      update: (id: string, body: { name?: string; color?: string }) =>
+         patch<LabelGroupDto>(`/label-groups/${id}`, body),
+      remove: (id: string) => del<{ deleted: boolean }>(`/label-groups/${id}`),
    },
    healthStates: () =>
       get<{ id: string; name: string; color: string; description: string | null }[]>(
@@ -368,6 +389,8 @@ export const api = {
          }
       ) => patch<TeamDto>(`/teams/${key}`, body),
       remove: (key: string) => del<{ deleted: boolean }>(`/teams/${key}`),
+      /** O que a exclusão do time apaga junto (contagens). Só admin. */
+      deletionImpact: (key: string) => get<TeamDeletionImpact>(`/teams/${key}/deletion-impact`),
       members: (key: string) => get<MemberDto[]>(`/teams/${key}/members`),
       addMember: (key: string, email: string) =>
          post<MemberDto[]>(`/teams/${key}/members`, { email }),
@@ -423,9 +446,14 @@ export const api = {
 
    /** Documentos (update/delete por id; escrita exige criador ou admin). */
    documents: {
-      update: (id: string, body: { name?: string; icon?: string | null; pinned?: boolean }) =>
-         patch<{ id: string }>(`/documents/${id}`, body),
+      /** Documento aberto: metadados + corpo (`descriptionDoc`) e `descriptionVersion`. */
+      get: (id: string) => get<DocumentDetailDto>(`/documents/${id}`),
+      update: (id: string, body: UpdateDocumentInput) =>
+         patch<DocumentDetailDto>(`/documents/${id}`, body),
       remove: (id: string) => del<{ deleted: boolean }>(`/documents/${id}`),
+      updateFolder: (id: string, body: { name?: string; icon?: string | null }) =>
+         patch<Omit<FolderDto, 'documents'>>(`/document-folders/${id}`, body),
+      removeFolder: (id: string) => del<{ deleted: boolean }>(`/document-folders/${id}`),
    },
 
    integrations: {
@@ -477,6 +505,11 @@ export const api = {
          ),
       postUpdate: (id: string, body: PostUpdateInput) =>
          post<ProjectUpdateDto>(`/projects/${id}/updates`, body),
+      /** Edita um update já postado (pl#11). */
+      updateUpdate: (id: string, updateId: string, body: EditUpdateInput) =>
+         patch<ProjectUpdateDto>(`/projects/${id}/updates/${updateId}`, body),
+      removeUpdate: (id: string, updateId: string) =>
+         del<{ deleted: boolean }>(`/projects/${id}/updates/${updateId}`),
       resources: (id: string) => get<ProjectResourceDto[]>(`/projects/${id}/resources`),
       addResource: (id: string, body: AddResourceInput) =>
          post<ProjectResourceDto>(`/projects/${id}/resources`, body),
@@ -514,6 +547,15 @@ export const api = {
          patch<InitiativeDto>(`/initiatives/${id}`, body),
       remove: (id: string) => del<{ deleted: boolean }>(`/initiatives/${id}`),
       updates: (id: string) => get<InitiativeUpdateDto[]>(`/initiatives/${id}/updates`),
+      /** Edita um update da initiative; devolve o update e a initiative (pl#11). */
+      updateUpdate: (id: string, updateId: string, body: EditInitiativeUpdateInput) =>
+         patch<{ update: InitiativeUpdateDto; initiative: InitiativeDto }>(
+            `/initiatives/${id}/updates/${updateId}`,
+            body
+         ),
+      /** Exclui um update da initiative; devolve a initiative com o health recalculado. */
+      removeUpdate: (id: string, updateId: string) =>
+         del<InitiativeDto>(`/initiatives/${id}/updates/${updateId}`),
       /** Posta um update; devolve o update e a initiative já com o health propagado. */
       postUpdate: (id: string, body: PostInitiativeUpdateInput) =>
          post<{ update: InitiativeUpdateDto; initiative: InitiativeDto }>(
@@ -548,6 +590,21 @@ export const api = {
       snooze: (id: string, snoozedUntil: string | null) =>
          patch<{ id: string }>(`/notifications/${id}`, { snoozedUntil }),
       readAll: () => post<{ marked: number }>('/notifications/read-all'),
+      /** Página por cursor (co#3): `cursor` é o `nextCursor` da página anterior. */
+      page: async (opts: { cursor?: string | null; limit?: number; snoozed?: boolean } = {}) => {
+         const sp = new URLSearchParams();
+         if (opts.cursor) sp.set('cursor', opts.cursor);
+         if (opts.limit != null) sp.set('limit', String(opts.limit));
+         if (opts.snoozed) sp.set('snoozed', 'true');
+         const q = sp.toString();
+         const { data, meta } = await requestEnvelope<NotificationDto[]>(
+            `/inbox${q ? `?${q}` : ''}`
+         );
+         const nextCursor =
+            (meta as { nextCursor?: string | null } | undefined)?.nextCursor ?? null;
+         return { items: data, nextCursor };
+      },
+      remove: (id: string) => del<{ id: string; deleted: boolean }>(`/notifications/${id}`),
    },
 
    favorites: {
@@ -556,6 +613,8 @@ export const api = {
          post<{ added: boolean }>('/favorites', { entityType, entityId }),
       remove: (entityType: FavoriteEntityType, entityId: string) =>
          del<{ removed: boolean }>(`/favorites?entityType=${entityType}&entityId=${entityId}`),
+      /** Nova ordem (ids de favorito) da sidebar (co#16). */
+      reorder: (order: string[]) => patch<{ reordered: number }>('/favorites', { order }),
    },
 
    reviews: {
@@ -677,6 +736,8 @@ export const api = {
       }) => post<{ jobId: string }>('/import/commit', input),
       /** Progresso/resultado do job de import (só o dono). */
       job: (id: string) => get<ImportJobDto>(`/import/jobs/${encodeURIComponent(id)}`),
+      /** Job de import ainda rodando do próprio usuário (ou null) — ad#5. */
+      activeJob: () => get<ImportJobDto | null>('/import/jobs'),
    },
 
    /** Webhooks de saída (#101). O segredo só vem no `create`. */

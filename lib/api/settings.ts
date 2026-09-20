@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { userSettings } from '@/db/schema';
 import { ApiError } from './errors';
+import { publish } from './events';
 import { MAX_SETTINGS_BYTES } from '@/lib/settings-limits';
 import type { DetailPanelKind } from '@/store/detail-panel-store';
 
@@ -192,6 +193,26 @@ export async function putUserSettings(
    userId: string,
    data: UserSettings
 ): Promise<UserSettings> {
+   const saved = await writeUserSettings(db, userId, data);
+   publishSettingsChanged(userId);
+   return saved;
+}
+
+/**
+ * Aviso às OUTRAS abas do mesmo usuário (ad#14): antes a preferência só aparecia lá
+ * depois de um reload. Endereçado ao dono (`recipientId`); a aba que gravou reconhece o
+ * eco pelo `clientId` e não relê.
+ */
+function publishSettingsChanged(userId: string): void {
+   publish({ entity: 'settings', action: 'updated', recipientId: userId });
+}
+
+/** Gravação pura (sem evento): usada pelo PUT e, dentro da transação, pelo PATCH. */
+async function writeUserSettings(
+   db: Db,
+   userId: string,
+   data: UserSettings
+): Promise<UserSettings> {
    const serialized = JSON.stringify(data ?? {});
    if (Buffer.byteLength(serialized, 'utf8') > MAX_SETTINGS_BYTES) {
       throw new ApiError(413, 'Settings excedem o tamanho máximo');
@@ -219,6 +240,17 @@ export async function patchUserSettings(
    userId: string,
    patch: SettingsPatch
 ): Promise<UserSettings> {
+   const saved = await writeSettingsSections(db, userId, patch);
+   // Evento DEPOIS do commit.
+   publishSettingsChanged(userId);
+   return saved;
+}
+
+function writeSettingsSections(
+   db: Db,
+   userId: string,
+   patch: SettingsPatch
+): Promise<UserSettings> {
    return db.transaction(async (tx) => {
       const rows = await tx
          .select({ data: userSettings.data })
@@ -236,6 +268,6 @@ export async function patchUserSettings(
       const merged: UserSettings = { ...current };
       for (const [section, value] of Object.entries(patch))
          if (value !== undefined) merged[section] = value;
-      return putUserSettings(tx as unknown as Db, userId, merged);
+      return writeUserSettings(tx as unknown as Db, userId, merged);
    });
 }

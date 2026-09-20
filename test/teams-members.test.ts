@@ -1,7 +1,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
-import { issue } from '@/db/schema';
+import { eq } from 'drizzle-orm';
+import { issue, savedView, documentFolder } from '@/db/schema';
 import {
    listTeams,
    getTeam,
@@ -131,13 +132,13 @@ describe('teams', () => {
       expect(await updateTeam(db, 'NOPE', { name: 'x' })).toBeNull();
    });
 
-   it('deletes an empty team but refuses when it has issues (409)', async () => {
+   it('deletes an empty team and, with issues, deletes them too (cascade)', async () => {
       const { db, ana } = await workspace();
       // DESIGN está vazio -> apaga (remove os team_member primeiro)
       expect(await deleteTeam(db, 'DESIGN')).toBe(true);
       expect(await getTeam(db, 'DESIGN')).toBeNull();
 
-      // CORE ganha uma issue -> recusa
+      // CORE ganha uma issue -> a exclusão leva a issue junto
       await db.insert(issue).values({
          id: 'iss-1',
          identifier: 'CORE-1',
@@ -152,29 +153,32 @@ describe('teams', () => {
          rank: 'a0',
          dueDate: null,
       });
-      await expect(deleteTeam(db, 'CORE')).rejects.toThrow();
-      expect(await getTeam(db, 'CORE')).not.toBeNull(); // segue existindo
+      expect(await deleteTeam(db, 'CORE')).toBe(true);
+      expect(await getTeam(db, 'CORE')).toBeNull();
+      expect(await db.select().from(issue).where(eq(issue.id, 'iss-1'))).toEqual([]);
    });
 
-   it('refuses to delete a team that still has a saved view (FK RESTRICT)', async () => {
-      const { db, ana } = await workspace();
-      await createView(
+   it('deletes a team that still has a saved view (the view goes with it)', async () => {
+      const { db } = await workspace();
+      const view = await createView(
          db,
          { slug: 'v', name: 'V', type: 'issue', filter: {}, teamId: 'DESIGN' },
          'ana@nimbloo.ai'
       );
-      // DESIGN não está mais "vazio" -> recusa 409 em vez de estourar 500 no FK
-      await expect(deleteTeam(db, 'DESIGN')).rejects.toThrow();
-      expect(await getTeam(db, 'DESIGN')).not.toBeNull();
-      void ana;
+      expect(await deleteTeam(db, 'DESIGN')).toBe(true);
+      expect(await getTeam(db, 'DESIGN')).toBeNull();
+      expect(await db.select().from(savedView).where(eq(savedView.id, view.id))).toEqual([]);
    });
 
-   it('refuses to delete a team that still has a document folder (FK RESTRICT)', async () => {
+   it('deletes a team that still has a document folder (folder and documents go with it)', async () => {
       const { db } = await workspace();
       // ana é membro de DESIGN — passa na checagem de membership do createFolder.
       await createFolder(db, { teamId: 'DESIGN', name: 'Specs' }, 'ana@nimbloo.ai');
-      await expect(deleteTeam(db, 'DESIGN')).rejects.toThrow();
-      expect(await getTeam(db, 'DESIGN')).not.toBeNull();
+      expect(await deleteTeam(db, 'DESIGN')).toBe(true);
+      expect(await getTeam(db, 'DESIGN')).toBeNull();
+      expect(
+         await db.select().from(documentFolder).where(eq(documentFolder.teamId, 'DESIGN'))
+      ).toEqual([]);
    });
 });
 

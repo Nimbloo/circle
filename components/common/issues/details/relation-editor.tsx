@@ -1,13 +1,5 @@
 'use client';
 
-import {
-   Command,
-   CommandEmpty,
-   CommandGroup,
-   CommandInput,
-   CommandItem,
-   CommandList,
-} from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { api } from '@/lib/client';
 import { useIssuesStore } from '@/store/issues-store';
@@ -16,6 +8,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { IssuePicker } from './issue-picker';
 
 export type RelationKind = 'sub' | 'related' | 'blocked_by' | 'duplicate';
 
@@ -57,10 +50,7 @@ export function RelationEditor({
    const byId = useMemo(() => new Map(issues.map((i) => [i.id, i])), [issues]);
    const related = relatedIds.map((id) => byId.get(id)).filter((i) => i !== undefined);
 
-   const candidates = useMemo(() => {
-      const taken = new Set([...relatedIds, issueId]);
-      return issues.filter((i) => !taken.has(i.id));
-   }, [issues, relatedIds, issueId]);
+   const taken = useMemo(() => new Set([...relatedIds, issueId]), [relatedIds, issueId]);
 
    async function add(relatedId: string) {
       setOpen(false);
@@ -93,6 +83,7 @@ export function RelationEditor({
             related.map((issue) => (
                <div key={issue.id} className="group flex items-center gap-2 text-sm min-w-0">
                   <issue.status.icon />
+                  <span className="shrink-0 text-xs text-muted-foreground">{issue.identifier}</span>
                   <Link
                      href={`/${orgId ?? 'nimbloo'}/issue/${issue.identifier}`}
                      className="truncate hover:underline"
@@ -122,28 +113,7 @@ export function RelationEditor({
                </button>
             </PopoverTrigger>
             <PopoverContent className="border-input w-72 p-0" align="start">
-               <Command>
-                  <CommandInput placeholder="Buscar issues..." />
-                  <CommandList>
-                     <CommandEmpty>Nenhuma issue encontrada.</CommandEmpty>
-                     <CommandGroup>
-                        {candidates.map((issue) => (
-                           <CommandItem
-                              key={issue.id}
-                              value={`${issue.identifier} ${issue.title}`}
-                              onSelect={() => add(issue.id)}
-                              className="flex items-center gap-2"
-                           >
-                              <issue.status.icon />
-                              <span className="text-muted-foreground text-xs shrink-0">
-                                 {issue.identifier}
-                              </span>
-                              <span className="truncate">{issue.title}</span>
-                           </CommandItem>
-                        ))}
-                     </CommandGroup>
-                  </CommandList>
-               </Command>
+               <IssuePicker excludeIds={taken} onSelect={(issue) => void add(issue.id)} />
             </PopoverContent>
          </Popover>
       </div>

@@ -130,3 +130,30 @@ describe('fila de triagem (#28)', () => {
       expect(apiMocks.suggestion).not.toHaveBeenCalled();
    });
 });
+
+describe('fila de triagem não empurra a lista (is#1)', () => {
+   const many = Array.from({ length: 12 }, (_, n) => ({ ...SUGGESTION, issueId: `s${n}` }));
+
+   it('fica num container com altura máxima e rolagem própria', async () => {
+      apiMocks.queue.mockResolvedValue(many);
+      render(<TriageSuggestionsQueue />);
+      const region = await screen.findByRole('region', { name: 'Suggestions' });
+      const list = region.querySelector('[data-slot="triage-suggestions-list"]') as HTMLElement;
+      expect(list).toBeTruthy();
+      expect(list.className).toMatch(/max-h-/);
+      expect(list.className).toMatch(/overflow-y-auto/);
+      expect(region.className).toMatch(/shrink-0/);
+   });
+
+   it('mostra a contagem e colapsa pelo cabeçalho', async () => {
+      const user = userEvent.setup();
+      apiMocks.queue.mockResolvedValue(many);
+      render(<TriageSuggestionsQueue />);
+      const toggle = await screen.findByRole('button', { name: /12 suggestions/i });
+      expect(toggle.getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getAllByText('Suggested')).toHaveLength(12);
+      await user.click(toggle);
+      expect(toggle.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryAllByText('Suggested')).toHaveLength(0);
+   });
+});

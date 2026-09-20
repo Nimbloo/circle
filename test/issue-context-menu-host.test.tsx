@@ -2,7 +2,7 @@
 
 import './setup-dom';
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { toast } from 'sonner';
@@ -13,6 +13,7 @@ import { status } from './helpers/catalog-fixture';
 import { useDisplaySettingsStore } from '@/store/display-settings-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { DELETE_UNDO_MS } from '@/components/common/issues/delete-with-undo';
 
 const apiMocks = vi.hoisted(() => ({ update: vi.fn(), remove: vi.fn() }));
 const menuRenders = vi.hoisted(() => ({ ids: [] as (string | undefined)[] }));
@@ -20,7 +21,9 @@ const menuRenders = vi.hoisted(() => ({ ids: [] as (string | undefined)[] }));
 vi.mock('@/lib/client', () => ({
    api: { issues: { update: apiMocks.update, remove: apiMocks.remove } },
 }));
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('sonner', () => ({
+   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
+}));
 vi.mock('next/navigation', () => ({
    useParams: () => ({ orgId: 'nimbloo' }),
    usePathname: () => '/nimbloo/team/ENG/all',
@@ -104,12 +107,22 @@ describe('R7 menu de contexto único no nível da lista', () => {
       expect(await screen.findByText('Delete...')).toBeTruthy();
    });
 
-   it('Is#13: excluir só toasta sucesso depois da API', async () => {
+   // is#16: o DELETE só sai quando a janela de desfazer fecha; o erro segue avisado
+   // pelo store (rollback + toast.error) e nunca há toast de sucesso antes da API.
+   it('Is#13/is#16: excluir espera a janela de Undo e avisa a falha', async () => {
       apiMocks.remove.mockRejectedValue(new Error('x'));
       render(view());
       fireEvent.contextMenu(screen.getByText('Issue 2'));
       await userEvent.setup().click(await screen.findByText('Delete...'));
       await userEvent.setup().click(await screen.findByRole('button', { name: 'Delete' }));
+      await waitFor(() =>
+         expect(useIssuesStore.getState().issues.map((i) => i.id)).toEqual(['i1', 'i3'])
+      );
+      expect(apiMocks.remove).not.toHaveBeenCalled();
+
+      await act(async () => {
+         await new Promise((r) => setTimeout(r, DELETE_UNDO_MS + 20));
+      });
       await waitFor(() => expect(apiMocks.remove).toHaveBeenCalledWith('i2'));
       await waitFor(() => expect(toast.error).toHaveBeenCalled());
       expect(toast.success).not.toHaveBeenCalled();

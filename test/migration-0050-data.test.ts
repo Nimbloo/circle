@@ -8,7 +8,6 @@ import { migrate } from 'drizzle-orm/pglite/migrator';
 import { sql } from 'drizzle-orm';
 import * as schema from '@/db/schema';
 import type { Db } from '@/db';
-import { seedCatalogs } from '@/db/seed-catalogs';
 
 /**
  * Migration 0050 com DADOS (a suíte só a roda em banco vazio): banco até a 0049, com
@@ -33,7 +32,13 @@ describe('migration 0050 sobre dados existentes', () => {
       const client = new PGlite();
       const db = drizzle(client, { schema }) as unknown as Db;
       await migrate(drizzle(client), { migrationsFolder: migrationsUpTo0049() });
-      await seedCatalogs(db);
+      // Catálogo mínimo por SQL: o `seedCatalogs` de hoje conhece tabelas de migrations
+      // posteriores (ex.: label_group), que ainda não existem neste ponto.
+      await db.execute(sql`
+         INSERT INTO status (id, name, color, category, position)
+         VALUES ('backlog', 'Backlog', '#999', 'backlog', 0)`);
+      await db.execute(sql`
+         INSERT INTO priority (id, name, position, sort_rank) VALUES ('low', 'Low', 0, 3)`);
       await db.execute(sql`
          INSERT INTO team (id, name, icon, color, issue_seq) VALUES
             ('ENG', 'Eng', 'x', '#000', 0), ('OPS', 'Ops', 'x', '#000', 0)`);

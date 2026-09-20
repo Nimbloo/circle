@@ -292,7 +292,44 @@ describe('workspace-store — splice por entidade', () => {
          expect(st().getUserById('me')?.teamIds).toEqual([]);
          expect(st().getUserById('bob')).toBe(before.users[2]); // não era membro: mesma ref
          expect(st().me?.teamIds).toEqual([]);
-         expectUntouched(before, ['teams', 'users', 'me']);
+         // Exclusão em cascata: projetos e ciclos do time saem junto (e da initiative).
+         expectUntouched(before, ['teams', 'users', 'me', 'projects', 'cycles', 'initiatives']);
+      });
+
+      it('removeTeamLocal poda projetos, ciclos, views e issues do time (cascata)', () => {
+         useWorkspaceStore.setState({
+            projects: [...st().projects, project('p3', 'OPS')],
+            views: [
+               ...st().views,
+               { id: 'v2', name: 'V2', teamId: 'ENG', filter: {} } as unknown as View,
+            ],
+         });
+         useIssuesStore.setState({
+            issues: [
+               { id: 'a', teamId: 'ENG', project: { id: 'p1' }, cycleId: 'c1' },
+               { id: 'b', teamId: 'ENG', parentId: 'a', cycleId: '' },
+               {
+                  id: 'c',
+                  teamId: 'OPS',
+                  parentId: 'a',
+                  parentIdentifier: 'ENG-1',
+                  project: { id: 'p2' },
+                  cycleId: 'c1',
+               },
+               { id: 'd', teamId: 'OPS', project: { id: 'p3' }, cycleId: '' },
+            ] as unknown as Issue[],
+         });
+         st().removeTeamLocal('ENG');
+         expect(st().projects.map((p) => p.id)).toEqual(['p3']);
+         expect(st().cycles).toEqual([]);
+         expect(st().views.map((v) => v.id)).toEqual(['v1']);
+         expect(st().initiatives[0].projectIds).toEqual([]);
+         const issues = useIssuesStore.getState().issues;
+         expect(issues.map((i) => i.id)).toEqual(['c', 'd']);
+         // Issue de outro time perde o pai, o projeto e o ciclo que eram do time excluído.
+         expect(issues[0]).toMatchObject({ parentId: null, parentIdentifier: null, cycleId: '' });
+         expect(issues[0].project).toBeUndefined();
+         expect(issues[1].project?.id).toBe('p3');
       });
 
       it('applyTeamMembers substitui a lista: quem entrou ganha o time, quem saiu perde', () => {

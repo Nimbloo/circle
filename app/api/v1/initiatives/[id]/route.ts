@@ -24,7 +24,12 @@ export async function GET(req: Request, { params }: Params) {
 }
 
 const UpdateSchema = z.object({
-   name: z.string().min(1).max(196).optional(),
+   name: z
+      .string()
+      .trim()
+      .min(1, 'name é obrigatório')
+      .max(128, 'name deve ter no máximo 128 caracteres')
+      .optional(),
    description: z.string().nullish(),
    icon: z.string().max(64).nullish(),
    iconColor: z.string().max(32).nullish(),

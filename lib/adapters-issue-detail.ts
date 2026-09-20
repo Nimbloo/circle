@@ -50,6 +50,7 @@ export function adaptActivity(dtos: ActivityDto[]): ActivityItem[] {
             actor,
             timeAgo,
             body: textToBlocks(a.body),
+            source: a.body ?? '',
             parentId: a.parentId ?? null,
             updatedAt: a.updatedAt ?? null,
             resolvedAt: a.resolvedAt ?? null,

@@ -1,5 +1,8 @@
 'use client';
 
+import { cn } from '@/lib/utils';
+import { Check } from 'lucide-react';
+import { useBulkSelectionStore } from '@/store/bulk-selection-store';
 import { Issue } from '@/data/issues';
 import { useDisplaySetting } from '@/store/display-settings-store';
 import { format } from 'date-fns';
@@ -97,6 +100,16 @@ function IssueGridComponent({ issue, getGroup, layout = true }: IssueGridProps) 
    const { orgId } = useParams<{ orgId: string }>();
    const displayProperties = useDisplaySetting('displayProperties');
    const inMenuHost = useInIssueMenuHost();
+   // is#10: no board a seleção era invisível — sem caixa e sem destaque no card.
+   const selected = useBulkSelectionStore((s) => s.selected.has(issue.id));
+   const anySelected = useBulkSelectionStore((s) => s.selected.size > 0);
+   const toggleSelected = useBulkSelectionStore((s) => s.toggle);
+   const selectRange = useBulkSelectionStore((s) => s.selectRange);
+   const pick = (e: { shiftKey: boolean }) => {
+      const ordered = getGroup?.().issues.map((i) => i.id);
+      if (e.shiftKey && ordered) selectRange(ordered, issue.id);
+      else toggleSelected(issue.id);
+   };
 
    // Set up drag functionality.
    // Deps [issue]: sem elas o item arrastado ficava congelado na 1ª versão da issue.
@@ -118,7 +131,7 @@ function IssueGridComponent({ issue, getGroup, layout = true }: IssueGridProps) 
 
    // Drop sobre o card: reorder no grupo ou campo do agrupamento (R2). O resultado
    // sinaliza `didDrop()` ao container, que então não trata de novo.
-   const drop = useIssueDropTarget(issue.id, getGroup, ref);
+   const { drop } = useIssueDropTarget(issue.id, getGroup, ref);
 
    // Connect drag and drop to the element.
    drag(drop(ref));
@@ -130,7 +143,10 @@ function IssueGridComponent({ issue, getGroup, layout = true }: IssueGridProps) 
       <Card
          ref={ref}
          data-issue-id={issue.id}
-         className="w-full cursor-default rounded-lg bg-card p-2 shadow-[var(--card-shadow)]"
+         className={cn(
+            'group/card w-full cursor-default rounded-lg bg-card p-2 shadow-[var(--card-shadow)]',
+            selected && 'ring-2 ring-primary'
+         )}
          {...(layout && { layoutId: `issue-grid-${issue.identifier || issue.id}` })}
          style={{
             opacity: isDragging ? 0.5 : 1,
@@ -139,7 +155,22 @@ function IssueGridComponent({ issue, getGroup, layout = true }: IssueGridProps) 
       >
          {/* Bloco superior: conteúdo à esquerda e assignee fixo no canto. */}
          <div className="relative mb-2.5 h-[37px]">
-            <div className="flex h-[37px] flex-col pl-1 pr-[34px]">
+            <button
+               type="button"
+               onClick={pick}
+               aria-label={selected ? 'Deselect issue' : 'Select issue'}
+               aria-pressed={selected}
+               className={cn(
+                  'absolute -left-0.5 top-0 z-10 flex size-4 items-center justify-center rounded border transition-opacity',
+                  selected
+                     ? 'border-primary bg-primary text-primary-foreground opacity-100'
+                     : 'border-border text-transparent opacity-0 group-hover/card:opacity-100 focus-visible:opacity-100',
+                  anySelected && 'opacity-100'
+               )}
+            >
+               <Check className="size-3" />
+            </button>
+            <div className={cn('flex h-[37px] flex-col pr-[34px]', anySelected ? 'pl-5' : 'pl-1')}>
                {displayProperties.id ? (
                   <span className="text-xs font-medium tabular-nums text-muted-foreground">
                      {issue.identifier}

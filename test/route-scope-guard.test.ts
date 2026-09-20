@@ -33,11 +33,13 @@ const EXEMPT: ReadonlySet<string> = new Set([
    // 1. Dado do PRÓPRIO usuário (o gate é a identidade da sessão, não o time).
    'POST /agent/chats',
    'POST /favorites',
+   'PATCH /favorites',
    'DELETE /favorites',
    'PATCH /me',
    'POST /me/avatar',
    'DELETE /me/avatar',
    'PATCH /notifications/[id]',
+   'DELETE /notifications/[id]',
    'POST /notifications/read-all',
    'POST /uploads',
 

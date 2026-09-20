@@ -43,7 +43,7 @@ export default function Header() {
    return (
       <>
          <LocationBar>
-            <HeaderGroup className="pl-2.5">
+            <HeaderGroup>
                {team ? (
                   <>
                      <Link

@@ -4,6 +4,7 @@ import type { TriageSuggestionDto } from '@/lib/api/triage';
 import { api } from '@/lib/client';
 import { ISSUE_CHANGED_EVENT } from '@/lib/use-live-sync';
 import { useIssuesStore } from '@/store/issues-store';
+import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -19,6 +20,7 @@ export function TriageSuggestionsQueue() {
    const { orgId, teamId } = useParams<{ orgId?: string; teamId?: string }>();
    const issues = useIssuesStore((s) => s.issues);
    const [suggestions, setSuggestions] = useState<TriageSuggestionDto[]>([]);
+   const [open, setOpen] = useState(true);
 
    const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -77,29 +79,51 @@ export function TriageSuggestionsQueue() {
    );
    if (pending.length === 0) return null;
 
+   // is#1: a fila tem altura máxima e rolagem própria — com centenas de cards ela
+   // empurrava a lista de issues para fora da tela (pai overflow-hidden). O cabeçalho
+   // mostra a contagem e colapsa a fila inteira.
    return (
-      <div className="flex flex-col gap-2 border-b px-6 py-3">
-         {pending.map((s) => {
-            const issue = issues.find((i) => i.id === s.issueId);
-            return (
-               <TriageSuggestionCard
-                  key={s.issueId}
-                  issueId={s.issueId}
-                  initial={s}
-                  onResolved={load}
-                  heading={
-                     issue ? (
-                        <Link
-                           href={`/${orgId ?? 'nimbloo'}/issue/${issue.identifier}`}
-                           className="text-muted-foreground hover:text-foreground"
-                        >
-                           {issue.identifier} · {issue.title}
-                        </Link>
-                     ) : null
-                  }
-               />
-            );
-         })}
-      </div>
+      <section aria-label="Suggestions" className="flex shrink-0 flex-col border-b">
+         <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen((v) => !v)}
+            className="flex h-9 items-center gap-1.5 px-6 text-left text-xs font-medium text-muted-foreground transition-colors duration-[var(--dur-instant,80ms)] hover:text-foreground"
+         >
+            <ChevronRight
+               className={`size-3.5 transition-transform duration-[var(--dur-instant,80ms)] ${open ? 'rotate-90' : ''}`}
+            />
+            {pending.length} {pending.length === 1 ? 'suggestion' : 'suggestions'}
+         </button>
+         {open && (
+            <div
+               data-slot="triage-suggestions-list"
+               className="flex max-h-[40vh] flex-col gap-2 overflow-y-auto px-6 pb-3"
+            >
+               {pending.map((s) => {
+                  const issue = issues.find((i) => i.id === s.issueId);
+                  return (
+                     <TriageSuggestionCard
+                        key={s.issueId}
+                        issueId={s.issueId}
+                        initial={s}
+                        onResolved={load}
+                        className="shrink-0"
+                        heading={
+                           issue ? (
+                              <Link
+                                 href={`/${orgId ?? 'nimbloo'}/issue/${issue.identifier}`}
+                                 className="text-muted-foreground hover:text-foreground"
+                              >
+                                 {issue.identifier} · {issue.title}
+                              </Link>
+                           ) : null
+                        }
+                     />
+                  );
+               })}
+            </div>
+         )}
+      </section>
    );
 }

@@ -20,6 +20,7 @@ import Notifications from './notifications';
 const ISSUE_VIEW_TABS = [
    { label: 'Active', segment: 'active' },
    { label: 'Backlog', segment: 'backlog' },
+   { label: 'Triage', segment: 'triage' },
    { label: 'All issues', segment: 'all' },
 ];
 

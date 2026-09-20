@@ -28,11 +28,16 @@ export function SettingsShell({
    return (
       <div className="h-full w-full overflow-y-scroll">
          <div className="relative -left-[2.5px] mx-auto w-full max-w-[640px] py-16 pb-20 max-md:left-0 max-md:px-5 max-md:py-8">
-            <div className="relative px-4 max-md:px-0">
-               <div className="flex items-start gap-1.5">
-                  <SidebarTrigger className="-ml-1 mt-0.5 lg:hidden" />
-                  <div className="min-w-0">
-                     <h1 className="text-2xl font-medium leading-8">{title}</h1>
+            {/* Título e ações lado a lado (ad#3): o título quebra na própria coluna em vez
+                de passar por baixo das ações, que ficam no canto (tamanho sm). O trigger da
+                sidebar tem caixa fixa, então o h1 começa no mesmo x em toda tela. */}
+            <div className="flex items-start gap-3 px-4 max-md:px-0">
+               <div className="flex min-w-0 flex-1 items-start gap-1.5">
+                  <SidebarTrigger className="-ml-1 mt-0.5 size-7 shrink-0 lg:hidden" />
+                  <div className="min-w-0 flex-1">
+                     <h1 className="text-2xl font-medium leading-8 [overflow-wrap:anywhere]">
+                        {title}
+                     </h1>
                      {description && (
                         <p className="mt-1 text-[13px] leading-[22px] text-muted-foreground">
                            {description}
@@ -40,7 +45,7 @@ export function SettingsShell({
                      )}
                   </div>
                </div>
-               {action && <div className="absolute right-4 top-0 max-md:right-0">{action}</div>}
+               {action && <div className="flex shrink-0 items-center pt-0.5">{action}</div>}
             </div>
             <SettingsSyncWarning />
             <div className={cn('mt-8 flex flex-col gap-12', description && 'mt-[34px]')}>
@@ -124,7 +129,7 @@ export function SettingsRow({
       <Comp
          onClick={onClick}
          className={cn(
-            'content-enter flex min-h-[60px] w-full items-center gap-3 px-4 py-[15.5px] text-left last:min-h-[66px]',
+            'flex min-h-[60px] w-full items-center gap-3 px-4 py-[15.5px] text-left last:min-h-[66px]',
             onClick && 'cursor-pointer transition-colors hover:bg-accent/40',
             muted && 'opacity-60'
          )}
@@ -135,9 +140,22 @@ export function SettingsRow({
             </span>
          )}
          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 text-[13px] font-medium leading-4">{title}</div>
+            {/* Texto longo (nome de time, URL de webhook) trunca na row em vez de estourar
+                o card (ad#3). Título com nós (badge etc.) mantém o flex. */}
+            {typeof title === 'string' ? (
+               <div className="truncate text-[13px] font-medium leading-4" title={title}>
+                  {title}
+               </div>
+            ) : (
+               <div className="flex min-w-0 items-center gap-2 text-[13px] font-medium leading-4">
+                  {title}
+               </div>
+            )}
             {description && (
-               <div className="mt-0.5 text-[13px] leading-4 text-muted-foreground">
+               <div
+                  className="mt-0.5 truncate text-[13px] leading-4 text-muted-foreground"
+                  title={typeof description === 'string' ? description : undefined}
+               >
                   {description}
                </div>
             )}

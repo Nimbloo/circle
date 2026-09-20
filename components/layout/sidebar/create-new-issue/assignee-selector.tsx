@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { activeUsers, User } from '@/data/users';
 import { CheckIcon, UserCircle, UserRoundCheck } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AssigneeAvatars } from '@/components/common/issues/assignee-avatars';
 import type { Issue } from '@/data/issues';
@@ -31,13 +31,15 @@ interface AssigneeSelectorProps {
    assignees: User[];
    /** Recebe o conjunto inteiro a cada toggle; o 1º é o principal. */
    onChange: (assignees: User[]) => void;
+   /** Trigger customizado (linha de propriedade do detalhe); default: botão com avatares. */
+   children?: ReactNode;
 }
 
 /**
  * Multi-select de responsáveis (#96) do modal de criação e da sidebar de propriedades:
  * checkbox por membro, busca, "Assign to me" alterna o próprio. Fica aberto ao marcar.
  */
-export function AssigneeSelector({ assignees, onChange }: AssigneeSelectorProps) {
+export function AssigneeSelector({ assignees, onChange, children }: AssigneeSelectorProps) {
    const id = useId();
    const [open, setOpen] = useState<boolean>(false);
 
@@ -68,22 +70,24 @@ export function AssigneeSelector({ assignees, onChange }: AssigneeSelectorProps)
       <div className="*:not-first:mt-2">
          <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-               <Button
-                  id={id}
-                  className="flex items-center justify-center"
-                  size="xs"
-                  variant="secondary"
-                  role="combobox"
-                  aria-expanded={open}
-                  aria-label={`Assignees: ${label}`}
-               >
-                  {assignees.length ? (
-                     <AssigneeAvatars users={assignees} size="sm" />
-                  ) : (
-                     <UserCircle className="size-5" />
-                  )}
-                  <span>{label}</span>
-               </Button>
+               {children ?? (
+                  <Button
+                     id={id}
+                     className="flex items-center justify-center"
+                     size="xs"
+                     variant="secondary"
+                     role="combobox"
+                     aria-expanded={open}
+                     aria-label={`Assignees: ${label}`}
+                  >
+                     {assignees.length ? (
+                        <AssigneeAvatars users={assignees} size="sm" />
+                     ) : (
+                        <UserCircle className="size-5" />
+                     )}
+                     <span>{label}</span>
+                  </Button>
+               )}
             </PopoverTrigger>
             <PopoverContent
                className="border-input w-full min-w-[var(--radix-popper-anchor-width)] p-0"

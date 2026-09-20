@@ -11,7 +11,7 @@ import {
 import type { Issue } from '@/data/issues';
 import type { LabelInterface } from '@/data/labels';
 import type { Project } from '@/data/projects';
-import { usePriorities, useStatuses, useLabels } from '@/store/catalog-store';
+import { usePriorities, useWorkflowOrderedStatuses, useLabels } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { CheckIcon, FolderIcon } from 'lucide-react';
 import { useMemo } from 'react';
@@ -44,7 +44,8 @@ export function StatusOptions({
    value: string | undefined;
    onSelect: (statusId: string) => void;
 }) {
-   const allStatus = useStatuses();
+   // is#19: ordem de workflow (triage → … → canceled), não a ordem crua do catálogo.
+   const allStatus = useWorkflowOrderedStatuses();
    const counts = useIssueCounts(byStatus);
    return (
       <Command>

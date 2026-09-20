@@ -12,6 +12,7 @@ import {
    issueSubscription,
    projectMilestone,
    appUser,
+   cycle as cycleT,
 } from '@/db/schema';
 import { getOrCreateUser } from './users';
 import { dispatchNotifications, type NotifyInput } from './notify';
@@ -807,6 +808,45 @@ export async function deleteComment(
    return true;
 }
 
+const CYCLE_CHANGE = /^changed cycle from (\S+) to (\S+)$/;
+const CYCLE_AUTO_ADD = /^added to cycle (\S+) on start$/;
+
+/**
+ * O histórico de ciclo guarda os IDs (é a trilha do escopo do ciclo, #24); o feed mostra
+ * os nomes (is#8). Ciclo que não existe mais vira "a deleted cycle".
+ */
+async function humanizeCycleEvents(
+   db: Db,
+   events: { event: string; text: string | null }[]
+): Promise<Map<string, string>> {
+   const ids = new Set<string>();
+   for (const e of events) {
+      if (e.event !== 'cycle' || !e.text) continue;
+      const m = e.text.match(CYCLE_CHANGE) ?? e.text.match(CYCLE_AUTO_ADD);
+      for (const id of m?.slice(1) ?? []) if (id !== 'none') ids.add(id);
+   }
+   const names = new Map<string, string>();
+   if (ids.size === 0) return names;
+   const rows = await db
+      .select({ id: cycleT.id, name: cycleT.name, number: cycleT.number })
+      .from(cycleT)
+      .where(inArray(cycleT.id, [...ids]));
+   for (const r of rows) names.set(r.id, r.name || `Cycle ${r.number}`);
+   return names;
+}
+
+function cycleEventText(text: string, names: Map<string, string>): string {
+   const name = (id: string) => names.get(id) ?? 'a deleted cycle';
+   const auto = text.match(CYCLE_AUTO_ADD);
+   if (auto) return `added to cycle ${name(auto[1])} on start`;
+   const change = text.match(CYCLE_CHANGE);
+   if (!change) return text;
+   const [, from, to] = change;
+   if (from === 'none') return `added to cycle ${name(to)}`;
+   if (to === 'none') return `removed from cycle ${name(from)}`;
+   return `moved from ${name(from)} to ${name(to)}`;
+}
+
 /** Feed unificado: eventos + comentários, ordenado por data. */
 export async function listActivity(
    db: Db,
@@ -823,7 +863,10 @@ export async function listActivity(
          .limit(limit),
       listComments(db, issueId, meEmail, limit),
    ]);
-   const users = await loadUsers(db, events.map((e) => e.actorId).filter(Boolean) as string[]);
+   const [users, cycleNames] = await Promise.all([
+      loadUsers(db, events.map((e) => e.actorId).filter(Boolean) as string[]),
+      humanizeCycleEvents(db, events),
+   ]);
 
    const eventItems: ActivityItem[] = events.map((e) => ({
       kind: 'event',
@@ -831,7 +874,8 @@ export async function listActivity(
       actor: userRef(e.actorId ? users.get(e.actorId) : undefined),
       createdAt: e.createdAt instanceof Date ? e.createdAt.toISOString() : String(e.createdAt),
       event: e.event,
-      text: e.text ?? undefined,
+      text:
+         e.event === 'cycle' && e.text ? cycleEventText(e.text, cycleNames) : (e.text ?? undefined),
    }));
    const commentItems: ActivityItem[] = comments.map((c) => ({
       kind: 'comment',

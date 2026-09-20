@@ -11,6 +11,28 @@ import { ArrowUp, Bot, CalendarClock, ListTodo, Sparkles, X } from 'lucide-react
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { LoadingArea } from '@/components/common/loading-area';
 
+/** Status HTTP de um erro do cliente da API (sem depender da classe em runtime). */
+function httpStatusOf(error: unknown): number | undefined {
+   if (!(error instanceof Error) || error.name !== 'ApiError') return undefined;
+   const status = (error as { status?: unknown }).status;
+   return typeof status === 'number' ? status : undefined;
+}
+
+/**
+ * Mensagem de falha do Agent (co#12): provedor fora do ar (503) e erro do servidor não
+ * podem culpar a conexão do usuário — só a falha de rede fala de conexão.
+ */
+export function agentErrorMessage(error: unknown): string {
+   const status = httpStatusOf(error);
+   if (status !== undefined) {
+      if (status === 503)
+         return 'O Agent está indisponível agora (o provedor não respondeu). Tente de novo em instantes.';
+      if (status >= 500) return 'O Agent falhou ao responder. Tente de novo em instantes.';
+      return (error as Error).message || 'Não consegui responder agora.';
+   }
+   return 'Não consegui responder agora. Verifique a conexão e tente de novo.';
+}
+
 /** Prompts de exemplo — perguntas reais que o Agent responde consultando o workspace. */
 const agentExamples = [
    {
@@ -241,12 +263,8 @@ export default function AgentChat() {
          const res = await api.agent.send(persisted ? chatId : null, input);
          if (!persisted) rekeyChat(chatId, res.chatId, res.title);
          resolveMessage(res.chatId, assistantMessageId, res.reply);
-      } catch {
-         failMessage(
-            chatId,
-            assistantMessageId,
-            'Não consegui responder agora. Verifique a conexão e tente de novo.'
-         );
+      } catch (error) {
+         failMessage(chatId, assistantMessageId, agentErrorMessage(error));
       }
    };
 

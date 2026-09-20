@@ -26,7 +26,8 @@ import { useSearchStore } from '@/store/search-store';
 import { useViewStore } from '@/store/view-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useEffect, useMemo, useState } from 'react';
-import { scopeMyIssues, useMyIssuesTab } from './use-my-issues';
+import { scopeMyIssues, useMyIssuesActiveIds, useMyIssuesTab } from './use-my-issues';
+import { SidePanelSlot } from '@/components/common/detail-side-panel';
 
 /**
  * "My issues" body — the exact same machinery as the team issue views
@@ -69,20 +70,9 @@ export default function MyIssues() {
       return new Set([...(tab === 'subscribed' ? allSubscribed : []), ...live]);
    }, [subscribedIssueIds, allSubscribed, tab]);
 
-   // Aba "Activity" (padrão Linear = board de issues em que estive ativo): busca os
-   // ids das issues com atividade minha e usa como escopo do board.
-   const [activeIds, setActiveIds] = useState<ReadonlySet<string>>(new Set());
-   useEffect(() => {
-      if (tab !== 'activity') return;
-      let alive = true;
-      api.me
-         .activity()
-         .then((items) => alive && setActiveIds(new Set(items.map((i) => i.issueId))))
-         .catch(() => {});
-      return () => {
-         alive = false;
-      };
-   }, [tab]);
+   // Aba "Activity" (padrão Linear = board de issues em que estive ativo): ids das
+   // issues com atividade minha, usados como escopo do board.
+   const activeIds = useMyIssuesActiveIds(tab);
 
    // Aba "Assigned" (#29): derivada do store — os DTOs já trazem todos os responsáveis
    // (principal + colaboradores). Sem busca `assignee=me` a cada mudança de responsável.
@@ -149,16 +139,24 @@ export default function MyIssues() {
                />
             </div>
 
-            {openPanel === 'insights' && (
-               <aside className="hidden lg:flex w-[420px] shrink-0 border-l h-full overflow-hidden bg-container">
-                  <InsightsPanel issues={displayedIssues} />
-               </aside>
-            )}
-            {openPanel === 'breakdown' && (
-               <aside className="hidden lg:flex w-80 shrink-0 border-l h-full overflow-hidden bg-container">
-                  <BreakdownPanel issues={displayedIssues} />
-               </aside>
-            )}
+            <SidePanelSlot
+               open={openPanel === 'insights'}
+               width={420}
+               label="Insights"
+               className="hidden lg:flex"
+               panelClassName="border-l bg-container"
+            >
+               <InsightsPanel issues={displayedIssues} />
+            </SidePanelSlot>
+            <SidePanelSlot
+               open={openPanel === 'breakdown'}
+               width={320}
+               label="Breakdown"
+               className="hidden lg:flex"
+               panelClassName="border-l bg-container"
+            >
+               <BreakdownPanel issues={displayedIssues} />
+            </SidePanelSlot>
          </div>
       </div>
    );

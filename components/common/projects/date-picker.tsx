@@ -6,6 +6,7 @@ import { Calendar as CalendarIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { formatPlanDay } from './format-day';
 
 interface DatePickerProps {
    date: Date | undefined;
@@ -34,8 +35,8 @@ export function DatePicker({ date, onDateChange }: DatePickerProps) {
             >
                <CalendarIcon className="h-4 w-4 md:mr-0.5" />
                {selectedDate ? (
-                  <span className="text-xs hidden xl:inline mt-[1px]">
-                     {format(selectedDate, 'MMM dd, yyyy')}
+                  <span className="text-xs hidden xl:inline mt-[1px] truncate">
+                     {formatPlanDay(format(selectedDate, 'yyyy-MM-dd'))}
                   </span>
                ) : (
                   <span className="text-xs text-muted-foreground hidden xl:inline mt-[1px]">

@@ -13,7 +13,9 @@ import { api, ApiError } from '@/lib/client';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Check, Link2, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useSharedProjectDependencies } from './use-project-detail';
+import { PropertyButton } from '../project-property-fields';
 import { toast } from 'sonner';
 
 /**
@@ -23,24 +25,11 @@ import { toast } from 'sonner';
  */
 export function ProjectDependenciesPicker({ projectId }: { projectId: string }) {
    const projects = useWorkspaceStore((s) => s.projects);
-   const [dependsOn, setDependsOn] = useState<string[] | null>(null);
+   // Guardado no provider da rota (pl#6): trocar de aba não refaz o GET, e o evento
+   // remoto do projeto recarrega a lista (pl#8).
+   const { ids: dependsOn, setIds: setDependsOn } = useSharedProjectDependencies(projectId);
    const [open, setOpen] = useState(false);
    const [busy, setBusy] = useState(false);
-
-   useEffect(() => {
-      let active = true;
-      api.projectDependencies
-         .list(projectId)
-         .then((ids) => {
-            if (active) setDependsOn(ids);
-         })
-         .catch(() => {
-            if (active) setDependsOn([]);
-         });
-      return () => {
-         active = false;
-      };
-   }, [projectId]);
 
    const current = dependsOn ?? [];
    const options = projects.filter((p) => p.id !== projectId);
@@ -69,25 +58,24 @@ export function ProjectDependenciesPicker({ projectId }: { projectId: string }) 
       void save(current.includes(id) ? current.filter((x) => x !== id) : [...current, id]);
 
    return (
-      <div className="flex min-w-0 flex-col items-end gap-1">
+      <div className="flex min-w-0 flex-col items-start gap-1 py-0.5">
          <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-               <button
-                  type="button"
+               <PropertyButton
                   disabled={busy}
                   aria-label="Depends on"
-                  className={cn(
-                     'inline-flex max-w-44 items-center gap-1.5 truncate rounded-md px-1 py-0.5 text-[13px] transition-colors hover:bg-accent/60',
-                     selected.length === 0 && 'text-muted-foreground'
-                  )}
+                  className={cn(selected.length === 0 && 'text-muted-foreground')}
                >
-                  <Link2 className="size-3.5 shrink-0" />
-                  {selected.length === 0
-                     ? 'No dependencies'
-                     : `${selected.length} ${selected.length === 1 ? 'project' : 'projects'}`}
-               </button>
+                  <Link2 className="size-3.5 shrink-0 text-muted-foreground" />
+                  {/* Sem resposta ainda, não afirma nada (pl#6). */}
+                  {dependsOn === null
+                     ? null
+                     : selected.length === 0
+                       ? 'Add dependency'
+                       : `${selected.length} ${selected.length === 1 ? 'project' : 'projects'}`}
+               </PropertyButton>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-64 p-0">
+            <PopoverContent align="start" className="w-64 p-0">
                <Command>
                   <CommandInput placeholder="Depends on…" />
                   <CommandList>
@@ -111,7 +99,7 @@ export function ProjectDependenciesPicker({ projectId }: { projectId: string }) 
          </Popover>
 
          {selected.length > 0 && (
-            <div className="flex flex-wrap justify-end gap-1">
+            <div className="flex flex-wrap gap-1">
                {selected.map((project) => (
                   <span
                      key={project.id}

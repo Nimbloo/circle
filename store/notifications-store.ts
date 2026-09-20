@@ -39,8 +39,13 @@ export interface NotificationEvent extends NotificationEventPatch {
 
 /** O evento traz estado novo aplicável como patch (senão: hidratar). */
 export function isNotificationPatch(event: NotificationEvent): boolean {
-   return event.read !== undefined || event.snoozedUntil !== undefined;
+   return event.read !== undefined || event.snoozedUntil !== undefined || event.deleted === true;
 }
+
+/** Tamanho da 1ª página (o default do `GET /inbox`, co#3). */
+export const INBOX_PAGE_SIZE = 100;
+/** Tamanho das páginas seguintes ("carregar mais"). */
+const MORE_PAGE_SIZE = 50;
 
 interface NotificationsState {
    // Data
@@ -56,11 +61,16 @@ interface NotificationsState {
    loaded: boolean;
    /** A última hidratação falhou — com a lista vazia, o inbox mostra erro + retry (não "vazio"). */
    loadError: boolean;
+   /** Há notificações mais antigas que as carregadas (paginação por cursor, co#3). */
+   hasMore: boolean;
+   loadingMore: boolean;
 
    // Hydration
    hydrate: () => Promise<void>;
    /** Carrega a lista de adiadas vigentes (aba Snoozed). */
    hydrateSnoozed: () => Promise<void>;
+   /** Carrega a página seguinte (cursor = a última notificação carregada). */
+   loadMore: () => Promise<void>;
    /**
     * Aplica o estado que veio no evento SSE (`read`/`snoozedUntil`/`all`) sem re-hidratar
     * — idempotente com o otimista da própria ação (#19). Evento sem patch → hidrata.
@@ -72,8 +82,13 @@ interface NotificationsState {
    markAsRead: (id: string) => void;
    markAllAsRead: () => void;
    markAsUnread: (id: string) => void;
-   /** Adia a notificação por `hours` horas (some do inbox até vencer). */
-   snooze: (id: string, hours: number) => void;
+   /**
+    * Adia a notificação por `hours` horas, ou até o instante ISO `until` (some do inbox
+    * até vencer). O toast de sucesso oferece Desfazer.
+    */
+   snooze: (id: string, hoursOrUntil: number | string) => void;
+   /** Exclui a notificação (otimista; rollback + toast na falha, e re-lança). */
+   remove: (id: string) => Promise<void>;
    /** Desfaz o adiamento: volta pro inbox e some da aba Snoozed. */
    unsnooze: (id: string) => void;
 
@@ -157,6 +172,10 @@ function setReadIn(
 
 const byNewest = (a: InboxNotification, b: InboxNotification) => b.sortAt.localeCompare(a.sortAt);
 
+/** `a` vem depois de `b` na ordem do servidor (createdAt desc, id desc). */
+const isOlder = (a: InboxNotification, b: InboxNotification) =>
+   a.sortAt < b.sortAt || (a.sortAt === b.sortAt && a.id < b.id);
+
 /** Timer para trazer de volta a adiada quando o adiamento vence (sem reload). */
 let snoozeTimer: ReturnType<typeof setTimeout> | null = null;
 let snoozeWakeAt: number | null = null;
@@ -206,6 +225,8 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => {
       unreadCount: 0,
       loaded: false,
       loadError: false,
+      hasMore: false,
+      loadingMore: false,
 
       hydrate: async () => {
          // Token de sequência: uma hidratação que termina DEPOIS de outra mais nova é descartada.
@@ -216,20 +237,32 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => {
                api.inbox.unreadCount().catch(() => ({ count: 0 })),
             ]);
             if (seq !== hydrateSeq) return;
-            const items = adaptAll(dtos);
-            set((state) => ({
-               notifications: items,
-               unreadCount: countRes.count,
-               loaded: true,
-               loadError: false,
-               // Reconcilia a seleção com a versão fresca (read/content podem ter mudado
-               // no servidor); se sumiu da lista, mantém o snapshot atual para o preview
-               // aberto não desaparecer no meio da leitura.
-               selectedNotification: state.selectedNotification
-                  ? (items.find((item) => item.id === state.selectedNotification!.id) ??
-                    state.selectedNotification)
-                  : undefined,
-            }));
+            const fresh = adaptAll(dtos);
+            set((state) => {
+               // 1ª página cheia pode ter mais atrás: as páginas já trazidas pelo
+               // "carregar mais" continuam (a hidratação por evento não as descarta).
+               const full = dtos.length >= INBOX_PAGE_SIZE;
+               const last = fresh[fresh.length - 1];
+               const ids = new Set(fresh.map((n) => n.id));
+               const tail =
+                  full && last
+                     ? state.notifications.filter((n) => !ids.has(n.id) && isOlder(n, last))
+                     : [];
+               return {
+                  notifications: [...fresh, ...tail],
+                  hasMore: full && (tail.length === 0 || state.hasMore),
+                  unreadCount: countRes.count,
+                  loaded: true,
+                  loadError: false,
+                  // Reconcilia a seleção com a versão fresca (read/content podem ter
+                  // mudado no servidor); se sumiu da lista, mantém o snapshot atual para o
+                  // preview aberto não desaparecer no meio da leitura.
+                  selectedNotification: state.selectedNotification
+                     ? (fresh.find((item) => item.id === state.selectedNotification!.id) ??
+                       state.selectedNotification)
+                     : undefined,
+               };
+            });
          } catch {
             if (seq !== hydrateSeq) return;
             // Mantém a lista atual e sinaliza a falha (a tela vazia vira erro + retry).
@@ -249,6 +282,28 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => {
             if (earliest) scheduleSnoozeWake(earliest);
          } catch {
             // Degradação graciosa.
+         }
+      },
+
+      loadMore: async () => {
+         const { loadingMore, hasMore, notifications } = get();
+         const last = notifications[notifications.length - 1];
+         if (loadingMore || !hasMore || !last) return;
+         set({ loadingMore: true });
+         try {
+            const page = await api.inbox.page({ cursor: last.id, limit: MORE_PAGE_SIZE });
+            const items = adaptAll(page.items);
+            set((state) => {
+               const have = new Set(state.notifications.map((n) => n.id));
+               return {
+                  notifications: [...state.notifications, ...items.filter((n) => !have.has(n.id))],
+                  hasMore: page.nextCursor !== null,
+               };
+            });
+         } catch {
+            toast.error('Falha ao carregar mais notificações');
+         } finally {
+            set({ loadingMore: false });
          }
       },
 
@@ -275,6 +330,22 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => {
          }
          const id = event.id;
          if (!id) return;
+         if (event.deleted) {
+            const gone = [...state.notifications, ...state.snoozed].find((n) => n.id === id);
+            if (!gone) {
+               void refreshUnreadCount();
+               return;
+            }
+            const counted = !gone.read && !isSnoozedNow(gone);
+            set({
+               notifications: state.notifications.filter((n) => n.id !== id),
+               snoozed: state.snoozed.filter((n) => n.id !== id),
+               selectedNotification:
+                  state.selectedNotification?.id === id ? undefined : state.selectedNotification,
+               unreadCount: counted ? Math.max(0, state.unreadCount - 1) : state.unreadCount,
+            });
+            return;
+         }
          const inList = state.notifications.find((n) => n.id === id);
          const inSnoozed = state.snoozed.find((n) => n.id === id);
          const current = inList ?? inSnoozed;
@@ -304,12 +375,10 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => {
                ? without(state.notifications)
                : upsert(state.notifications, !!inList),
             snoozed: snoozedNow ? upsert(state.snoozed, !!inSnoozed) : without(state.snoozed),
+            // A aberta segue no preview mesmo adiada em outra aba (co#14): sai só da
+            // lista — esvaziar o preview no meio da leitura era o bug.
             selectedNotification:
-               state.selectedNotification?.id === id
-                  ? snoozedNow
-                     ? undefined
-                     : next
-                  : state.selectedNotification,
+               state.selectedNotification?.id === id ? next : state.selectedNotification,
             unreadCount: Math.max(0, state.unreadCount + delta),
          });
          if (snoozedNow && next.snoozedUntil) scheduleSnoozeWake(next.snoozedUntil);
@@ -377,11 +446,14 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => {
          });
       },
 
-      snooze: (id: string, hours: number) => {
+      snooze: (id: string, hoursOrUntil: number | string) => {
          const removed = get().notifications.find((n) => n.id === id);
          const wasSelected = get().selectedNotification?.id === id;
          const wasUnread = get().notifications.some((n) => n.id === id && !n.read);
-         const until = new Date(Date.now() + hours * 3600_000).toISOString();
+         const until =
+            typeof hoursOrUntil === 'number'
+               ? new Date(Date.now() + hoursOrUntil * 3600_000).toISOString()
+               : hoursOrUntil;
          // Otimista: a adiada some do inbox default (o backend a filtra até vencer) e
          // entra na lista de adiadas (o "Show snoozed" a mostra na hora).
          set((state) => ({
@@ -397,7 +469,11 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => {
          scheduleSnoozeWake(until);
          void api.inbox
             .snooze(id, until)
-            .then(() => toast.success(`Adiada por ${hours}h`))
+            .then(() =>
+               toast.success('Notificação adiada', {
+                  action: { label: 'Desfazer', onClick: () => get().unsnooze(id) },
+               })
+            )
             .catch(() => {
                // Rollback direcionado: devolve só a notificação adiada (na ordem por data).
                set((state) => {
@@ -414,6 +490,40 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => {
                });
                toast.error('Falha ao adiar');
             });
+      },
+
+      remove: async (id: string) => {
+         const state = get();
+         const index = state.notifications.findIndex((n) => n.id === id);
+         const removed = state.notifications[index] ?? state.snoozed.find((n) => n.id === id);
+         if (!removed) return;
+         const wasSnoozed = index === -1;
+         const wasSelected = state.selectedNotification?.id === id;
+         const counted = !removed.read && !isSnoozedNow(removed);
+         set((s) => ({
+            notifications: s.notifications.filter((n) => n.id !== id),
+            snoozed: s.snoozed.filter((n) => n.id !== id),
+            selectedNotification: wasSelected ? undefined : s.selectedNotification,
+            unreadCount: counted ? Math.max(0, s.unreadCount - 1) : s.unreadCount,
+         }));
+         try {
+            await api.inbox.remove(id);
+         } catch (error) {
+            // Rollback direcionado: devolve só esta, na posição por data.
+            set((s) => {
+               if ([...s.notifications, ...s.snoozed].some((n) => n.id === id)) return {};
+               return wasSnoozed
+                  ? { snoozed: [...s.snoozed, removed].sort(byNewest) }
+                  : {
+                       notifications: [...s.notifications, removed].sort(byNewest),
+                       selectedNotification:
+                          wasSelected && !s.selectedNotification ? removed : s.selectedNotification,
+                       unreadCount: counted ? s.unreadCount + 1 : s.unreadCount,
+                    };
+            });
+            toast.error('Falha ao excluir a notificação');
+            throw error;
+         }
       },
 
       unsnooze: (id: string) => {

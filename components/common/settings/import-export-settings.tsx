@@ -19,8 +19,9 @@ import type {
 } from '@/lib/api/import';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { AlertTriangle, CheckCircle2, Download, FileUp, Upload } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { errorReason } from '@/lib/error-reason';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
 import { ImportJobProgress } from './import-job-progress';
 
@@ -89,6 +90,23 @@ export default function ImportExportSettings() {
 
    const [exportTeam, setExportTeam] = useState('');
 
+   // Voltar para a tela no meio de um import (ad#5): o progresso era perdido porque o
+   // jobId só vivia neste componente. Ao montar, procura o job ativo do usuário.
+   useEffect(() => {
+      let alive = true;
+      void api.importIssues
+         .activeJob()
+         .then((job) => {
+            if (!alive || !job) return;
+            setJobId((current) => current ?? job.id);
+            setStep((current) => (current === 'upload' ? 'running' : current));
+         })
+         .catch(() => {});
+      return () => {
+         alive = false;
+      };
+   }, []);
+
    const reset = () => {
       setStep('upload');
       setFileName('');
@@ -110,8 +128,8 @@ export default function ImportExportSettings() {
          setMapping(dto.mapping);
          setTeamId((current) => current || teams[0]?.id || '');
          setStep('mapping');
-      } catch {
-         toast.error('Não foi possível ler o arquivo (é um CSV válido?)');
+      } catch (err) {
+         toast.error(errorReason(err, 'Não foi possível ler o arquivo (é um CSV válido?)'));
       } finally {
          setBusy(false);
          if (inputRef.current) inputRef.current.value = '';
@@ -134,8 +152,8 @@ export default function ImportExportSettings() {
          // Job em background (#10): a tela acompanha o progresso até o fim.
          setJobId(id);
          setStep('running');
-      } catch {
-         toast.error('Não foi possível importar as issues');
+      } catch (err) {
+         toast.error(errorReason(err, 'Não foi possível importar as issues'));
       } finally {
          setBusy(false);
       }

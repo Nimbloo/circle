@@ -5,14 +5,20 @@ import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 
 import { cn } from '@/lib/utils';
 
+/**
+ * Tooltip no padrão do sistema de motion: aparece após 300 ms de hover e sem "skip" (cada
+ * trigger espera o seu atraso), entra em 160 ms e sai em 120 ms (`.motion-pop`).
+ */
 function TooltipProvider({
-   delayDuration = 0,
+   delayDuration = 300,
+   skipDelayDuration = 0,
    ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
    return (
       <TooltipPrimitive.Provider
          data-slot="tooltip-provider"
          delayDuration={delayDuration}
+         skipDelayDuration={skipDelayDuration}
          {...props}
       />
    );
@@ -42,7 +48,7 @@ function TooltipContent({
             data-slot="tooltip-content"
             sideOffset={sideOffset}
             className={cn(
-               'bg-background border text-muted-foreground animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 w-fit rounded-md px-3 py-1.5 text-xs text-balance',
+               'motion-pop bg-popover text-popover-foreground z-50 w-fit rounded-lg border border-[var(--popover-border)] px-2.5 py-1.5 text-xs text-balance shadow-[var(--popover-shadow)]',
                className
             )}
             {...props}

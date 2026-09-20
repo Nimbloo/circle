@@ -58,6 +58,29 @@ export class TestBackend {
       actions.drop();
       actions.endDrag();
    }
+
+   /** Arrasta e paira sobre o alvo SEM soltar — inspeciona estado de hover (ex.: indicador de drop). */
+   simulateHover(
+      sourceNode: Element,
+      targetNode: Element,
+      clientOffset: { x: number; y: number } = { x: 0, y: 0 }
+   ) {
+      const sourceId = this.sources.get(sourceNode);
+      const targetId = this.targets.get(targetNode);
+      if (sourceId === undefined) throw new Error('source node is not connected to react-dnd');
+      if (targetId === undefined) throw new Error('target node is not connected to react-dnd');
+      const actions = this.manager.getActions();
+      actions.beginDrag([sourceId], {
+         clientOffset,
+         getSourceClientOffset: () => clientOffset,
+      });
+      actions.hover([targetId], { clientOffset });
+   }
+
+   /** Encerra um arraste iniciado por `simulateHover`, sem soltar. */
+   endDragWithoutDrop() {
+      this.manager.getActions().endDrag();
+   }
 }
 
 /** Última instância criada — o teste a recupera após o `render`. */

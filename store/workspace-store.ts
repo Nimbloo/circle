@@ -387,8 +387,29 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
    },
    removeTeamLocal: (id) => {
       touch('team', id);
+      // A exclusão é em cascata: projetos, ciclos, views e issues do time somem junto.
+      const s0 = get();
+      const projectIds = s0.projects.filter((p) => p.teamId === id).map((p) => p.id);
+      const cycleIds = s0.cycles.filter((c) => c.teamId === id).map((c) => c.id);
+      for (const pid of projectIds) touch('project', pid);
+      for (const cid of cycleIds) touch('cycle', cid);
+      for (const v of s0.views) if (v.teamId === id) touch('view', v.id);
+      useIssuesStore.getState().dropTeam(id, projectIds, cycleIds);
+      const goneProjects = new Set(projectIds);
       set((s) => ({
          teams: s.teams.filter((t) => t.id !== id),
+         projects: projectIds.length ? s.projects.filter((p) => p.teamId !== id) : s.projects,
+         cycles: cycleIds.length ? s.cycles.filter((c) => c.teamId !== id) : s.cycles,
+         views: s.views.some((v) => v.teamId === id)
+            ? s.views.filter((v) => v.teamId !== id)
+            : s.views,
+         initiatives: goneProjects.size
+            ? mapIfChanged(s.initiatives, (i) =>
+                 i.projectIds.some((pid) => goneProjects.has(pid))
+                    ? { ...i, projectIds: i.projectIds.filter((pid) => !goneProjects.has(pid)) }
+                    : i
+              )
+            : s.initiatives,
          users: mapIfChanged(s.users, (u) =>
             u.teamIds.includes(id) ? { ...u, teamIds: dropId(u.teamIds, id) } : u
          ),

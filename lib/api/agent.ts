@@ -186,6 +186,13 @@ const TOOLS: Tool[] = [
 
 type ToolInput = Record<string, unknown>;
 
+class AgentProviderError extends Error {
+   constructor(cause: unknown) {
+      super('O provedor do Agent está indisponível', { cause });
+      this.name = 'AgentProviderError';
+   }
+}
+
 /** Resolve id de catálogo (status/priority) por nome, case-insensitive. */
 function findByName(rows: { id: string; name: string }[], name: string): string | undefined {
    const n = name.trim().toLowerCase();
@@ -381,15 +388,21 @@ export async function runAgent(
    const toolConfig: ToolConfiguration = { tools: TOOLS };
 
    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const res = await client().send(
-         new ConverseCommand({
-            modelId: MODEL_ID,
-            system: [{ text: systemText }],
-            messages,
-            toolConfig,
-            inferenceConfig: { maxTokens: 1024, temperature: 0.2 },
-         })
-      );
+      const res = await (async () => {
+         try {
+            return await client().send(
+               new ConverseCommand({
+                  modelId: MODEL_ID,
+                  system: [{ text: systemText }],
+                  messages,
+                  toolConfig,
+                  inferenceConfig: { maxTokens: 1024, temperature: 0.2 },
+               })
+            );
+         } catch (e) {
+            throw new AgentProviderError(e);
+         }
+      })();
 
       const out = res.output?.message;
       if (!out) break;
@@ -483,7 +496,17 @@ export async function sendAgentMessage(
       history = chat.messages;
    }
    const isNew = !chatId;
-   const reply = await runAgent(db, email, [...history, { role: 'user', content }]);
+   let reply: string;
+   try {
+      reply = await runAgent(db, email, [...history, { role: 'user', content }]);
+   } catch (e) {
+      if (e instanceof AgentProviderError)
+         throw new ApiError(
+            503,
+            'O provedor do Agent está indisponível. Sua mensagem não foi salva; tente novamente.'
+         );
+      throw e;
+   }
    const chatKey = chatId ?? randomUUID();
    if (isNew) title = content.trim().slice(0, 80) || 'New chat';
    const now = new Date();

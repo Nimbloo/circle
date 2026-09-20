@@ -9,6 +9,7 @@ import { useCreateIssueStore } from '@/store/create-issue-store';
 
 vi.mock('next/navigation', () => ({
    useParams: () => ({ orgId: 'nimbloo' }),
+   usePathname: () => '/nimbloo/team/ENG/all',
    useRouter: () => ({ push: vi.fn() }),
 }));
 

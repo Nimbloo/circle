@@ -20,7 +20,9 @@ export default function HeaderOptions() {
    };
 
    return (
-      <ViewBar>
+      // is#18: sem overflow, o toolbar estourava a largura em telas ~390px (tabs + ações
+      // não cabem lado a lado); rola horizontalmente em vez de quebrar o layout.
+      <ViewBar className="overflow-x-auto">
          <IssueViewTabs />
          <HeaderActions>
             <IssueFilterTrigger />

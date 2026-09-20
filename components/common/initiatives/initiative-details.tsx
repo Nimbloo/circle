@@ -6,7 +6,6 @@ import { LoadingArea } from '@/components/common/loading-area';
 import { ProjectGroup } from '@/components/common/projects/projects';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Initiative } from '@/data/initiatives';
-import { Project } from '@/data/projects';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { initiativeWithDescendants } from '@/lib/initiative-tree';
 import { api } from '@/lib/client';
@@ -25,11 +24,20 @@ import {
    Boxes,
    CalendarClock,
    ChevronDown,
+   MoreHorizontal,
    Network,
+   Pencil,
    PenLine,
    Plus,
+   Trash2,
    X,
 } from 'lucide-react';
+import {
+   DropdownMenu,
+   DropdownMenuContent,
+   DropdownMenuItem,
+   DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { format, parseISO } from 'date-fns';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -43,26 +51,29 @@ import type { InitiativeActivityDto } from '@/lib/api/initiatives';
 import { ProgressHistory } from '@/components/common/projects/progress-history';
 import { InitiativeProgressPanel } from './initiative-progress-panel';
 import { InitiativeProjectRow } from './initiative-project-row';
+import { groupInitiativeProjects } from './initiative-project-groups';
 import { InitiativeIconPicker } from './initiative-icon-picker';
 import { InitiativePropertiesPanel } from './initiative-properties-panel';
 import { useInitiativePatch } from './use-initiative-patch';
 import { DetailSidePanel, DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
+import { healthColor } from '@/components/common/projects/progress-colors';
+import { blocksToMarkdown, markdownToBlocks } from '@/components/common/projects/update-blocks';
+import { ContentBlocks } from '@/components/common/issues/details/content-blocks';
+import {
+   AlertDialog,
+   AlertDialogAction,
+   AlertDialogCancel,
+   AlertDialogContent,
+   AlertDialogDescription,
+   AlertDialogFooter,
+   AlertDialogHeader,
+   AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
-const TABS = ['overview', 'activity', 'projects'] as const;
+const TABS = ['overview', 'projects', 'activity'] as const;
 const formatDay = (iso: string) => format(parseISO(iso), 'MMM d, yyyy');
 
 /* ------------------------------ projects table ---------------------------- */
-
-const GROUP_ORDER: { key: string; label: string; match: (project: Project) => boolean }[] = [
-   { key: 'in-progress', label: 'In Progress', match: (p) => p.status.category === 'started' },
-   { key: 'planned', label: 'Planned', match: (p) => p.status.category === 'unstarted' },
-   {
-      key: 'backlog',
-      label: 'Backlog',
-      match: (p) => p.status.category === 'backlog' || p.status.category === 'triage',
-   },
-   { key: 'completed', label: 'Completed', match: (p) => p.status.category === 'completed' },
-];
 
 function ProjectsSection({ initiative }: { initiative: Initiative }) {
    const { orgId } = useParams<{ orgId: string }>();
@@ -73,10 +84,7 @@ function ProjectsSection({ initiative }: { initiative: Initiative }) {
       const linked = new Set(initiative.projectIds);
       const projects = allProjects.filter((p) => linked.has(p.id));
       return {
-         groups: GROUP_ORDER.map((group) => ({
-            ...group,
-            projects: projects.filter(group.match),
-         })).filter((group) => group.projects.length > 0),
+         groups: groupInitiativeProjects(projects),
          available: allProjects.filter((p) => !linked.has(p.id)),
       };
    }, [allProjects, initiative.projectIds]);
@@ -517,10 +525,158 @@ function ActivityFeed({ initiativeId }: { initiativeId: string }) {
 /* ------------------------------- activity tab ----------------------------- */
 
 const UPDATE_HEALTHS = [
-   { id: 'on-track', label: 'On track', color: 'var(--chart-2)' },
-   { id: 'at-risk', label: 'At risk', color: 'var(--chart-4)' },
-   { id: 'off-track', label: 'Off track', color: 'var(--destructive)' },
+   { id: 'on-track', label: 'On track', color: healthColor('on-track') },
+   { id: 'at-risk', label: 'At risk', color: healthColor('at-risk') },
+   { id: 'off-track', label: 'Off track', color: healthColor('off-track') },
 ] as const;
+
+/** Card de update da initiative, com editar e excluir (pl#11). */
+function InitiativeUpdateCard({
+   initiativeId,
+   update,
+   onChanged,
+}: {
+   initiativeId: string;
+   update: InitiativeUpdateDto;
+   onChanged: (next: InitiativeUpdateDto | null, removed: boolean) => void;
+}) {
+   const applyInitiative = useWorkspaceStore((s) => s.applyInitiative);
+   const [draft, setDraft] = useState<string | null>(null);
+   const [confirmOpen, setConfirmOpen] = useState(false);
+   const [busy, setBusy] = useState(false);
+   const meta = UPDATE_HEALTHS.find((x) => x.id === update.health);
+
+   const save = async () => {
+      if (draft === null || draft.trim() === '' || busy) return;
+      setBusy(true);
+      try {
+         const result = await api.initiatives.updateUpdate(initiativeId, update.id, {
+            blocks: markdownToBlocks(draft),
+         });
+         applyInitiative(result.initiative);
+         onChanged(result.update, false);
+         setDraft(null);
+         toast.success('Update editado');
+      } catch {
+         toast.error('Não foi possível editar o update');
+      } finally {
+         setBusy(false);
+      }
+   };
+
+   const remove = async () => {
+      if (busy) return;
+      setBusy(true);
+      try {
+         applyInitiative(await api.initiatives.removeUpdate(initiativeId, update.id));
+         onChanged(null, true);
+         setConfirmOpen(false);
+         toast.success('Update excluído');
+      } catch {
+         toast.error('Não foi possível excluir o update');
+      } finally {
+         setBusy(false);
+      }
+   };
+
+   return (
+      <div className="rounded-lg border border-border/60 bg-container p-3">
+         <div className="mb-1.5 flex items-center gap-2 text-sm">
+            <span
+               className="size-2 rounded-full"
+               style={{ backgroundColor: meta?.color ?? 'var(--muted-foreground)' }}
+            />
+            <span className="font-medium">{meta?.label ?? update.health}</span>
+            <span className="text-xs text-muted-foreground">
+               {update.author?.name ?? 'Alguém'} · {new Date(update.createdAt).toLocaleDateString()}
+            </span>
+            {draft === null && (
+               <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                     <Button
+                        size="icon"
+                        variant="ghost"
+                        className="ml-auto size-7"
+                        aria-label="Update actions"
+                     >
+                        <MoreHorizontal className="size-4 text-muted-foreground" />
+                     </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                     <DropdownMenuItem onSelect={() => setDraft(blocksToMarkdown(update.blocks))}>
+                        <Pencil className="size-4" />
+                        Editar
+                     </DropdownMenuItem>
+                     <DropdownMenuItem
+                        variant="destructive"
+                        onSelect={(event) => {
+                           event.preventDefault();
+                           setConfirmOpen(true);
+                        }}
+                     >
+                        <Trash2 className="size-4" />
+                        Excluir
+                     </DropdownMenuItem>
+                  </DropdownMenuContent>
+               </DropdownMenu>
+            )}
+         </div>
+         {draft === null ? (
+            <div className="text-sm">
+               <ContentBlocks blocks={update.blocks} />
+            </div>
+         ) : (
+            <div>
+               <textarea
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  aria-label="Editar update"
+                  autoFocus
+                  className="min-h-20 w-full resize-y rounded-md border bg-transparent p-2 text-sm outline-none"
+               />
+               <div className="mt-2 flex items-center gap-2">
+                  <Button
+                     size="xs"
+                     onClick={() => void save()}
+                     disabled={busy || draft.trim() === ''}
+                     aria-label="Salvar update"
+                  >
+                     Salvar
+                  </Button>
+                  <Button size="xs" variant="ghost" onClick={() => setDraft(null)}>
+                     Cancelar
+                  </Button>
+               </div>
+            </div>
+         )}
+
+         <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <AlertDialogContent>
+               <AlertDialogHeader>
+                  <AlertDialogTitle>Excluir este update?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                     O update sai da timeline e o health da initiative volta para o update anterior.
+                     Não dá para desfazer.
+                  </AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter>
+                  <AlertDialogCancel disabled={busy}>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction
+                     aria-label="Excluir update"
+                     disabled={busy}
+                     onClick={(event) => {
+                        event.preventDefault();
+                        void remove();
+                     }}
+                  >
+                     Excluir
+                  </AlertDialogAction>
+               </AlertDialogFooter>
+            </AlertDialogContent>
+         </AlertDialog>
+      </div>
+   );
+}
 
 /** Activity da initiative: composer de update (health + texto) + feed. O health do
  * último update propaga pro health da initiative (paridade Linear). */
@@ -564,9 +720,10 @@ function Activity({ initiativeId }: { initiativeId: string }) {
 
    const post = async () => {
       if (busy) return;
+      if (text.trim() === '') return; // update vazio não vira registro (pl#11)
       setBusy(true);
       try {
-         const blocks = text.trim() ? [{ type: 'paragraph' as const, text: text.trim() }] : [];
+         const blocks = markdownToBlocks(text);
          const { update, initiative } = await api.initiatives.postUpdate(initiativeId, {
             health,
             blocks,
@@ -613,7 +770,7 @@ function Activity({ initiativeId }: { initiativeId: string }) {
                className="w-full resize-none bg-transparent outline-none text-sm placeholder:text-muted-foreground disabled:opacity-60"
             />
             <div className="flex justify-end">
-               <Button size="xs" onClick={() => void post()} disabled={busy}>
+               <Button size="xs" onClick={() => void post()} disabled={busy || !text.trim()}>
                   {busy ? 'Publicando…' : 'Publicar update'}
                </Button>
             </div>
@@ -632,36 +789,20 @@ function Activity({ initiativeId }: { initiativeId: string }) {
             />
          ) : (
             <div className="content-enter flex flex-col gap-3">
-               {updates.map((u) => {
-                  const h = UPDATE_HEALTHS.find((x) => x.id === u.health);
-                  return (
-                     <div
-                        key={u.id}
-                        className="rounded-lg border border-border/60 bg-container p-3"
-                     >
-                        <div className="flex items-center gap-2 mb-1.5 text-sm">
-                           <span
-                              className="size-2 rounded-full"
-                              style={{
-                                 backgroundColor: h?.color ?? 'var(--muted-foreground)',
-                              }}
-                           />
-                           <span className="font-medium">{h?.label ?? u.health}</span>
-                           <span className="text-xs text-muted-foreground">
-                              {u.author?.name ?? 'Alguém'} ·{' '}
-                              {new Date(u.createdAt).toLocaleDateString()}
-                           </span>
-                        </div>
-                        {u.blocks.map((b, i) =>
-                           b.type === 'paragraph' ? (
-                              <p key={i} className="text-sm text-ink-2">
-                                 {b.text}
-                              </p>
-                           ) : null
-                        )}
-                     </div>
-                  );
-               })}
+               {updates.map((u) => (
+                  <InitiativeUpdateCard
+                     key={u.id}
+                     initiativeId={initiativeId}
+                     update={u}
+                     onChanged={(next, removed) => {
+                        setUpdates((prev) =>
+                           removed
+                              ? prev.filter((item) => item.id !== u.id)
+                              : prev.map((item) => (item.id === u.id ? next! : item))
+                        );
+                     }}
+                  />
+               ))}
             </div>
          )}
       </div>

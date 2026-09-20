@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { and, eq, inArray, asc } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { documentFolder, teamDocument, teamMember, appUser } from '@/db/schema';
@@ -7,6 +7,8 @@ import { isAdmin } from './auth';
 import type { UserRef } from './issues';
 import { ApiError } from './errors';
 import { publish } from './events';
+import { projectDescriptionDoc } from './description-doc';
+import type { EditorDoc } from '@/lib/editor-doc';
 
 export interface DocumentDto {
    id: string;
@@ -17,6 +19,26 @@ export interface DocumentDto {
    pinned: boolean;
    createdAt: string;
    updatedAt: string;
+}
+
+/** Documento aberto: metadados + corpo (editor de blocos) e a versão do corpo. */
+export interface DocumentDetailDto extends DocumentDto {
+   teamId: string;
+   folderName: string;
+   /** JSON do ProseMirror. null = documento sem corpo. */
+   descriptionDoc: EditorDoc | null;
+   /**
+    * Versão opaca do corpo (igual à da issue/projeto). Volta em
+    * `expectedDescriptionVersion` no PATCH; divergiu → 409.
+    */
+   descriptionVersion: string;
+}
+
+function descriptionVersionOf(doc: unknown): string {
+   return createHash('sha1')
+      .update(JSON.stringify(doc ?? null))
+      .digest('hex')
+      .slice(0, 16);
 }
 
 export interface FolderDto {
@@ -94,14 +116,75 @@ export async function createFolder(
    input: { id?: string; teamId: string; name: string; icon?: string | null },
    actorEmail: string
 ): Promise<FolderDto> {
-   if (!input.name?.trim()) throw new ApiError(400, 'name é obrigatório');
+   const name = input.name?.trim();
+   if (!name) throw new ApiError(400, 'name é obrigatório');
    await assertTeamMember(db, input.teamId, actorEmail);
    const id = input.id ?? randomUUID();
    await db
       .insert(documentFolder)
-      .values({ id, teamId: input.teamId, name: input.name, icon: input.icon ?? null });
+      .values({ id, teamId: input.teamId, name, icon: input.icon ?? null });
    publish({ entity: 'document', action: 'created', id, teamId: input.teamId });
-   return { id, teamId: input.teamId, name: input.name, icon: input.icon ?? null, documents: [] };
+   return { id, teamId: input.teamId, name, icon: input.icon ?? null, documents: [] };
+}
+
+async function getFolderRow(db: Db, id: string) {
+   const rows = await db.select().from(documentFolder).where(eq(documentFolder.id, id)).limit(1);
+   return rows[0] ?? null;
+}
+
+/** Renomeia/troca o ícone da pasta (membro do time ou admin). null se não existir. */
+export async function updateFolder(
+   db: Db,
+   id: string,
+   patch: { name?: string; icon?: string | null },
+   actorEmail: string
+): Promise<Omit<FolderDto, 'documents'> | null> {
+   const folder = await getFolderRow(db, id);
+   if (!folder) return null;
+   if (!(await isAdmin(actorEmail, db))) await assertTeamMember(db, folder.teamId, actorEmail);
+   const set: Partial<typeof documentFolder.$inferInsert> = {};
+   if (patch.name !== undefined) {
+      const name = patch.name.trim();
+      if (!name) throw new ApiError(400, 'name é obrigatório');
+      set.name = name;
+   }
+   if (patch.icon !== undefined) set.icon = patch.icon?.trim() || null;
+   const [row] =
+      Object.keys(set).length > 0
+         ? await db.update(documentFolder).set(set).where(eq(documentFolder.id, id)).returning()
+         : [folder];
+   publish({ entity: 'document', action: 'updated', id, actorEmail, teamId: folder.teamId });
+   return { id: row.id, teamId: row.teamId, name: row.name, icon: row.icon };
+}
+
+/**
+ * Exclui a pasta. Com documentos dentro, eles vão junto — só se o ator puder excluir
+ * cada um (criador ou admin); senão 403 e nada muda. Pasta vazia: qualquer membro.
+ */
+export async function deleteFolder(db: Db, id: string, actorEmail: string): Promise<boolean> {
+   const folder = await getFolderRow(db, id);
+   if (!folder) return false;
+   const admin = await isAdmin(actorEmail, db);
+   const me = admin ? null : await assertTeamMember(db, folder.teamId, actorEmail);
+   const docs = await db
+      .select({ id: teamDocument.id, creatorId: teamDocument.creatorId })
+      .from(teamDocument)
+      .where(eq(teamDocument.folderId, id));
+   if (me && docs.some((d) => d.creatorId !== me.id))
+      throw new ApiError(403, 'A pasta tem documentos de outras pessoas');
+   const removed = await db.transaction(async (tx) => {
+      await tx.delete(teamDocument).where(eq(teamDocument.folderId, id));
+      return tx
+         .delete(documentFolder)
+         .where(eq(documentFolder.id, id))
+         .returning({ id: documentFolder.id });
+   });
+   if (removed.length === 0) return false;
+   const teamId = folder.teamId;
+   for (const d of docs)
+      publish({ entity: 'document', action: 'deleted', id: d.id, actorEmail, teamId });
+   publish({ entity: 'document', action: 'deleted', id, actorEmail, teamId });
+   return true;
 }
 
 export async function createDocument(
@@ -149,7 +232,7 @@ export async function createDocument(
       await tx.insert(teamDocument).values({
          id,
          folderId,
-         name: input.name,
+         name: input.name.trim(),
          icon: input.icon ?? null,
          creatorId: creator.id,
          pinned: input.pinned ?? false,
@@ -169,7 +252,7 @@ export async function createDocument(
    return {
       id,
       folderId,
-      name: input.name,
+      name: input.name.trim(),
       icon: input.icon ?? null,
       creator: {
          id: creator.id,
@@ -202,25 +285,96 @@ async function assertDocumentOwner(db: Db, id: string, actorEmail: string): Prom
    return rows[0].teamId;
 }
 
+/** Documento com corpo e versão. null se não existir. */
+export async function getDocument(db: Db, id: string): Promise<DocumentDetailDto | null> {
+   const rows = await db
+      .select({ doc: teamDocument, folder: documentFolder, creator: appUser })
+      .from(teamDocument)
+      .innerJoin(documentFolder, eq(documentFolder.id, teamDocument.folderId))
+      .leftJoin(appUser, eq(appUser.id, teamDocument.creatorId))
+      .where(eq(teamDocument.id, id))
+      .limit(1);
+   if (rows.length === 0) return null;
+   const { doc: d, folder, creator: c } = rows[0];
+   return {
+      id: d.id,
+      folderId: d.folderId,
+      folderName: folder.name,
+      teamId: folder.teamId,
+      name: d.name,
+      icon: d.icon,
+      creator: c
+         ? { id: c.id, slug: c.slug, name: c.name, email: c.email, avatarUrl: c.avatarUrl }
+         : null,
+      pinned: d.pinned,
+      createdAt: d.createdAt instanceof Date ? d.createdAt.toISOString() : String(d.createdAt),
+      updatedAt: d.updatedAt instanceof Date ? d.updatedAt.toISOString() : String(d.updatedAt),
+      descriptionDoc: (d.descriptionDoc as EditorDoc | null) ?? null,
+      descriptionVersion: descriptionVersionOf(d.descriptionDoc),
+   };
+}
+
+export interface UpdateDocumentInput {
+   name?: string;
+   icon?: string | null;
+   pinned?: boolean;
+   /** Corpo do documento (editor de blocos). Doc vazio limpa. */
+   descriptionDoc?: EditorDoc | null;
+   /** Concorrência otimista do corpo: versão vista. Ausente → last-write-wins. */
+   expectedDescriptionVersion?: string | null;
+}
+
+/**
+ * Metadados (nome, ícone, pin) continuam só do criador ou admin. O CORPO é do time:
+ * qualquer membro edita (como no Linear), com concorrência otimista pela versão.
+ * Devolve o documento atualizado (null se não existir).
+ */
 export async function updateDocument(
    db: Db,
    id: string,
-   patch: { name?: string; icon?: string | null; pinned?: boolean },
+   patch: UpdateDocumentInput,
    actorEmail: string
-): Promise<boolean> {
-   const teamId = await assertDocumentOwner(db, id, actorEmail);
-   if (!teamId) return false;
-   const set: Record<string, unknown> = { updatedAt: new Date() };
-   if (patch.name !== undefined) set.name = patch.name;
-   if (patch.icon !== undefined) set.icon = patch.icon;
+): Promise<DocumentDetailDto | null> {
+   const current = await getDocument(db, id);
+   if (!current) return null;
+   const teamId = current.teamId;
+   const touchesMeta =
+      patch.name !== undefined || patch.icon !== undefined || patch.pinned !== undefined;
+   if (touchesMeta) await assertDocumentOwner(db, id, actorEmail);
+   if (patch.descriptionDoc !== undefined && !(await isAdmin(actorEmail, db)))
+      await assertTeamMember(db, teamId, actorEmail);
+
+   const set: Partial<typeof teamDocument.$inferInsert> = { updatedAt: new Date() };
+   if (patch.name !== undefined) {
+      const name = patch.name.trim();
+      if (!name) throw new ApiError(400, 'name é obrigatório');
+      set.name = name;
+   }
+   if (patch.icon !== undefined) set.icon = patch.icon?.trim() || null;
    if (patch.pinned !== undefined) set.pinned = patch.pinned;
-   const res = await db
-      .update(teamDocument)
-      .set(set)
-      .where(eq(teamDocument.id, id))
-      .returning({ id: teamDocument.id });
-   if (res.length > 0) publish({ entity: 'document', action: 'updated', id, actorEmail, teamId });
-   return res.length > 0;
+   if (patch.descriptionDoc !== undefined)
+      set.descriptionDoc = projectDescriptionDoc(patch.descriptionDoc).doc;
+
+   const updated = await db.transaction(async (tx) => {
+      if (set.descriptionDoc !== undefined && patch.expectedDescriptionVersion) {
+         // Checagem e gravação atômicas: serializa escritas no mesmo documento.
+         const [cur] = await tx
+            .select({ doc: teamDocument.descriptionDoc })
+            .from(teamDocument)
+            .where(eq(teamDocument.id, id))
+            .for('update');
+         if (cur && descriptionVersionOf(cur.doc) !== patch.expectedDescriptionVersion)
+            throw new ApiError(409, 'O documento foi alterado por outra pessoa');
+      }
+      return tx
+         .update(teamDocument)
+         .set(set)
+         .where(eq(teamDocument.id, id))
+         .returning({ id: teamDocument.id });
+   });
+   if (updated.length === 0) return null;
+   publish({ entity: 'document', action: 'updated', id, actorEmail, teamId });
+   return getDocument(db, id);
 }
 
 export async function deleteDocument(db: Db, id: string, actorEmail: string): Promise<boolean> {

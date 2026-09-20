@@ -97,10 +97,12 @@ describe('deleteTeam em transação trata templates (#59)', () => {
    });
 });
 
-describe('deleteTeam com conteúdo explica o que impede', () => {
-   it('o 409 diz quantas issues e projetos o time ainda tem', async () => {
+describe('deleteTeam com conteúdo apaga em cascata (paridade Linear)', () => {
+   it('issues e projeto criados pelos serviços somem com o time', async () => {
       const { createIssue } = await import('@/lib/api/issues');
       const { createProject } = await import('@/lib/api/projects');
+      const { getTeamDeletionImpact } = await import('@/lib/api/teams');
+      const { issue, project } = await import('@/db/schema');
       await seedUser(db, { name: 'Ana', email: 'ana@x.com' });
       await createIssue(
          db,
@@ -119,11 +121,11 @@ describe('deleteTeam com conteúdo explica o que impede', () => {
          priorityId: 'high',
          healthId: 'on-track',
       });
+      expect(await getTeamDeletionImpact(db, 'OPEN')).toMatchObject({ issues: 2, projects: 1 });
 
-      const err = await deleteTeam(db, 'OPEN').catch((e) => e);
-      expect(err.status).toBe(409);
-      expect(err.message).toContain('2 issues');
-      expect(err.message).toContain('1 projeto');
-      expect(err.message).not.toContain('cycles');
+      expect(await deleteTeam(db, 'OPEN')).toBe(true);
+      expect(await db.select().from(teamT).where(eq(teamT.id, 'OPEN'))).toEqual([]);
+      expect(await db.select().from(issue).where(eq(issue.teamId, 'OPEN'))).toEqual([]);
+      expect(await db.select().from(project).where(eq(project.teamId, 'OPEN'))).toEqual([]);
    });
 });

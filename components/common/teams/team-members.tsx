@@ -1,5 +1,16 @@
 'use client';
 
+import {
+   AlertDialog,
+   AlertDialogAction,
+   AlertDialogCancel,
+   AlertDialogContent,
+   AlertDialogDescription,
+   AlertDialogFooter,
+   AlertDialogHeader,
+   AlertDialogTitle,
+   useLatchedTarget,
+} from '@/components/ui/alert-dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/client';
@@ -11,6 +22,7 @@ import { useParams } from 'next/navigation';
 import { TEAM_CHANGED_EVENT, useLiveReload } from '@/lib/use-live-sync';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { errorReason } from '@/lib/error-reason';
 
 /**
  * Team Home — "Members" tab: membros do time, com adicionar e remover. Só entra no
@@ -28,6 +40,11 @@ export default function TeamMembers() {
    const team = teams.find((t) => t.id === teamId);
 
    const [busy, setBusy] = useState(false);
+   // Remover do time pede confirmação (ad#13); alvo e `open` separados para o nome
+   // não sumir do título durante a saída.
+   const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null);
+   const removingLatched = useLatchedTarget(removing);
+   const [removeOpen, setRemoveOpen] = useState(false);
 
    // Solicitações de entrada pendentes (só admin enxerga/decide).
    const [requests, setRequests] = useState<JoinRequestDto[]>([]);
@@ -76,13 +93,16 @@ export default function TeamMembers() {
 
    const members = [...team.members].sort((a, b) => a.name.localeCompare(b.name));
 
-   const removeMember = async (id: string, name: string) => {
+   const removeMember = async () => {
+      if (!removing || busy) return;
+      const { id, name } = removing;
       setBusy(true);
       try {
          applyTeamMembers(team.id, await api.teams.removeMember(team.id, id));
+         setRemoveOpen(false);
          toast.success(`${name} removed from ${team.name}`);
-      } catch {
-         toast.error('Could not remove the member');
+      } catch (err) {
+         toast.error(errorReason(err, 'Could not remove the member'));
       } finally {
          setBusy(false);
       }
@@ -154,7 +174,7 @@ export default function TeamMembers() {
                         {member.name}
                      </span>
                      <span className="truncate text-xs font-medium leading-[15px] text-muted-foreground">
-                        {member.name.split('.')[0]}
+                        {member.slug || member.email.split('@')[0]}
                      </span>
                   </div>
                </div>
@@ -171,10 +191,13 @@ export default function TeamMembers() {
                   {isAdmin && (
                      <button
                         type="button"
-                        onClick={() => void removeMember(member.id, member.name)}
+                        onClick={() => {
+                           setRemoving({ id: member.id, name: member.name });
+                           setRemoveOpen(true);
+                        }}
                         disabled={busy}
                         aria-label={`Remove ${member.name}`}
-                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground disabled:opacity-40"
+                        className="text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 disabled:opacity-40 group-hover:opacity-100 max-md:opacity-100"
                      >
                         <X className="size-4" />
                      </button>
@@ -182,6 +205,33 @@ export default function TeamMembers() {
                </div>
             </div>
          ))}
+
+         <AlertDialog open={removeOpen} onOpenChange={(o) => !busy && setRemoveOpen(o)}>
+            <AlertDialogContent>
+               <AlertDialogHeader>
+                  <AlertDialogTitle>
+                     Remove {removingLatched?.name} from {team.name}?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                     They stop being a member of this team. Issues assigned to them keep the
+                     assignment.
+                  </AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter>
+                  <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                     onClick={(e) => {
+                        e.preventDefault();
+                        void removeMember();
+                     }}
+                     disabled={busy}
+                     className="bg-destructive text-white hover:bg-destructive/90"
+                  >
+                     Remove
+                  </AlertDialogAction>
+               </AlertDialogFooter>
+            </AlertDialogContent>
+         </AlertDialog>
       </div>
    );
 }

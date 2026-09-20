@@ -1138,9 +1138,24 @@ export async function updateIssue(
       // eventos de atividade para transições relevantes
       statusChanged = patch.statusId !== undefined && patch.statusId !== prev.statusId;
       const events: { event: string; text: string }[] = [];
-      if (statusChanged) events.push({ event: 'status', text: `changed status` });
-      if (patch.priorityId !== undefined && patch.priorityId !== prev.priorityId)
-         events.push({ event: 'priority', text: `changed priority` });
+      // De/para pelo nome (is#8): "changed status" sozinho não dizia o que mudou.
+      const priorityChanged =
+         patch.priorityId !== undefined && patch.priorityId !== prev.priorityId;
+      const names = statusChanged || priorityChanged ? await loadCatalogs(txDb) : null;
+      if (statusChanged)
+         events.push({
+            event: 'status',
+            text: `changed status from ${names?.statuses.get(prev.statusId)?.name ?? 'none'} to ${
+               names?.statuses.get(patch.statusId as string)?.name ?? 'none'
+            }`,
+         });
+      if (priorityChanged)
+         events.push({
+            event: 'priority',
+            text: `changed priority from ${names?.priorities.get(prev.priorityId)?.name ?? 'none'} to ${
+               names?.priorities.get(patch.priorityId as string)?.name ?? 'none'
+            }`,
+         });
       // De/para no texto: sem isso o histórico não permite reconstruir o escopo de um
       // ciclo ao longo do tempo — foi o que bloqueou o `scopeDelta` real (#24).
       if (patch.cycleId !== undefined && (patch.cycleId || null) !== prev.cycleId)
