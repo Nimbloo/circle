@@ -5,7 +5,7 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
 import { Hourglass } from 'lucide-react';
 import { EmptyState } from '@/components/common/empty-state';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { useParams } from 'next/navigation';
 import { useMemo } from 'react';
 import CycleLine, { CyclePlayIcon } from './cycle-line';
@@ -49,7 +49,7 @@ export default function Cycles() {
       if (!loaded) {
          return (
             <div data-testid="cycles-loading">
-               <ListSkeleton rows={4} />
+               <LoadingArea rows={4} />
             </div>
          );
       }
@@ -63,7 +63,7 @@ export default function Cycles() {
    }
 
    return (
-      <div className="w-full">
+      <div className="content-enter w-full">
          {cycles.map((cycle, idx) => (
             <div key={cycle.id} className="flex w-full flex-col">
                {idx === cooldownBefore && until && (

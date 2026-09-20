@@ -18,7 +18,7 @@ import {
    AlertDialogHeader,
    AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { api } from '@/lib/client';
+import { api, ApiError } from '@/lib/client';
 import { Team } from '@/data/teams';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Box, Copy, IterationCcw, Link2, ListTodo, Trash2 } from 'lucide-react';
@@ -54,8 +54,9 @@ export function TeamContextMenu({ team, children }: { team: Team; children: Reac
          removeTeamLocal(team.id);
          toast.success('Team deleted');
          setConfirmOpen(false);
-      } catch {
-         toast.error('Não foi possível excluir o time (ainda tem issues/projects/cycles?)');
+      } catch (e) {
+         // A API explica o motivo (ex.: 409 com o conteúdo que ainda está no time).
+         toast.error(e instanceof ApiError ? e.message : 'Não foi possível excluir o time');
       } finally {
          setBusy(false);
       }

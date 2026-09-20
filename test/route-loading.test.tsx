@@ -18,7 +18,7 @@ describe('loading/entrada de rota', () => {
    });
 
    // O fallback de [orgId] ficava acima do MainLayout per-página: em toda navegação o
-   // header sumia. As telas têm skeletons próprios dentro do frame.
+   // header sumia. As telas têm o próprio loading (LoadingArea) dentro do frame.
    it('o workspace não tem fallback de rota próprio', () => {
       expect(existsSync(join(root, 'app/[orgId]/loading.tsx'))).toBe(false);
    });

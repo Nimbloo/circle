@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { EmptyState } from '@/components/common/empty-state';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { api, ApiError } from '@/lib/client';
 import type { AuditLogDto } from '@/lib/api/audit';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -88,7 +88,7 @@ export default function AuditLogSettings() {
                </Button>
             </div>
          ) : entries === null ? (
-            <ListSkeleton rows={6} />
+            <LoadingArea rows={6} />
          ) : entries.length === 0 ? (
             <EmptyState
                variant="activity"
@@ -96,7 +96,7 @@ export default function AuditLogSettings() {
                className="py-10"
             />
          ) : (
-            <div className="rounded-lg border bg-container overflow-hidden divide-y divide-border/60">
+            <div className="content-enter rounded-lg border bg-container overflow-hidden divide-y divide-border/60">
                {entries.map((e) => {
                   const meta = formatMeta(e.meta);
                   return (

@@ -2,7 +2,7 @@
 
 import ProjectsTimeline from '@/components/common/projects/projects-timeline';
 import { EmptyState } from '@/components/common/empty-state';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { ProjectGroup } from '@/components/common/projects/projects';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Initiative } from '@/data/initiatives';
@@ -483,11 +483,11 @@ function ActivityFeed({ initiativeId }: { initiativeId: string }) {
       <div className="flex flex-col gap-3">
          <span className="text-[13px] font-medium leading-4">Activity</span>
          {entries === null ? (
-            <ListSkeleton rows={3} />
+            <LoadingArea rows={3} />
          ) : entries.length === 0 ? (
             <p className="text-xs text-muted-foreground">No activity recorded yet.</p>
          ) : (
-            <ul className="flex flex-col gap-2.5">
+            <ul className="content-enter flex flex-col gap-2.5">
                {entries.map((e) => (
                   <li key={e.id} className="flex items-start gap-2 text-xs">
                      <Avatar className="size-5 shrink-0 mt-0.5">
@@ -620,7 +620,7 @@ function Activity({ initiativeId }: { initiativeId: string }) {
          </div>
 
          {feed === 'loading' && updates.length === 0 ? (
-            <ListSkeleton rows={3} />
+            <LoadingArea rows={3} />
          ) : feed === 'error' && updates.length === 0 ? (
             <p className="text-sm text-muted-foreground">Não foi possível carregar os updates.</p>
          ) : updates.length === 0 ? (
@@ -631,7 +631,7 @@ function Activity({ initiativeId }: { initiativeId: string }) {
                className="py-8"
             />
          ) : (
-            <div className="flex flex-col gap-3">
+            <div className="content-enter flex flex-col gap-3">
                {updates.map((u) => {
                   const h = UPDATE_HEALTHS.find((x) => x.id === u.health);
                   return (
@@ -697,11 +697,11 @@ export default function InitiativeDetails({ initiativeId }: { initiativeId: stri
    }, [initiative, allProjects]);
 
    if (!initiative) {
-      // Hidratando → skeleton; not-found só como estado final (fim do flash no deep-link frio).
+      // Hidratando → loading; not-found só como estado final (fim do flash no deep-link frio).
       if (!loaded) {
          return (
             <div className="p-8">
-               <ListSkeleton rows={6} />
+               <LoadingArea rows={6} />
             </div>
          );
       }
@@ -729,7 +729,7 @@ export default function InitiativeDetails({ initiativeId }: { initiativeId: stri
       );
 
    return (
-      <div className="flex h-full w-full overflow-hidden">
+      <div className="content-enter flex h-full w-full overflow-hidden">
          <div className="min-w-0 flex-1 overflow-hidden">{content}</div>
          <DetailSidePanel
             kind="initiative"

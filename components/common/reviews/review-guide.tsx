@@ -5,11 +5,12 @@ import type { GuideSection, Review, ReviewGuide as ReviewGuideData } from '@/dat
 import { generateReviewGuide } from '@/lib/adapters-reviews';
 import { ApiError } from '@/lib/client';
 import { patchToLines } from '@/lib/diff-patch';
-import { FileCode2, Loader2, RefreshCw, Sparkles } from 'lucide-react';
+import { FileCode2, RefreshCw, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { DiffView } from './diff-view';
 import { DiffStat, InlineText, PrIcon } from './review-shared';
+import { CircleLoading } from '@/components/common/circle-loading';
 
 /** Mensagem honesta por status da API (o backend fala pt-BR; a UI é em inglês). */
 function errorMessage(e: unknown): string {
@@ -107,7 +108,7 @@ export function ReviewGuide({ review }: { review: Review }) {
                         aria-label="Regenerate guide"
                      >
                         {generating ? (
-                           <Loader2 className="size-3.5 animate-spin" />
+                           <CircleLoading size="sm" inline />
                         ) : (
                            <RefreshCw className="size-3.5" />
                         )}
@@ -136,7 +137,7 @@ export function ReviewGuide({ review }: { review: Review }) {
                   >
                      {generating ? (
                         <>
-                           <Loader2 className="size-4 animate-spin" />
+                           <CircleLoading size="sm" inline />
                            Generating…
                         </>
                      ) : (

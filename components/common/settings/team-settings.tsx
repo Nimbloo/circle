@@ -28,7 +28,7 @@ import {
    AlertDialogHeader,
    AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { api } from '@/lib/client';
+import { api, ApiError } from '@/lib/client';
 import { ESTIMATE_SCALE_META, normalizeScale, type EstimateScale } from '@/data/estimate-scales';
 import { useLabels, useStatuses } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -366,8 +366,9 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
          removeTeamLocal(team.id);
          toast.success('Time excluído');
          router.push(`/${orgId}`);
-      } catch {
-         toast.error('Não foi possível excluir o time');
+      } catch (e) {
+         // A API explica o motivo (ex.: 409 com o conteúdo que ainda está no time).
+         toast.error(e instanceof ApiError ? e.message : 'Não foi possível excluir o time');
          setBusy(false);
       }
    };

@@ -9,7 +9,7 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { useAgentChatStore, type AgentMessage } from '@/store/agent-chat-store';
 import { ArrowUp, Bot, CalendarClock, ListTodo, Sparkles, X } from 'lucide-react';
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 
 /** Prompts de exemplo — perguntas reais que o Agent responde consultando o workspace. */
 const agentExamples = [
@@ -102,7 +102,7 @@ const ChatMessage = memo(function ChatMessage({ message }: { message: AgentMessa
 
    if (message.role === 'user') {
       return (
-         <div className="flex justify-end">
+         <div className="content-enter flex justify-end">
             <div className="flex items-start gap-2.5 max-w-[85%]">
                <div className="rounded-2xl rounded-tr-sm bg-accent px-4 py-2.5 text-sm">
                   {message.content}
@@ -116,7 +116,7 @@ const ChatMessage = memo(function ChatMessage({ message }: { message: AgentMessa
       );
    }
    return (
-      <div className="flex items-start gap-2.5">
+      <div className="content-enter flex items-start gap-2.5">
          <span className="mt-1 inline-flex size-6 items-center justify-center rounded-full border bg-container shrink-0">
             <Bot className="size-3.5" />
          </span>
@@ -318,11 +318,7 @@ export default function AgentChat() {
          >
             <div className="max-w-2xl mx-auto px-6 py-8 flex flex-col gap-6">
                {activeChat.messages.length === 0 && activeChat.loadState === 'loading' && (
-                  <div className="flex flex-col gap-3" aria-busy="true">
-                     <span className="sr-only">Carregando conversa…</span>
-                     <Skeleton className="h-9 w-2/3 self-end rounded-2xl" />
-                     <Skeleton className="h-16 w-full" />
-                  </div>
+                  <LoadingArea rows={3} label="Carregando conversa…" />
                )}
                {activeChat.messages.length === 0 && activeChat.loadState === 'error' && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">

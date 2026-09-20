@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { useWorkspaceStore } from '@/store/workspace-store';
 
 /**
- * Falha do bootstrap do workspace (#16): sem isto a tela ficava no skeleton para sempre.
+ * Falha do bootstrap do workspace (#16): sem isto a tela ficava no loading para sempre.
  * Enquanto nada carregou e o último bootstrap falhou, mostra o erro com retry; depois
  * de carregado uma vez, uma falha de refetch não derruba a tela (os dados seguem).
  */

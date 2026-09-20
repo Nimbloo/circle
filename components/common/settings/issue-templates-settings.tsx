@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/common/empty-state';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import {
    Dialog,
    DialogContent,
@@ -195,7 +195,7 @@ export default function IssueTemplatesSettings() {
    }, [teams, teamId]);
 
    // R4 (#57): seq por time — resposta atrasada do time anterior nunca aparece; troca
-   // de time mostra skeleton; reload do mesmo time é silencioso; falha vira erro, não vazio.
+   // de time mostra loading; reload do mesmo time é silencioso; falha vira erro, não vazio.
    const resource = useAsyncResource(teamId || null, (id) => api.teams.templates(id));
    const templates = resource.data ?? [];
    const loading = resource.loading;
@@ -250,7 +250,7 @@ export default function IssueTemplatesSettings() {
 
          <div className="rounded-lg border bg-container overflow-hidden">
             {loading ? (
-               <ListSkeleton rows={4} />
+               <LoadingArea rows={4} />
             ) : resource.error ? (
                <div className="flex flex-col items-center gap-2 py-10 text-sm text-muted-foreground">
                   Não foi possível carregar os templates.
@@ -273,7 +273,7 @@ export default function IssueTemplatesSettings() {
                templates.map((tmpl) => (
                   <div
                      key={tmpl.id}
-                     className="flex items-center gap-3 px-4 py-3 border-b last:border-b-0 border-border/50"
+                     className="content-enter flex items-center gap-3 px-4 py-3 border-b last:border-b-0 border-border/50"
                   >
                      <FileText className="size-4 text-muted-foreground shrink-0" />
                      <div className="min-w-0 flex-1">

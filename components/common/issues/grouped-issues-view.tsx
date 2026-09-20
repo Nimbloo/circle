@@ -2,7 +2,7 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { EmptyState } from '@/components/common/empty-state';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { cn } from '@/lib/utils';
 import { Issue, sortIssuesByPriority } from '@/data/issues';
 import { Status } from '@/data/status';
@@ -41,7 +41,7 @@ interface GroupedIssuesViewProps {
 /**
  * Estado exibido quando não há nenhum grupo/issue para mostrar. Distingue
  * carregando (hidratando) de falha (com retry) de vazio real. Ocupa a área toda:
- * o skeleton fica no topo (onde as linhas vão aparecer), erro e vazio centralizados.
+ * o loading fica no topo (onde as linhas vão aparecer), erro e vazio centralizados.
  */
 function IssuesEmptyState({
    loading,
@@ -71,7 +71,7 @@ function IssuesEmptyState({
    if (loading) {
       return (
          <div data-testid="issues-loading" className="h-full w-full pt-1">
-            <ListSkeleton rows={8} />
+            <LoadingArea rows={8} />
          </div>
       );
    }
@@ -446,7 +446,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
          <DndProvider backend={HTML5Backend}>
             <CustomDragLayer />
             <BulkActionsBar />
-            <div className="h-full flex flex-col">
+            <div className="content-enter h-full flex flex-col">
                <div className="flex-1 min-h-0 overflow-x-auto">
                   <IssueContextMenuHost>
                      <div className="flex h-full min-w-max gap-0 px-1">
@@ -482,7 +482,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
          {listGroups.length === 0 && !showFooter ? (
             <IssuesEmptyState loading={loading} error={error} onRetry={onRetry} />
          ) : (
-            <div className="h-full flex flex-col min-h-0">
+            <div className="content-enter h-full flex flex-col min-h-0">
                {/* Lista VIRTUALIZADA: só as linhas visíveis vão pro DOM (fluido a 1000+). */}
                <div className="flex-1 min-h-0">
                   <IssueContextMenuHost>

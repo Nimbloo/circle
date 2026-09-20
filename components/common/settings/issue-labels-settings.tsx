@@ -26,7 +26,7 @@ import { useCatalogStore, useLabels } from '@/store/catalog-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { Pencil, Pipette, Tag, Trash2 } from 'lucide-react';
 import { EmptyState } from '@/components/common/empty-state';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { labelColor } from '@/components/common/palette';
@@ -260,7 +260,7 @@ export default function IssueLabelsSettings() {
             {rows.map((label) => (
                <div
                   key={label.id}
-                  className="group flex items-center px-2 py-2.5 text-sm border-b border-muted-foreground/5 hover:bg-sidebar/50"
+                  className="content-enter group flex items-center px-2 py-2.5 text-sm border-b border-muted-foreground/5 hover:bg-sidebar/50"
                >
                   <div className="flex-1 min-w-0 flex items-center gap-2.5">
                      <span
@@ -296,7 +296,7 @@ export default function IssueLabelsSettings() {
             ))}
             {rows.length === 0 &&
                (!catalogLoaded ? (
-                  <ListSkeleton rows={4} />
+                  <LoadingArea rows={4} />
                ) : query ? (
                   <EmptyState
                      variant="search"

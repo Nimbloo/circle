@@ -113,10 +113,11 @@ describe('perfil de membro', () => {
       });
    }
 
-   it('carregando usa skeleton, não texto cru', async () => {
+   it('carregando usa o loading do Circle, não texto cru', async () => {
       await renderPage();
       expect(screen.queryByText('Carregando…')).toBeNull();
-      expect(screen.getByTestId('profile-loading')).toBeTruthy();
+      const loading = screen.getByTestId('profile-loading');
+      expect(loading.querySelector('[data-part="arc"]')).not.toBeNull();
    });
 
    it('membro inexistente depois de carregado mostra EmptyState', async () => {

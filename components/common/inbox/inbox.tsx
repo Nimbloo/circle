@@ -38,7 +38,7 @@ import {
 import { getNotificationIcon } from '@/lib/notification-utils';
 import { EmptyState } from '@/components/common/empty-state';
 import { ErrorState } from '@/components/common/error-state';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import type { NotificationType } from '@/data/inbox';
 import NotificationPreview from './issue-preview';
 import IssueLine from './issue-line';
@@ -467,7 +467,7 @@ export default function Inbox() {
             {filteredNotifications.length === 0 &&
                (!loaded ? (
                   <div className="w-full">
-                     <ListSkeleton rows={6} />
+                     <LoadingArea rows={6} />
                   </div>
                ) : loadError && notifications.length === 0 ? (
                   <ErrorState

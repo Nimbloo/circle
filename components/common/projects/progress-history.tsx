@@ -1,6 +1,6 @@
 'use client';
 
-import { Skeleton } from '@/components/ui/skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { api, type ProjectSnapshotPoint } from '@/lib/client';
 import { useEffect, useState } from 'react';
 import { ProjectSnapshotChart } from './project-snapshot-chart';
@@ -48,7 +48,7 @@ export function ProgressHistory({
       <div className="flex flex-col gap-2">
          <span className="text-[13px] font-medium leading-4">{title}</span>
          {points === null ? (
-            <Skeleton className="h-[120px] w-full" />
+            <LoadingArea rows={3} size="sm" className="h-[120px]" />
          ) : (
             <ProjectSnapshotChart points={points} />
          )}

@@ -41,12 +41,13 @@ describe('feed de updates do projeto', () => {
       detail.mockReset();
    });
 
-   it('primeira carga mostra skeleton, não o vazio', async () => {
+   it('primeira carga mostra o loading do Circle, não o vazio', async () => {
       let resolve!: (value: unknown) => void;
       detail.mockReturnValue(new Promise((r) => (resolve = r)));
       render(<ProjectActivity projectId={project.id} />);
 
       expect(screen.queryByText(/No updates yet/)).toBeNull();
+      expect(screen.getByRole('status', { name: 'Carregando' })).toBeTruthy();
 
       await act(async () => resolve(emptyDto));
       expect(screen.getByText('No updates yet')).toBeTruthy();

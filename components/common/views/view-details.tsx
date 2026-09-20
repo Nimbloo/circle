@@ -1,7 +1,7 @@
 'use client';
 
 import { GroupedIssuesView } from '@/components/common/issues/grouped-issues-view';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import dynamic from 'next/dynamic';
 
 // O painel de insights carrega recharts (357 KB no bundle) e só renderiza quando
@@ -166,11 +166,11 @@ export default function ViewDetails({ viewId }: { viewId: string }) {
    const loaded = useWorkspaceStore((s) => s.loaded);
 
    if (!view) {
-      // Hidratando → skeleton; not-found só como estado final (fim do flash no deep-link frio).
+      // Hidratando → loading; not-found só como estado final (fim do flash no deep-link frio).
       if (!loaded) {
          return (
             <div className="p-8">
-               <ListSkeleton rows={6} />
+               <LoadingArea rows={6} />
             </div>
          );
       }

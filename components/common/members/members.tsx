@@ -2,7 +2,7 @@
 
 import MemberLine from './member-line';
 import { EmptyState } from '@/components/common/empty-state';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { useMembersFilterStore } from '@/store/members-filter-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { ArrowDown, Users } from 'lucide-react';
@@ -64,9 +64,9 @@ export default function Members() {
 
          <div className="w-full">
             {displayed.length === 0 && !loaded ? (
-               // Hidratando → skeleton; "No members yet" só depois do workspace chegar.
+               // Hidratando → loading; "No members yet" só depois do workspace chegar.
                <div className="py-4">
-                  <ListSkeleton rows={5} />
+                  <LoadingArea rows={5} />
                </div>
             ) : displayed.length === 0 ? (
                filters.role.length > 0 ? (

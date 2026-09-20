@@ -11,7 +11,7 @@ import { parseAsStringLiteral, useQueryState } from 'nuqs';
 import { useMemo } from 'react';
 import { Box } from 'lucide-react';
 import { EmptyState } from '@/components/common/empty-state';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { PROJECT_TABS } from '@/components/layout/headers/projects/projects-view-controls';
 import ProjectsBoard from './projects-board';
 import ProjectsInsightsPanel from './projects-insights-panel';
@@ -122,9 +122,9 @@ export default function Projects({ teamId }: { teamId?: string }) {
          <div className="flex-1 min-h-0 w-full flex overflow-hidden">
             <div className="flex-1 min-w-0 h-full overflow-hidden">
                {displayed.length === 0 && !loaded ? (
-                  // Hidratando → skeleton; o vazio só depois que o workspace chegou.
+                  // Hidratando → loading; o vazio só depois que o workspace chegou.
                   <div className="py-4">
-                     <ListSkeleton rows={6} />
+                     <LoadingArea rows={6} />
                   </div>
                ) : displayed.length === 0 ? (
                   scopeHasProjects ? (

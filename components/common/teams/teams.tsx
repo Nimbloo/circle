@@ -2,7 +2,7 @@
 
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { EmptyState } from '@/components/common/empty-state';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { useTeamsFilterStore } from '@/store/team-filter-store';
 import { useTeamsDisplayStore } from '@/store/teams-display-store';
 import { Users } from 'lucide-react';
@@ -86,9 +86,9 @@ export default function Teams() {
 
          <div className="w-full">
             {displayed.length === 0 && !loaded ? (
-               // Hidratando → skeleton; "No teams yet" só depois do workspace chegar.
+               // Hidratando → loading; "No teams yet" só depois do workspace chegar.
                <div className="py-4">
-                  <ListSkeleton rows={4} />
+                  <LoadingArea rows={4} />
                </div>
             ) : displayed.length === 0 ? (
                filters.membership.length > 0 || filters.identifier.length > 0 ? (

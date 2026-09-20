@@ -94,7 +94,7 @@ export function ProjectSnapshotChart({
    };
 
    return (
-      <div className="flex flex-col gap-2" data-testid="snapshot-chart">
+      <div className="content-enter flex flex-col gap-2" data-testid="snapshot-chart">
          <div className="relative" style={{ height }}>
             <svg
                className="absolute inset-0 h-full w-full"

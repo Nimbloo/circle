@@ -220,7 +220,7 @@ export default function ProjectsBoard({ groups }: { groups: ProjectGroup[] }) {
 
    return (
       <DndProvider backend={HTML5Backend}>
-         <div className="h-full w-full overflow-x-auto">
+         <div className="content-enter h-full w-full overflow-x-auto">
             <p id={DRAG_HINT_ID} className="sr-only">
                Drag a project card to another column to change its {byTeam ? 'team' : 'status'}.
             </p>

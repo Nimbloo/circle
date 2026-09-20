@@ -508,16 +508,22 @@ export async function deleteTeam(db: Db, id: string): Promise<boolean> {
          tx.select({ n: count() }).from(savedViewT).where(eq(savedViewT.teamId, id)),
          tx.select({ n: count() }).from(documentFolderT).where(eq(documentFolderT.teamId, id)),
       ]);
-      const total =
-         Number(issues[0].n) +
-         Number(projects[0].n) +
-         Number(cycles[0].n) +
-         Number(views[0].n) +
-         Number(folders[0].n);
-      if (total > 0)
+      // O que ainda está no time, contado e nomeado: a tela mostra esta mensagem, e
+      // "esvazie antes" sem dizer o quê deixava o admin sem saber o que mover.
+      const blocking = [
+         [Number(issues[0].n), 'issue', 'issues'],
+         [Number(projects[0].n), 'projeto', 'projetos'],
+         [Number(cycles[0].n), 'ciclo', 'ciclos'],
+         [Number(views[0].n), 'view', 'views'],
+         [Number(folders[0].n), 'pasta de documentos', 'pastas de documentos'],
+      ] as const;
+      const parts = blocking
+         .filter(([n]) => n > 0)
+         .map(([n, one, many]) => `${n} ${n === 1 ? one : many}`);
+      if (parts.length > 0)
          throw new ApiError(
             409,
-            `Team '${id}' tem issues/projects/cycles/views/folders — esvazie antes de apagar`
+            `O time ainda tem ${parts.join(', ')}. Mova ou exclua esse conteúdo antes de excluir o time.`
          );
 
       // Sub-times (#100): reancora os filhos no avô antes de apagar. Sem isto o FK

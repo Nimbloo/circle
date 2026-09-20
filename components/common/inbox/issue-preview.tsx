@@ -6,7 +6,7 @@ import {
    DetailSidePanelTrigger,
 } from '@/components/common/detail-side-panel';
 import { IssueDetailView } from '@/components/common/issues/details/issue-details';
-import { IssueDetailSkeleton } from '@/components/common/issues/details/issue-detail-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { getNotificationIcon } from '@/lib/notification-utils';
@@ -148,13 +148,13 @@ export default function IssuePreview({
             ) : issuesLoaded ? (
                // Issue fora do store (ex.: removida ou fora do escopo carregado): mostra o
                // contexto e o título, com o "Open" do cabeçalho para a página da issue.
-               <div className="mx-auto max-w-3xl p-8">
+               <div className="content-enter mx-auto max-w-3xl p-8">
                   <NotificationContext notification={notification} />
                   <h2 className="text-lg font-semibold">{notification.title}</h2>
                </div>
             ) : (
-               // Issue ainda não hidratada no store → skeleton (resolve em instantes).
-               <IssueDetailSkeleton />
+               // Issue ainda não hidratada no store → loading (resolve em instantes).
+               <LoadingArea className="h-full" />
             )}
          </div>
       </DetailPanelContainer>

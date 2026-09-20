@@ -3,7 +3,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/common/empty-state';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import {
    Command,
    CommandEmpty,
@@ -384,7 +384,7 @@ function InitiativeRow({
       <InitiativeContextMenu initiative={initiative}>
          <Link
             href={`/${orgId}/initiative/${initiative.id}`}
-            className="h-[52px] pl-[52px] pr-[34px] flex items-center gap-3 rounded-lg text-[13px] hover:bg-accent/40 transition-colors"
+            className="content-enter h-[52px] pl-[52px] pr-[34px] flex items-center gap-3 rounded-lg text-[13px] hover:bg-accent/40 transition-colors"
          >
             <span className="flex min-w-0 flex-1 items-center gap-2.5">
                <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-muted/50 text-sm">
@@ -583,10 +583,10 @@ export default function Initiatives() {
             </AnimatePresence>
 
             {displayed.length === 0 && !creating && !loaded ? (
-               // Hidratando → skeleton; o empty state "No initiatives yet" só depois
+               // Hidratando → loading; o empty state "No initiatives yet" só depois
                // que o workspace chegou (fim do flash no deep-link frio).
                <div className="py-4">
-                  <ListSkeleton rows={5} />
+                  <LoadingArea rows={5} />
                </div>
             ) : displayed.length === 0 && !creating ? (
                allInitiatives.length === 0 ? (

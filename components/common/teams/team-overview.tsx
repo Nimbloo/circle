@@ -2,7 +2,7 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { adaptFolders } from '@/lib/adapters-documents';
-import { ListSkeleton } from '@/components/common/list-skeleton';
+import { LoadingArea } from '@/components/common/loading-area';
 import { api } from '@/lib/client';
 import type { TeamDocument } from '@/data/documents';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -58,12 +58,12 @@ export default function TeamOverview() {
    useLiveReload(DOCUMENT_CHANGED_EVENT, { teamId }, () => loadPinned());
 
    if (!team) {
-      // Workspace ainda hidratando → skeleton; "not found" só é estado FINAL
+      // Workspace ainda hidratando → loading; "not found" só é estado FINAL
       // (antes, deep-link frio mostrava "Team not found." por segundos até o hydrate).
       if (!loaded) {
          return (
             <div className="p-8">
-               <ListSkeleton rows={5} />
+               <LoadingArea rows={5} />
             </div>
          );
       }
@@ -80,7 +80,7 @@ export default function TeamOverview() {
    ];
 
    return (
-      <div className="w-full max-w-5xl -translate-x-[9px] mx-auto px-8 py-6 flex flex-col lg:flex-row gap-12">
+      <div className="content-enter w-full max-w-5xl -translate-x-[9px] mx-auto px-8 py-6 flex flex-col lg:flex-row gap-12">
          {/* Main column */}
          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3">

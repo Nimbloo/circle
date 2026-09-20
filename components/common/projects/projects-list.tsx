@@ -9,7 +9,7 @@ export default function ProjectsList({ groups }: { groups: ProjectGroup[] }) {
    const { grouping, displayProperties } = useProjectsDisplayStore();
 
    return (
-      <div className="h-full w-full overflow-y-auto">
+      <div className="content-enter h-full w-full overflow-y-auto">
          <div className="sticky top-0 z-10 flex h-8 items-center bg-container text-xs font-[450] leading-[15px] text-[var(--table-header-foreground)]">
             <div className="w-[38px] shrink-0" />
             <div className="min-w-0 flex-1 px-1.5">Name</div>
