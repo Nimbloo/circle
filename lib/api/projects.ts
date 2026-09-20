@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { eq, inArray, count, and, notInArray, sql } from 'drizzle-orm';
+import { eq, inArray, count, and, notInArray, ne, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    project as projectT,
@@ -359,7 +359,7 @@ export async function updateProject(
    actorEmail?: string
 ): Promise<ProjectDto | null> {
    const existing = await db
-      .select({ id: projectT.id, healthId: projectT.healthId })
+      .select({ id: projectT.id, healthId: projectT.healthId, teamId: projectT.teamId })
       .from(projectT)
       .where(eq(projectT.id, id))
       .limit(1);
@@ -376,6 +376,18 @@ export async function updateProject(
          .limit(1);
       if (found.length === 0) throw new ApiError(400, `team '${patch.teamId}' inválido`);
       if (scope) assertTeamInScope(scope.teamIds, patch.teamId);
+      if (patch.teamId !== existing[0].teamId) {
+         const [foreignIssue] = await db
+            .select({ id: issueT.id })
+            .from(issueT)
+            .where(and(eq(issueT.projectId, id), ne(issueT.teamId, patch.teamId)))
+            .limit(1);
+         if (foreignIssue)
+            throw new ApiError(
+               409,
+               'Não é possível trocar o time de um projeto com issues de outro time'
+            );
+      }
    }
 
    // Resolvido ANTES da transação: o ator exige consulta própria, e consultar `db` de
@@ -443,7 +455,10 @@ export async function deleteProject(db: Db, id: string, actorEmail?: string): Pr
    if (actorEmail) await assertCanWriteProject(db, actorEmail, id);
    await db.transaction(async (tx) => {
       // issue.projectId é RESTRICT e nullable: desvincula em vez de deletar as issues.
-      await tx.update(issueT).set({ projectId: null }).where(eq(issueT.projectId, id));
+      await tx
+         .update(issueT)
+         .set({ projectId: null, milestoneId: null })
+         .where(eq(issueT.projectId, id));
       await tx.delete(projectLabel).where(eq(projectLabel.projectId, id));
       await tx.delete(projectUpdate).where(eq(projectUpdate.projectId, id));
       await tx.delete(projectActivity).where(eq(projectActivity.projectId, id));

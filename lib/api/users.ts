@@ -1,8 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { and, eq, notInArray } from 'drizzle-orm';
 import type { Db } from '@/db';
-import { appUser, teamMember, issueSubscription } from '@/db/schema';
-import { isAdmin, isBreakGlassAdmin } from './auth';
+import { appUser, teamMember, issueSubscription, issue, status } from '@/db/schema';
+import {
+   isAdmin,
+   isBreakGlassAdmin,
+   requestCacheClear,
+   requestCacheGet,
+   requestCacheSet,
+} from './auth';
 import { publish } from './events';
 import { ApiError } from './errors';
 
@@ -46,6 +52,7 @@ export interface MeDto {
    role: string;
    admin: boolean;
    teamIds: string[];
+   /** Issues ABERTAS que o usuário segue (bootstrap enxuto: sem completed/canceled). */
    subscribedIssueIds: string[];
    /** Handle do GitHub — liga o PR (que guarda o login) a este usuário. */
    githubLogin: string | null;
@@ -58,10 +65,19 @@ export async function getMe(db: Db, email: string): Promise<MeDto> {
       .select({ teamId: teamMember.teamId })
       .from(teamMember)
       .where(eq(teamMember.userId, user.id));
+   // Só issues abertas: com milhares de issues fechadas seguidas, a lista inteira era o
+   // grosso do bootstrap (120 KB) e é re-baixada a cada refetch do workspace.
    const subscriptions = await db
       .select({ issueId: issueSubscription.issueId })
       .from(issueSubscription)
-      .where(eq(issueSubscription.userId, user.id));
+      .innerJoin(issue, eq(issue.id, issueSubscription.issueId))
+      .innerJoin(status, eq(status.id, issue.statusId))
+      .where(
+         and(
+            eq(issueSubscription.userId, user.id),
+            notInArray(status.category, ['completed', 'canceled'])
+         )
+      );
    return {
       id: user.id,
       slug: user.slug,
@@ -134,7 +150,12 @@ async function provisionUser(db: Db, normalizedEmail: string, role: string): Pro
          })
          .onConflictDoNothing()
          .returning();
-      if (inserted.length > 0) return inserted[0];
+      if (inserted.length > 0) {
+         // Primeiro acesso: a lista de membros e os seletores de responsável dos outros
+         // clientes precisam do novo usuário sem esperar um reload.
+         publish({ entity: 'member', action: 'created', id: inserted[0].id });
+         return inserted[0];
+      }
 
       const byEmail = await db
          .select()
@@ -168,22 +189,41 @@ export async function getOrCreateUser(
    opts: { syncRole?: boolean } = {}
 ): Promise<UserRow> {
    const normalized = email.trim().toLowerCase();
+   const cacheKey = `app-user:${normalized}`;
+   const cached = requestCacheGet<UserRow>(cacheKey);
+   if (cached) {
+      assertActiveUser(cached);
+      if (!opts.syncRole) return cached;
+      const wantedRole = isBreakGlassAdmin(normalized) ? 'Admin' : defaultRole;
+      if (wantedRole === cached.role) return cached;
+   }
    const existing = await db.select().from(appUser).where(eq(appUser.email, normalized)).limit(1);
    if (existing.length > 0) {
       assertActiveUser(existing[0]);
-      if (!opts.syncRole) return existing[0];
+      if (!opts.syncRole) {
+         requestCacheSet(cacheKey, existing[0]);
+         return existing[0];
+      }
       const role = isBreakGlassAdmin(normalized) ? 'Admin' : defaultRole;
-      if (role === existing[0].role) return existing[0];
+      if (role === existing[0].role) {
+         requestCacheSet(cacheKey, existing[0]);
+         return existing[0];
+      }
+      requestCacheClear();
       const [updated] = await db
          .update(appUser)
          .set({ role, updatedAt: new Date() })
          .where(eq(appUser.id, existing[0].id))
          .returning();
-      return updated ?? existing[0];
+      const result = updated ?? existing[0];
+      requestCacheSet(cacheKey, result);
+      return result;
    }
 
    const role = isBreakGlassAdmin(normalized) ? 'Admin' : defaultRole;
-   return provisionUser(db, normalized, role);
+   const result = await provisionUser(db, normalized, role);
+   requestCacheSet(cacheKey, result);
+   return result;
 }
 
 export interface UpdateProfileInput {
@@ -218,6 +258,7 @@ export async function updateProfile(
       set.githubLogin = raw ? raw.replace(/\/.*$/, '') : null;
    }
    if (Object.keys(set).length > 0) {
+      requestCacheClear();
       await db
          .update(appUser)
          .set({ ...set, updatedAt: new Date() })

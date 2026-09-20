@@ -12,6 +12,7 @@ import {
    unique,
    type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 // ─────────────────────────────────────────────────────────────
 // Catálogos (semeados; fixos no produto) — DESIGN §3
@@ -358,7 +359,10 @@ export const issue = pgTable(
       estimate: integer('estimate'), // pontos de estimativa (nullable = sem estimativa)
       // Milestone estruturada (paridade Linear): FK p/ project_milestone. Substitui o
       // texto livre issue_content.milestone. NULL = sem milestone.
-      milestoneId: varchar('milestone_id', { length: 36 }),
+      milestoneId: varchar('milestone_id', { length: 36 }).references(
+         (): AnyPgColumn => projectMilestone.id,
+         { onDelete: 'set null' }
+      ),
       // Snooze da issue (paridade Linear/triage): enquanto > now, some da fila de triage.
       snoozedUntil: timestamp('snoozed_until'),
       // Marcos temporais p/ métricas (cycle/lead time). startedAt = 1ª entrada em status
@@ -393,6 +397,7 @@ export const issue = pgTable(
       index('idx_issue_assignee').on(t.assigneeId),
       index('idx_issue_created_by').on(t.createdById),
       index('idx_issue_rank').on(t.rank),
+      index('idx_issue_milestone').on(t.milestoneId),
       unique('issue_sentry_issue_id_unique').on(t.sentryIssueId),
    ]
 );
@@ -441,14 +446,18 @@ export const issueRelation = pgTable(
    ]
 );
 
-export const issuePrLink = pgTable('issue_pr_link', {
-   id: varchar('id', { length: 36 }).primaryKey(),
-   issueId: varchar('issue_id', { length: 36 })
-      .notNull()
-      .references(() => issue.id),
-   title: varchar('title', { length: 512 }).notNull(),
-   status: varchar('status', { length: 16 }).notNull(), // open|merged|draft
-});
+export const issuePrLink = pgTable(
+   'issue_pr_link',
+   {
+      id: varchar('id', { length: 36 }).primaryKey(),
+      issueId: varchar('issue_id', { length: 36 })
+         .notNull()
+         .references(() => issue.id),
+      title: varchar('title', { length: 512 }).notNull(),
+      status: varchar('status', { length: 16 }).notNull(), // open|merged|draft
+   },
+   (t) => [index('idx_issue_pr_link_issue').on(t.issueId)]
+);
 
 // Assinatura de issue (Linear-style): quem recebe atualizações e vê a issue na
 // aba "Subscribed"/"Activity" do My issues. Auto-assinada em create/assign/comment/
@@ -531,7 +540,11 @@ export const comment = pgTable(
       resolvedAt: timestamp('resolved_at'),
       resolvedById: varchar('resolved_by_id', { length: 36 }).references(() => appUser.id),
    },
-   (t) => [index('idx_comment_issue').on(t.issueId), index('idx_comment_parent').on(t.parentId)]
+   (t) => [
+      index('idx_comment_issue').on(t.issueId),
+      index('idx_comment_parent').on(t.parentId),
+      index('idx_comment_author_created_at').on(t.authorId, t.createdAt),
+   ]
 );
 
 // Anexo de issue ou de comentário (#98). O arquivo vive no S3/CDN (`url`); a linha guarda
@@ -586,7 +599,10 @@ export const activityEvent = pgTable(
       text: varchar('text', { length: 1024 }),
       createdAt: timestamp('created_at').notNull().defaultNow(),
    },
-   (t) => [index('idx_activity_issue').on(t.issueId)]
+   (t) => [
+      index('idx_activity_issue').on(t.issueId),
+      index('idx_activity_actor_created_at').on(t.actorId, t.createdAt),
+   ]
 );
 
 // ─────────────────────────────────────────────────────────────
@@ -629,7 +645,14 @@ export const notification = pgTable(
       snoozedUntil: timestamp('snoozed_until'),
       createdAt: timestamp('created_at').notNull().defaultNow(),
    },
-   (t) => [index('idx_notification_recipient').on(t.recipientId)]
+   (t) => [
+      index('idx_notification_issue').on(t.issueId),
+      index('idx_notification_recipient').on(t.recipientId),
+      index('idx_notification_recipient_created_at').on(t.recipientId, t.createdAt.desc()),
+      index('idx_notification_unread_recipient')
+         .on(t.recipientId)
+         .where(sql`${t.read} = false`),
+   ]
 );
 
 // Audit log append-only no nível workspace (paridade Linear): quem fez o quê nas

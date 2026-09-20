@@ -1,6 +1,6 @@
 import { db } from '@/db';
 import { emailFromRequest } from '@/lib/api/auth';
-import { subscribe, type CircleEvent } from '@/lib/api/events';
+import { eventForViewer, subscribe, type CircleEvent } from '@/lib/api/events';
 import { problem } from '@/lib/api/response';
 import { scopeForEmail } from '@/lib/api/scope';
 import { assertActiveEmail } from '@/lib/api/users';
@@ -43,12 +43,11 @@ export async function GET(req: Request): Promise<Response> {
       return problem(status, 'Forbidden', detalhe);
    }
 
-   // O barramento é global e o evento não carrega o time, então filtrar por entidade
-   // custaria uma query POR EVENTO. Para quem tem escopo restrito (#100), o corte é
-   // outro: o evento vai SEM identificadores (`id`/`actorEmail`), que é o suficiente
-   // para o cliente refazer as listas que ele pode ver, sem revelar atividade alheia.
-   const { teamIds } = await scopeForEmail(db, email);
-   const redact = teamIds !== null;
+   // Quem está do outro lado é resolvido UMA vez: o corte por destinatário e por time
+   // (#100) usa só o que o evento já carrega (`recipientId`/`teamId`) — nenhuma query
+   // por evento. Ver `eventForViewer`.
+   const { user, teamIds } = await scopeForEmail(db, email);
+   const viewer = { userId: user.id, teamIds };
 
    const encoder = new TextEncoder();
    let unsubscribe: (() => void) | null = null;
@@ -85,9 +84,8 @@ export async function GET(req: Request): Promise<Response> {
          send(': connected\n\n');
 
          unsubscribe = subscribe((event: CircleEvent) => {
-            const payload: CircleEvent = redact
-               ? { entity: event.entity, action: event.action, ts: event.ts }
-               : event;
+            const payload = eventForViewer(event, viewer);
+            if (!payload) return;
             send(`data: ${JSON.stringify(payload)}\n\n`);
          });
 

@@ -1,10 +1,13 @@
 'use client';
 
 import { CycleDetailsPanel } from '@/components/common/cycles/cycle-details-panel';
+import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
+import { EmptyState } from '@/components/common/empty-state';
+import { ListSkeleton } from '@/components/common/list-skeleton';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
-import { useIssuesStore } from '@/store/issues-store';
+import { selectIssuesLoading, useIssuesStore } from '@/store/issues-store';
 import { applyIssueFilters } from './issue-filter-columns';
 import { IssueFilterBar } from './issue-filter-bar';
 import { useRightPanelStore } from '@/store/right-panel-store';
@@ -40,6 +43,10 @@ export default function CycleIssues({ cycleView }: CycleIssuesProps) {
    const { viewType } = useViewStore();
    const { filters } = useFilterStore();
    const issues = useIssuesStore((s) => s.issues);
+   const loading = useIssuesStore(selectIssuesLoading);
+   const error = useIssuesStore((s) => s.error);
+   const hydrate = useIssuesStore((s) => s.hydrate);
+   const workspaceLoaded = useWorkspaceStore((s) => s.loaded);
    const { openPanel } = useRightPanelStore();
    const displayOrderedStatus = useDisplayOrderedStatuses();
 
@@ -78,6 +85,22 @@ export default function CycleIssues({ cycleView }: CycleIssuesProps) {
       );
    }
 
+   // Sem ciclo: antes da 1ª carga do workspace ainda não dá para afirmar que não existe.
+   if (!cycle) {
+      if (!workspaceLoaded) return <ListSkeleton />;
+      return (
+         <EmptyState
+            icon={CyclePlayIcon}
+            title={cycleView === 'active' ? 'No active cycle' : 'No upcoming cycle'}
+            description={
+               cycleView === 'active'
+                  ? 'This team has no cycle running right now.'
+                  : 'This team has no cycle scheduled next.'
+            }
+         />
+      );
+   }
+
    return (
       <div className="w-full h-full flex flex-col overflow-hidden">
          <IssueFilterBar />
@@ -88,6 +111,9 @@ export default function CycleIssues({ cycleView }: CycleIssuesProps) {
                   totalIssues={cycleIssues}
                   statuses={displayOrderedStatus}
                   isViewTypeGrid={isViewTypeGrid}
+                  loading={loading}
+                  error={error}
+                  onRetry={() => hydrate()}
                />
             </div>
 
@@ -96,7 +122,7 @@ export default function CycleIssues({ cycleView }: CycleIssuesProps) {
                   <InsightsPanel issues={displayedIssues} />
                </aside>
             )}
-            {openPanel === 'cycle-details' && cycle && (
+            {openPanel === 'cycle-details' && (
                <aside className="hidden lg:flex w-[420px] shrink-0 border-l h-full overflow-hidden bg-container">
                   <CycleDetailsPanel cycle={cycle} issues={cycleIssues} />
                </aside>

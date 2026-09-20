@@ -6,6 +6,8 @@ import { fetchReviews, syncReviews } from '@/lib/adapters-reviews';
 import { Review, ReviewList, ReviewStatus } from '@/data/reviews';
 import { CheckIcon, ChevronLeft, ListFilter, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import { EmptyState } from '@/components/common/empty-state';
+import { ErrorState } from '@/components/common/error-state';
+import { ListSkeleton } from '@/components/common/list-skeleton';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ReactNode, useEffect, useRef, useState } from 'react';
@@ -13,7 +15,6 @@ import { REVIEW_CHANGED_EVENT } from '@/lib/use-live-sync';
 import { ReviewDetail, ReviewSection } from './review-detail';
 import { toast } from 'sonner';
 import { PrIcon } from './review-shared';
-import { Skeleton } from '@/components/ui/skeleton';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import {
@@ -383,19 +384,18 @@ export default function Reviews({
             </div>
             <div className="flex-1 overflow-y-auto">
                {loading ? (
-                  <div className="flex flex-col divide-y divide-border/50">
-                     {Array.from({ length: 8 }).map((_, i) => (
-                        <div key={i} className="flex h-11 items-center gap-3 px-[18px]">
-                           <Skeleton className="size-4 rounded-full shrink-0" />
-                           <Skeleton className="h-4 flex-1 max-w-md" />
-                           <Skeleton className="h-4 w-16 shrink-0" />
-                        </div>
-                     ))}
-                  </div>
+                  <ListSkeleton rows={8} />
                ) : error ? (
-                  <div className="px-[18px] py-6 text-[13px] text-muted-foreground">
-                     Could not load reviews.
-                  </div>
+                  <ErrorState
+                     title="Could not load reviews"
+                     description="Something went wrong while loading the reviews."
+                     action={
+                        <Button size="sm" onClick={() => setReloadKey((key) => key + 1)}>
+                           Try again
+                        </Button>
+                     }
+                     className="min-h-0 px-4 py-10"
+                  />
                ) : groups.length === 0 ? (
                   <EmptyState
                      variant={reviews.length > 0 ? 'filtered' : 'empty'}
@@ -461,8 +461,8 @@ export default function Reviews({
                   </div>
                </div>
             ) : !loading && !error && total === 0 ? (
-               <div className="flex h-full items-center justify-center text-muted-foreground">
-                  <div className="flex w-[540px] flex-col gap-6">
+               <div className="flex h-full items-center justify-center px-6 text-muted-foreground">
+                  <div className="flex w-full max-w-[540px] flex-col gap-6">
                      <EmptySketch />
                      <div className="flex flex-col gap-2">
                         <h3 className="text-[15px] font-semibold leading-[23px] text-foreground">
@@ -494,9 +494,7 @@ export default function Reviews({
             ) : (
                <div className="h-full flex flex-col items-center justify-center gap-4 text-muted-foreground">
                   <EmptySketch />
-                  <span className="text-sm">
-                     {loading ? 'Loading…' : error ? 'Could not load reviews.' : `${total} reviews`}
-                  </span>
+                  {!loading && !error && <span className="text-sm">{total} reviews</span>}
                   {isAdmin && (
                      <button
                         type="button"

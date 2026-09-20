@@ -131,6 +131,8 @@ interface CatalogState {
     * workspace inteiro. Cada um mexe SÓ na sua coleção. */
    applyLabel: (dto: LabelDto) => void;
    removeLabel: (id: string) => void;
+   /** Lista inteira de labels (evento remoto): preserva o `groupId` já carregado. */
+   setLabels: (dtos: LabelDto[]) => void;
    applyStatus: (dto: StatusDto) => void;
    /** Lista inteira já ordenada (retorno do reorder). */
    setStatuses: (dtos: StatusDto[]) => void;
@@ -169,6 +171,11 @@ export const useCatalogStore = create<CatalogState>((set) => ({
          return { labels: upsert(s.labels, next).sort((a, b) => a.name.localeCompare(b.name)) };
       }),
    removeLabel: (id) => set((s) => ({ labels: s.labels.filter((l) => l.id !== id) })),
+   setLabels: (dtos) =>
+      set((s) => {
+         const groupById = new Map(s.labels.map((l) => [l.id, l.groupId]));
+         return { labels: dtos.map((d) => toLabel({ ...d, groupId: groupById.get(d.id) })) };
+      }),
    // Status criado recebe a maior position (vai pro fim); editado fica na mesma casa.
    applyStatus: (dto) => set((s) => ({ statuses: upsert(s.statuses, toStatus(dto)) })),
    setStatuses: (dtos) => set({ statuses: dtos.map(toStatus) }),

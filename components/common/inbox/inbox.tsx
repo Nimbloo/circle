@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useNotificationsStore } from '@/store/notifications-store';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useNotificationsStore, type InboxNotification } from '@/store/notifications-store';
+import { useIssuesStore } from '@/store/issues-store';
 import { Button } from '@/components/ui/button';
 import {
    DropdownMenu,
@@ -36,6 +37,7 @@ import {
 } from 'lucide-react';
 import { getNotificationIcon } from '@/lib/notification-utils';
 import { EmptyState } from '@/components/common/empty-state';
+import { ErrorState } from '@/components/common/error-state';
 import { ListSkeleton } from '@/components/common/list-skeleton';
 import type { NotificationType } from '@/data/inbox';
 import NotificationPreview from './issue-preview';
@@ -64,22 +66,79 @@ const TYPE_LABELS: { value: NotificationType; label: string }[] = [
    { value: 'upload', label: 'Upload' },
 ];
 
-export default function Inbox() {
-   const {
-      notifications,
-      selectedNotification,
-      setSelectedNotification,
-      markAsRead,
-      markAsUnread,
-      markAllAsRead,
-      snooze,
-      unsnooze,
-      snoozed,
-      hydrateSnoozed,
-      getUnreadNotifications,
-      loaded,
-   } = useNotificationsStore();
+/**
+ * Linhas do inbox. O mapa identifier→status (vivo) é montado UMA vez por evento aqui —
+ * cada linha fazia `issues.find` por identifier (O(linhas × issues)). Só este bloco
+ * assina as issues; as linhas são `memo` e só a que mudou re-renderiza.
+ */
+function NotificationRows({
+   items,
+   selectedId,
+   showId,
+   showStatusIcon,
+   onOpen,
+}: {
+   items: { item: InboxNotification; isSnoozed: boolean }[];
+   selectedId: string | undefined;
+   showId: boolean;
+   showStatusIcon: boolean;
+   onOpen: (notification: InboxNotification) => void;
+}) {
+   const issues = useIssuesStore((s) => s.issues);
+   const snooze = useNotificationsStore((s) => s.snooze);
+   const unsnooze = useNotificationsStore((s) => s.unsnooze);
+   const statusByIdentifier = useMemo(
+      () => new Map(issues.map((issue) => [issue.identifier, issue.status.id])),
+      [issues]
+   );
 
+   return items.map(({ item: notification, isSnoozed }) =>
+      isSnoozed ? (
+         <IssueLine
+            key={notification.id}
+            notification={notification}
+            statusId={statusByIdentifier.get(notification.identifier)}
+            onUnsnooze={unsnooze}
+            showId={showId}
+            showStatusIcon={showStatusIcon}
+         />
+      ) : (
+         <IssueLine
+            key={notification.id}
+            notification={notification}
+            statusId={statusByIdentifier.get(notification.identifier)}
+            isSelected={selectedId === notification.id}
+            onOpen={onOpen}
+            onSnooze={snooze}
+            showId={showId}
+            showStatusIcon={showStatusIcon}
+         />
+      )
+   );
+}
+
+export default function Inbox() {
+   // Seletores estreitos (não o store inteiro).
+   const notifications = useNotificationsStore((s) => s.notifications);
+   const snoozed = useNotificationsStore((s) => s.snoozed);
+   const selectedNotification = useNotificationsStore((s) => s.selectedNotification);
+   const loaded = useNotificationsStore((s) => s.loaded);
+   const setSelectedNotification = useNotificationsStore((s) => s.setSelectedNotification);
+   const markAsRead = useNotificationsStore((s) => s.markAsRead);
+   const markAsUnread = useNotificationsStore((s) => s.markAsUnread);
+   const markAllAsRead = useNotificationsStore((s) => s.markAllAsRead);
+   const hydrateSnoozed = useNotificationsStore((s) => s.hydrateSnoozed);
+
+   const openNotification = useCallback(
+      (notification: InboxNotification) => {
+         setSelectedNotification(notification);
+         // Padrão Linear: abrir a notificação já a marca como lida.
+         if (!notification.read) markAsRead(notification.id);
+      },
+      [setSelectedNotification, markAsRead]
+   );
+
+   const loadError = useNotificationsStore((s) => s.loadError);
    const isMobile = useIsMobile();
    const desktopContainerRef = useRef<HTMLDivElement>(null);
    const listPanelRef = useRef<ImperativePanelHandle>(null);
@@ -179,7 +238,7 @@ export default function Inbox() {
                   <DropdownMenuContent align="start" className="w-52">
                      <DropdownMenuItem
                         onClick={markAllAsRead}
-                        disabled={getUnreadNotifications().length === 0}
+                        disabled={!notifications.some((n) => !n.read)}
                      >
                         <CheckCheck className="size-4 text-muted-foreground" />
                         Mark all as read
@@ -370,6 +429,21 @@ export default function Inbox() {
                   <div className="w-full">
                      <ListSkeleton rows={6} />
                   </div>
+               ) : loadError && notifications.length === 0 ? (
+                  <ErrorState
+                     title="Couldn't load notifications"
+                     description="Check your connection and try again."
+                     className="my-auto min-h-0"
+                     action={
+                        <Button
+                           variant="outline"
+                           size="sm"
+                           onClick={() => void useNotificationsStore.getState().hydrate()}
+                        >
+                           Try again
+                        </Button>
+                     }
+                  />
                ) : notifications.length > 0 || snoozed.length > 0 ? (
                   <EmptyState
                      variant="filtered"
@@ -386,32 +460,15 @@ export default function Inbox() {
                      className="my-auto"
                   />
                ))}
-            {filteredNotifications.length > 0 &&
-               filteredNotifications.map(({ item: notification, isSnoozed }) =>
-                  isSnoozed ? (
-                     <IssueLine
-                        key={notification.id}
-                        notification={notification}
-                        onUnsnooze={() => unsnooze(notification.id)}
-                        showId={showId}
-                        showStatusIcon={showStatusIcon}
-                     />
-                  ) : (
-                     <IssueLine
-                        key={notification.id}
-                        notification={notification}
-                        isSelected={selectedNotification?.id === notification.id}
-                        onClick={() => {
-                           setSelectedNotification(notification);
-                           // Padrão Linear: abrir a notificação já a marca como lida.
-                           if (!notification.read) markAsRead(notification.id);
-                        }}
-                        onSnooze={(hours) => snooze(notification.id, hours)}
-                        showId={showId}
-                        showStatusIcon={showStatusIcon}
-                     />
-                  )
-               )}
+            {filteredNotifications.length > 0 && (
+               <NotificationRows
+                  items={filteredNotifications}
+                  selectedId={selectedNotification?.id}
+                  showId={showId}
+                  showStatusIcon={showStatusIcon}
+                  onOpen={openNotification}
+               />
+            )}
          </div>
       </>
    );

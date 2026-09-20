@@ -1,5 +1,6 @@
 'use client';
 
+import { EmptyState } from '@/components/common/empty-state';
 import { GroupedIssuesView } from '@/components/common/issues/grouped-issues-view';
 import { ListSkeleton } from '@/components/common/list-skeleton';
 import { applyIssueFilters } from '@/components/common/issues/issue-filter-columns';
@@ -9,7 +10,7 @@ import { api } from '@/lib/client';
 import type { ProjectDetail } from '@/data/project-details';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { useFilterStore } from '@/store/filter-store';
-import { useIssuesStore } from '@/store/issues-store';
+import { selectIssuesLoading, useIssuesStore } from '@/store/issues-store';
 import { useViewStore } from '@/store/view-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useEffect, useMemo, useState } from 'react';
@@ -29,7 +30,7 @@ export default function ProjectIssues({ projectId }: ProjectIssuesProps) {
    const displayOrderedStatus = useDisplayOrderedStatuses();
    // Layout list/board da view (o "Display" do header) — antes a lista era fixa.
    const { viewType } = useViewStore();
-   const loading = useIssuesStore((s) => s.loading);
+   const loading = useIssuesStore(selectIssuesLoading);
    const error = useIssuesStore((s) => s.error);
    const hydrate = useIssuesStore((s) => s.hydrate);
 
@@ -63,9 +64,11 @@ export default function ProjectIssues({ projectId }: ProjectIssuesProps) {
    if (!project) {
       if (!loaded) return <ListSkeleton rows={8} />;
       return (
-         <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-            Project not found.
-         </div>
+         <EmptyState
+            variant="search"
+            title="Project not found"
+            description="It may have been deleted or you don't have access to it."
+         />
       );
    }
 

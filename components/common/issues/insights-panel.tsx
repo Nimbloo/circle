@@ -9,18 +9,11 @@ import { useRightPanelStore } from '@/store/right-panel-store';
 import { X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { countIssueMatrix } from '@/data/insights';
+import { PRIORITY_COLORS } from '@/components/common/palette';
 import { usePanelFilter } from './use-panel-filter';
 import { api } from '@/lib/client';
 import type { TimeMetrics } from '@/lib/api/aggregations';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-
-const PRIORITY_COLORS: Record<string, string> = {
-   'no-priority': '#64748b',
-   'urgent': '#eb5757',
-   'high': '#f2994a',
-   'medium': '#facc15',
-   'low': '#4cb782',
-};
 
 interface InsightsRow {
    status: Status;

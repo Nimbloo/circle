@@ -299,6 +299,9 @@ export async function rolloverCyclesForTeam(
    now: Date = new Date()
 ): Promise<void> {
    const today = isoDay(now);
+   // O que mudou, para publicar DEPOIS do commit (#20): antes o rollover era silencioso
+   // (issues trocavam de ciclo sem evento) e o `cycle/created` saía de dentro da transação.
+   const touched = { created: null as string | null, updated: new Set<string>(), movedIssues: 0 };
    await db.transaction(async (tx) => {
       const [current] = await tx
          .select()
@@ -314,7 +317,10 @@ export async function rolloverCyclesForTeam(
             .where(and(eq(cycleT.teamId, teamId), eq(cycleT.status, 'upcoming')))
             .orderBy(asc(cycleT.startDate))
             .limit(1);
-         if (!next) next = await createNextCycle(tx, teamId, current);
+         if (!next) {
+            next = await createNextCycle(tx, teamId, current);
+            touched.created = next.id;
+         } else touched.updated.add(next.id);
 
          const statuses = await tx.select().from(statusT);
          // Paridade Linear: só issues "em aberto" (unstarted/started) rolam pro próximo ciclo.
@@ -322,7 +328,7 @@ export async function rolloverCyclesForTeam(
          // explicitamente backlog+triage, além de completed/canceled).
          const noCarry = new Set(['backlog', 'triage', 'completed', 'canceled']);
          const excludeIds = statuses.filter((s) => noCarry.has(s.category)).map((s) => s.id);
-         await tx
+         const moved = await tx
             .update(issueT)
             .set({ cycleId: next.id, updatedAt: new Date() })
             .where(
@@ -330,8 +336,11 @@ export async function rolloverCyclesForTeam(
                   eq(issueT.cycleId, current.id),
                   excludeIds.length ? notInArray(issueT.statusId, excludeIds) : sql`true`
                )
-            );
+            )
+            .returning({ id: issueT.id });
+         touched.movedIssues = moved.length;
          await tx.update(cycleT).set({ status: 'completed' }).where(eq(cycleT.id, current.id));
+         touched.updated.add(current.id);
       }
 
       // Sem current (recém-fechado ou cool-down que acabou): promove o upcoming cuja data
@@ -349,9 +358,20 @@ export async function rolloverCyclesForTeam(
             )
             .orderBy(asc(cycleT.startDate))
             .limit(1);
-         if (due) await tx.update(cycleT).set({ status: 'current' }).where(eq(cycleT.id, due.id));
+         if (due) {
+            await tx.update(cycleT).set({ status: 'current' }).where(eq(cycleT.id, due.id));
+            touched.updated.add(due.id);
+         }
       }
    });
+   if (touched.created) {
+      touched.updated.delete(touched.created);
+      publish({ entity: 'cycle', action: 'created', id: touched.created, teamId });
+   }
+   for (const id of touched.updated) publish({ entity: 'cycle', action: 'updated', id, teamId });
+   // Issues carregadas para o próximo ciclo: um sinal coarse do time (sem id) em vez de
+   // um evento por issue — o cliente re-hidrata a lista uma vez.
+   if (touched.movedIssues > 0) publish({ entity: 'issue', action: 'updated', teamId });
    await snapshotCurrentCycles(db, teamId, now);
 }
 
@@ -382,7 +402,7 @@ async function createNextCycle(tx: Tx, teamId: string, prev: CycleRow): Promise<
          capacity: prev.capacity,
       })
       .returning();
-   publish({ entity: 'cycle', action: 'created', id: row.id });
+   // Sem publish aqui: roda dentro da transação do rollover, que publica após o commit.
    return row;
 }
 
@@ -396,10 +416,18 @@ export async function listCyclesByTeam(db: Db, teamId: string): Promise<CycleDto
  * + snapshots pra todos os ids), em vez de N chamadas de listCyclesByTeam (cada uma
  * re-escaneando a tabela status). Usado no bootstrap do workspace — fim do N+1.
  */
-export async function listCyclesForTeams(db: Db, teamIds: string[]): Promise<CycleDto[]> {
+export async function listCyclesForTeams(
+   db: Db,
+   teamIds: string[],
+   opts: { burnup?: 'all' | 'current' } = {}
+): Promise<CycleDto[]> {
    if (teamIds.length === 0) return [];
    const rows = await db.select().from(cycleT).where(inArray(cycleT.teamId, teamIds));
-   return (await toDtos(db, rows, new Date())).sort((a, b) => b.number - a.number);
+   const dtos = await toDtos(db, rows, new Date());
+   // `burnup: 'current'` (bootstrap): a série diária dos ciclos passados é o grosso do
+   // payload e só o detalhe do ciclo a desenha — fica para `getCycle`.
+   if (opts.burnup === 'current') for (const d of dtos) if (d.status !== 'current') d.burnup = null;
+   return dtos.sort((a, b) => b.number - a.number);
 }
 
 /**
@@ -479,7 +507,7 @@ export async function createCycle(db: Db, input: CreateCycleInput): Promise<Cycl
             endDate: input.endDate,
             capacity: input.capacity ?? 0,
          });
-         publish({ entity: 'cycle', action: 'created', id });
+         publish({ entity: 'cycle', action: 'created', id, teamId: input.teamId });
          return (await getCycle(db, id))!;
       } catch (e) {
          // 23505 na constraint de (team, number) → corrida: recomputa e retenta.
@@ -523,14 +551,14 @@ export async function updateCycle(
       await db.update(cycleT).set(set).where(eq(cycleT.id, id));
    }
 
-   publish({ entity: 'cycle', action: 'updated', id });
+   publish({ entity: 'cycle', action: 'updated', id, teamId: prev.teamId });
    return getCycle(db, id);
 }
 
 /** Desassocia as issues (cycle_id=NULL) e remove o ciclo. Retorna boolean. */
 export async function deleteCycle(db: Db, id: string): Promise<boolean> {
    const existing = await db
-      .select({ id: cycleT.id })
+      .select({ id: cycleT.id, teamId: cycleT.teamId })
       .from(cycleT)
       .where(eq(cycleT.id, id))
       .limit(1);
@@ -540,6 +568,6 @@ export async function deleteCycle(db: Db, id: string): Promise<boolean> {
       await tx.update(issueT).set({ cycleId: null }).where(eq(issueT.cycleId, id));
       await tx.delete(cycleT).where(eq(cycleT.id, id));
    });
-   publish({ entity: 'cycle', action: 'deleted', id });
+   publish({ entity: 'cycle', action: 'deleted', id, teamId: existing[0].teamId });
    return true;
 }

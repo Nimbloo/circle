@@ -78,10 +78,10 @@ const makeIssue = (over: Partial<Issue> & { id: string }): Issue => ({
 });
 
 /** A linha lê a issue do store — como as listas reais (re-render após a mutação). */
-function Row({ id, orderedIssues }: { id: string; orderedIssues?: Issue[] }) {
+function Row({ id, getOrderedIssues }: { id: string; getOrderedIssues?: () => Issue[] }) {
    const issue = useIssuesStore((s) => s.issues.find((i) => i.id === id));
    if (!issue) return null;
-   return <IssueLine issue={issue} orderedIssues={orderedIssues} />;
+   return <IssueLine issue={issue} getOrderedIssues={getOrderedIssues} />;
 }
 
 const storeIssue = (id: string) => useIssuesStore.getState().getIssueById(id)!;
@@ -197,7 +197,7 @@ describe('IssueLine — drag-and-drop no modo lista', () => {
       return (
          <DndProvider backend={HTML5Backend}>
             {issues.map((issue) => (
-               <Row key={issue.id} id={issue.id} orderedIssues={issues} />
+               <Row key={issue.id} id={issue.id} getOrderedIssues={() => issues} />
             ))}
          </DndProvider>
       );

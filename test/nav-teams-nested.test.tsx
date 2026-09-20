@@ -40,7 +40,6 @@ function team(id: string, name: string, parentId: string | null): Team {
       autoCloseChildren: false,
       parentId,
       members: [],
-      projects: [],
    };
 }
 

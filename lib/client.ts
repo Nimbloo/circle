@@ -190,6 +190,8 @@ const me = Object.assign(() => get<MeDto>('/me'), {
       post<MeDto>('/me/avatar', { dataUrl, contentType }),
    removeAvatar: () => del<MeDto>('/me/avatar'),
    activity: () => get<MyActivityItemDto[]>('/me/activity'),
+   /** Todas as issues seguidas (abertas e fechadas); o bootstrap só traz as abertas. */
+   subscriptions: () => get<{ issueIds: string[] }>('/me/subscriptions'),
 });
 
 export const api = {
@@ -306,6 +308,8 @@ export const api = {
          del<IssueDetailDto>(
             `/issues/${id}/relations?relatedId=${encodeURIComponent(relatedId)}&kind=${kind}`
          ),
+      subscription: (id: string) =>
+         get<{ id: string; subscribed: boolean }>(`/issues/${id}/subscription`),
       subscribe: (id: string) =>
          post<{ id: string; subscribed: boolean }>(`/issues/${id}/subscription`, {}),
       unsubscribe: (id: string) =>

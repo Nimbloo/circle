@@ -5,6 +5,7 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
 import { Hourglass } from 'lucide-react';
 import { EmptyState } from '@/components/common/empty-state';
+import { ListSkeleton } from '@/components/common/list-skeleton';
 import { useParams } from 'next/navigation';
 import { useMemo } from 'react';
 import CycleLine, { CyclePlayIcon } from './cycle-line';
@@ -31,6 +32,7 @@ const CycleBurnupChart = dynamic(
 export default function Cycles() {
    const { teamId } = useParams<{ teamId?: string }>();
    const allCycles = useWorkspaceStore((state) => state.cycles);
+   const loaded = useWorkspaceStore((state) => state.loaded);
    const cycles = useMemo(() => {
       const teamCycles = teamId ? allCycles.filter((cycle) => cycle.teamId === teamId) : allCycles;
       return [...teamCycles].sort((a, b) => b.startDate.localeCompare(a.startDate));
@@ -42,6 +44,14 @@ export default function Cycles() {
    const cooldownBefore = until ? cycles.findIndex((c) => c.startDate < until) : -1;
 
    if (cycles.length === 0) {
+      // Antes da 1ª carga do workspace a lista vazia não significa "sem cycles".
+      if (!loaded) {
+         return (
+            <div data-testid="cycles-loading">
+               <ListSkeleton rows={4} />
+            </div>
+         );
+      }
       return (
          <EmptyState
             icon={CyclePlayIcon}

@@ -6,9 +6,9 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/client';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { useAgentChatStore } from '@/store/agent-chat-store';
+import { useAgentChatStore, type AgentMessage } from '@/store/agent-chat-store';
 import { ArrowUp, Bot, CalendarClock, ListTodo, Sparkles, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 /** Prompts de exemplo — perguntas reais que o Agent responde consultando o workspace. */
 const agentExamples = [
@@ -35,30 +35,44 @@ const agentExamples = [
    },
 ];
 
-/** Streams the canned reply into the assistant message, word by word. */
+/** Ritmo da revelação: uma palavra (com o espaço seguinte) a cada 14 ms. */
+const MS_PER_WORD = 14;
+
+/**
+ * Transmite a resposta na bolha palavra a palavra, em LOTE por frame (rAF): no máximo
+ * um `set` no store por frame, com as palavras que "venceram" desde o anterior — em vez
+ * de um `set` (e um re-render) por pedaço num setInterval.
+ */
 function useStreamReply() {
-   const { appendToMessage, finishMessage } = useAgentChatStore();
-   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+   const appendToMessage = useAgentChatStore((s) => s.appendToMessage);
+   const finishMessage = useAgentChatStore((s) => s.finishMessage);
+   const frameRef = useRef<number | null>(null);
 
    useEffect(() => {
       return () => {
-         if (intervalRef.current) clearInterval(intervalRef.current);
+         if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
       };
    }, []);
 
    return (chatId: string, messageId: string, reply: string) => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      const words = reply.split(/(\s+)/);
+      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+      const words = reply.match(/\S+\s*|\s+/g) ?? [];
+      const start = performance.now();
       let index = 0;
-      intervalRef.current = setInterval(() => {
+      const tick = (now: number) => {
+         const due = Math.min(words.length, Math.floor((now - start) / MS_PER_WORD) + 1);
+         if (due > index) {
+            appendToMessage(chatId, messageId, words.slice(index, due).join(''));
+            index = due;
+         }
          if (index >= words.length) {
-            if (intervalRef.current) clearInterval(intervalRef.current);
+            frameRef.current = null;
             finishMessage(chatId, messageId);
             return;
          }
-         appendToMessage(chatId, messageId, words[index]);
-         index += 1;
-      }, 14);
+         frameRef.current = requestAnimationFrame(tick);
+      };
+      frameRef.current = requestAnimationFrame(tick);
    };
 }
 
@@ -75,7 +89,14 @@ function DemoBadge() {
    );
 }
 
-function AgentMessageBody({ content, streaming }: { content: string; streaming?: boolean }) {
+/** Memoizada: durante o streaming só a mensagem que recebe texto re-renderiza. */
+const AgentMessageBody = memo(function AgentMessageBody({
+   content,
+   streaming,
+}: {
+   content: string;
+   streaming?: boolean;
+}) {
    const lines = content.split('\n');
    return (
       <div className="text-sm leading-relaxed flex flex-col gap-1">
@@ -112,7 +133,42 @@ function AgentMessageBody({ content, streaming }: { content: string; streaming?:
          {streaming && <span className="inline-block w-2 h-4 bg-foreground/60 animate-pulse" />}
       </div>
    );
-}
+});
+
+/** Uma bolha do chat; memoizada pela referência da mensagem (o store preserva as demais). */
+const ChatMessage = memo(function ChatMessage({ message }: { message: AgentMessage }) {
+   const avatarUrl = useWorkspaceStore((s) => s.me?.avatarUrl);
+   const name = useWorkspaceStore((s) => s.me?.name) ?? 'You';
+
+   if (message.role === 'user') {
+      return (
+         <div className="flex justify-end">
+            <div className="flex items-start gap-2.5 max-w-[85%]">
+               <div className="rounded-2xl rounded-tr-sm bg-accent px-4 py-2.5 text-sm">
+                  {message.content}
+               </div>
+               <Avatar className="size-6 mt-1 shrink-0">
+                  <AvatarImage src={avatarUrl ?? undefined} alt={name} />
+                  <AvatarFallback>{name[0]}</AvatarFallback>
+               </Avatar>
+            </div>
+         </div>
+      );
+   }
+   return (
+      <div className="flex items-start gap-2.5">
+         <span className="mt-1 inline-flex size-6 items-center justify-center rounded-full border bg-container shrink-0">
+            <Bot className="size-3.5" />
+         </span>
+         <div className="min-w-0 flex-1">
+            <AgentMessageBody content={message.content} streaming={message.streaming} />
+         </div>
+      </div>
+   );
+});
+
+/** Distância (px) do fim abaixo da qual o chat segue a resposta rolando sozinho. */
+const STICK_TO_BOTTOM_PX = 80;
 
 function ChatComposer({
    onSend,
@@ -174,20 +230,35 @@ function ChatComposer({
  * podem ser revisitadas pelo dropdown do header.
  */
 export default function AgentChat() {
-   const { chats, activeChatId, sendMessage, failMessage, hydrate, loadChat, rekeyChat } =
-      useAgentChatStore();
-   const me = useWorkspaceStore((s) => s.me);
+   // Seletores estreitos: `find` devolve a referência guardada (estável entre updates de
+   // outros chats); ações têm referência fixa.
+   const activeChat = useAgentChatStore((s) => s.chats.find((chat) => chat.id === s.activeChatId));
+   const activeChatId = useAgentChatStore((s) => s.activeChatId);
+   const sendMessage = useAgentChatStore((s) => s.sendMessage);
+   const failMessage = useAgentChatStore((s) => s.failMessage);
+   const hydrate = useAgentChatStore((s) => s.hydrate);
+   const loadChat = useAgentChatStore((s) => s.loadChat);
+   const rekeyChat = useAgentChatStore((s) => s.rekeyChat);
    const stream = useStreamReply();
    const [bannerDismissed, setBannerDismissed] = useState(false);
    const [examplesDismissed, setExamplesDismissed] = useState(false);
    const scrollRef = useRef<HTMLDivElement>(null);
+   // Segue o fim só se o usuário já estava lá (não arranca quem rolou para ler acima).
+   const stickToBottom = useRef(true);
 
-   const activeChat = chats.find((chat) => chat.id === activeChatId);
-   const isStreaming = activeChat?.messages.some((message) => message.streaming) ?? false;
+   const messages = activeChat?.messages;
+   const isStreaming = messages?.some((message) => message.streaming) ?? false;
+   const messageCount = messages?.length ?? 0;
+
+   // Mensagem nova (envio/troca de chat): sempre vai para o fim.
+   useLayoutEffect(() => {
+      stickToBottom.current = true;
+   }, [messageCount, activeChatId]);
 
    useEffect(() => {
-      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-   }, [activeChat?.messages]);
+      const el = scrollRef.current;
+      if (el && stickToBottom.current) el.scrollTo({ top: el.scrollHeight });
+   }, [messages]);
 
    // Carrega a lista de chats persistidos ao montar.
    useEffect(() => {
@@ -285,38 +356,19 @@ export default function AgentChat() {
          <div className="shrink-0 border-b bg-container px-4 py-2">
             <DemoBadge />
          </div>
-         <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
+         <div
+            ref={scrollRef}
+            onScroll={(event) => {
+               const el = event.currentTarget;
+               stickToBottom.current =
+                  el.scrollHeight - el.scrollTop - el.clientHeight < STICK_TO_BOTTOM_PX;
+            }}
+            className="flex-1 min-h-0 overflow-y-auto"
+         >
             <div className="max-w-2xl mx-auto px-6 py-8 flex flex-col gap-6">
-               {activeChat.messages.map((message) =>
-                  message.role === 'user' ? (
-                     <div key={message.id} className="flex justify-end">
-                        <div className="flex items-start gap-2.5 max-w-[85%]">
-                           <div className="rounded-2xl rounded-tr-sm bg-accent px-4 py-2.5 text-sm">
-                              {message.content}
-                           </div>
-                           <Avatar className="size-6 mt-1 shrink-0">
-                              <AvatarImage
-                                 src={me?.avatarUrl ?? undefined}
-                                 alt={me?.name ?? 'You'}
-                              />
-                              <AvatarFallback>{(me?.name ?? 'You')[0]}</AvatarFallback>
-                           </Avatar>
-                        </div>
-                     </div>
-                  ) : (
-                     <div key={message.id} className="flex items-start gap-2.5">
-                        <span className="mt-1 inline-flex size-6 items-center justify-center rounded-full border bg-container shrink-0">
-                           <Bot className="size-3.5" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                           <AgentMessageBody
-                              content={message.content}
-                              streaming={message.streaming}
-                           />
-                        </div>
-                     </div>
-                  )
-               )}
+               {activeChat.messages.map((message) => (
+                  <ChatMessage key={message.id} message={message} />
+               ))}
             </div>
          </div>
          <div className="shrink-0 border-t bg-container">

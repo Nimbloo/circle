@@ -132,7 +132,6 @@ export function adaptTeam(t: TeamFull): Team {
       autoCloseChildren: t.autoCloseChildren,
       parentId: t.parentId ?? null,
       members: t.members.map(adaptMemberToUser),
-      projects: t.projects.map(adaptProject),
    };
 }
 

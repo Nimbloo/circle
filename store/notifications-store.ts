@@ -28,6 +28,8 @@ interface NotificationsState {
    unreadCount: number;
    /** Primeira hidratação terminou (sucesso ou falha) — antes disso a UI mostra skeleton, não vazio. */
    loaded: boolean;
+   /** A última hidratação falhou — com a lista vazia, o inbox mostra erro + retry (não "vazio"). */
+   loadError: boolean;
 
    // Hydration
    hydrate: () => Promise<void>;
@@ -91,6 +93,23 @@ function adaptNotification(
    };
 }
 
+let hydrateSeq = 0;
+
+/** Marca `read` nas notificações `ids` (lista + seleção) — base dos rollbacks direcionados. */
+function setReadIn(
+   state: Pick<NotificationsState, 'notifications' | 'selectedNotification'>,
+   ids: Set<string>,
+   read: boolean
+) {
+   return {
+      notifications: state.notifications.map((n) => (ids.has(n.id) ? { ...n, read } : n)),
+      selectedNotification:
+         state.selectedNotification && ids.has(state.selectedNotification.id)
+            ? { ...state.selectedNotification, read }
+            : state.selectedNotification,
+   };
+}
+
 export const useNotificationsStore = create<NotificationsState>((set, get) => ({
    // Initial state — vazio; populado via hydrate() a partir da API.
    notifications: [],
@@ -98,13 +117,17 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
    selectedNotification: undefined,
    unreadCount: 0,
    loaded: false,
+   loadError: false,
 
    hydrate: async () => {
+      // Token de sequência: uma hidratação que termina DEPOIS de outra mais nova é descartada.
+      const seq = ++hydrateSeq;
       try {
          const [dtos, countRes] = await Promise.all([
             api.inbox.list(),
             api.inbox.unreadCount().catch(() => ({ count: 0 })),
          ]);
+         if (seq !== hydrateSeq) return;
          const issueById = new Map(useIssuesStore.getState().issues.map((i) => [i.id, i]));
          const items = dtos
             .map((dto) => adaptNotification(dto, issueById))
@@ -113,6 +136,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
             notifications: items,
             unreadCount: countRes.count,
             loaded: true,
+            loadError: false,
             // Reconcilia a seleção com a versão fresca (read/content/timestamp podem
             // ter mudado no servidor); se sumiu da lista, mantém o snapshot atual
             // para o preview aberto não desaparecer no meio da leitura.
@@ -122,8 +146,9 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
                : undefined,
          }));
       } catch {
-         // Degradação graciosa — mantém o estado atual se a API falhar.
-         set({ loaded: true });
+         if (seq !== hydrateSeq) return;
+         // Mantém a lista atual e sinaliza a falha (a tela vazia vira erro + retry).
+         set({ loaded: true, loadError: true });
       }
    },
 
@@ -146,11 +171,6 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
    },
 
    markAsRead: (id: string) => {
-      const snapshot = {
-         notifications: get().notifications,
-         selectedNotification: get().selectedNotification,
-         unreadCount: get().unreadCount,
-      };
       const wasUnread = get().notifications.some((n) => n.id === id && !n.read);
       set((state) => ({
          notifications: state.notifications.map((notification) =>
@@ -163,17 +183,22 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
          unreadCount: wasUnread ? Math.max(0, state.unreadCount - 1) : state.unreadCount,
       }));
       void api.inbox.setRead(id, true).catch(() => {
-         set(snapshot);
+         // Rollback direcionado: só esta notificação (não o store inteiro).
+         set((state) => ({
+            ...setReadIn(state, new Set([id]), false),
+            unreadCount: wasUnread ? state.unreadCount + 1 : state.unreadCount,
+         }));
          toast.error('Falha ao marcar como lida');
       });
    },
 
    markAllAsRead: () => {
-      const snapshot = {
-         notifications: get().notifications,
-         selectedNotification: get().selectedNotification,
-         unreadCount: get().unreadCount,
-      };
+      const unreadIds = new Set(
+         get()
+            .notifications.filter((n) => !n.read)
+            .map((n) => n.id)
+      );
+      const prevCount = get().unreadCount;
       set((state) => ({
          notifications: state.notifications.map((notification) => ({
             ...notification,
@@ -185,17 +210,16 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
          unreadCount: 0,
       }));
       void api.inbox.readAll().catch(() => {
-         set(snapshot);
+         // Rollback direcionado: só as que ESTA ação marcou como lidas.
+         set((state) => ({
+            ...setReadIn(state, unreadIds, false),
+            unreadCount: state.unreadCount + prevCount,
+         }));
          toast.error('Falha ao marcar todas como lidas');
       });
    },
 
    markAsUnread: (id: string) => {
-      const snapshot = {
-         notifications: get().notifications,
-         selectedNotification: get().selectedNotification,
-         unreadCount: get().unreadCount,
-      };
       const wasRead = get().notifications.some((n) => n.id === id && n.read);
       set((state) => ({
          notifications: state.notifications.map((notification) =>
@@ -208,17 +232,17 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
          unreadCount: wasRead ? state.unreadCount + 1 : state.unreadCount,
       }));
       void api.inbox.setRead(id, false).catch(() => {
-         set(snapshot);
+         set((state) => ({
+            ...setReadIn(state, new Set([id]), true),
+            unreadCount: wasRead ? Math.max(0, state.unreadCount - 1) : state.unreadCount,
+         }));
          toast.error('Falha ao marcar como não lida');
       });
    },
 
    snooze: (id: string, hours: number) => {
-      const snapshot = {
-         notifications: get().notifications,
-         selectedNotification: get().selectedNotification,
-         unreadCount: get().unreadCount,
-      };
+      const removed = get().notifications.find((n) => n.id === id);
+      const wasSelected = get().selectedNotification?.id === id;
       const wasUnread = get().notifications.some((n) => n.id === id && !n.read);
       // Otimista: a adiada some do inbox default (o backend a filtra até vencer).
       set((state) => ({
@@ -232,15 +256,28 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
          .snooze(id, until)
          .then(() => toast.success(`Adiada por ${hours}h`))
          .catch(() => {
-            set(snapshot);
+            // Rollback direcionado: devolve só a notificação adiada (na ordem por data).
+            set((state) => {
+               if (!removed || state.notifications.some((n) => n.id === id)) return {};
+               return {
+                  notifications: [...state.notifications, removed].sort((a, b) =>
+                     b.sortAt.localeCompare(a.sortAt)
+                  ),
+                  selectedNotification:
+                     wasSelected && !state.selectedNotification
+                        ? removed
+                        : state.selectedNotification,
+                  unreadCount: wasUnread ? state.unreadCount + 1 : state.unreadCount,
+               };
+            });
             toast.error('Falha ao adiar');
          });
    },
 
    unsnooze: (id: string) => {
-      const prevSnoozed = get().snoozed;
+      const removed = get().snoozed.find((n) => n.id === id);
       // Otimista: some da aba Snoozed; ao recarregar o inbox ela reaparece.
-      set({ snoozed: prevSnoozed.filter((n) => n.id !== id) });
+      set((state) => ({ snoozed: state.snoozed.filter((n) => n.id !== id) }));
       void api.inbox
          .snooze(id, null)
          .then(() => {
@@ -248,7 +285,12 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
             void get().hydrate();
          })
          .catch(() => {
-            set({ snoozed: prevSnoozed });
+            // Rollback direcionado: devolve só esta à lista de adiadas.
+            set((state) =>
+               removed && !state.snoozed.some((n) => n.id === id)
+                  ? { snoozed: [...state.snoozed, removed] }
+                  : {}
+            );
             toast.error('Falha ao desfazer o adiamento');
          });
    },

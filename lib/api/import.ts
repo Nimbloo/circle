@@ -21,6 +21,7 @@ import {
 } from '@/db/schema';
 import { ApiError } from './errors';
 import { createIssue, updateIssue } from './issues';
+import { publish } from './events';
 import { assertCanWriteTeam } from './scope';
 
 export type ImportSource = 'csv' | 'linear' | 'jira';
@@ -568,10 +569,13 @@ export async function commitImport(
             if (!input.createMissingLabels) continue;
             const id = slugifyLabel(l.name);
             if (!id) continue;
-            await db
+            const novas = await db
                .insert(labelT)
                .values({ id, name: l.name, color: IMPORTED_LABEL_COLOR, groupId: null })
-               .onConflictDoNothing();
+               .onConflictDoNothing()
+               .returning({ id: labelT.id });
+            // Label criada pelo import entra no catálogo dos outros clientes (#12).
+            if (novas.length > 0) publish({ entity: 'label', action: 'created', id });
             cat.labelByName.set(norm(l.name), id);
             labelIds.push(id);
          }
@@ -593,7 +597,8 @@ export async function commitImport(
                   ...(mapped.dueDate ? { dueDate: mapped.dueDate } : {}),
                   ...(mapped.estimate != null ? { estimate: mapped.estimate } : {}),
                },
-               actorEmail
+               actorEmail,
+               { silent: true }
             );
             issueId = existingId;
             result.updated++;
@@ -611,7 +616,8 @@ export async function commitImport(
                   estimate: mapped.estimate,
                   description: cell(raw, mapping.description) || null,
                },
-               actorEmail
+               actorEmail,
+               { silent: true }
             );
             issueId = created.id;
             result.created++;
@@ -647,11 +653,16 @@ export async function commitImport(
       const parentId = idByExternal.get(link.parentExternalId);
       if (!parentId || parentId === link.childId) continue;
       try {
-         await updateIssue(db, link.childId, { parentId }, actorEmail);
+         await updateIssue(db, link.childId, { parentId }, actorEmail, { silent: true });
       } catch (e) {
          result.errors.push({ row: 0, message: `parent: ${(e as Error).message}` });
       }
    }
 
+   // Modo silencioso (#7): em vez de um evento por linha (cada um vira um GET em cada
+   // cliente, e o `pg_notify` disputa o pool), UM evento coarse sem id no fim — o
+   // cliente re-hidrata a lista de issues uma vez.
+   if (result.created + result.updated > 0)
+      publish({ entity: 'issue', action: 'updated', teamId: input.teamId, actorEmail });
    return result;
 }
