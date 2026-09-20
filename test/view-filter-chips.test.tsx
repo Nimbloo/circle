@@ -3,9 +3,12 @@
 import './setup-dom';
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { ViewFilterChips } from '@/components/common/views/view-filter-chips';
 import type { View } from '@/data/views';
+import { seedCatalog } from './helpers/catalog-fixture';
+
+beforeEach(() => seedCatalog());
 
 /**
  * A página de view salva mostra o filtro como chips SOMENTE LEITURA — os mesmos da

@@ -10,6 +10,7 @@ import type { ProjectGroup } from '@/components/common/projects/projects';
 import type { Project } from '@/data/projects';
 import type { Team } from '@/data/teams';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { useIssuesStore } from '@/store/issues-store';
 import { lastTestBackend } from './helpers/dnd-test-backend';
 import { makeProject, statusOf, toProjectDto } from './helpers/project-fixture';
 
@@ -191,5 +192,24 @@ describe('ProjectsBoard — agrupado por time', () => {
       expect(apiMocks.update).not.toHaveBeenCalled();
       const hint = document.getElementById(card.getAttribute('aria-describedby')!);
       expect(hint?.textContent).toContain('change its team');
+   });
+
+   it('projeto com issues de outro time não aceita drop em outro time (evita o 409, #43)', () => {
+      useIssuesStore.setState({
+         issues: [{ id: 'i1', teamId: 'CORE', project: { id: 'p1' } } as never],
+      });
+      render(<TeamHarness />);
+      act(() => lastTestBackend!.simulateDragDrop(cardIn('Core'), column('Design')));
+      expect(apiMocks.update).not.toHaveBeenCalled();
+      expect(within(column('Core')).getByText('Alpha')).toBeTruthy();
+      useIssuesStore.setState({ issues: [] });
+   });
+
+   it('erro da API mostra a mensagem do servidor', async () => {
+      const err = Object.assign(new Error('Não é possível trocar o time'), { status: 409 });
+      apiMocks.update.mockRejectedValue(err);
+      render(<TeamHarness />);
+      act(() => lastTestBackend!.simulateDragDrop(cardIn('Core'), column('Design')));
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Não é possível trocar o time'));
    });
 });

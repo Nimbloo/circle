@@ -19,6 +19,16 @@ import {
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import {
+   AlertDialog,
+   AlertDialogAction,
+   AlertDialogCancel,
+   AlertDialogContent,
+   AlertDialogDescription,
+   AlertDialogFooter,
+   AlertDialogHeader,
+   AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { adaptFolders } from '@/lib/adapters-documents';
 import { api } from '@/lib/client';
 import { DOCUMENT_CHANGED_EVENT, useLiveReload } from '@/lib/use-live-sync';
@@ -54,6 +64,8 @@ export default function TeamDocuments() {
       null
    );
    const [busy, setBusy] = useState(false);
+   /** Documento aguardando confirmação de exclusão (Ad#21–40: excluía no 1º clique). */
+   const [toDelete, setToDelete] = useState<{ id: string; name: string } | null>(null);
 
    const reload = useCallback(() => {
       if (!teamId) return;
@@ -111,6 +123,7 @@ export default function TeamDocuments() {
    const remove = async (docId: string) => {
       try {
          await api.documents.remove(docId);
+         setToDelete(null);
          toast.success('Documento excluído');
          await reload();
       } catch {
@@ -228,8 +241,8 @@ export default function TeamDocuments() {
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem
-                                       className="text-red-600 focus:text-red-600"
-                                       onClick={() => remove(doc.id)}
+                                       className="text-destructive focus:text-destructive"
+                                       onClick={() => setToDelete({ id: doc.id, name: doc.name })}
                                     >
                                        <Trash2 className="size-3.5 mr-2" /> Delete
                                     </DropdownMenuItem>
@@ -241,6 +254,28 @@ export default function TeamDocuments() {
                   </Collapsible>
                ))}
          </div>
+
+         <AlertDialog open={toDelete !== null} onOpenChange={(o) => !o && setToDelete(null)}>
+            <AlertDialogContent>
+               <AlertDialogHeader>
+                  <AlertDialogTitle>Excluir “{toDelete?.name}”?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                     O documento será removido do time. Esta ação não pode ser desfeita.
+                  </AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction
+                     onClick={(e) => {
+                        e.preventDefault();
+                        if (toDelete) void remove(toDelete.id);
+                     }}
+                  >
+                     Excluir
+                  </AlertDialogAction>
+               </AlertDialogFooter>
+            </AlertDialogContent>
+         </AlertDialog>
 
          {/* Rename (secundário — o create é o modal Linear) */}
          <Dialog open={renaming !== null} onOpenChange={(o) => !o && setRenaming(null)}>

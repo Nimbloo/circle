@@ -10,7 +10,8 @@ import { Box, CopyMinus, Inbox, Layers, Settings } from 'lucide-react';
 import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { DOCUMENT_CHANGED_EVENT, useLiveReload } from '@/lib/use-live-sync';
 
 /**
  * Team Home — "Overview" tab: team identity, pinned resources and
@@ -26,27 +27,35 @@ export default function TeamOverview() {
 
    const [pinnedDocuments, setPinnedDocuments] = useState<TeamDocument[]>([]);
 
+   const loadPinned = useCallback(
+      (isActive: () => boolean = () => true) =>
+         teamId
+            ? api.teams
+                 .documents(teamId)
+                 .then((dtos) => {
+                    if (isActive())
+                       setPinnedDocuments(
+                          adaptFolders(dtos)
+                             .flatMap((folder) => folder.documents)
+                             .filter((doc) => doc.pinned)
+                       );
+                 })
+                 .catch(() => {
+                    if (isActive()) setPinnedDocuments([]);
+                 })
+            : undefined,
+      [teamId]
+   );
+
    useEffect(() => {
-      if (!teamId) return;
       let active = true;
-      api.teams
-         .documents(teamId)
-         .then((dtos) => {
-            if (active) {
-               setPinnedDocuments(
-                  adaptFolders(dtos)
-                     .flatMap((folder) => folder.documents)
-                     .filter((doc) => doc.pinned)
-               );
-            }
-         })
-         .catch(() => {
-            if (active) setPinnedDocuments([]);
-         });
+      void loadPinned(() => active);
       return () => {
          active = false;
       };
-   }, [teamId]);
+   }, [loadPinned]);
+   // #58: documento fixado/criado/apagado por outro usuário reflete no overview.
+   useLiveReload(DOCUMENT_CHANGED_EVENT, { teamId }, () => loadPinned());
 
    if (!team) {
       // Workspace ainda hidratando → skeleton; "not found" só é estado FINAL

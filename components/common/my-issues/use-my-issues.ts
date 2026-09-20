@@ -28,23 +28,19 @@ const isAssignedToMe = (issue: Issue, meId: string): boolean =>
  * Issues shown by each My issues tab. `meId` = usuário corrente (SSO);
  * `subscribedIds` = assinaturas REAIS (issue_subscription), não mais uma heurística.
  * A aba "Activity" tem feed próprio (activity-feed), não passa por aqui.
- * `assignedIds` = resposta do filtro SERVIDOR `assignee=me` (junção, inclui colaborador);
- * sem ele (ex.: contador do header), aproxima pelos responsáveis carregados no store.
+ * "Assigned" sai dos responsáveis das issues do store (principal e colaboradores).
  */
 export function scopeMyIssues(
    issues: Issue[],
    tab: MyIssuesTab,
    meId: string | undefined,
    subscribedIds: ReadonlySet<string>,
-   activeIds?: ReadonlySet<string>,
-   assignedIds?: ReadonlySet<string>
+   activeIds?: ReadonlySet<string>
 ): Issue[] {
    if (!meId) return [];
    switch (tab) {
       case 'assigned':
-         return issues.filter((issue) =>
-            assignedIds ? assignedIds.has(issue.id) : isAssignedToMe(issue, meId)
-         );
+         return issues.filter((issue) => isAssignedToMe(issue, meId));
       case 'created':
          return issues.filter((issue) => isCreatedByMe(issue, meId));
       case 'activity':

@@ -1,8 +1,10 @@
 'use client';
 
-import { useIssuesStore } from '@/store/issues-store';
+import { selectIssuesLoading, useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useMemo } from 'react';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { SettingsShell } from './shared';
 
 interface Bucket {
@@ -62,14 +64,28 @@ const CATEGORY_LABEL: Record<string, string> = {
    canceled: 'Canceled',
 };
 
+interface PulseData {
+   total: number;
+   completed: number;
+   inProgress: number;
+   backlog: number;
+   completionRate: number;
+   statusBuckets: Bucket[];
+   priorityBuckets: Bucket[];
+   teamBuckets: Bucket[];
+}
+
 /** "Pulse" — dashboard de analytics do backlog (computado sobre as issues carregadas). */
 export default function PulseSettings() {
    const issues = useIssuesStore((s) => s.issues);
+   // Os números só valem com a carga completa: durante a paginação o total "subia aos
+   // poucos" a partir de 0 (Ad#32).
+   const loading = useIssuesStore(selectIssuesLoading);
+   const failed = useIssuesStore((s) => s.error && !s.loaded);
    const teams = useWorkspaceStore((s) => s.teams);
 
-   const data = useMemo(() => {
+   const data = useMemo((): PulseData => {
       const byCategory = new Map<string, { count: number; color: string }>();
-      const byStatus = new Map<string, { count: number; color: string }>();
       const byPriority = new Map<string, number>();
       const byTeam = new Map<string, number>();
 
@@ -78,11 +94,6 @@ export default function PulseSettings() {
          const c = byCategory.get(cat) ?? { count: 0, color: i.status?.color ?? '#888' };
          c.count += 1;
          byCategory.set(cat, c);
-
-         const sName = i.status?.name ?? '—';
-         const s = byStatus.get(sName) ?? { count: 0, color: i.status?.color ?? '#888' };
-         s.count += 1;
-         byStatus.set(sName, s);
 
          const pName = i.priority?.name ?? 'No priority';
          byPriority.set(pName, (byPriority.get(pName) ?? 0) + 1);
@@ -124,6 +135,36 @@ export default function PulseSettings() {
          title="Pulse"
          description="Uma visão do backlog: distribuição por status, prioridade e time, com a taxa de conclusão."
       >
+         {failed ? (
+            <div className="flex flex-col items-center gap-2 py-10 text-sm text-muted-foreground">
+               Não foi possível carregar as issues.
+               <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void useIssuesStore.getState().hydrate()}
+               >
+                  Tentar novamente
+               </Button>
+            </div>
+         ) : loading ? (
+            <div role="status" aria-label="Carregando o pulse" className="flex flex-col gap-3">
+               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                     <Skeleton key={i} className="h-[74px] rounded-lg" />
+                  ))}
+               </div>
+               <Skeleton className="h-40 rounded-lg" />
+            </div>
+         ) : (
+            <PulseContent data={data} />
+         )}
+      </SettingsShell>
+   );
+}
+
+function PulseContent({ data }: { data: PulseData }) {
+   return (
+      <>
          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             <StatCard label="Total de issues" value={String(data.total)} />
             <StatCard
@@ -142,6 +183,6 @@ export default function PulseSettings() {
                <BarList title="Por time" buckets={data.teamBuckets} />
             </div>
          </div>
-      </SettingsShell>
+      </>
    );
 }

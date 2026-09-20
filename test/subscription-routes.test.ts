@@ -60,4 +60,21 @@ describe('assinaturas fora do bootstrap', () => {
       expect(res.status).toBe(200);
       expect(new Set((await res.json()).data.issueIds)).toEqual(new Set([openId, closedId]));
    });
+
+   it('convidado fora do time recebe 403 ao consultar a assinatura (#20)', async () => {
+      await seedTeam(db, 'OTHER', 'Other');
+      await seedUser(db, {
+         name: 'Guest',
+         email: 'guest@fora.com',
+         role: 'Guest',
+         teamIds: ['OTHER'],
+      });
+      const res = await getSubscriptionRoute(
+         new Request(`http://x/api/v1/issues/${openId}/subscription`, {
+            headers: { 'x-forwarded-email': 'guest@fora.com' },
+         }),
+         params(openId)
+      );
+      expect(res.status).toBe(403);
+   });
 });

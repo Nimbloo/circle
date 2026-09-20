@@ -5,8 +5,7 @@ import { EmptyState } from '@/components/common/empty-state';
 import { ListSkeleton } from '@/components/common/list-skeleton';
 import { ProjectGroup } from '@/components/common/projects/projects';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Initiative, INITIATIVE_STATUS_META, type InitiativeStatus } from '@/data/initiatives';
-import { useLabels, usePriorities } from '@/store/catalog-store';
+import { Initiative } from '@/data/initiatives';
 import { Project } from '@/data/projects';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { initiativeWithDescendants } from '@/lib/initiative-tree';
@@ -29,7 +28,6 @@ import {
    Network,
    PenLine,
    Plus,
-   UserRound,
    X,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
@@ -45,10 +43,9 @@ import type { InitiativeActivityDto } from '@/lib/api/initiatives';
 import { ProgressHistory } from '@/components/common/projects/progress-history';
 import { InitiativeProgressPanel } from './initiative-progress-panel';
 import { InitiativeProjectRow } from './initiative-project-row';
-import { InitiativeStatusIcon } from './initiative-status-icon';
 import { InitiativeIconPicker } from './initiative-icon-picker';
-import { InitiativeLabelPicker } from './initiative-label-picker';
-import { InitiativeTargetPicker } from './initiative-target-picker';
+import { InitiativePropertiesPanel } from './initiative-properties-panel';
+import { useInitiativePatch } from './use-initiative-patch';
 import { DetailSidePanel, DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 
 const TABS = ['overview', 'activity', 'projects'] as const;
@@ -70,7 +67,6 @@ const GROUP_ORDER: { key: string; label: string; match: (project: Project) => bo
 function ProjectsSection({ initiative }: { initiative: Initiative }) {
    const { orgId } = useParams<{ orgId: string }>();
    const allProjects = useWorkspaceStore((s) => s.projects);
-   const applyInitiative = useWorkspaceStore((s) => s.applyInitiative);
    // Derivados memoizados: só recalculam quando os projetos do workspace ou os
    // vínculos da iniciativa mudam (não a cada re-render da página).
    const { groups, available } = useMemo(() => {
@@ -86,20 +82,22 @@ function ProjectsSection({ initiative }: { initiative: Initiative }) {
    }, [allProjects, initiative.projectIds]);
 
    const [pickerOpen, setPickerOpen] = useState(false);
+   const patch = useInitiativePatch(initiative.id);
 
-   const setProjects = async (projectIds: string[]) => {
-      try {
-         applyInitiative(await api.initiatives.update(initiative.id, { projectIds }));
-      } catch {
-         toast.error('Could not update the projects');
-      }
+   // Lê o conjunto ATUAL do store (já com cliques otimistas anteriores) e serializa o
+   // PATCH: cliques rápidos não perdem seleção (#46).
+   const setProjects = (next: (ids: string[]) => string[]) => {
+      const current =
+         useWorkspaceStore.getState().getInitiativeById(initiative.id)?.projectIds ??
+         initiative.projectIds;
+      const projectIds = next(current);
+      void patch({ projectIds }, { projectIds }, { error: 'Could not update the projects' });
    };
    const addProject = (id: string) => {
       setPickerOpen(false);
-      void setProjects([...initiative.projectIds, id]);
+      setProjects((ids) => (ids.includes(id) ? ids : [...ids, id]));
    };
-   const removeProject = (id: string) =>
-      void setProjects(initiative.projectIds.filter((x) => x !== id));
+   const removeProject = (id: string) => setProjects((ids) => ids.filter((x) => x !== id));
 
    return (
       <section className="mx-0.5 flex flex-col gap-2">
@@ -310,290 +308,7 @@ function SubInitiativesSection({ initiative }: { initiative: Initiative }) {
    );
 }
 
-/**
- * Picker "Parent initiative" (#100). Esconde a própria initiative e sua subárvore —
- * o servidor recusa ciclo com 400, a UI só evita oferecer a opção inválida.
- */
-function ParentInitiativePicker({ initiative }: { initiative: Initiative }) {
-   const initiatives = useWorkspaceStore((s) => s.initiatives);
-   const applyInitiative = useWorkspaceStore((s) => s.applyInitiative);
-   const [open, setOpen] = useState(false);
-
-   const forbidden = new Set(initiativeWithDescendants(initiatives, initiative.id));
-   const options = initiatives.filter((i) => !forbidden.has(i.id));
-   const parent = initiative.parentId
-      ? initiatives.find((i) => i.id === initiative.parentId)
-      : undefined;
-
-   const setParent = async (parentId: string | null) => {
-      setOpen(false);
-      try {
-         applyInitiative(await api.initiatives.update(initiative.id, { parentId }));
-         toast.success(parentId ? 'Parent initiative definida' : 'Parent initiative removida');
-      } catch {
-         toast.error('Não foi possível atualizar a parent initiative');
-      }
-   };
-
-   return (
-      <Popover open={open} onOpenChange={setOpen}>
-         <PopoverTrigger asChild>
-            <PropertyButton>
-               <Network className="size-3.5 text-muted-foreground" />
-               <span className={parent ? undefined : 'text-muted-foreground'}>
-                  {parent?.name ?? 'No parent'}
-               </span>
-            </PropertyButton>
-         </PopoverTrigger>
-         <PopoverContent align="start" className="w-64 p-0">
-            <Command>
-               <CommandInput placeholder="Iniciativa pai…" />
-               <CommandList>
-                  <CommandEmpty>No initiatives.</CommandEmpty>
-                  <CommandGroup>
-                     <CommandItem value="No parent" onSelect={() => void setParent(null)}>
-                        No parent
-                     </CommandItem>
-                     {options.map((candidate) => (
-                        <CommandItem
-                           key={candidate.id}
-                           value={candidate.name}
-                           onSelect={() => void setParent(candidate.id)}
-                        >
-                           {candidate.name}
-                        </CommandItem>
-                     ))}
-                  </CommandGroup>
-               </CommandList>
-            </Command>
-         </PopoverContent>
-      </Popover>
-   );
-}
-
 /* ------------------------------- overview tab ----------------------------- */
-
-function PropertyRow({ label, children }: { label: string; children: React.ReactNode }) {
-   return (
-      <div className="flex items-center gap-2 text-[13px]">
-         <span className="w-24 shrink-0 text-[13px] text-muted-foreground">{label}</span>
-         {children}
-      </div>
-   );
-}
-
-/** Botão discreto que abre o popover de edição de uma propriedade. */
-function PropertyButton({ children }: { children: React.ReactNode }) {
-   return (
-      <button
-         type="button"
-         className="inline-flex items-center gap-1.5 rounded px-1 -mx-1 py-0.5 hover:bg-accent transition-colors text-left"
-      >
-         {children}
-      </button>
-   );
-}
-
-const STATUS_IDS = Object.keys(INITIATIVE_STATUS_META) as InitiativeStatus[];
-
-/**
- * Painel de propriedades EDITÁVEL. Antes eram `<span>` estáticos — o backend já
- * aceitava status/priority/owner/target, mas nada na tela os enviava, então a página
- * de detalhe era read-only e só a lista (via context menu) editava.
- */
-function PropertiesPanel({ initiative }: { initiative: Initiative }) {
-   const applyInitiative = useWorkspaceStore((s) => s.applyInitiative);
-   const users = useWorkspaceStore((s) => s.users);
-   const priorities = usePriorities();
-   const labels = useLabels();
-   // Deriva da fatia assinada: assinar `countCompletedProjects` (funcao, referencia
-   // estavel) nao acorda o painel quando um projeto e vinculado ou concluido.
-   const allProjects = useWorkspaceStore((s) => s.projects);
-   const linked = new Set(initiative.projectIds);
-   const completed = allProjects.filter(
-      (p) => linked.has(p.id) && (p.status.category === 'completed' || p.percentComplete >= 100)
-   ).length;
-
-   const patch = async (body: Parameters<typeof api.initiatives.update>[1], msg: string) => {
-      try {
-         const dto = await api.initiatives.update(initiative.id, body);
-         applyInitiative(dto);
-         toast.success(msg);
-      } catch {
-         toast.error('Não foi possível atualizar a initiative');
-      }
-   };
-
-   return (
-      <div className="flex flex-col gap-3">
-         <span className="text-[13px] font-medium leading-4">Properties</span>
-
-         <PropertyRow label="Status">
-            <Popover>
-               <PopoverTrigger asChild>
-                  <PropertyButton>
-                     <InitiativeStatusIcon status={initiative.status} />
-                     {INITIATIVE_STATUS_META[initiative.status].label}
-                  </PropertyButton>
-               </PopoverTrigger>
-               <PopoverContent align="start" className="w-52 p-1">
-                  {STATUS_IDS.map((s) => (
-                     <button
-                        key={s}
-                        type="button"
-                        onClick={() =>
-                           void patch({ status: s }, `Status → ${INITIATIVE_STATUS_META[s].label}`)
-                        }
-                        className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-accent"
-                     >
-                        <InitiativeStatusIcon status={s} />
-                        {INITIATIVE_STATUS_META[s].label}
-                     </button>
-                  ))}
-               </PopoverContent>
-            </Popover>
-         </PropertyRow>
-
-         <PropertyRow label="Priority">
-            <Popover>
-               <PopoverTrigger asChild>
-                  <PropertyButton>
-                     <initiative.priority.icon className="size-4 text-muted-foreground" />
-                     <span className="text-muted-foreground">{initiative.priority.name}</span>
-                  </PropertyButton>
-               </PopoverTrigger>
-               <PopoverContent align="start" className="w-52 p-1">
-                  {priorities.map((p) => (
-                     <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => void patch({ priorityId: p.id }, `Prioridade → ${p.name}`)}
-                        className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-accent"
-                     >
-                        <p.icon className="size-4 text-muted-foreground" />
-                        {p.name}
-                     </button>
-                  ))}
-               </PopoverContent>
-            </Popover>
-         </PropertyRow>
-
-         <PropertyRow label="Owner">
-            <Popover>
-               <PopoverTrigger asChild>
-                  <PropertyButton>
-                     {initiative.owner ? (
-                        <>
-                           <Avatar className="size-4">
-                              <AvatarImage
-                                 src={initiative.owner.avatarUrl || undefined}
-                                 alt={initiative.owner.name}
-                              />
-                              <AvatarFallback className="text-[8px]">
-                                 {initiative.owner.name[0]}
-                              </AvatarFallback>
-                           </Avatar>
-                           {initiative.owner.name}
-                        </>
-                     ) : (
-                        <span className="text-muted-foreground inline-flex items-center gap-1.5">
-                           <UserRound className="size-4" /> Add owner
-                        </span>
-                     )}
-                  </PropertyButton>
-               </PopoverTrigger>
-               <PopoverContent align="start" className="w-60 p-0">
-                  <Command>
-                     <CommandInput placeholder="Buscar pessoa…" />
-                     <CommandList>
-                        <CommandEmpty>Ninguém encontrado.</CommandEmpty>
-                        <CommandGroup>
-                           {initiative.owner && (
-                              <CommandItem
-                                 value="__none__"
-                                 onSelect={() => void patch({ ownerId: null }, 'Owner removido')}
-                              >
-                                 <X className="size-4 text-muted-foreground" />
-                                 Sem owner
-                              </CommandItem>
-                           )}
-                           {users.map((u) => (
-                              <CommandItem
-                                 key={u.id}
-                                 value={u.name}
-                                 onSelect={() => void patch({ ownerId: u.id }, `Owner → ${u.name}`)}
-                              >
-                                 <Avatar className="size-4">
-                                    <AvatarImage src={u.avatarUrl || undefined} alt={u.name} />
-                                    <AvatarFallback className="text-[8px]">
-                                       {u.name[0]}
-                                    </AvatarFallback>
-                                 </Avatar>
-                                 <span className="truncate">{u.name}</span>
-                              </CommandItem>
-                           ))}
-                        </CommandGroup>
-                     </CommandList>
-                  </Command>
-               </PopoverContent>
-            </Popover>
-         </PropertyRow>
-
-         <PropertyRow label="Start">
-            <InitiativeTargetPicker
-               kind="start"
-               date={initiative.startDate ?? null}
-               onChange={({ date }) =>
-                  void patch(
-                     { startDate: date },
-                     date ? `Start → ${formatDay(date)}` : 'Start removido'
-                  )
-               }
-            />
-         </PropertyRow>
-
-         <PropertyRow label="Target">
-            <InitiativeTargetPicker
-               label={initiative.target ?? null}
-               date={initiative.targetDate ?? null}
-               onChange={({ label, date }) =>
-                  void patch(
-                     { target: label, targetDate: date },
-                     label ? `Target → ${label}` : 'Target removido'
-                  )
-               }
-            />
-         </PropertyRow>
-
-         <PropertyRow label="Labels">
-            <InitiativeLabelPicker
-               labels={labels}
-               value={initiative.labels.map((label) => label.id)}
-               onChange={(labelIds) => void patch({ labelIds }, 'Labels atualizadas')}
-            />
-         </PropertyRow>
-
-         <PropertyRow label="Parent">
-            <ParentInitiativePicker initiative={initiative} />
-         </PropertyRow>
-
-         <PropertyRow label="Projects">
-            <span className="text-muted-foreground text-xs">
-               {completed} / {initiative.projectIds.length} completed
-            </span>
-         </PropertyRow>
-
-         {initiative.childIds.length > 0 && (
-            <PropertyRow label="Rollup">
-               <span className="text-muted-foreground text-xs">
-                  {initiative.rollupCompletedProjectCount} / {initiative.rollupProjectCount} with
-                  sub-initiatives
-               </span>
-            </PropertyRow>
-         )}
-      </div>
-   );
-}
 
 /**
  * Período da initiative acima da timeline de projetos: usa `startDate`/`targetDate`
@@ -649,7 +364,7 @@ function InitiativeSidePanelContent({ initiative }: { initiative: Initiative }) 
    return (
       <div className="flex h-full w-full flex-col gap-2 overflow-y-auto">
          <div className="rounded-[10px] border bg-card p-3 pb-[22.5px]">
-            <PropertiesPanel initiative={initiative} />
+            <InitiativePropertiesPanel initiative={initiative} />
          </div>
 
          {initiative.projectIds.length > 0 && (
@@ -673,16 +388,10 @@ function InitiativeSidePanelContent({ initiative }: { initiative: Initiative }) 
 }
 
 function Overview({ initiative }: { initiative: Initiative }) {
-   const applyInitiative = useWorkspaceStore((state) => state.applyInitiative);
-
-   const updateIcon = async (body: Parameters<typeof api.initiatives.update>[1]) => {
-      try {
-         const dto = await api.initiatives.update(initiative.id, body);
-         applyInitiative(dto);
-         toast.success('Initiative icon updated');
-      } catch {
-         toast.error('Could not update the initiative icon');
-      }
+   const patch = useInitiativePatch(initiative.id);
+   const messages = {
+      success: 'Initiative icon updated',
+      error: 'Could not update the initiative icon',
    };
 
    return (
@@ -692,8 +401,8 @@ function Overview({ initiative }: { initiative: Initiative }) {
                <InitiativeIconPicker
                   icon={initiative.icon}
                   color={initiative.iconColor ?? 'gray'}
-                  onIconChange={(icon) => void updateIcon({ icon })}
-                  onColorChange={(iconColor) => void updateIcon({ iconColor })}
+                  onIconChange={(icon) => void patch({ icon }, { icon }, messages)}
+                  onColorChange={(iconColor) => void patch({ iconColor }, { iconColor }, messages)}
                />
                <div className="flex items-center gap-1.5">
                   <DetailSidePanelTrigger kind="initiative" />

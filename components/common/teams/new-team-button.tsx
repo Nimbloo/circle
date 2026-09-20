@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { api } from '@/lib/client';
+import { api, ApiError } from '@/lib/client';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
@@ -12,6 +12,8 @@ import { toast } from 'sonner';
 /** Cria um time (key + nome) via api.teams.create e aplica o DTO no workspace. */
 export function NewTeamButton() {
    const applyTeam = useWorkspaceStore((s) => s.applyTeam);
+   // Convidado não cria time (o servidor responde 403): o botão nem aparece.
+   const isGuest = useWorkspaceStore((s) => s.me?.role === 'Guest');
    const [open, setOpen] = useState(false);
    const [key, setKey] = useState('');
    const [name, setName] = useState('');
@@ -27,12 +29,18 @@ export function NewTeamButton() {
          setName('');
          setOpen(false);
          toast.success(`Team ${id} created`);
-      } catch {
-         toast.error('Could not create the team (key inválida ou já existe)');
+      } catch (e) {
+         toast.error(
+            e instanceof ApiError
+               ? e.message
+               : 'Could not create the team (key inválida ou já existe)'
+         );
       } finally {
          setBusy(false);
       }
    };
+
+   if (isGuest) return null;
 
    return (
       <Popover open={open} onOpenChange={setOpen}>

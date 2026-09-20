@@ -17,11 +17,8 @@ import {
 } from '@/db/schema';
 import { listProjects, type ProjectDto } from './projects';
 import { listAllDependencies } from './project-dependencies';
-import {
-   getAggregatedSnapshots,
-   snapshotProjects,
-   type ProjectSnapshotPoint,
-} from './project-snapshots';
+import { getAggregatedSnapshots, type ProjectSnapshotPoint } from './project-snapshots';
+import { isProjectCompleted } from '@/lib/project-completion';
 import { initiativeDescendantIds } from './hierarchy';
 
 export interface RoadmapMilestone {
@@ -175,9 +172,7 @@ export async function getRoadmap(db: Db, opts: RoadmapOptions = {}): Promise<Roa
    const projectIds = projects.map((p) => p.id);
    const byId = new Map(projects.map((p) => [p.id, p]));
 
-   // Snapshot lazy do dia (mesmo padrão do cycle): a visita ao roadmap alimenta o
-   // histórico de progresso sem job.
-   await snapshotProjects(db, projectIds, now);
+   // Sem escrita no GET (#40): o snapshot diário é gravado no housekeeping do boot.
 
    const [initiatives, milestoneRows, dependencyRows, projectStatuses] = await Promise.all([
       db
@@ -198,6 +193,13 @@ export async function getRoadmap(db: Db, opts: RoadmapOptions = {}): Promise<Roa
    const closedStatusIds = new Set(
       projectStatuses.filter((s) => CLOSED_CATEGORIES.has(s.category)).map((s) => s.id)
    );
+
+   // Mesma definição de "concluído" da lista e do detalhe (#41).
+   const countCompleted = (ids: string[]) =>
+      ids.filter((pid) => {
+         const p = byId.get(pid);
+         return p ? isProjectCompleted(p) : false;
+      }).length;
 
    const directByInitiative = new Map<string, string[]>();
    const orphans: string[] = [];
@@ -221,9 +223,7 @@ export async function getRoadmap(db: Db, opts: RoadmapOptions = {}): Promise<Roa
       const direct = directByInitiative.get(row.id) ?? [];
       // Initiative sem nenhum projeto visível na subárvore não vira linha na tela.
       if (rollup.size === 0) continue;
-      const completed = [...rollup].filter((pid) =>
-         closedStatusIds.has(byId.get(pid)?.status.id ?? '')
-      ).length;
+      const completed = countCompleted([...rollup]);
       groups.push({
          id: row.id,
          name: row.name,
@@ -238,9 +238,7 @@ export async function getRoadmap(db: Db, opts: RoadmapOptions = {}): Promise<Roa
    }
 
    if (orphans.length > 0) {
-      const completed = orphans.filter((pid) =>
-         closedStatusIds.has(byId.get(pid)?.status.id ?? '')
-      ).length;
+      const completed = countCompleted(orphans);
       groups.push({
          id: 'no-initiative',
          name: 'No initiative',

@@ -79,16 +79,17 @@ describe('catalog-store — splice por item', () => {
    });
 
    describe('statuses', () => {
-      it('applyStatus novo vai pro fim (maior position) com ícone de fallback', () => {
+      it('applyStatus novo vai pro fim (maior position) com ícone derivado do DTO', () => {
          const before = refs();
          st().applyStatus(statusDto('review', 3, { category: 'started' }));
          expect(st().statuses.map((s) => s.id)).toEqual(['todo', 'in-progress', 'review']);
          expect(st().statuses[2].category).toBe('started');
-         expect(st().statuses[2].icon).toBe(Circle);
+         expect(st().statuses[2].icon).not.toBe(Circle);
+         expect(typeof st().statuses[2].icon).toBe('function');
          expectUntouched(before, ['statuses']);
       });
 
-      it('applyStatus existente troca na mesma casa e mantém o ícone do catálogo mock', () => {
+      it('applyStatus existente troca na mesma casa e ganha ícone da categoria', () => {
          st().applyStatus(statusDto('in-progress', 1, { name: 'Doing', category: 'started' }));
          expect(st().statuses.map((s) => s.id)).toEqual(['todo', 'in-progress']);
          expect(st().statuses[1].name).toBe('Doing');

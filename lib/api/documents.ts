@@ -100,14 +100,17 @@ export async function createFolder(
    await db
       .insert(documentFolder)
       .values({ id, teamId: input.teamId, name: input.name, icon: input.icon ?? null });
-   publish({ entity: 'document', action: 'created', id });
+   publish({ entity: 'document', action: 'created', id, teamId: input.teamId });
    return { id, teamId: input.teamId, name: input.name, icon: input.icon ?? null, documents: [] };
 }
 
 export async function createDocument(
    db: Db,
    input: {
-      folderId: string;
+      /** Pasta existente. Ou `newFolder`, que cria a pasta junto (Ad#37). */
+      folderId?: string;
+      /** Pasta nova criada na MESMA transação do documento: falhou, nada fica órfão. */
+      newFolder?: { name: string; icon?: string | null };
       teamId: string;
       name: string;
       icon?: string | null;
@@ -116,32 +119,56 @@ export async function createDocument(
    creatorEmail: string
 ): Promise<DocumentDto> {
    if (!input.name?.trim()) throw new ApiError(400, 'name é obrigatório');
+   if (!input.folderId && !input.newFolder?.name?.trim())
+      throw new ApiError(400, 'informe folderId ou newFolder');
    const creator = await assertTeamMember(db, input.teamId, creatorEmail);
-   // A pasta-alvo tem que existir E pertencer ao mesmo time (evita gravar documento
-   // em pasta de outro time via folderId forjado).
-   const [folder] = await db
-      .select({ teamId: documentFolder.teamId })
-      .from(documentFolder)
-      .where(eq(documentFolder.id, input.folderId))
-      .limit(1);
-   if (!folder) throw new ApiError(404, 'Pasta não encontrada');
-   if (folder.teamId !== input.teamId) throw new ApiError(400, 'A pasta não pertence a este time');
+   if (input.folderId) {
+      // A pasta-alvo tem que existir E pertencer ao mesmo time (evita gravar documento
+      // em pasta de outro time via folderId forjado).
+      const [folder] = await db
+         .select({ teamId: documentFolder.teamId })
+         .from(documentFolder)
+         .where(eq(documentFolder.id, input.folderId))
+         .limit(1);
+      if (!folder) throw new ApiError(404, 'Pasta não encontrada');
+      if (folder.teamId !== input.teamId)
+         throw new ApiError(400, 'A pasta não pertence a este time');
+   }
+   const folderId = input.folderId ?? randomUUID();
    const id = randomUUID();
    const now = new Date();
-   await db.insert(teamDocument).values({
-      id,
-      folderId: input.folderId,
-      name: input.name,
-      icon: input.icon ?? null,
-      creatorId: creator.id,
-      pinned: input.pinned ?? false,
-      createdAt: now,
-      updatedAt: now,
+   await db.transaction(async (tx) => {
+      if (!input.folderId && input.newFolder) {
+         await tx.insert(documentFolder).values({
+            id: folderId,
+            teamId: input.teamId,
+            name: input.newFolder.name.trim(),
+            icon: input.newFolder.icon ?? null,
+         });
+      }
+      await tx.insert(teamDocument).values({
+         id,
+         folderId,
+         name: input.name,
+         icon: input.icon ?? null,
+         creatorId: creator.id,
+         pinned: input.pinned ?? false,
+         createdAt: now,
+         updatedAt: now,
+      });
    });
-   publish({ entity: 'document', action: 'created', id, actorEmail: creatorEmail });
+   if (!input.folderId)
+      publish({ entity: 'document', action: 'created', id: folderId, teamId: input.teamId });
+   publish({
+      entity: 'document',
+      action: 'created',
+      id,
+      actorEmail: creatorEmail,
+      teamId: input.teamId,
+   });
    return {
       id,
-      folderId: input.folderId,
+      folderId,
       name: input.name,
       icon: input.icon ?? null,
       creator: {
@@ -157,18 +184,22 @@ export async function createDocument(
    };
 }
 
-/** Só o criador do documento (ou um admin) pode alterá-lo/removê-lo (403). */
-async function assertDocumentOwner(db: Db, id: string, actorEmail: string): Promise<boolean> {
+/**
+ * Só o criador do documento (ou um admin) pode alterá-lo/removê-lo (403). Devolve o time
+ * do documento (vai no evento, #58) ou null se não existir.
+ */
+async function assertDocumentOwner(db: Db, id: string, actorEmail: string): Promise<string | null> {
    const rows = await db
-      .select({ creatorId: teamDocument.creatorId })
+      .select({ creatorId: teamDocument.creatorId, teamId: documentFolder.teamId })
       .from(teamDocument)
+      .innerJoin(documentFolder, eq(documentFolder.id, teamDocument.folderId))
       .where(eq(teamDocument.id, id))
       .limit(1);
-   if (rows.length === 0) return false;
+   if (rows.length === 0) return null;
    const me = await getOrCreateUser(db, actorEmail);
    if (rows[0].creatorId !== me.id && !(await isAdmin(actorEmail, db)))
       throw new ApiError(403, 'Apenas o criador do documento pode alterá-lo');
-   return true;
+   return rows[0].teamId;
 }
 
 export async function updateDocument(
@@ -177,7 +208,8 @@ export async function updateDocument(
    patch: { name?: string; icon?: string | null; pinned?: boolean },
    actorEmail: string
 ): Promise<boolean> {
-   if (!(await assertDocumentOwner(db, id, actorEmail))) return false;
+   const teamId = await assertDocumentOwner(db, id, actorEmail);
+   if (!teamId) return false;
    const set: Record<string, unknown> = { updatedAt: new Date() };
    if (patch.name !== undefined) set.name = patch.name;
    if (patch.icon !== undefined) set.icon = patch.icon;
@@ -187,16 +219,17 @@ export async function updateDocument(
       .set(set)
       .where(eq(teamDocument.id, id))
       .returning({ id: teamDocument.id });
-   if (res.length > 0) publish({ entity: 'document', action: 'updated', id, actorEmail });
+   if (res.length > 0) publish({ entity: 'document', action: 'updated', id, actorEmail, teamId });
    return res.length > 0;
 }
 
 export async function deleteDocument(db: Db, id: string, actorEmail: string): Promise<boolean> {
-   if (!(await assertDocumentOwner(db, id, actorEmail))) return false;
+   const teamId = await assertDocumentOwner(db, id, actorEmail);
+   if (!teamId) return false;
    const res = await db
       .delete(teamDocument)
       .where(eq(teamDocument.id, id))
       .returning({ id: teamDocument.id });
-   if (res.length > 0) publish({ entity: 'document', action: 'deleted', id, actorEmail });
+   if (res.length > 0) publish({ entity: 'document', action: 'deleted', id, actorEmail, teamId });
    return res.length > 0;
 }

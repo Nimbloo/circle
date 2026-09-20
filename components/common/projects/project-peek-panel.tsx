@@ -1,9 +1,6 @@
 'use client';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { adaptProjectDetail, emptyProjectDetail } from '@/lib/adapters-project-detail';
-import { api } from '@/lib/client';
-import type { ProjectDetail } from '@/data/project-details';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { format, parseISO } from 'date-fns';
@@ -19,8 +16,10 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { ProjectProgressChart, PROGRESS_COLORS } from './details/project-progress-chart';
+import { useSharedProjectDetail } from './details/use-project-detail';
+import { labelColor } from '@/components/common/palette';
 
 interface ProjectPeekPanelProps {
    projectId: string;
@@ -59,21 +58,8 @@ export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) 
 
    const project = useWorkspaceStore((s) => s.getProjectById(projectId));
 
-   const [detail, setDetail] = useState<ProjectDetail>(() => emptyProjectDetail(projectId));
-   useEffect(() => {
-      let active = true;
-      api.projects
-         .detail(projectId)
-         .then((dto) => {
-            if (active) setDetail(adaptProjectDetail(dto));
-         })
-         .catch(() => {
-            if (active) setDetail(emptyProjectDetail(projectId));
-         });
-      return () => {
-         active = false;
-      };
-   }, [projectId]);
+   // Mesmo hook do detalhe da rota (#45): sequência + live reload do projeto.
+   const { detail } = useSharedProjectDetail(projectId);
 
    const issues = useMemo(
       () => allIssues.filter((issue) => issue.project?.id === projectId),
@@ -238,7 +224,7 @@ export function ProjectPeekPanel({ projectId, onClose }: ProjectPeekPanelProps) 
                         >
                            <span
                               className="size-2 rounded-full"
-                              style={{ backgroundColor: label.color }}
+                              style={{ backgroundColor: labelColor(label.color) }}
                            />
                            {label.name}
                         </span>

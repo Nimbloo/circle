@@ -1,8 +1,9 @@
 'use client';
 
-import { InboxItem } from '@/data/inbox';
+import type { NotificationType } from '@/data/inbox';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
+import { relativeTime } from '@/lib/relative-time';
 import { renderStatusIcon } from '@/lib/status-utils';
 import { getNotificationIcon } from '@/lib/notification-utils';
 import { Clock, RotateCcw } from 'lucide-react';
@@ -14,8 +15,27 @@ import {
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-interface IssueLineProps<T extends InboxItem> {
+/** O que a linha precisa de uma notificação (o `InboxNotification` do store satisfaz). */
+export interface InboxLineItem {
+   id: string;
+   identifier: string;
+   title: string;
+   read: boolean;
+   type: NotificationType;
+   content: string;
+   user: { name: string; avatarUrl: string };
+   /** Snapshot do status da issue (null quando a issue não está no store). */
+   status?: { id: string } | null;
+   /** ISO da notificação — o tempo relativo é calculado com `now`. */
+   sortAt?: string;
+   /** Relativo pré-calculado (fallback quando não há `sortAt`). */
+   timestamp?: string;
+}
+
+interface IssueLineProps<T extends InboxLineItem> {
    notification: T;
+   /** "Agora" do tick compartilhado (o tempo relativo anda sem re-hidratar). */
+   now?: number;
    /** Status VIVO da issue (mapa do pai); ausente = snapshot da notificação. */
    statusId?: string;
    isSelected?: boolean;
@@ -41,8 +61,9 @@ const SNOOZE_OPTIONS: { label: string; hours: number }[] = [
  * identifier + título em 13px (título branco quando não lida, muted quando lida) e
  * ícone de status à direita, linha 2 com o contexto em 12px + timestamp à direita.
  */
-function IssueLine<T extends InboxItem>({
+function IssueLine<T extends InboxLineItem>({
    notification,
+   now,
    statusId: liveStatusId,
    isSelected = false,
    onOpen,
@@ -53,7 +74,10 @@ function IssueLine<T extends InboxItem>({
 }: IssueLineProps<T>) {
    // Status VIVO da issue com fallback pro snapshot da notificação — o ícone na linha
    // acompanha mudanças de status em tempo real (padrão Linear).
-   const statusId = liveStatusId ?? notification.status.id;
+   const statusId = liveStatusId ?? notification.status?.id;
+   const when = notification.sortAt
+      ? relativeTime(notification.sortAt, now)
+      : (notification.timestamp ?? '');
    return (
       <div onClick={onOpen ? () => onOpen(notification) : undefined} className="w-full pl-2.5">
          <div className="group/inbox-line relative flex h-[55px] w-full cursor-pointer items-center gap-3 rounded-lg px-2">
@@ -147,7 +171,7 @@ function IssueLine<T extends InboxItem>({
                      </DropdownMenu>
                   )}
 
-                  {showStatusIcon && (
+                  {showStatusIcon && statusId && (
                      <div className="flex shrink-0 items-center">{renderStatusIcon(statusId)}</div>
                   )}
                </div>
@@ -156,9 +180,7 @@ function IssueLine<T extends InboxItem>({
                   <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                      {notification.content}
                   </p>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                     {notification.timestamp}
-                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{when}</span>
                </div>
             </div>
          </div>

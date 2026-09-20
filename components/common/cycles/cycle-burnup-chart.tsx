@@ -12,6 +12,7 @@ import {
    XAxis,
    YAxis,
 } from 'recharts';
+import { CycleBurnupEmpty } from './cycle-burnup-empty';
 
 const COLORS = {
    scope: 'var(--muted-foreground)',
@@ -39,16 +40,7 @@ interface CycleBurnupChartProps {
 export function CycleBurnupChart({ cycle, height = 210, compact = false }: CycleBurnupChartProps) {
    const data = cycle.burnup ?? [];
 
-   if (data.length === 0) {
-      return (
-         <div
-            className="flex items-center justify-center text-xs text-muted-foreground border border-dashed rounded-md"
-            style={{ height }}
-         >
-            No progress data yet
-         </div>
-      );
-   }
+   if (data.length === 0) return <CycleBurnupEmpty height={height} />;
 
    const first = data[0].date;
    const middle = data[Math.floor(data.length / 2)].date;

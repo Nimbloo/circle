@@ -1,6 +1,6 @@
-import { Priority, priorities } from './priorities';
-import { Health, health, Project, projects } from './projects';
-import { User, users } from './users';
+import { Priority } from './priorities';
+import { Health } from './projects';
+import { User } from './users';
 import type { LabelInterface } from './labels';
 
 export type InitiativeStatus = 'proposed' | 'planned' | 'active' | 'completed' | 'canceled';
@@ -41,28 +41,8 @@ export const INITIATIVE_STATUS_META: Record<InitiativeStatus, { label: string; c
    canceled: { label: 'Canceled', color: '#6b7280' },
 };
 
-const noUpdate = health[0];
-const byId = (id: string): Health => health.find((entry) => entry.id === id) ?? noUpdate;
-
 /**
  * Workspace initiatives (Linear "Initiatives" page). Fake data around the
  * LNDev UI component-library storyline; projects reference mock-data/projects.
  */
 export const initiatives: Initiative[] = [];
-
-export function getInitiativeById(id: string): Initiative | undefined {
-   return initiatives.find((initiative) => initiative.id === id);
-}
-
-export function getInitiativeProjects(initiative: Initiative): Project[] {
-   return initiative.projectIds
-      .map((id) => projects.find((project) => project.id === id))
-      .filter((project): project is Project => Boolean(project));
-}
-
-/** Projects considered "completed" for the n / m counter. */
-export function countCompletedProjects(initiative: Initiative): number {
-   return getInitiativeProjects(initiative).filter(
-      (project) => project.status.category === 'completed' || project.percentComplete >= 100
-   ).length;
-}

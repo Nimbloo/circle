@@ -11,11 +11,12 @@ import {
 } from './auth';
 import { publish } from './events';
 import { ApiError } from './errors';
+import { DEACTIVATED_MESSAGE } from '@/lib/session-redirect';
 
 export type UserRow = typeof appUser.$inferSelect;
 
-/** Mensagem única do 403 de conta desativada — a UI reconhece por ela. */
-export const DEACTIVATED_MESSAGE = 'Conta desativada';
+/** Mensagem única do 403 de conta desativada — a UI reconhece por ela (#12). */
+export { DEACTIVATED_MESSAGE };
 
 /**
  * 403 quando a conta do ATOR está desativada (#100).

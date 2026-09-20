@@ -9,6 +9,7 @@ import type { Project } from '@/data/projects';
 import type { Status, StatusCategory } from '@/data/status';
 import { useLabels, usePriorities, useProjectStatuses } from '@/store/catalog-store';
 import { BarChart3, CircleCheck, CircleDashed, Tag } from 'lucide-react';
+import { labelColor } from '@/components/common/palette';
 
 /* ------------------------- Options dos catálogos (hidratados) --------------- */
 
@@ -28,7 +29,12 @@ function labelOptionsOf(labels: LabelInterface[]): ColumnOption[] {
    return labels.map((label) => ({
       value: label.id,
       label: label.name,
-      icon: <span className="size-2.5 rounded-full" style={{ backgroundColor: label.color }} />,
+      icon: (
+         <span
+            className="size-2.5 rounded-full"
+            style={{ backgroundColor: labelColor(label.color) }}
+         />
+      ),
    }));
 }
 

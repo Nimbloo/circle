@@ -149,14 +149,16 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
    const updateIssueAssignees = useIssuesStore((s) => s.updateIssueAssignees);
    const addIssueLabel = useIssuesStore((s) => s.addIssueLabel);
    const removeIssueLabel = useIssuesStore((s) => s.removeIssueLabel);
+   // O store reverte + avisa o erro e re-lança; aqui só não deixa a rejeição solta (Is#13).
+   const settle = (p: Promise<unknown>) => void p.catch(() => undefined);
    // Diff entre a seleção do LabelSelector e as labels atuais → add/remove no store.
    const onLabelsChange = (next: LabelInterface[]) => {
       next
          .filter((l) => !issue.labels.some((c) => c.id === l.id))
-         .forEach((l) => addIssueLabel(issue.id, l));
+         .forEach((l) => settle(addIssueLabel(issue.id, l)));
       issue.labels
          .filter((c) => !next.some((l) => l.id === c.id))
-         .forEach((c) => removeIssueLabel(issue.id, c.id));
+         .forEach((c) => settle(removeIssueLabel(issue.id, c.id)));
    };
 
    return (
@@ -172,7 +174,7 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
                <div className="flex items-center gap-1.5 -ml-0.5 mt-0.5">
                   <AssigneeSelector
                      assignees={issue.assignees}
-                     onChange={(assignees) => updateIssueAssignees(issue.id, assignees)}
+                     onChange={(assignees) => settle(updateIssueAssignees(issue.id, assignees))}
                   />
                </div>
                <div className="mt-0.5">
@@ -182,13 +184,13 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
                   <EstimateSelector
                      estimate={issue.estimate}
                      teamId={issue.teamId}
-                     onChange={(estimate) => updateIssue(issue.id, { estimate })}
+                     onChange={(estimate) => settle(updateIssue(issue.id, { estimate }))}
                   />
                </div>
                <div className="flex items-center gap-1.5 -ml-1.5 mt-0.5">
                   <DueDateSelector
                      dueDate={issue.dueDate}
-                     onChange={(dueDate) => updateIssue(issue.id, { dueDate })}
+                     onChange={(dueDate) => settle(updateIssue(issue.id, { dueDate }))}
                   />
                </div>
             </div>

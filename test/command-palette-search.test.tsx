@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CommandPalette } from '@/components/layout/command-palette';
 import type { Issue } from '@/data/issues';
 import { priorities } from '@/data/priorities';
-import { status } from '@/data/status';
+import { status } from './helpers/catalog-fixture';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 

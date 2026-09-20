@@ -46,7 +46,9 @@ export default function Profile() {
    const applyMe = useWorkspaceStore((s) => s.applyMe);
    const [name, setName] = useState(me?.name ?? '');
    const [gh, setGh] = useState(me?.githubLogin ?? '');
-   const [saving, setSaving] = useState(false);
+   // Um estado por campo (Ad#33): um só desabilitava os dois e o Tab perdia o foco.
+   const [savingName, setSavingName] = useState(false);
+   const [savingGh, setSavingGh] = useState(false);
    const [uploading, setUploading] = useState(false);
    const [preview, setPreview] = useState<string | null>(null);
    const fileRef = useRef<HTMLInputElement>(null);
@@ -67,8 +69,8 @@ export default function Profile() {
     */
    const saveGithub = async () => {
       const next = gh.trim();
-      if (!me || saving || next === (me.githubLogin ?? '')) return;
-      setSaving(true);
+      if (!me || savingGh || next === (me.githubLogin ?? '')) return;
+      setSavingGh(true);
       try {
          applyMe(await api.me.update({ githubLogin: next || null }));
          toast.success(next ? 'GitHub handle updated' : 'GitHub handle removed');
@@ -76,14 +78,14 @@ export default function Profile() {
          toast.error('Could not update your GitHub handle');
          setGh(me.githubLogin ?? '');
       } finally {
-         setSaving(false);
+         setSavingGh(false);
       }
    };
 
    const saveName = async () => {
       const next = name.trim();
-      if (!me || saving || !next || next === me.name) return;
-      setSaving(true);
+      if (!me || savingName || !next || next === me.name) return;
+      setSavingName(true);
       try {
          applyMe(await api.me.update({ name: next }));
          toast.success('Name updated');
@@ -91,7 +93,7 @@ export default function Profile() {
          toast.error('Could not update your name');
          setName(me.name);
       } finally {
-         setSaving(false);
+         setSavingName(false);
       }
    };
 
@@ -204,7 +206,7 @@ export default function Profile() {
                         onKeyDown={(e) => {
                            if (e.key === 'Enter') e.currentTarget.blur();
                         }}
-                        disabled={saving}
+                        disabled={savingName}
                         className="h-8 w-[180px]"
                      />
                   }
@@ -221,7 +223,7 @@ export default function Profile() {
                         onKeyDown={(e) => {
                            if (e.key === 'Enter') e.currentTarget.blur();
                         }}
-                        disabled={saving}
+                        disabled={savingGh}
                         className="h-8 w-[180px]"
                      />
                   }

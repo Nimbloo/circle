@@ -15,3 +15,16 @@ export function projectDateRangeLabel(
 
    return `${startLabel} - ${format(parseISO(targetDate), 'MMM d')}`;
 }
+
+/**
+ * Dia civil `YYYY-MM-DD` como data LOCAL (#44). `new Date('2026-09-30')` é meia-noite
+ * UTC — em UTC−3 mostraria 29/09.
+ */
+export function parseDay(iso: string): Date {
+   return parseISO(iso);
+}
+
+/** "Hoje" no fuso do usuário, em `YYYY-MM-DD` (não o dia UTC de `toISOString`). */
+export function localTodayIso(now: Date = new Date()): string {
+   return format(now, 'yyyy-MM-dd');
+}

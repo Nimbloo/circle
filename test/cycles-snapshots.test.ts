@@ -3,11 +3,11 @@ import { asc, eq } from 'drizzle-orm';
 import { makeTestDb } from './helpers/db';
 import { seedTeam } from './helpers/fixtures';
 import { cycle, cycleSnapshot, issue } from '@/db/schema';
-import { getCycle, rolloverCyclesForTeam } from '@/lib/api/cycles';
+import { getCycle, rolloverCyclesForTeam, snapshotCurrentCycles } from '@/lib/api/cycles';
 
 /**
- * Snapshots do cycle (#24): sem job, o dia é gravado (upsert idempotente) no rollover e
- * no GET do detalhe; `scopeDelta` e o burn-up saem daí quando há >= 2 pontos, senão o
+ * Snapshots do cycle (#24): sem job, o dia é gravado (upsert idempotente) no rollover
+ * (o GET do detalhe não escreve, #36); `scopeDelta` e o burn-up saem daí quando há >= 2 pontos, senão o
  * burn-up cai no sintético (started/completed de issue.startedAt/completedAt, scope plano).
  */
 
@@ -56,13 +56,13 @@ const snapshotsOf = (db: Awaited<ReturnType<typeof setup>>) =>
       .orderBy(asc(cycleSnapshot.date));
 
 describe('snapshots do cycle (#24)', () => {
-   it('GET do detalhe grava o dia uma vez e atualiza no mesmo dia (idempotente)', async () => {
+   it('o snapshot grava o dia uma vez e atualiza no mesmo dia (idempotente)', async () => {
       const db = await setup('current');
       await addIssue(db, 1, 'to-do', 3);
 
-      await getCycle(db, 'c1', at('2026-01-05'));
+      await snapshotCurrentCycles(db, 'CORE', at('2026-01-05'));
       await addIssue(db, 2, 'done', 2);
-      await getCycle(db, 'c1', at('2026-01-05'));
+      await snapshotCurrentCycles(db, 'CORE', at('2026-01-05'));
 
       const rows = await snapshotsOf(db);
       expect(rows).toHaveLength(1);

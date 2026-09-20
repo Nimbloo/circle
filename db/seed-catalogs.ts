@@ -83,11 +83,18 @@ export const PROJECT_STATUS_SEED = [
    { id: 'proj-canceled', name: 'Canceled', color: '#95a2b3', category: 'canceled', position: 4 },
 ];
 
-/** Idempotente: só semeia se vazio (onConflictDoNothing). */
+/** Semeia apenas uma tabela vazia; remoções explícitas não são ressuscitadas. */
 export async function seedCatalogs(db: Db) {
-   await db.insert(status).values(STATUS_SEED).onConflictDoNothing();
-   await db.insert(priority).values(PRIORITY_SEED).onConflictDoNothing();
-   await db.insert(label).values(LABEL_SEED).onConflictDoNothing();
-   await db.insert(health).values(HEALTH_SEED).onConflictDoNothing();
-   await db.insert(projectStatus).values(PROJECT_STATUS_SEED).onConflictDoNothing();
+   const tables = [
+      [status, STATUS_SEED],
+      [priority, PRIORITY_SEED],
+      [label, LABEL_SEED],
+      [health, HEALTH_SEED],
+      [projectStatus, PROJECT_STATUS_SEED],
+   ] as const;
+
+   for (const [table, values] of tables) {
+      const existing = await db.select({ id: table.id }).from(table).limit(1);
+      if (existing.length === 0) await db.insert(table).values(values).onConflictDoNothing();
+   }
 }

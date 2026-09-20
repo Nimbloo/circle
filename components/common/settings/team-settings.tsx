@@ -59,6 +59,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
+import { useSeedOnOpen } from '@/hooks/use-seed-on-open';
 
 interface TeamSettingsProps {
    teamId: string;
@@ -81,13 +82,12 @@ function EditTeamDialog({
    const [icon, setIcon] = useState(team.icon ?? '');
    const [scale, setScale] = useState<EstimateScale>('fibonacci');
 
-   useEffect(() => {
-      if (open) {
-         setName(team.name);
-         setIcon(team.icon ?? '');
-         setScale(normalizeScale(teamFromStore?.estimateScale));
-      }
-   }, [open, team, teamFromStore]);
+   // #38: só ao abrir — evento de time com o diálogo aberto não apaga o que foi digitado.
+   useSeedOnOpen(open, () => {
+      setName(team.name);
+      setIcon(team.icon ?? '');
+      setScale(normalizeScale(teamFromStore?.estimateScale));
+   });
 
    const save = async () => {
       if (!name.trim() || busy) return;

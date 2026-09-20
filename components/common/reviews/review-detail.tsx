@@ -4,13 +4,13 @@ import { addReviewComment, fetchReview, latestVerdict } from '@/lib/adapters-rev
 import { EmptyState } from '@/components/common/empty-state';
 import { ListSkeleton } from '@/components/common/list-skeleton';
 import { Button } from '@/components/ui/button';
-import type { Review, ReviewComment, ReviewVerdictKind } from '@/data/reviews';
+import type { Review, ReviewComment, ReviewList, ReviewVerdictKind } from '@/data/reviews';
 import { REVIEW_CHANGED_EVENT } from '@/lib/use-live-sync';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Check, CircleSlash } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { type ReviewCommentsHandle, VerdictBadge } from './review-comments';
@@ -33,13 +33,25 @@ const VERDICT_TOAST: Record<ReviewVerdictKind, string> = {
    request_changes: 'Changes requested',
 };
 
+/**
+ * Janela em que um evento do próprio review é tratado como ECO da ação local (comentário,
+ * veredito) e não refaz o fetch do detalhe inteiro (#48). Evento de outra pessoa depois
+ * dela recarrega normalmente.
+ */
+const OWN_ECHO_MS = 3000;
+/** Coalescência dos eventos do review aberto (rajada de check_run/sync). */
+const DETAIL_RELOAD_DEBOUNCE_MS = 300;
+
 /** Right pane of the Reviews split view: breadcrumb, veredito, abas e a seção ativa do PR. */
 export function ReviewDetail({
    reviewId,
    section = 'overview',
+   listTab = 'for-you',
 }: {
    reviewId: string;
    section?: ReviewSection;
+   /** Aba da lista de origem — mantida nos links das seções (`?list=created`). */
+   listTab?: ReviewList;
 }) {
    const { orgId } = useParams<{ orgId: string }>();
    const me = useWorkspaceStore((s) => s.me);
@@ -67,18 +79,28 @@ export function ReviewDetail({
       };
    }, [reviewId, reloadKey]);
 
-   // Realtime: comentário/veredito de OUTRO usuário neste review → refaz o fetch.
+   // Realtime: comentário/veredito de OUTRO usuário neste review → refaz o fetch
+   // (coalescido; o eco da ação local, que já foi aplicada por splice, é ignorado).
+   const ownMutationAtRef = useRef(0);
    useEffect(() => {
+      let timer: ReturnType<typeof setTimeout> | null = null;
       const onChanged = (e: Event) => {
          const id = (e as CustomEvent<{ id?: string }>).detail?.id;
-         if (!id || id === reviewId) setReloadKey((k) => k + 1);
+         if (id && id !== reviewId) return;
+         if (id && Date.now() - ownMutationAtRef.current < OWN_ECHO_MS) return;
+         if (timer) clearTimeout(timer);
+         timer = setTimeout(() => setReloadKey((k) => k + 1), DETAIL_RELOAD_DEBOUNCE_MS);
       };
       window.addEventListener(REVIEW_CHANGED_EVENT, onChanged);
-      return () => window.removeEventListener(REVIEW_CHANGED_EVENT, onChanged);
+      return () => {
+         if (timer) clearTimeout(timer);
+         window.removeEventListener(REVIEW_CHANGED_EVENT, onChanged);
+      };
    }, [reviewId]);
 
    /** Splice na thread + recálculo do veredito, sem refetch (mutações do próprio usuário). */
    const mutateComments = useCallback((fn: (comments: ReviewComment[]) => ReviewComment[]) => {
+      ownMutationAtRef.current = Date.now();
       setReview((current) => {
          if (!current) return current;
          const comments = fn(current.comments);
@@ -168,7 +190,9 @@ export function ReviewDetail({
                {SECTIONS.map((candidate) => (
                   <Link
                      key={candidate.id}
-                     href={`/${orgId}/review/${encodeURIComponent(reviewId)}${candidate.path}`}
+                     href={`/${orgId}/review/${encodeURIComponent(reviewId)}${candidate.path}${
+                        listTab === 'created' ? '?list=created' : ''
+                     }`}
                      aria-current={section === candidate.id ? 'page' : undefined}
                      className={cn(
                         'inline-flex h-6 items-center rounded-full border px-2.5 text-xs font-medium transition-colors',

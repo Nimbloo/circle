@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { subscribe, type CircleEvent } from '@/lib/api/events';
+import { getOrCreateUser } from '@/lib/api/users';
 import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
 import { createIssue } from '@/lib/api/issues';
@@ -78,5 +80,26 @@ describe('favorites', () => {
       await seedUser(db, { name: 'Bob', email: 'bob@nimbloo.ai', teamIds: ['CORE'] });
       await addFavorite(db, user, 'project', project.id);
       expect(await listFavorites(db, 'bob@nimbloo.ai')).toHaveLength(0);
+   });
+});
+
+describe('favorites — evento para as outras abas do usuário', () => {
+   it('add/remove publicam evento só para o dono; toggle sem efeito não publica', async () => {
+      const { db, user, project } = await setup();
+      const me = await getOrCreateUser(db, user);
+      const events: CircleEvent[] = [];
+      const off = subscribe((e) => {
+         if ((e.entity as string) === 'favorite') events.push(e);
+      });
+      try {
+         await addFavorite(db, user, 'project', project.id);
+         await addFavorite(db, user, 'project', project.id); // já era favorito
+         await removeFavorite(db, user, 'project', project.id);
+         await removeFavorite(db, user, 'project', project.id); // já removido
+      } finally {
+         off();
+      }
+      expect(events.map((e) => e.action)).toEqual(['created', 'deleted']);
+      expect(events.every((e) => e.recipientId === me.id && e.id === project.id)).toBe(true);
    });
 });

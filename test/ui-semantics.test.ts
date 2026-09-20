@@ -8,7 +8,7 @@ import { InitiativeProjectRow } from '@/components/common/initiatives/initiative
 import { SubIssueRow } from '@/components/common/issues/details/sub-issue-row';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import type { Project } from '@/data/projects';
-import { status } from '@/data/status';
+import { status } from './helpers/catalog-fixture';
 
 describe('semântica da interface', () => {
    it('expõe um único landmark principal no frame da página', () => {

@@ -27,9 +27,8 @@ import {
    AlertDialogHeader,
    AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { api } from '@/lib/client';
+import { api, ApiError } from '@/lib/client';
 import { cn } from '@/lib/utils';
-import { ApiError } from '@/lib/api/errors';
 import type { StatusCategory } from '@/data/status';
 import { useCatalogStore, useStatuses } from '@/store/catalog-store';
 import { useWorkspaceStore } from '@/store/workspace-store';

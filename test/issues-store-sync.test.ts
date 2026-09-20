@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { status } from '@/data/status';
-import { labels } from '@/data/labels';
+import { status } from './helpers/catalog-fixture';
+import { labels } from './helpers/catalog-fixture';
 import { adaptIssue } from '@/lib/adapters';
 import type { IssueDto } from '@/lib/api/issues';
 

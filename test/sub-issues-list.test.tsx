@@ -12,7 +12,7 @@ import {
    SUB_ISSUES_WITH_SUB,
 } from '@/components/common/issues/issue-filter-columns';
 import type { Issue } from '@/data/issues';
-import { status } from '@/data/status';
+import { status } from './helpers/catalog-fixture';
 import { priorities } from '@/data/priorities';
 import { useDisplaySettingsStore } from '@/store/display-settings-store';
 

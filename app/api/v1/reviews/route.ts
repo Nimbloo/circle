@@ -26,8 +26,13 @@ export async function GET(req: Request) {
       const list = raw === 'created' || raw === 'for-you' ? raw : undefined;
       const me = list ? await getOrCreateUser(db, email) : null;
 
+      // `status` aceita CSV (`open,merged`): o filtro da lista é feito aqui, não na página.
+      const statuses = (sp.get('status') ?? '')
+         .split(',')
+         .map((s) => s.trim())
+         .filter((s) => s === 'open' || s === 'merged' || s === 'closed');
       const { items, total } = await listReviews(db, {
-         status: sp.get('status') ?? undefined,
+         statuses: statuses.length ? statuses : undefined,
          list,
          viewerLogin: me?.githubLogin ?? null,
          limit,

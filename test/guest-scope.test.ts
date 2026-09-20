@@ -32,6 +32,7 @@ import { GET as favoritesRoute } from '@/app/api/v1/favorites/route';
 import { GET as searchRoute } from '@/app/api/v1/search/route';
 import { GET as teamTriageRoute } from '@/app/api/v1/teams/[teamKey]/triage-suggestions/route';
 import { GET as listMembersRoute } from '@/app/api/v1/members/route';
+import { GET as getMemberRoute } from '@/app/api/v1/members/[id]/route';
 import { GET as listTeamsRoute } from '@/app/api/v1/teams/route';
 import { GET as getTeamRoute } from '@/app/api/v1/teams/[teamKey]/route';
 import { GET as listTeamIssuesRoute } from '@/app/api/v1/teams/[teamKey]/issues/route';
@@ -357,6 +358,30 @@ describe('escopo de Guest por rota de leitura (#100)', () => {
       const emails = data.map((m: { email: string }) => m.email);
       expect(emails).toContain(GUEST);
       expect(emails).not.toContain('bruno@nimbloo.ai');
+   });
+
+   it('GET /members/:id: 403 fora do escopo e times de fora ocultos (Ad#27)', async () => {
+      const outside = await getMemberRoute(
+         req(`http://x/api/v1/members/${ids.memberOnlyId}`, GUEST),
+         params({ id: ids.memberOnlyId })
+      );
+      expect(outside.status).toBe(403);
+
+      const ana = (await getOrCreateUser(db, ADMIN)).id;
+      const shared = await getMemberRoute(
+         req(`http://x/api/v1/members/${ana}`, GUEST),
+         params({ id: ana })
+      );
+      expect(shared.status).toBe(200);
+      const dto = await json(shared);
+      expect(dto.teamIds).toEqual(['OPEN']);
+      expect(dto.teamCount).toBe(1);
+
+      // Membro (sem restrição) segue vendo tudo.
+      const full = await json(
+         await getMemberRoute(req(`http://x/api/v1/members/${ana}`, ADMIN), params({ id: ana }))
+      );
+      expect([...full.teamIds].sort()).toEqual(['OPEN', 'SECRET']);
    });
 
    it('GET /teams e /teams/{key}: lista escopada e 403 no time de fora', async () => {

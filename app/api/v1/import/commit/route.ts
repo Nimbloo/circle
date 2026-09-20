@@ -2,10 +2,11 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { handle, requireEmail } from '@/lib/api/http';
 import { ok } from '@/lib/api/response';
+import { assertCanWriteTeam } from '@/lib/api/scope';
 import {
-   commitImport,
    IMPORT_LIMITS,
    IMPORT_SOURCES,
+   startImportJob,
    validateImportCsv,
    validateImportRequestSize,
    type ImportMapping,
@@ -23,8 +24,9 @@ const bodySchema = z.object({
 });
 
 /**
- * POST /import/commit — cria (ou atualiza, em re-import) as issues do CSV com o
- * mapeamento confirmado no wizard. Devolve o resumo (criadas/atualizadas/ignoradas/erros).
+ * POST /import/commit — valida o CSV e o mapeamento confirmado no wizard e cria um JOB em
+ * background (#10) que cria/atualiza as issues. Devolve `{ jobId }` na hora; o progresso
+ * e o resumo ficam em `GET /import/jobs/{jobId}` (e o dono recebe um evento SSE ao fim).
  */
 export async function POST(req: Request) {
    return handle(async () => {
@@ -32,7 +34,9 @@ export async function POST(req: Request) {
       validateImportRequestSize(req);
       const body = bodySchema.parse(await req.json());
       validateImportCsv(body.csv, body.mapping as ImportMapping);
-      const result = await commitImport(
+      // Gate explícito antes de criar o job (o serviço repete a checagem).
+      await assertCanWriteTeam(db, email, body.teamId);
+      const { jobId } = await startImportJob(
          db,
          {
             source: body.source as 'csv' | 'linear' | 'jira',
@@ -43,6 +47,6 @@ export async function POST(req: Request) {
          },
          email
       );
-      return ok(result);
+      return ok({ jobId });
    }, req);
 }

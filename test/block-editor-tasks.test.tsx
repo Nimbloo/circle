@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '@tiptap/react';
 import { BlockEditor } from '@/components/common/editor/block-editor';
 import { blocksToDoc, docToText, type EditorDoc } from '@/lib/editor-doc';
-import { status } from '@/data/status';
+import { status } from './helpers/catalog-fixture';
 import { useIssuesStore } from '@/store/issues-store';
 
 vi.mock('next/navigation', () => ({

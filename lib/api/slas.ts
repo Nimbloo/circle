@@ -62,7 +62,13 @@ export async function setTeamSla(
          .onConflictDoUpdate({ target: [teamSla.teamId, teamSla.priorityId], set: { hours } });
    }
    // SLA muda o prazo mostrado na issue de todo o time, não só de quem editou.
-   publish({ entity: 'catalog', action: 'updated', id: `${teamId}:${priorityId}` });
+   publish({
+      entity: 'catalog',
+      action: 'updated',
+      id: `${teamId}:${priorityId}`,
+      kind: 'sla',
+      teamId,
+   });
    return listTeamSlas(db, teamId);
 }
 

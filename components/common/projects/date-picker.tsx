@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { format } from 'date-fns';
+import { format, isSameDay } from 'date-fns';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -17,11 +17,10 @@ export function DatePicker({ date, onDateChange }: DatePickerProps) {
    // Deriva do prop — reverte junto com o rollback e reflete mudança externa.
    const selectedDate = date;
 
-   const handleDateSelect = (date: Date | undefined) => {
-      if (onDateChange) {
-         onDateChange(date);
-      }
+   const handleDateSelect = (next: Date | undefined) => {
       setOpen(false);
+      const same = next && selectedDate ? isSameDay(next, selectedDate) : next === selectedDate;
+      if (!same) onDateChange?.(next);
    };
 
    return (

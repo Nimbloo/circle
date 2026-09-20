@@ -6,7 +6,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GroupedIssuesView } from '@/components/common/issues/grouped-issues-view';
-import { status } from '@/data/status';
+import { status } from './helpers/catalog-fixture';
 import { useDisplaySettingsStore } from '@/store/display-settings-store';
 
 vi.mock('@/lib/client', () => ({ api: { issues: {} } }));

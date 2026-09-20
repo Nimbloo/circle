@@ -19,7 +19,7 @@ import {
    SelectTrigger,
    SelectValue,
 } from '@/components/ui/select';
-import { api } from '@/lib/client';
+import { api, ApiError } from '@/lib/client';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -60,8 +60,8 @@ export function CreateCycleButton({ defaultTeamId }: { defaultTeamId?: string })
          setEndDate('');
          setOpen(false);
          toast.success('Cycle created');
-      } catch {
-         toast.error('Could not create the cycle');
+      } catch (e) {
+         toast.error(e instanceof ApiError ? e.message : 'Could not create the cycle');
       } finally {
          setBusy(false);
       }
@@ -80,7 +80,14 @@ export function CreateCycleButton({ defaultTeamId }: { defaultTeamId?: string })
                <DialogTitle>New cycle</DialogTitle>
                <DialogDescription>Time-boxed iteration for a team.</DialogDescription>
             </DialogHeader>
-            <div className="flex flex-col gap-3">
+            <form
+               id="create-cycle-form"
+               className="flex flex-col gap-3"
+               onSubmit={(e) => {
+                  e.preventDefault();
+                  void create();
+               }}
+            >
                <div className="flex flex-col gap-1.5">
                   <Label htmlFor="cycle-name">Name</Label>
                   <Input
@@ -125,11 +132,12 @@ export function CreateCycleButton({ defaultTeamId }: { defaultTeamId?: string })
                      />
                   </div>
                </div>
-            </div>
+            </form>
             <DialogFooter>
                <Button
+                  type="submit"
+                  form="create-cycle-form"
                   size="sm"
-                  onClick={() => void create()}
                   disabled={busy || !name.trim() || !teamId || !startDate || !endDate}
                >
                   Create cycle

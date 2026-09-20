@@ -36,6 +36,7 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { useParams } from 'next/navigation';
 import { Link2, MoreHorizontal, Pencil, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
+import { useSeedOnOpen } from '@/hooks/use-seed-on-open';
 import { toast } from 'sonner';
 import { ViewFilterEditor } from './view-filter-editor';
 
@@ -56,6 +57,13 @@ function RenameViewDialog({
    const [name, setName] = useState(view.name);
    const [description, setDescription] = useState(view.description ?? '');
    const [filter, setFilter] = useState<ViewFilter>(view.filter ?? {});
+   // #38: semeia ao abrir (o estado inicial era do mount — reabrir mostrava valor velho) e
+   // não re-semeia com o diálogo aberto (evento de view não apaga o que foi digitado).
+   useSeedOnOpen(open, () => {
+      setName(view.name);
+      setDescription(view.description ?? '');
+      setFilter(view.filter ?? {});
+   });
 
    const save = async () => {
       if (!name.trim() || busy) return;

@@ -14,6 +14,7 @@ import { Check, ChevronDown, Pipette } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { SettingsCard, SettingsRow } from './shared';
+import { parseImportedTheme } from '@/lib/theme-import';
 
 /* ------------------------------- theme list ------------------------------- */
 
@@ -225,8 +226,9 @@ export function ThemePreferences() {
 
    const importTheme = async () => {
       try {
-         const parsed = JSON.parse(await navigator.clipboard.readText());
-         if (typeof parsed !== 'object' || parsed === null) throw new Error('invalid');
+         // Validado antes de aplicar (Ad#5): tema fora do schema travava o sync.
+         const parsed = parseImportedTheme(await navigator.clipboard.readText());
+         if (!parsed) throw new Error('invalid');
          setCustom(parsed);
          setMode('custom');
          setTheme(isDarkColor(parsed.background) ? 'dark' : 'light');

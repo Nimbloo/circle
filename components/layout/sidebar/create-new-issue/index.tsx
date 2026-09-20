@@ -9,7 +9,6 @@ import { usePriorities, useStatuses } from '@/store/catalog-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
 import { toast } from 'sonner';
-import { v4 as uuidv4 } from 'uuid';
 import { StatusSelector } from './status-selector';
 import { PrioritySelector } from './priority-selector';
 import { AssigneeSelector } from './assignee-selector';
@@ -38,30 +37,17 @@ export function CreateNewIssue() {
    // Time do contexto (URL /team/[teamId]/...) ou o 1º time do usuário.
    const teamId = params?.teamId ?? teams[0]?.id ?? '';
 
-   const generateUniqueIdentifier = useCallback(() => {
-      // Leitura imperativa (fora do render): quer o valor FRESCO no momento do clique,
-      // e nao precisa assinar o store para isso.
-      const identifiers = useIssuesStore.getState().issues.map((issue) => issue.identifier);
-      let identifier = Math.floor(Math.random() * 999)
-         .toString()
-         .padStart(3, '0');
-      while (identifiers.includes(`LNUI-${identifier}`)) {
-         identifier = Math.floor(Math.random() * 999)
-            .toString()
-            .padStart(3, '0');
-      }
-      return identifier;
-   }, []);
-
    const createDefaultData = useCallback(() => {
-      const identifier = generateUniqueIdentifier();
       return {
-         id: uuidv4(),
-         identifier: `LNUI-${identifier}`,
+         id: crypto.randomUUID(),
+         // Sem identifier inventado (Is#17): a issue otimista não tem link até o servidor
+         // devolver o real — antes o "LNUI-123" levava a um 404.
+         identifier: '',
          title: '',
          description: '',
          descriptionDoc: null,
-         status: defaultStatus || status.find((s) => s.id === 'to-do')!,
+         // 1º status "unstarted" do catálogo (Is#17), não um id fixo que pode não existir.
+         status: defaultStatus || status.find((s) => s.category === 'unstarted') || status[0],
          assignee: null,
          assignees: [],
          priority: priorities.find((p) => p.id === 'no-priority')!,
@@ -76,17 +62,22 @@ export function CreateNewIssue() {
          // Rank otimista; o servidor reatribui o rank real no re-hydrate após o POST.
          rank: new LexoRank('a3c').toString(),
       };
-   }, [defaultStatus, generateUniqueIdentifier, status, priorities, teamId]);
+   }, [defaultStatus, status, priorities, teamId]);
 
    const [addIssueForm, setAddIssueForm] = useState<Issue>(createDefaultData);
 
-   // Formulário novo SÓ quando o modal abre (false→true) — ou após criar. Resetar por
-   // troca de referência do catálogo apagava o que estava sendo digitado a cada evento
-   // remoto que re-hidrata o workspace.
+   // Ao abrir (false→true): rascunho vazio vira formulário novo; rascunho com conteúdo é
+   // preservado (Is#17, como o Linear) — o "+" de uma coluna só aplica o status dela.
+   // Resetar por troca de referência do catálogo apagava o que estava sendo digitado a
+   // cada evento remoto que re-hidrata o workspace; o reset real é após criar.
    const [wasOpen, setWasOpen] = useState(isOpen);
    if (isOpen !== wasOpen) {
       setWasOpen(isOpen);
-      if (isOpen) setAddIssueForm(createDefaultData());
+      if (isOpen) {
+         const pristine = !addIssueForm.title && !addIssueForm.descriptionDoc;
+         if (pristine) setAddIssueForm(createDefaultData());
+         else if (defaultStatus) setAddIssueForm((f) => ({ ...f, status: defaultStatus }));
+      }
    }
 
    const [submitting, setSubmitting] = useState(false);
@@ -136,7 +127,16 @@ export function CreateNewIssue() {
 
    return (
       <Dialog open={isOpen} onOpenChange={(value) => (value ? openModal() : closeModal())}>
-         <DialogContent className="top-[23.8%] w-full gap-[5.5px] rounded-[21px] bg-card p-0 shadow-xl sm:max-w-[750px]">
+         <DialogContent
+            className="top-[23.8%] w-full gap-[5.5px] rounded-[21px] bg-card p-0 shadow-xl sm:max-w-[750px]"
+            onKeyDown={(e) => {
+               // ⌘Enter / Ctrl+Enter cria de qualquer campo (Is#17, atalho do Linear).
+               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  void createIssue();
+               }
+            }}
+         >
             <DialogHeader>
                <DialogTitle className="px-4 pt-4 text-base font-medium">New issue</DialogTitle>
             </DialogHeader>
@@ -183,6 +183,7 @@ export function CreateNewIssue() {
                   />
                   <ProjectSelector
                      project={addIssueForm.project}
+                     teamId={teamId}
                      onChange={(newProject) =>
                         setAddIssueForm({ ...addIssueForm, project: newProject })
                      }

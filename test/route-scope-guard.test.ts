@@ -52,6 +52,7 @@ const EXEMPT: ReadonlySet<string> = new Set([
    'POST /emojis',
    'DELETE /emojis/[id]',
    'PUT /settings',
+   'PATCH /settings',
 
    // 3. Autenticação por HMAC/token de integração (não há sessão nem escopo de time).
    //    `sentry/teams/options` é o form do Sentry: devolve id/nome de time, não escreve.

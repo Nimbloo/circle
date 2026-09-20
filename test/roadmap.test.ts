@@ -187,6 +187,21 @@ describe('dependências entre projetos (#102)', () => {
       expect(await listDependencies(db, 'a')).toEqual([]);
    });
 
+   it('duas gravações concorrentes não fecham um ciclo (checagem dentro da transação)', async () => {
+      const db = await setup();
+      await addProject(db, 'a');
+      await addProject(db, 'b');
+
+      const results = await Promise.allSettled([
+         setDependencies(db, 'a', ['b']),
+         setDependencies(db, 'b', ['a']),
+      ]);
+
+      expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+      const edges = [...(await listDependencies(db, 'a')), ...(await listDependencies(db, 'b'))];
+      expect(edges).toHaveLength(1);
+   });
+
    it('recusa alvo inexistente e projeto inexistente', async () => {
       const db = await setup();
       await addProject(db, 'a');

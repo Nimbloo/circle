@@ -6,22 +6,19 @@ import { Status } from '@/data/status';
 import { User } from '@/data/users';
 import { create } from 'zustand';
 import { toast } from 'sonner';
-import { api } from '@/lib/client';
+import { api, ApiError } from '@/lib/client';
+import { markOwnMutation } from '@/lib/client-id';
 import { issueCursor } from '@/lib/issue-cursor';
 import { adaptIssues } from '@/lib/adapters';
 import { rankBetween } from '@/lib/api/rank';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import type { CreateIssueInput, UpdateIssueInput, IssueListOptions } from '@/lib/api/issues';
-
-interface FilterOptions {
-   status?: string[];
-   assignee?: string[];
-   priority?: string[];
-   labels?: string[];
-   project?: string[];
-   cycle?: string[];
-   statusType?: string[];
-}
+import { useCatalogStore } from '@/store/catalog-store';
+import type {
+   CreateIssueInput,
+   IssueDto,
+   UpdateIssueInput,
+   IssueListOptions,
+} from '@/lib/api/issues';
 
 interface IssuesState {
    issues: Issue[];
@@ -38,9 +35,16 @@ interface IssuesState {
    updateIssue: (id: string, updatedIssue: Partial<Issue>) => Promise<void>;
    deleteIssue: (id: string) => Promise<void>;
 
+   /** Resync incremental (#14): só o delta desde a marca d'água; cai no `hydrate` se o
+    *  store está vazio ou o delta veio truncado. */
+   resync: () => Promise<void>;
+
    /** Sync em tempo real TARGETED: re-busca UMA issue e faz splice no store (sem
-    *  re-hidratar as ~500). Fallback pra hydrate() só se o GET falhar (ex.: deletada). */
+    *  re-hidratar as ~500). 404 remove; erro transitório tenta uma vez de novo (If#23). */
    applyRemote: (id: string) => Promise<void>;
+   /** Upsert de UM DTO do servidor (resposta de mutação, fetch direcionado); ignora o
+    *  que for mais velho que o item do store. */
+   applyDto: (dto: IssueDto) => void;
    /** Remove UMA issue do store (evento remoto de delete) — sem refetch. */
    removeRemote: (id: string) => void;
    /** Projeto/ciclo removido: limpa a referência nas issues (sem refetch). */
@@ -50,15 +54,6 @@ interface IssuesState {
    patchLabel: (label: { id: string; name: string; color: string }) => void;
    /** Label apagada (evento remoto): sai das issues em memória. */
    dropLabel: (labelId: string) => void;
-
-   filterByStatus: (statusId: string) => Issue[];
-   filterByPriority: (priorityId: string) => Issue[];
-   filterByAssignee: (userId: string | null) => Issue[];
-   filterByLabel: (labelId: string) => Issue[];
-   filterByProject: (projectId: string) => Issue[];
-   filterByCycle: (cycleId: string) => Issue[];
-   searchIssues: (query: string) => Issue[];
-   filterIssues: (filters: FilterOptions) => Issue[];
 
    updateIssueStatus: (issueId: string, newStatus: Status) => Promise<void>;
    updateIssuePriority: (issueId: string, newPriority: Priority) => Promise<void>;
@@ -84,19 +79,86 @@ const sortByRank = (issues: Issue[]) => [...issues].sort(byRank);
 /** true quando `a` é estritamente mais velha que `b` (pelo `updatedAt` do servidor). */
 const isOlder = (a: Issue, b: Issue) => !!a.updatedAt && !!b.updatedAt && a.updatedAt < b.updatedAt;
 
+/**
+ * `rankBetween` que nunca lança: vizinhos invertidos (lista velha no cliente, drags
+ * concorrentes) são reordenados; empate ancora logo depois. Falha residual → null (o
+ * chamador mantém o rank atual e o servidor devolve o real).
+ */
+function safeRankBetween(before: string | null, after: string | null): string | null {
+   try {
+      if (before && after) {
+         if (before === after) return rankBetween(before, null);
+         return before < after ? rankBetween(before, after) : rankBetween(after, before);
+      }
+      return rankBetween(before, after);
+   } catch {
+      return null;
+   }
+}
+
+/** Id do toast de erro de mutação de issue: falhas em rajada (lote) viram UM toast. */
+export const ISSUE_MUTATION_TOAST = 'issue-mutation-error';
+
 /** Token da hidratação corrente: uma hidratação que termina depois de outra mais nova é descartada. */
 let hydrateSeq = 0;
 
-/** Rollback de UMA issue: devolve só os campos `keys` ao valor de `prev`. */
-function revertFields(state: IssuesState, id: string, prev: Issue, keys: (keyof Issue)[]) {
-   return {
-      issues: state.issues.map((i) => {
-         if (i.id !== id) return i;
-         const back: Record<string, unknown> = { ...i };
-         for (const k of keys) back[k] = prev[k];
-         return back as unknown as Issue;
-      }),
+/**
+ * Rollback de UMA issue (#17): devolve ao valor de `prev` só os campos que AINDA estão
+ * com o valor otimista. Se um evento remoto trocou o campo no meio, o valor remoto fica.
+ */
+function revertFields(
+   state: IssuesState,
+   id: string,
+   prev: Issue,
+   optimistic: Partial<Issue>,
+   keys: (keyof Issue)[]
+) {
+   const cur = state.issues.find((i) => i.id === id);
+   if (!cur) return {};
+   const back: Record<string, unknown> = { ...cur };
+   let changed = false;
+   for (const k of keys) {
+      if (cur[k] !== optimistic[k]) continue;
+      back[k] = prev[k];
+      changed = true;
+   }
+   if (!changed) return {};
+   return { issues: state.issues.map((i) => (i.id === id ? (back as unknown as Issue) : i)) };
+}
+
+/**
+ * Mutações em voo por issue: a resposta só é aplicada quando é a ÚLTIMA — senão a
+ * resposta da 1ª edição pisaria no otimista da 2ª, ainda em voo. Também marca a
+ * mutação como desta aba: o eco SSE dela não refaz o GET (If#16).
+ */
+const inFlight = new Map<string, number>();
+function beginMutation(id: string): () => boolean {
+   inFlight.set(id, (inFlight.get(id) ?? 0) + 1);
+   markOwnMutation('issue', id);
+   let finished = false;
+   return () => {
+      if (finished) return false;
+      finished = true;
+      const left = (inFlight.get(id) ?? 1) - 1;
+      if (left <= 0) inFlight.delete(id);
+      else inFlight.set(id, left);
+      return left <= 0;
    };
+}
+
+/** Issues otimistas ainda sem resposta do POST: o resync não as trata como lápide. */
+const pendingCreates = new Set<string>();
+
+/** Margem da marca d'água do resync: cobre relógio adiantado de outro pod. */
+const RESYNC_MARGIN_MS = 60_000;
+
+function upsertDto(issues: Issue[], dto: IssueDto): Issue[] {
+   const fresh = adaptIssues([dto])[0];
+   const cur = issues.find((i) => i.id === dto.id);
+   // Resposta mais velha que o que já está no store (GETs fora de ordem): ignora.
+   if (cur && isOlder(fresh, cur)) return issues;
+   const next = cur ? issues.map((i) => (i.id === dto.id ? fresh : i)) : [...issues, fresh];
+   return sortByRank(next);
 }
 
 /** Carregando para a UI: hidratação em voo OU 1ª carga ainda não terminou (sem erro).
@@ -189,6 +251,7 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
    },
 
    addIssue: (issue: Issue) => {
+      pendingCreates.add(issue.id);
       set((state) => ({ issues: [...state.issues, issue] }));
       const input: CreateIssueInput = {
          // Time: o do próprio issue (rota) → o do projeto → 1º time do workspace.
@@ -222,6 +285,8 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
       return api.issues
          .create(input)
          .then((dto) => {
+            pendingCreates.delete(issue.id);
+            markOwnMutation('issue', dto.id);
             const fresh = adaptIssues([dto])[0];
             // Remove a otimista E uma eventual cópia que o evento `created` do SSE já
             // tenha inserido antes desta resposta (senão a issue aparecia duplicada).
@@ -233,29 +298,65 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
             }));
          })
          .catch((err) => {
+            pendingCreates.delete(issue.id);
             // Rollback DIRECIONADO: remove só a issue otimista (não clobra criações concorrentes).
             set((state) => ({ issues: state.issues.filter((i) => i.id !== issue.id) }));
             throw err;
          });
    },
 
-   applyRemote: async (id: string) => {
+   resync: async () => {
+      const { issues, loaded } = get();
+      if (!loaded || issues.length === 0) return get().hydrate();
+      // Marca d'água = maior `updatedAt` do store (relógio do SERVIDOR, não da aba).
+      let mark = '';
+      for (const i of issues) if (i.updatedAt && i.updatedAt > mark) mark = i.updatedAt;
+      if (!mark) return get().hydrate();
+      const since = new Date(new Date(mark).getTime() - RESYNC_MARGIN_MS).toISOString();
+      const seq = hydrateSeq;
       try {
-         const dto = await api.issues.get(id);
-         const fresh = adaptIssues([dto])[0];
+         const { data, meta } = await api.issues.changes(since);
+         if (seq !== hydrateSeq) return; // uma hidratação completa começou no meio
+         if (meta?.truncated || !meta?.ids) return get().hydrate();
+         const alive = new Set(meta.ids);
          set((state) => {
-            const cur = state.issues.find((i) => i.id === id);
-            // Resposta mais velha que o que já está no store (GETs fora de ordem): ignora.
-            if (cur && isOlder(fresh, cur)) return {};
-            const next = cur
-               ? state.issues.map((i) => (i.id === id ? fresh : i))
-               : [...state.issues, fresh];
-            return { issues: sortByRank(next) };
+            let next = state.issues;
+            for (const dto of data) next = upsertDto(next, dto);
+            // Lápides: sumiu dos ids vivos = apagada ou fora do escopo (a otimista fica).
+            const kept = next.filter((i) => alive.has(i.id) || pendingCreates.has(i.id));
+            return kept.length === state.issues.length && next === state.issues
+               ? {}
+               : { issues: kept };
          });
       } catch {
-         // GET falhou (issue deletada / erro) → reconcilia com um hydrate completo (raro).
-         void get().hydrate();
+         if (seq === hydrateSeq) await get().hydrate();
       }
+   },
+
+   applyDto: (dto) =>
+      set((state) => {
+         const issues = upsertDto(state.issues, dto);
+         return issues === state.issues ? {} : { issues };
+      }),
+
+   applyRemote: async (id: string) => {
+      const fetchOnce = () => api.issues.get(id);
+      let dto: IssueDto;
+      try {
+         try {
+            dto = await fetchOnce();
+         } catch (e) {
+            if (e instanceof ApiError && e.status === 404) throw e;
+            dto = await fetchOnce(); // erro transitório: UMA nova tentativa (If#23)
+         }
+      } catch (e) {
+         // Apagada (ou fora do escopo): sai do store. Outro erro: mantém o que há —
+         // o próximo evento/resync reconcilia, sem baixar o board inteiro.
+         if (e instanceof ApiError && (e.status === 404 || e.status === 403))
+            get().removeRemote(id);
+         return;
+      }
+      get().applyDto(dto);
    },
 
    removeRemote: (id: string) => {
@@ -327,9 +428,9 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
       const prev = get().getIssueById(id);
       const keys = Object.keys(updatedIssue) as (keyof Issue)[];
       // Issue FORA do store (deep-link frio, ⌘K/context menu antes do hydrate): não há
-      // otimista possível, mas a API é chamada e o resultado entra por `applyRemote`
-      // (upsert) — a tela passa a ler do store e reflete a mudança.
-      const inStore = prev !== undefined;
+      // otimista possível, mas a API é chamada e o DTO da RESPOSTA entra no store (upsert,
+      // sem GET extra — If#16); a tela passa a ler do store e reflete a mudança.
+      const done = beginMutation(id);
       set((state) => ({
          issues: state.issues.map((issue) =>
             issue.id === id ? { ...issue, ...updatedIssue } : issue
@@ -338,16 +439,18 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
       return api.issues
          .update(id, toUpdateInput(updatedIssue))
          .catch((e) => {
-            if (prev) set((state) => revertFields(state, id, prev, keys));
-            toast.error('Falha ao atualizar a issue');
+            done();
+            if (prev) set((state) => revertFields(state, id, prev, updatedIssue, keys));
+            toast.error('Falha ao atualizar a issue', { id: ISSUE_MUTATION_TOAST });
             throw e;
          })
-         .then(() => {
-            if (!inStore) return get().applyRemote(id);
+         .then((dto) => {
+            if (done() && dto?.id) get().applyDto(dto);
          });
    },
 
    deleteIssue: (id: string) => {
+      markOwnMutation('issue', id);
       const removed = get().getIssueById(id);
       set((state) => ({ issues: state.issues.filter((issue) => issue.id !== id) }));
       return api.issues
@@ -360,54 +463,10 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
                      ? {}
                      : { issues: sortByRank([...state.issues, removed]) }
                );
-            toast.error('Falha ao excluir a issue');
+            toast.error('Falha ao excluir a issue', { id: ISSUE_MUTATION_TOAST });
             throw e;
          })
          .then(() => {});
-   },
-
-   filterByStatus: (statusId) => get().issues.filter((i) => i.status.id === statusId),
-   filterByPriority: (priorityId) => get().issues.filter((i) => i.priority.id === priorityId),
-   // Casa QUALQUER responsável (principal ou colaborador); sem responsável = conjunto vazio.
-   filterByAssignee: (userId) =>
-      userId === null
-         ? get().issues.filter((i) => i.assignee === null)
-         : get().issues.filter((i) => i.assignees.some((a) => a.id === userId)),
-   filterByLabel: (labelId) => get().issues.filter((i) => i.labels.some((l) => l.id === labelId)),
-   filterByProject: (projectId) => get().issues.filter((i) => i.project?.id === projectId),
-   filterByCycle: (cycleId) => get().issues.filter((i) => i.cycleId === cycleId),
-
-   searchIssues: (query) => {
-      const q = query.toLowerCase();
-      return get().issues.filter(
-         (i) => i.title.toLowerCase().includes(q) || i.identifier.toLowerCase().includes(q)
-      );
-   },
-
-   filterIssues: (filters: FilterOptions) => {
-      let out = get().issues;
-      if (filters.status?.length) out = out.filter((i) => filters.status!.includes(i.status.id));
-      if (filters.assignee?.length) {
-         out = out.filter((i) => {
-            if (filters.assignee!.includes('unassigned') && i.assignee === null) return true;
-            return i.assignees.some((a) => filters.assignee!.includes(a.id));
-         });
-      }
-      if (filters.priority?.length)
-         out = out.filter((i) => filters.priority!.includes(i.priority.id));
-      if (filters.labels?.length)
-         out = out.filter((i) => i.labels.some((l) => filters.labels!.includes(l.id)));
-      if (filters.project?.length)
-         out = out.filter((i) => i.project && filters.project!.includes(i.project.id));
-      if (filters.cycle?.length) {
-         out = out.filter((i) => {
-            if (filters.cycle!.includes('no-cycle') && i.cycleId === '') return true;
-            return filters.cycle!.includes(i.cycleId);
-         });
-      }
-      if (filters.statusType?.length)
-         out = out.filter((i) => filters.statusType!.includes(i.status.category));
-      return out;
    },
 
    updateIssueStatus: (issueId, newStatus) => get().updateIssue(issueId, { status: newStatus }),
@@ -429,8 +488,8 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
    },
 
    addIssueLabel: (issueId, label) => {
-      // Fora do store: ainda persiste e entra por `applyRemote` (mesma regra do updateIssue).
-      const inStore = get().getIssueById(issueId) !== undefined;
+      // Fora do store: ainda persiste e o DTO da resposta entra no store (If#16).
+      const done = beginMutation(issueId);
       set((state) => ({
          issues: state.issues.map((i) =>
             i.id === issueId ? { ...i, labels: [...i.labels, label] } : i
@@ -439,6 +498,7 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
       return api.issues
          .addLabel(issueId, label.id)
          .catch((e) => {
+            done();
             // Rollback direcionado: tira só esta label desta issue.
             set((state) => ({
                issues: state.issues.map((i) =>
@@ -448,13 +508,13 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
             toast.error('Falha ao adicionar a label');
             throw e;
          })
-         .then(() => {
-            if (!inStore) return get().applyRemote(issueId);
+         .then((dto) => {
+            if (done() && dto?.id) get().applyDto(dto);
          });
    },
 
    removeIssueLabel: (issueId, labelId) => {
-      const inStore = get().getIssueById(issueId) !== undefined;
+      const done = beginMutation(issueId);
       const removedLabel = get()
          .getIssueById(issueId)
          ?.labels.find((l) => l.id === labelId);
@@ -466,6 +526,7 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
       return api.issues
          .removeLabel(issueId, labelId)
          .catch((e) => {
+            done();
             // Rollback direcionado: devolve só esta label a esta issue.
             if (removedLabel)
                set((state) => ({
@@ -478,8 +539,8 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
             toast.error('Falha ao remover a label');
             throw e;
          })
-         .then(() => {
-            if (!inStore) return get().applyRemote(issueId);
+         .then((dto) => {
+            if (done() && dto?.id) get().applyDto(dto);
          });
    },
 
@@ -497,27 +558,55 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
       // direcionado à issue movida (não clobra reorders concorrentes que já sucederam).
       const rankOf = (nid: string | null) =>
          nid ? (current.find((i) => i.id === nid)?.rank ?? null) : null;
-      const optimisticRank = rankBetween(rankOf(beforeId), rankOf(afterId));
+      const optimisticRank = safeRankBetween(rankOf(beforeId), rankOf(afterId)) ?? prevRank;
 
       const applyRank = (rank: string) => (state: IssuesState) => ({
          issues: sortByRank(state.issues.map((i) => (i.id === id ? { ...i, rank } : i))),
       });
       set(applyRank(optimisticRank));
+      const done = beginMutation(id);
 
       api.issues
          .reorder(id, beforeId, afterId)
          .then((dto) => {
             // Reconcilia com o rank REAL do servidor (splice de 1 item).
-            const fresh = adaptIssues([dto])[0];
-            set((state) => ({
-               issues: sortByRank(state.issues.map((i) => (i.id === id ? fresh : i))),
-            }));
+            if (done() && dto?.id) get().applyDto(dto);
          })
          .catch(() => {
-            set(applyRank(prevRank)); // rollback só desta issue
+            done();
+            // Rollback só desta issue e só se o rank ainda é o otimista (#17).
+            if (get().getIssueById(id)?.rank === optimisticRank) set(applyRank(prevRank));
             toast.error('Falha ao reordenar a issue');
          });
    },
 
    getIssueById: (id) => get().issues.find((i) => i.id === id),
 }));
+
+/**
+ * Status renomeado/recolorido no catálogo (#16) reflete nas issues em memória, sem
+ * refetch. Só troca o objeto quando a aparência mudou: re-hidratar o bootstrap recria
+ * os Status, mas issue cujo status não mudou mantém a referência (sem re-render).
+ */
+useCatalogStore.subscribe((next, prev) => {
+   if (next.statuses === prev.statuses) return;
+   const byId = new Map(next.statuses.map((st) => [st.id, st]));
+   useIssuesStore.setState((state) => {
+      let changed = false;
+      const issues = state.issues.map((i) => {
+         const st = byId.get(i.status.id);
+         if (
+            !st ||
+            st === i.status ||
+            (st.name === i.status.name &&
+               st.color === i.status.color &&
+               st.category === i.status.category &&
+               st.icon === i.status.icon)
+         )
+            return i;
+         changed = true;
+         return { ...i, status: st };
+      });
+      return changed ? { issues } : {};
+   });
+});
