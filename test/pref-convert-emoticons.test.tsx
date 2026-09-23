@@ -33,8 +33,9 @@ describe('preferência "Convert text emoticons into emojis"', () => {
       usePreferencesStore.getState().setPref('convertEmoticons', true);
       const editor = await mount();
       editor.commands.focus('end');
-      type(editor, 'oi :) tchau :( rs :D amo <3');
-      expect(editor.getText()).toBe('oi 🙂 tchau 🙁 rs 😄 amo ❤️');
+      // Converte no espaço depois do emoticon (como o Linear): ':path' não vira '😛ath'.
+      type(editor, 'oi :) tchau :( rs :D amo <3 ');
+      expect(editor.getText()).toBe('oi 🙂 tchau 🙁 rs 😄 amo ❤️ ');
    });
 
    it('desligada: o texto fica como digitado', async () => {
@@ -49,7 +50,9 @@ describe('preferência "Convert text emoticons into emojis"', () => {
       usePreferencesStore.getState().setPref('convertEmoticons', true);
       const editor = await mount();
       editor.commands.focus('end');
-      type(editor, 'http:D');
-      expect(editor.getText()).toBe('http:D');
+      type(editor, 'http:D ');
+      expect(editor.getText()).toBe('http:D ');
+      type(editor, ':path ');
+      expect(editor.getText()).toContain(':path');
    });
 });

@@ -38,8 +38,14 @@ describe('rebalanceamento de ranks por time', () => {
          ids.push(created.id);
       }
 
-      for (let i = 0; i < 100; i++) {
-         await reorderIssue(db, ids[ids.length - 1], null, ids[0], ACTOR);
+      // Cada volta leva uma issue DIFERENTE (do fim) para antes da primeira atual: o rank do
+      // topo encolhe a cada prepend até o rebalanceamento entrar.
+      const MOVES = 100;
+      let first = ids[0];
+      for (let i = 0; i < MOVES; i++) {
+         const moving = ids[ids.length - 1 - i];
+         await reorderIssue(db, moving, null, first, ACTOR);
+         first = moving;
       }
 
       const rows = await db
@@ -48,6 +54,9 @@ describe('rebalanceamento de ranks por time', () => {
          .where(eq(issue.teamId, 'CORE'))
          .orderBy(asc(issue.rank));
       expect(rows).toHaveLength(CREATES);
+      // A ordem pedida pelos moves sobrevive ao rebalanceamento: o último movido fica em
+      // 1º, cada anterior logo depois — o topo é `ids[N-MOVES] … ids[N-1]`.
+      expect(rows.slice(0, MOVES).map((r) => r.id)).toEqual(ids.slice(ids.length - MOVES));
       expect(Math.max(...rows.map((row) => row.rank.length))).toBeLessThanOrEqual(RANK_LIMIT);
       expect(new Set(rows.map((row) => row.rank)).size).toBe(rows.length);
    }, 60_000);

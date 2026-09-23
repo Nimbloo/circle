@@ -256,12 +256,13 @@ export const useDisplaySettingsStore = create<DisplaySettingsState>()(
             hydrateByView: (byView) =>
                set((state) => {
                   const next = normalizeByView(byView);
-                  // O servidor ainda não guarda `subGrouping` (fica no localStorage): snapshot
-                  // sem o campo mantém o sub-grupo local da view.
+                  // Blob salvo antes de o servidor guardar `subGrouping`: a view vem SEM o
+                  // campo, e o sub-grupo local é mantido. View AUSENTE do snapshot foi
+                  // limpa em outro dispositivo ("servidor vence") e não é recriada aqui.
                   for (const [viewKey, local] of Object.entries(state.byView)) {
                      if (local.subGrouping === 'none') continue;
                      const incoming = byView?.[viewKey];
-                     if (incoming && 'subGrouping' in incoming) continue;
+                     if (!incoming || 'subGrouping' in incoming) continue;
                      const base = next[viewKey] ?? DEFAULT_DISPLAY_SETTINGS;
                      next[viewKey] = {
                         ...base,

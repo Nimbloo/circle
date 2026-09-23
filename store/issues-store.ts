@@ -186,7 +186,10 @@ export const selectIssuesLoading = (s: IssuesState): boolean =>
  */
 function withSelfOnStart(prev: Issue | undefined, patch: Partial<Issue>): Partial<Issue> {
    const next = patch.status;
-   if (!prev || !next || next.category !== 'started' || prev.status.id === next.id) return patch;
+   // Só ao ENTRAR em started (vindo de outra categoria): trocar entre dois status
+   // started (In Progress → In Review) não é iniciar a issue.
+   if (!prev || !next || next.category !== 'started' || prev.status.category === 'started')
+      return patch;
    if ('assignee' in patch || 'assignees' in patch) return patch;
    if (prev.assignee || (prev.assignees?.length ?? 0) > 0) return patch;
    if (!usePreferencesStore.getState().assignSelfOnStart) return patch;

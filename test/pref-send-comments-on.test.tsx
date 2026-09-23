@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import './setup-dom';
+import { isCommentSubmitKey } from '@/lib/comment-submit-key';
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -60,5 +61,10 @@ describe('preferência "Send comments on..."', () => {
       render(<ReviewCommentComposer handle={{ reviewId: 'r1', mutate: vi.fn() } as never} />);
       await user.type(screen.getByRole('textbox'), 'ok{Enter}');
       await waitFor(() => expect(addReviewComment).toHaveBeenCalledTimes(1));
+   });
+
+   it('Enter de confirmação de IME (keyCode 229, Safari) nunca envia', () => {
+      const ev = { key: 'Enter', metaKey: true, ctrlKey: false, shiftKey: false, keyCode: 229 };
+      expect(isCommentSubmitKey({ ...ev, nativeEvent: { isComposing: false } })).toBe(false);
    });
 });

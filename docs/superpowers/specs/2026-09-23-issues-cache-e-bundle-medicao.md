@@ -34,9 +34,16 @@ mesmo resultado) — amostra pequena, poucas cargas. Não há contagem de issues
 medição (leitura do banco de prd bloqueada nesta sessão); a última referência era 2.000
 issues = 2 requisições, 118 KB.
 
+**O que o número é (e o que não é):** 430 ms é o p95 de **uma** requisição `GET
+/api/v1/issues` (uma página de até 1.000 issues). A carga completa é `⌈issues/1.000⌉`
+requisições **encadeadas** (keyset) e não foi medida de ponta a ponta. Até 1.000 issues por
+workspace ela é essa requisição única; acima disso, soma uma por página.
+
 **Decisão:** a refatoração "store como cache + filtro no servidor + paginação por scroll"
-**não se paga hoje** — a carga completa fica abaixo de meio segundo no p95, a primeira página
-já aparece progressivamente (hydrate progressivo) e o volume é de ferramenta interna.
+**não se paga hoje**: por página o custo fica abaixo de meio segundo no p95, a primeira
+página já aparece progressivamente (hydrate progressivo) e o volume é de ferramenta
+interna. Antes de usar isso para adiar de novo, medir a carga completa no navegador
+(tempo até o último `set` do hydrate) com o volume real de prd.
 
 ## 3. Gatilho para refazer o carregamento (plano, se o gatilho disparar)
 

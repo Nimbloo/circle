@@ -136,6 +136,19 @@ describe('fila de triagem (#28)', () => {
       await waitFor(() => expect(screen.queryByText('Suggested')).toBeNull(), { timeout: 1000 });
    });
 
+   it('o pai só recarrega a fila depois da animação de saída (API rápida não corta a saída)', async () => {
+      const user = userEvent.setup();
+      apiMocks.dismiss.mockResolvedValue(undefined);
+      const onResolved = vi.fn();
+      render(<TriageSuggestionCard issueId="i1" initial={SUGGESTION} onResolved={onResolved} />);
+      await screen.findByText('Suggested');
+      await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+      // A API já respondeu, mas o card ainda está saindo: recarregar agora o arrancaria.
+      await act(async () => {});
+      expect(onResolved).not.toHaveBeenCalled();
+      await waitFor(() => expect(onResolved).toHaveBeenCalledTimes(1), { timeout: 1000 });
+   });
+
    it('dispensa recusada: o card volta inteiro, sem ficar preso na saída', async () => {
       const user = userEvent.setup();
       apiMocks.dismiss.mockRejectedValue(new Error('500'));

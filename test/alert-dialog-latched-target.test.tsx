@@ -67,11 +67,13 @@ describe('useLatchedTarget', () => {
       const offenders = tracked.filter((file) =>
          [
             ...readFileSync(file, 'utf8').matchAll(
-               /<AlertDialog(Title|Description)>[\s\S]*?<\/AlertDialog\1>/g
+               // Com ou sem props na tag (`<AlertDialogTitle className=…>`).
+               /<AlertDialog(Title|Description)\b[^>]*>[\s\S]*?<\/AlertDialog\1>/g
             ),
          ].some((match) =>
-            // `{alvo?.nome}` ou `{alvo ? ... : ...}` — os dois esvaziam durante a saída.
-            /\{(toDelete|deleting|target|removing)\s*\?/.test(match[0])
+            // `{alvo?.nome}`, `{alvo ? … : …}`, `{alvo && alvo.nome}` ou `{alvo.nome}` —
+            // todos esvaziam (ou quebram) durante a saída.
+            /\{\s*(toDelete|deleting|target|removing)\s*(\?|&&|\.)/.test(match[0])
          )
       );
       expect(offenders).toEqual([]);

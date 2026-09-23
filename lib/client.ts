@@ -519,9 +519,11 @@ export const api = {
          patch<{ id: string }>(`/projects/${id}/resources/${rid}`, body),
       removeResource: (id: string, rid: string) =>
          del<{ deleted: boolean }>(`/projects/${id}/resources/${rid}`),
-      /** Cria um documento no time do projeto e o vincula como resource (atômico). */
-      createDocument: (id: string, body: { orgId: string }) =>
-         post<ProjectDocumentDto>(`/projects/${id}/documents`, body),
+      /**
+       * Cria um documento no time do projeto e o vincula como resource (atômico). A `url`
+       * volta relativa ao workspace (`/team/…`): prefixar com `/${orgId}`.
+       */
+      createDocument: (id: string) => post<ProjectDocumentDto>(`/projects/${id}/documents`, {}),
    },
 
    cycles: {

@@ -121,13 +121,15 @@ describe('sub-agrupamento: store', () => {
       expect(current().subGrouping).toBe('none');
    });
 
-   it('snapshot do servidor sem o campo mantém o sub-grupo local', () => {
+   it('snapshot com a view mas sem o campo (blob antigo) mantém o sub-grupo local', () => {
       store().setSubGrouping(VIEW_KEY, 'assignee');
       store().hydrateByView({ [VIEW_KEY]: { grouping: 'status', ordering: 'created' } });
       expect(current().ordering).toBe('created');
       expect(current().subGrouping).toBe('assignee');
+      // View ausente do snapshot = limpa em outro dispositivo ("servidor vence"): não volta.
       store().hydrateByView({});
-      expect(current().subGrouping).toBe('assignee');
+      expect(useDisplaySettingsStore.getState().byView[VIEW_KEY]).toBeUndefined();
+      store().setSubGrouping(VIEW_KEY, 'assignee');
       store().hydrateByView({ [VIEW_KEY]: { grouping: 'assignee' } });
       expect(current().subGrouping).toBe('none');
    });
@@ -155,6 +157,16 @@ describe('sub-agrupamento: popover Display', () => {
 
       await user.click(screen.getByRole('option', { name: 'Assignee' }));
       expect(current().subGrouping).toBe('assignee');
+   });
+
+   it('sem grupo principal o select (desabilitado) mostra "No grouping", não fica em branco', async () => {
+      store().setGrouping(VIEW_KEY, 'none');
+      const user = userEvent.setup();
+      render(<DisplayOptions />);
+      await user.click(screen.getByRole('button', { name: /Display options/ }));
+      const select = screen.getByRole('combobox', { name: 'Sub-grouping' });
+      expect(select.hasAttribute('disabled')).toBe(true);
+      expect(select.textContent).toContain('No grouping');
    });
 });
 
@@ -260,5 +272,25 @@ describe('sub-agrupamento: drag-and-drop entre swimlanes', () => {
          ordering: 'manual',
       });
       expect(plan).toEqual({ kind: 'move', value: { field: 'status', status: inProgress } });
+   });
+
+   it('sub-grupo por label (sem destino) com a issue já no grupo principal: não faz nada', () => {
+      const item = issue({ id: 'X', title: 'X', status: inProgress });
+      const plan = planIssueDrop({
+         item,
+         target: {
+            group: {
+               id: `${inProgress.id}::bug`,
+               name: 'Bug',
+               icon: null,
+               drop: { field: 'status' as const, status: inProgress },
+            },
+            issues: [],
+         },
+         targetIssueId: null,
+         dropAbove: false,
+         ordering: 'manual',
+      });
+      expect(plan).toEqual({ kind: 'none' });
    });
 });

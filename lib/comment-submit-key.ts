@@ -5,6 +5,8 @@ interface KeyLike {
    metaKey: boolean;
    ctrlKey: boolean;
    shiftKey: boolean;
+   /** 229 = tecla processada pelo IME (o Safari manda o Enter da composição assim). */
+   keyCode?: number;
    nativeEvent?: { isComposing?: boolean };
 }
 
@@ -14,7 +16,8 @@ interface KeyLike {
  * Shift+Enter quebra linha (Ctrl/⌘+Enter continua enviando). Composição de IME nunca envia.
  */
 export function isCommentSubmitKey(event: KeyLike): boolean {
-   if (event.key !== 'Enter' || event.nativeEvent?.isComposing) return false;
+   if (event.key !== 'Enter' || event.nativeEvent?.isComposing || event.keyCode === 229)
+      return false;
    if (event.metaKey || event.ctrlKey) return true;
    return usePreferencesStore.getState().sendCommentsOn === 'Enter' && !event.shiftKey;
 }

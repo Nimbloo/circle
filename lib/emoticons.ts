@@ -25,18 +25,18 @@ export const EMOTICONS: Readonly<Record<string, string>> = {
 };
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-// Mais longos primeiro (":-)" antes de ":)"); só no início do bloco ou após espaço, para
-// não mexer em URLs/código ("http://x:D" continua intacto).
+// Mais longos primeiro (":-)" antes de ":)"); só no início ou após espaço, e só quando o
+// espaço DEPOIS dele é digitado — senão ":path" viraria "😛ath" no meio da palavra, e
+// "http://x:D" também não converte. Grupo 1 = emoticon, grupo 2 = o espaço digitado.
 export const EMOTICON_BEFORE_CARET = new RegExp(
    `(?:^|\\s)(${Object.keys(EMOTICONS)
       .sort((a, b) => b.length - a.length)
       .map(escape)
-      .join('|')})$`
+      .join('|')})(\\s)$`
 );
 
 /**
- * Converte o emoticon imediatamente antes do cursor (no início ou após espaço) — o que
- * acabou de ser digitado. Devolve o texto novo e o cursor ajustado, ou null se não há o
+ * Converte o emoticon logo antes do espaço recém-digitado (no início ou após espaço). Devolve o texto novo e o cursor ajustado, ou null se não há o
  * que converter.
  */
 export function convertEmoticonBeforeCaret(
@@ -46,9 +46,9 @@ export function convertEmoticonBeforeCaret(
    const before = value.slice(0, caret);
    const match = before.match(EMOTICON_BEFORE_CARET);
    if (!match) return null;
-   const emoticon = match[1];
-   const emoji = EMOTICONS[emoticon];
-   const start = caret - emoticon.length;
+   const [, emoticon, space] = match;
+   const emoji = EMOTICONS[emoticon] + space;
+   const start = caret - emoticon.length - space.length;
    const next = value.slice(0, start) + emoji + value.slice(caret);
    return { value: next, caret: start + emoji.length };
 }
