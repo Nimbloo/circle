@@ -28,7 +28,13 @@ type GroupGetter = () => IssueGroupContext;
 
 /** Linha virtual: um header de grupo OU uma issue. */
 type Row =
-   | { kind: 'header'; group: IssueGroupDescriptor; count: number; getGroup: GroupGetter }
+   | {
+        kind: 'header';
+        group: IssueGroupDescriptor;
+        count: number;
+        open: boolean;
+        getGroup: GroupGetter;
+     }
    | {
         kind: 'subheader';
         group: IssueGroupDescriptor;
@@ -41,31 +47,48 @@ type Row =
 export const ISSUE_GROUP_HEADER_HEIGHT = 36;
 export const ISSUE_ROW_HEIGHT = 44;
 
-/** Header do grupo: também é alvo de drop — grupo vazio (show empty groups) aceita issue. */
+/**
+ * Header do grupo: colapsável (como no Linear) e alvo de drop — grupo vazio (show empty
+ * groups) aceita issue.
+ */
 function GroupHeader({
    group,
    count,
+   open,
    getGroup,
+   onToggle,
 }: {
    group: IssueGroupDescriptor;
    count: number;
+   open: boolean;
    getGroup: GroupGetter;
+   onToggle: (id: string) => void;
 }) {
-   const ref = useRef<HTMLDivElement>(null);
+   const ref = useRef<HTMLButtonElement>(null);
    const [{ isOver }, drop] = useGroupDropTarget(getGroup);
    drop(ref);
    return (
-      <div
+      <button
          ref={ref}
+         type="button"
+         aria-expanded={open}
+         onClick={() => onToggle(group.id)}
          className={cn(
-            'mx-2 flex h-9 items-center gap-2 rounded-lg bg-muted px-2',
+            'mx-2 flex h-9 w-[calc(100%-1rem)] items-center gap-2 rounded-lg bg-muted px-2 text-left',
             isOver && 'ring-1 ring-primary'
          )}
       >
+         <ChevronRight
+            className={cn(
+               'size-3.5 text-muted-foreground transition-transform',
+               open && 'rotate-90'
+            )}
+            aria-hidden
+         />
          {group.icon}
          <span className="text-[13px] font-medium">{group.name}</span>
          <span className="text-xs tabular-nums text-muted-foreground">{count}</span>
-      </div>
+      </button>
    );
 }
 
@@ -137,9 +160,10 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
       return getter;
    }, []);
 
-   // Sub-grupos recolhidos (estado de sessão, por id composto `grupo::sub-grupo`).
+   // Grupos e sub-grupos recolhidos (estado de sessão; o id do sub-grupo é composto
+   // `grupo::sub-grupo`, então não colide com o do grupo).
    const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
-   const toggleSubgroup = useCallback(
+   const toggleGroup = useCallback(
       (id: string) =>
          setCollapsed((prev) => {
             const next = new Set(prev);
@@ -160,7 +184,19 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
       for (const e of entries) {
          byId.set(e.group.id, e);
          const getGroup = getterFor(e.group.id);
-         out.push({ kind: 'header', group: e.group, count: e.issues.length, getGroup });
+         const groupOpen = !collapsed.has(e.group.id);
+         out.push({
+            kind: 'header',
+            group: e.group,
+            count: e.issues.length,
+            open: groupOpen,
+            getGroup,
+         });
+         if (!groupOpen) {
+            // Recolhido: os sub-grupos continuam conhecidos para o drop, mas sem linhas.
+            for (const sub of e.subgroups ?? []) byId.set(sub.group.id, sub);
+            continue;
+         }
          if (!e.subgroups) {
             pushIssues(e, getGroup);
             continue;
@@ -281,14 +317,20 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
                      }}
                   >
                      {row.kind === 'header' ? (
-                        <GroupHeader group={row.group} count={row.count} getGroup={row.getGroup} />
+                        <GroupHeader
+                           group={row.group}
+                           count={row.count}
+                           open={row.open}
+                           getGroup={row.getGroup}
+                           onToggle={toggleGroup}
+                        />
                      ) : row.kind === 'subheader' ? (
                         <SubGroupHeader
                            group={row.group}
                            count={row.count}
                            open={row.open}
                            getGroup={row.getGroup}
-                           onToggle={toggleSubgroup}
+                           onToggle={toggleGroup}
                         />
                      ) : (
                         // layoutId=false: sem animação de layout do framer-motion (brigaria

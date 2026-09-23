@@ -186,6 +186,23 @@ describe('sub-agrupamento: lista e board', () => {
       expect(screen.getByText('Um')).toBeTruthy();
    });
 
+   it('lista: o grupo principal também colapsa (esconde sub-grupos e issues)', async () => {
+      render(
+         <GroupedIssuesView
+            issues={all}
+            totalIssues={all}
+            statuses={[todo]}
+            isViewTypeGrid={false}
+         />
+      );
+      const groupHeader = screen.getByRole('button', { name: new RegExp(todo.name) });
+      expect(groupHeader.getAttribute('aria-expanded')).toBe('true');
+      await userEvent.setup().click(groupHeader);
+      expect(groupHeader.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByText('Um')).toBeNull();
+      expect(screen.queryByRole('button', { name: /Urgent/ })).toBeNull();
+   });
+
    it('board: swimlanes por sub-grupo, colapsáveis', async () => {
       render(<GroupedIssuesView issues={all} totalIssues={all} statuses={[todo]} isViewTypeGrid />);
       const lanes = screen.getAllByTestId('board-swimlane');
