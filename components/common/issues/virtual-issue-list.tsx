@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { Issue } from '@/data/issues';
 import { cn } from '@/lib/utils';
+import { ChevronRight } from 'lucide-react';
 import { IssueLine } from './issue-line';
 import type { IssueGroupContext, IssueGroupDescriptor } from './group-issues';
 import { useGroupDropTarget } from './use-issue-drop-target';
@@ -19,6 +20,8 @@ const scrollOffsets = new Map<string, number>();
 interface Entry {
    group: IssueGroupDescriptor;
    issues: Issue[];
+   /** Sub-grupos (Display → Sub-grouping), já sem os vazios. Ausente = sem sub-grupo. */
+   subgroups?: Entry[];
 }
 
 type GroupGetter = () => IssueGroupContext;
@@ -26,6 +29,13 @@ type GroupGetter = () => IssueGroupContext;
 /** Linha virtual: um header de grupo OU uma issue. */
 type Row =
    | { kind: 'header'; group: IssueGroupDescriptor; count: number; getGroup: GroupGetter }
+   | {
+        kind: 'subheader';
+        group: IssueGroupDescriptor;
+        count: number;
+        open: boolean;
+        getGroup: GroupGetter;
+     }
    | { kind: 'issue'; groupId: string; issue: Issue; getGroup: GroupGetter };
 
 export const ISSUE_GROUP_HEADER_HEIGHT = 36;
@@ -59,6 +69,48 @@ function GroupHeader({
    );
 }
 
+/** Header do sub-grupo: recuado, colapsável e alvo de drop (muda grupo e sub-grupo). */
+function SubGroupHeader({
+   group,
+   count,
+   open,
+   getGroup,
+   onToggle,
+}: {
+   group: IssueGroupDescriptor;
+   count: number;
+   open: boolean;
+   getGroup: GroupGetter;
+   onToggle: (id: string) => void;
+}) {
+   const ref = useRef<HTMLButtonElement>(null);
+   const [{ isOver }, drop] = useGroupDropTarget(getGroup);
+   drop(ref);
+   return (
+      <button
+         ref={ref}
+         type="button"
+         aria-expanded={open}
+         onClick={() => onToggle(group.id)}
+         className={cn(
+            'ml-8 mr-2 flex h-9 w-[calc(100%-2.5rem)] items-center gap-2 rounded-lg px-2 text-left transition-colors hover:bg-accent/40',
+            isOver && 'ring-1 ring-primary'
+         )}
+      >
+         <ChevronRight
+            className={cn(
+               'size-3.5 text-muted-foreground transition-transform',
+               open && 'rotate-90'
+            )}
+            aria-hidden
+         />
+         {group.icon}
+         <span className="text-[13px] font-medium">{group.name}</span>
+         <span className="text-xs tabular-nums text-muted-foreground">{count}</span>
+      </button>
+   );
+}
+
 /**
  * List view VIRTUALIZADA (estilo Linear): achata [header, ...rows, header, ...] numa
  * lista única e só renderiza as linhas VISÍVEIS (@tanstack/react-virtual). Com centenas/
@@ -85,31 +137,65 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
       return getter;
    }, []);
 
+   // Sub-grupos recolhidos (estado de sessão, por id composto `grupo::sub-grupo`).
+   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+   const toggleSubgroup = useCallback(
+      (id: string) =>
+         setCollapsed((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+         }),
+      []
+   );
+
    const rows = useMemo<Row[]>(() => {
       const out: Row[] = [];
-      groupsById.current = new Map(entries.map((e) => [e.group.id, e]));
-      for (const e of entries) {
-         const getGroup = getterFor(e.group.id);
-         out.push({ kind: 'header', group: e.group, count: e.issues.length, getGroup });
+      const byId = new Map<string, IssueGroupContext>();
+      const pushIssues = (e: Entry, getGroup: GroupGetter) => {
          for (const issue of e.issues)
             out.push({ kind: 'issue', groupId: e.group.id, issue, getGroup });
+      };
+      for (const e of entries) {
+         byId.set(e.group.id, e);
+         const getGroup = getterFor(e.group.id);
+         out.push({ kind: 'header', group: e.group, count: e.issues.length, getGroup });
+         if (!e.subgroups) {
+            pushIssues(e, getGroup);
+            continue;
+         }
+         // Grupos e sub-grupos achatados numa lista só: a virtualização segue intacta.
+         for (const sub of e.subgroups) {
+            byId.set(sub.group.id, sub);
+            const subGetter = getterFor(sub.group.id);
+            const open = !collapsed.has(sub.group.id);
+            out.push({
+               kind: 'subheader',
+               group: sub.group,
+               count: sub.issues.length,
+               open,
+               getGroup: subGetter,
+            });
+            if (open) pushIssues(sub, subGetter);
+         }
       }
+      groupsById.current = byId;
       return out;
-   }, [entries, getterFor]);
+   }, [entries, getterFor, collapsed]);
 
    const virtualizer = useVirtualizer({
       count: rows.length,
       getScrollElement: () => parentRef.current,
       estimateSize: (i) =>
-         rows[i].kind === 'header' ? ISSUE_GROUP_HEADER_HEIGHT : ISSUE_ROW_HEIGHT,
+         rows[i].kind === 'issue' ? ISSUE_ROW_HEIGHT : ISSUE_GROUP_HEADER_HEIGHT,
       // Chave pela issue (não pelo índice): ao reordenar, a linha montada — e um popover
       // aberto nela — continua ligada à mesma issue. O grupo entra na chave porque, por
       // label, a mesma issue aparece em mais de um grupo.
       getItemKey: (i) => {
          const row = rows[i];
-         return row.kind === 'header'
-            ? `header:${row.group.id}`
-            : `issue:${row.groupId}:${row.issue.id}`;
+         if (row.kind === 'issue') return `issue:${row.groupId}:${row.issue.id}`;
+         return `${row.kind}:${row.group.id}`;
       },
       overscan: 14,
    });
@@ -196,6 +282,14 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
                   >
                      {row.kind === 'header' ? (
                         <GroupHeader group={row.group} count={row.count} getGroup={row.getGroup} />
+                     ) : row.kind === 'subheader' ? (
+                        <SubGroupHeader
+                           group={row.group}
+                           count={row.count}
+                           open={row.open}
+                           getGroup={row.getGroup}
+                           onToggle={toggleSubgroup}
+                        />
                      ) : (
                         // layoutId=false: sem animação de layout do framer-motion (brigaria
                         // com o mount/unmount da virtualização).

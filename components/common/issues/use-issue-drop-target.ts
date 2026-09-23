@@ -31,7 +31,7 @@ export type GroupDropValue =
 export type IssueDropPlan =
    | { kind: 'none' }
    | { kind: 'reorder'; beforeId: string | null; afterId: string | null; switchToManual: boolean }
-   | { kind: 'move'; value: GroupDropValue };
+   | { kind: 'move'; value: GroupDropValue; subValue?: GroupDropValue };
 
 /** Resultado do drop do card → o container lê `didDrop()` e não trata de novo. */
 type IssueDropResult = { handled: true };
@@ -40,6 +40,20 @@ const byRank = (a: Issue, b: Issue) => (a.rank < b.rank ? -1 : a.rank > b.rank ?
 
 const inGroup = (item: Issue, target: IssueGroupContext) =>
    target.issues.some((i) => i.id === item.id);
+
+/** A issue já tem o valor que o grupo impõe (drop entre sub-grupos do mesmo grupo). */
+function issueHasValue(item: Issue, value: GroupDropValue): boolean {
+   switch (value.field) {
+      case 'status':
+         return item.status.id === value.status.id;
+      case 'priority':
+         return item.priority.id === value.priority.id;
+      case 'assignee':
+         return (item.assignee?.id ?? null) === (value.assignee?.id ?? null);
+      case 'project':
+         return (item.project?.id ?? null) === (value.project?.id ?? null);
+   }
+}
 
 export function canDropInto(item: Issue, target: IssueGroupContext): boolean {
    return inGroup(item, target) || target.group.drop !== undefined;
@@ -67,7 +81,15 @@ export function planIssueDrop({
    ordering: OrderingKey;
 }): IssueDropPlan {
    if (!inGroup(item, target)) {
-      return target.group.drop ? { kind: 'move', value: target.group.drop } : { kind: 'none' };
+      const { drop, subDrop } = target.group;
+      if (!drop) return { kind: 'none' };
+      // Sub-grupo/swimlane: muda também a 2ª dimensão (ex.: outra swimlane → assignee).
+      // Sub-grupo sem campo de destino (label) só move no grupo principal.
+      if (subDrop && !issueHasValue(item, subDrop)) {
+         return { kind: 'move', value: drop, subValue: subDrop };
+      }
+      if (subDrop && issueHasValue(item, drop)) return { kind: 'none' };
+      return { kind: 'move', value: drop };
    }
    if (!targetIssueId || targetIssueId === item.id) return { kind: 'none' };
    const list = target.issues.filter((i) => i.id !== item.id).sort(byRank);
@@ -93,21 +115,26 @@ function applyPlan(plan: IssueDropPlan, item: Issue, viewKey: string) {
          store.reorderIssue(item.id, plan.beforeId, plan.afterId);
          return;
       case 'move': {
-         const value = plan.value;
-         switch (value.field) {
-            case 'status':
-               return quiet(store.updateIssueStatus(item.id, value.status));
-            case 'priority':
-               return quiet(store.updateIssuePriority(item.id, value.priority));
-            case 'assignee':
-               return quiet(store.updateIssueAssignee(item.id, value.assignee));
-            case 'project':
-               return quiet(store.updateIssueProject(item.id, value.project));
-            default: {
-               const exhaustive: never = value;
-               return exhaustive;
+         const apply = (value: GroupDropValue) => {
+            switch (value.field) {
+               case 'status':
+                  return quiet(store.updateIssueStatus(item.id, value.status));
+               case 'priority':
+                  return quiet(store.updateIssuePriority(item.id, value.priority));
+               case 'assignee':
+                  return quiet(store.updateIssueAssignee(item.id, value.assignee));
+               case 'project':
+                  return quiet(store.updateIssueProject(item.id, value.project));
+               default: {
+                  const exhaustive: never = value;
+                  return exhaustive;
+               }
             }
-         }
+         };
+         // Entre swimlanes da mesma coluna o campo principal já bate: só o da 2ª dimensão.
+         if (!plan.subValue || !issueHasValue(item, plan.value)) apply(plan.value);
+         if (plan.subValue) apply(plan.subValue);
+         return;
       }
    }
 }
