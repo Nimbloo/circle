@@ -75,6 +75,11 @@ export interface PrLink {
    id: string;
    title: string;
    status: 'open' | 'merged' | 'draft';
+   /** Review do PR no Circle (`repo#número`); null em vínculo antigo. */
+   reviewId?: string | null;
+   repo?: string | null;
+   number?: number | null;
+   url?: string | null;
 }
 
 export interface IssueDetail {

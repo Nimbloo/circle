@@ -14,7 +14,8 @@ import { useIssuesStore } from '@/store/issues-store';
 import { IssueDetail } from '@/data/issue-details';
 import { Issue } from '@/data/issues';
 import { LabelInterface } from '@/data/labels';
-import { Ban, CheckIcon, GitPullRequestArrow } from 'lucide-react';
+import { Ban, CheckIcon } from 'lucide-react';
+import { useParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/client';
 import type { ProjectMilestoneDto } from '@/lib/api/project-detail';
@@ -29,6 +30,7 @@ import { EstimateSelector } from '@/components/layout/sidebar/create-new-issue/e
 import { DueDateSelector } from '@/components/layout/sidebar/create-new-issue/due-date-selector';
 import { ProjectSelector } from '@/components/layout/sidebar/create-new-issue/project-selector';
 import { IssueRefRow } from './content-blocks';
+import { PrLinkRow } from './pr-link-row';
 import { ParentIssueProperty } from './parent-issue';
 import { PropertyRow, PropertyValue, propertyValueClass } from './property-row';
 import { RelationEditor } from './relation-editor';
@@ -168,6 +170,7 @@ function MilestoneSelector({
  * assignee), cycle, labels, project + milestone, relations and linked PRs.
  */
 export function IssuePropertiesPanel({ issue, detail, onChanged }: IssuePropertiesPanelProps) {
+   const { orgId } = useParams<{ orgId: string }>();
    const updateIssue = useIssuesStore((s) => s.updateIssue);
    const updateIssueAssignees = useIssuesStore((s) => s.updateIssueAssignees);
    const addIssueLabel = useIssuesStore((s) => s.addIssueLabel);
@@ -500,22 +503,7 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
             <Section title="Diffs">
                <div className="flex flex-col gap-1">
                   {detail.prLinks.map((pr) => (
-                     <div key={pr.id} className="flex items-center gap-2 text-sm min-w-0">
-                        <GitPullRequestArrow
-                           className="size-3.5 shrink-0"
-                           style={{
-                              color:
-                                 pr.status === 'merged'
-                                    ? 'var(--review-merged)'
-                                    : 'var(--review-open)',
-                           }}
-                        />
-                        <span className="text-muted-foreground shrink-0">{pr.id}</span>
-                        <span className="truncate">{pr.title}</span>
-                        <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-accent text-muted-foreground">
-                           {pr.status}
-                        </span>
-                     </div>
+                     <PrLinkRow key={pr.id} pr={pr} orgId={orgId} />
                   ))}
                </div>
             </Section>

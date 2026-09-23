@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, inArray, or } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    issue as issueT,
@@ -13,6 +13,7 @@ import {
    projectMilestone,
    appUser,
    cycle as cycleT,
+   review as reviewT,
 } from '@/db/schema';
 import { getOrCreateUser } from './users';
 import { dispatchNotifications, type NotifyInput } from './notify';
@@ -112,7 +113,16 @@ export interface IssueDetailDto {
    /** Issues que ESTA bloqueia (lado inverso de blocked_by — paridade Linear "Blocks"). */
    blockingIds: string[];
    duplicateIds: string[];
-   prLinks: { id: string; title: string; status: string }[];
+   /** `reviewId`/`repo`/`number`/`url` vêm da review do PR (null em vínculo antigo). */
+   prLinks: {
+      id: string;
+      title: string;
+      status: string;
+      reviewId: string | null;
+      repo: string | null;
+      number: number | null;
+      url: string | null;
+   }[];
    /** Anexos da issue (os de comentário vêm em cada CommentDto). */
    attachments: AttachmentDto[];
    /**
@@ -211,7 +221,25 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
             .select({ issueId: issueRelation.issueId })
             .from(issueRelation)
             .where(and(eq(issueRelation.relatedId, issueId), eq(issueRelation.kind, 'blocked_by'))),
-         db.select().from(issuePrLink).where(eq(issuePrLink.issueId, issueId)),
+         // O id do vínculo é md5("issueId|repo#número") (reviews.ts `prLinkId`), e
+         // "repo#número" é o id da review: o join devolve número/repo/url sem coluna nova.
+         // Vínculo antigo (id por título) não casa e fica só com título e status.
+         db
+            .select({
+               id: issuePrLink.id,
+               title: issuePrLink.title,
+               status: issuePrLink.status,
+               reviewId: reviewT.id,
+               repo: reviewT.repo,
+               number: reviewT.prNumber,
+               url: reviewT.url,
+            })
+            .from(issuePrLink)
+            .leftJoin(
+               reviewT,
+               sql`md5(${issuePrLink.issueId} || '|' || ${reviewT.id}) = ${issuePrLink.id}`
+            )
+            .where(eq(issuePrLink.issueId, issueId)),
          iss.milestoneId
             ? db
                  .select({ id: projectMilestone.id, name: projectMilestone.name })
@@ -266,7 +294,15 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
       blockedByIds: relations.filter((r) => r.kind === 'blocked_by').map((r) => r.relatedId),
       blockingIds: blocking.map((b) => b.issueId),
       duplicateIds: relations.filter((r) => r.kind === 'duplicate').map((r) => r.relatedId),
-      prLinks: prs.map((p) => ({ id: p.id, title: p.title, status: p.status })),
+      prLinks: prs.map((p) => ({
+         id: p.id,
+         title: p.title,
+         status: p.status,
+         reviewId: p.reviewId ?? null,
+         repo: p.repo ?? null,
+         number: p.number ?? null,
+         url: p.url ?? null,
+      })),
       attachments,
       descriptionVersion: descriptionVersionOf(content[0]?.description, content[0]?.descriptionDoc),
    };
