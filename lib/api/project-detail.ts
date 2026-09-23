@@ -15,6 +15,8 @@ import {
 import { ApiError } from './errors';
 import { publish } from './events';
 import { assertCanWriteProject } from './scope';
+import { isAdmin } from './auth';
+import { getOrCreateUser } from './users';
 import type { UserRef } from './issues';
 import type { ContentBlock } from '@/data/issue-details';
 import type { EditorDoc } from '@/lib/editor-doc';
@@ -623,7 +625,25 @@ export interface EditUpdateInput {
    blocks?: ContentBlock[];
 }
 
-/** Edita um update do projeto e repropaga o health quando ele é o mais recente. */
+/** 403 se o ator não é o autor do update nem admin (paridade Linear). Reusado por
+ * initiative-detail.ts (mesma regra para updates de initiative). */
+export async function assertCanEditUpdate(
+   tx: Db,
+   actorEmail: string,
+   authorId: string,
+   verb: string
+): Promise<void> {
+   const actor = await getOrCreateUser(tx, actorEmail);
+   if (actor.id === authorId) return;
+   if (await isAdmin(actorEmail, tx)) return;
+   throw new ApiError(403, `Só o autor ou um admin pode ${verb} o update`);
+}
+
+/**
+ * Edita um update do projeto e repropaga o health quando ele é o mais recente. Leitura,
+ * checagem de autoria e escrita na MESMA transação: sem isso, um update apagado entre o
+ * SELECT e o UPDATE (TOCTOU) devolvia sucesso fantasma em vez de 404.
+ */
 export async function editProjectUpdate(
    db: Db,
    projectId: string,
@@ -632,43 +652,56 @@ export async function editProjectUpdate(
    actorEmail?: string
 ): Promise<ProjectUpdateDto> {
    if (actorEmail) await assertCanWriteProject(db, actorEmail, projectId);
-   const [row] = await db
-      .select()
-      .from(projectUpdate)
-      .where(eq(projectUpdate.id, updateId))
-      .limit(1);
-   if (!row || row.projectId !== projectId)
-      throw new ApiError(404, `Update '${updateId}' não encontrado`);
    if (input.health && !UPDATE_HEALTHS.includes(input.health))
       throw new ApiError(400, 'health inválido');
-   const blocks = input.blocks ?? parseBlocks(row.blocks);
-   if (!updateHasContent(blocks)) throw new ApiError(400, 'update sem conteúdo');
-   const health = input.health ?? (row.health as ProjectUpdateHealth);
 
-   await db.transaction(async (tx) => {
-      await tx
+   const result = await db.transaction(async (tx) => {
+      const dbTx = tx as unknown as Db;
+      const [row] = await tx
+         .select()
+         .from(projectUpdate)
+         .where(eq(projectUpdate.id, updateId))
+         .limit(1);
+      if (!row || row.projectId !== projectId)
+         throw new ApiError(404, `Update '${updateId}' não encontrado`);
+      if (actorEmail) await assertCanEditUpdate(dbTx, actorEmail, row.authorId, 'editar');
+
+      const blocks = input.blocks ?? parseBlocks(row.blocks);
+      if (!updateHasContent(blocks)) throw new ApiError(400, 'update sem conteúdo');
+      const health = input.health ?? (row.health as ProjectUpdateHealth);
+
+      const updated = await tx
          .update(projectUpdate)
          .set({ health, blocks: JSON.stringify(blocks) })
-         .where(eq(projectUpdate.id, updateId));
-      await syncProjectHealthFromUpdates(tx as unknown as Db, projectId);
+         .where(eq(projectUpdate.id, updateId))
+         .returning({ id: projectUpdate.id });
+      // Apagado por outra request entre o SELECT e aqui: 404, não sucesso fantasma.
+      if (updated.length === 0) throw new ApiError(404, `Update '${updateId}' não encontrado`);
+
+      await syncProjectHealthFromUpdates(dbTx, projectId);
+      return { row, blocks, health };
    });
+
    publish({
       entity: 'project',
       action: 'updated',
       id: projectId,
       teamId: await projectTeamId(db, projectId),
    });
-   const users = await loadUsers(db, [row.authorId]);
+   const users = await loadUsers(db, [result.row.authorId]);
    return {
-      id: row.id,
-      author: userRef(users.get(row.authorId)),
-      health,
-      blocks,
-      createdAt: iso(row.createdAt),
+      id: result.row.id,
+      author: userRef(users.get(result.row.authorId)),
+      health: result.health,
+      blocks: result.blocks,
+      createdAt: iso(result.row.createdAt),
    };
 }
 
-/** Exclui um update do projeto; o health volta ao do update anterior (ou `no-update`). */
+/**
+ * Exclui um update do projeto; o health volta ao do update anterior (ou `no-update`).
+ * Leitura, autoria e escrita na mesma transação (mesma defesa de TOCTOU do edit acima).
+ */
 export async function deleteProjectUpdate(
    db: Db,
    projectId: string,
@@ -676,16 +709,30 @@ export async function deleteProjectUpdate(
    actorEmail?: string
 ): Promise<boolean> {
    if (actorEmail) await assertCanWriteProject(db, actorEmail, projectId);
-   const [row] = await db
-      .select({ id: projectUpdate.id, projectId: projectUpdate.projectId })
-      .from(projectUpdate)
-      .where(eq(projectUpdate.id, updateId))
-      .limit(1);
-   if (!row || row.projectId !== projectId) return false;
-   await db.transaction(async (tx) => {
-      await tx.delete(projectUpdate).where(eq(projectUpdate.id, updateId));
-      await syncProjectHealthFromUpdates(tx as unknown as Db, projectId);
+   const deleted = await db.transaction(async (tx) => {
+      const dbTx = tx as unknown as Db;
+      const [row] = await tx
+         .select({
+            id: projectUpdate.id,
+            projectId: projectUpdate.projectId,
+            authorId: projectUpdate.authorId,
+         })
+         .from(projectUpdate)
+         .where(eq(projectUpdate.id, updateId))
+         .limit(1);
+      if (!row || row.projectId !== projectId) return false;
+      if (actorEmail) await assertCanEditUpdate(dbTx, actorEmail, row.authorId, 'excluir');
+
+      const removed = await tx
+         .delete(projectUpdate)
+         .where(eq(projectUpdate.id, updateId))
+         .returning({ id: projectUpdate.id });
+      if (removed.length === 0) return false;
+
+      await syncProjectHealthFromUpdates(dbTx, projectId);
+      return true;
    });
+   if (!deleted) return false;
    publish({
       entity: 'project',
       action: 'updated',

@@ -163,7 +163,8 @@ export async function reorderFavorites(
       .where(eq(favorite.userId, user.id))
       .orderBy(asc(favorite.position), asc(favorite.createdAt));
    const own = new Set(rows.map((r) => r.id));
-   const wanted = ids.filter((id) => own.has(id));
+   // Dedup: `[A, A]` duplicaria a posição e inflaria a contagem.
+   const wanted = [...new Set(ids)].filter((id) => own.has(id));
    const order = [...wanted, ...rows.map((r) => r.id).filter((id) => !wanted.includes(id))];
    await Promise.all(
       order.map((id, index) =>

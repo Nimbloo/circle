@@ -581,13 +581,13 @@ function InitiativeUpdateCard({
 
    return (
       <div className="rounded-lg border border-border/60 bg-container p-3">
-         <div className="mb-1.5 flex items-center gap-2 text-sm">
+         <div className="mb-1.5 flex min-w-0 items-center gap-2 text-sm">
             <span
-               className="size-2 rounded-full"
+               className="size-2 shrink-0 rounded-full"
                style={{ backgroundColor: meta?.color ?? 'var(--muted-foreground)' }}
             />
-            <span className="font-medium">{meta?.label ?? update.health}</span>
-            <span className="text-xs text-muted-foreground">
+            <span className="shrink-0 font-medium">{meta?.label ?? update.health}</span>
+            <span className="min-w-0 truncate text-xs text-muted-foreground">
                {update.author?.name ?? 'Alguém'} · {new Date(update.createdAt).toLocaleDateString()}
             </span>
             {draft === null && (

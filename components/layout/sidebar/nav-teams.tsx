@@ -35,7 +35,7 @@ import {
 } from '@/components/ui/sidebar';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { isTeamOpen, useSidebarTeamsStore } from '@/store/sidebar-teams-store';
-import { buildTeamTree, type TeamNode } from '@/lib/team-tree';
+import { buildTeamTree, teamWithDescendants, type TeamNode } from '@/lib/team-tree';
 import { toast } from 'sonner';
 import { CyclePlayIcon } from '@/components/common/cycles/cycle-line';
 
@@ -207,10 +207,14 @@ export function NavTeams() {
    // Expandido/recolhido por time é persistido (Linear lembra entre sessões).
    const openById = useSidebarTeamsStore((s) => s.openById);
    const setTeamOpen = useSidebarTeamsStore((s) => s.setOpen);
-   // Só os times do usuário na árvore, mas a hierarquia usa todos (um sub-time cujo
-   // pai ele não participa pendura no avô presente, não vira raiz solta).
+   // Times do usuário + sub-times deles (membro do pai tem escopo nos descendentes, como
+   // no Linear). A hierarquia usa todos (um sub-time cujo pai ele não participa pendura
+   // no avô presente, não vira raiz solta).
+   const mine = new Set(
+      teams.filter((t) => t.joined).flatMap((t) => teamWithDescendants(teams, t.id))
+   );
    const tree = buildTeamTree(
-      teams.filter((t) => t.joined),
+      teams.filter((t) => mine.has(t.id)),
       teams
    );
    return (

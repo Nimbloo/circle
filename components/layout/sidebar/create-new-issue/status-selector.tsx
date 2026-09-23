@@ -9,11 +9,13 @@ import { StatusOptions } from '@/components/common/issues/property-options';
 
 interface StatusSelectorProps {
    status: Status;
+   /** Time selecionado no form — escopa a contagem do seletor (senão conta todos os times). */
+   teamId?: string;
    onChange: (status: Status) => void;
 }
 
 /** Seletor de status do modal de criação: trigger próprio, lista compartilhada (R1). */
-export function StatusSelector({ status, onChange }: StatusSelectorProps) {
+export function StatusSelector({ status, teamId, onChange }: StatusSelectorProps) {
    const id = useId();
    const [open, setOpen] = useState<boolean>(false);
    const allStatus = useStatuses();
@@ -46,7 +48,7 @@ export function StatusSelector({ status, onChange }: StatusSelectorProps) {
                className="border-input w-full min-w-[var(--radix-popper-anchor-width)] p-0"
                align="start"
             >
-               <StatusOptions value={status.id} onSelect={handleStatusChange} />
+               <StatusOptions value={status.id} teamId={teamId} onSelect={handleStatusChange} />
             </PopoverContent>
          </Popover>
       </div>

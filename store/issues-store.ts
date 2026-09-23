@@ -47,6 +47,9 @@ interface IssuesState {
    applyDto: (dto: IssueDto) => void;
    /** Remove UMA issue do store (evento remoto de delete) — sem refetch. */
    removeRemote: (id: string) => void;
+   /** IDs apagados por evento remoto (outra aba/servidor) — consultado pelo Undo do
+    *  delete local (is#16) para não reviver, nem re-enviar DELETE, do que já se foi. */
+   remoteDeletedIds: Set<string>;
    /** Projeto/ciclo removido: limpa a referência nas issues (sem refetch). */
    detachProject: (projectId: string) => void;
    detachCycle: (cycleId: string) => void;
@@ -201,6 +204,7 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
    loading: false,
    loaded: false,
    error: false,
+   remoteDeletedIds: new Set(),
 
    hydrate: async (opts?: IssueListOptions) => {
       const seq = ++hydrateSeq;
@@ -370,8 +374,13 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
 
    removeRemote: (id: string) => {
       set((state) => {
-         if (!state.issues.some((i) => i.id === id)) return {};
-         return { issues: state.issues.filter((i) => i.id !== id) };
+         const remoteDeletedIds = state.remoteDeletedIds.has(id)
+            ? state.remoteDeletedIds
+            : new Set(state.remoteDeletedIds).add(id);
+         if (!state.issues.some((i) => i.id === id)) {
+            return remoteDeletedIds === state.remoteDeletedIds ? {} : { remoteDeletedIds };
+         }
+         return { issues: state.issues.filter((i) => i.id !== id), remoteDeletedIds };
       });
    },
 

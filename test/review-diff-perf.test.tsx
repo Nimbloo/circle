@@ -51,6 +51,7 @@ const handle: ReviewCommentsHandle = {
    meId: 'u1',
    isAdmin: false,
    mutate: () => {},
+   setFileReviewed: () => {},
 };
 
 const comment = (path: string): ReviewComment => ({

@@ -45,4 +45,17 @@ describe('reordenar favoritos', () => {
       const after = await listFavorites(db, 'ana@nimbloo.ai');
       expect(after.map((f) => f.name)).toEqual(['P2', 'P1', 'P3']);
    });
+
+   it('ids repetidos contam uma vez e não bagunçam as posições', async () => {
+      const { db, favorites } = await setup();
+      const res = await reorderFavorites(db, 'ana@nimbloo.ai', [
+         favorites[2].id,
+         favorites[2].id,
+         favorites[0].id,
+      ]);
+      expect(res.reordered).toBe(2);
+      const after = await listFavorites(db, 'ana@nimbloo.ai');
+      expect(after.map((f) => f.name)).toEqual(['P3', 'P1', 'P2']);
+      expect(after.map((f) => f.position)).toEqual([0, 1, 2]);
+   });
 });

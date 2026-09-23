@@ -3,7 +3,7 @@ import { desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '@/db';
 import { initiative as initT, initiativeUpdate, appUser } from '@/db/schema';
 import { ApiError } from './errors';
-import { updateHasContent } from './project-detail';
+import { assertCanEditUpdate, updateHasContent } from './project-detail';
 import { publish } from './events';
 import { getInitiative, type InitiativeDto } from './initiatives';
 import type { UserRef } from './issues';
@@ -152,67 +152,99 @@ export interface EditInitiativeUpdateInput {
    blocks?: ContentBlock[];
 }
 
-/** Edita um update da initiative (pl#11), repropagando o health do mais recente. */
+/**
+ * Edita um update da initiative (pl#11), repropagando o health do mais recente. Leitura,
+ * autoria (autor ou admin) e escrita na mesma transação: sem isso, um update apagado
+ * entre o SELECT e o UPDATE (TOCTOU) devolvia sucesso fantasma em vez de 404.
+ */
 export async function editInitiativeUpdate(
    db: Db,
    initiativeId: string,
    updateId: string,
-   input: EditInitiativeUpdateInput
+   input: EditInitiativeUpdateInput,
+   actorEmail?: string
 ): Promise<{ update: InitiativeUpdateDto; initiative: InitiativeDto }> {
-   const [row] = await db
-      .select()
-      .from(initiativeUpdate)
-      .where(eq(initiativeUpdate.id, updateId))
-      .limit(1);
-   if (!row || row.initiativeId !== initiativeId)
-      throw new ApiError(404, `Update '${updateId}' não encontrado`);
    if (input.health && !UPDATE_HEALTHS.includes(input.health))
       throw new ApiError(400, 'health inválido');
-   const blocks = input.blocks ?? parseBlocks(row.blocks);
-   if (!updateHasContent(blocks)) throw new ApiError(400, 'update sem conteúdo');
-   const health = input.health ?? (row.health as InitiativeUpdateHealth);
 
-   await db.transaction(async (tx) => {
-      await tx
+   const result = await db.transaction(async (tx) => {
+      const dbTx = tx as unknown as Db;
+      const [row] = await tx
+         .select()
+         .from(initiativeUpdate)
+         .where(eq(initiativeUpdate.id, updateId))
+         .limit(1);
+      if (!row || row.initiativeId !== initiativeId)
+         throw new ApiError(404, `Update '${updateId}' não encontrado`);
+      if (actorEmail) await assertCanEditUpdate(dbTx, actorEmail, row.authorId, 'editar');
+
+      const blocks = input.blocks ?? parseBlocks(row.blocks);
+      if (!updateHasContent(blocks)) throw new ApiError(400, 'update sem conteúdo');
+      const health = input.health ?? (row.health as InitiativeUpdateHealth);
+
+      const updated = await tx
          .update(initiativeUpdate)
          .set({ health, blocks: JSON.stringify(blocks) })
-         .where(eq(initiativeUpdate.id, updateId));
-      await syncInitiativeHealth(tx as unknown as Db, initiativeId);
+         .where(eq(initiativeUpdate.id, updateId))
+         .returning({ id: initiativeUpdate.id });
+      if (updated.length === 0) throw new ApiError(404, `Update '${updateId}' não encontrado`);
+
+      await syncInitiativeHealth(dbTx, initiativeId);
+      return { row, blocks, health };
    });
+
    const [users, initiative] = await Promise.all([
-      loadUsers(db, [row.authorId]),
+      loadUsers(db, [result.row.authorId]),
       getInitiative(db, initiativeId),
    ]);
    if (!initiative) throw new ApiError(404, `Initiative '${initiativeId}' não encontrada`);
    publish({ entity: 'initiative', action: 'updated', id: initiativeId });
    return {
       update: {
-         id: row.id,
-         author: userRef(users.get(row.authorId)),
-         health,
-         blocks,
-         createdAt: iso(row.createdAt),
+         id: result.row.id,
+         author: userRef(users.get(result.row.authorId)),
+         health: result.health,
+         blocks: result.blocks,
+         createdAt: iso(result.row.createdAt),
       },
       initiative,
    };
 }
 
-/** Exclui um update da initiative; devolve a initiative com o health recalculado. */
+/**
+ * Exclui um update da initiative; devolve a initiative com o health recalculado. Mesma
+ * defesa de autoria/TOCTOU do edit acima.
+ */
 export async function deleteInitiativeUpdate(
    db: Db,
    initiativeId: string,
-   updateId: string
+   updateId: string,
+   actorEmail?: string
 ): Promise<InitiativeDto | null> {
-   const [row] = await db
-      .select({ id: initiativeUpdate.id, initiativeId: initiativeUpdate.initiativeId })
-      .from(initiativeUpdate)
-      .where(eq(initiativeUpdate.id, updateId))
-      .limit(1);
-   if (!row || row.initiativeId !== initiativeId) return null;
-   await db.transaction(async (tx) => {
-      await tx.delete(initiativeUpdate).where(eq(initiativeUpdate.id, updateId));
-      await syncInitiativeHealth(tx as unknown as Db, initiativeId);
+   const deleted = await db.transaction(async (tx) => {
+      const dbTx = tx as unknown as Db;
+      const [row] = await tx
+         .select({
+            id: initiativeUpdate.id,
+            initiativeId: initiativeUpdate.initiativeId,
+            authorId: initiativeUpdate.authorId,
+         })
+         .from(initiativeUpdate)
+         .where(eq(initiativeUpdate.id, updateId))
+         .limit(1);
+      if (!row || row.initiativeId !== initiativeId) return false;
+      if (actorEmail) await assertCanEditUpdate(dbTx, actorEmail, row.authorId, 'excluir');
+
+      const removed = await tx
+         .delete(initiativeUpdate)
+         .where(eq(initiativeUpdate.id, updateId))
+         .returning({ id: initiativeUpdate.id });
+      if (removed.length === 0) return false;
+
+      await syncInitiativeHealth(dbTx, initiativeId);
+      return true;
    });
+   if (!deleted) return null;
    publish({ entity: 'initiative', action: 'updated', id: initiativeId });
    return getInitiative(db, initiativeId);
 }

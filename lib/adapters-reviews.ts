@@ -200,3 +200,17 @@ export async function updateReviewComment(
 export async function removeReviewComment(id: string, commentId: string): Promise<void> {
    await api.reviews.removeComment(id, commentId);
 }
+
+/** GET /reviews/{id}/file-states — caminhos que o usuário já marcou como revisados. */
+export async function fetchReviewedPaths(id: string): Promise<string[]> {
+   return api.reviews.listFileStates(id);
+}
+
+/** PUT /reviews/{id}/file-states/{path} — marca/desmarca "Reviewed" (escopo do usuário). */
+export async function setReviewFileState(
+   id: string,
+   path: string,
+   reviewed: boolean
+): Promise<void> {
+   await api.reviews.setFileState(id, path, reviewed);
+}

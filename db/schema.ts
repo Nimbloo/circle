@@ -33,14 +33,23 @@ export const priority = pgTable('priority', {
    sortRank: integer('sort_rank').notNull(), // urgent<high<medium<low<no-priority
 });
 
-export const label = pgTable('label', {
-   id: varchar('id', { length: 64 }).primaryKey(),
-   name: varchar('name', { length: 128 }).notNull(),
-   color: varchar('color', { length: 32 }).notNull(), // nome de cor, não hex
-   // Grupo de labels (paridade Linear): labels no mesmo grupo são mutuamente exclusivas
-   // por issue. NULL = label solta. O nome do grupo é a chave (ex.: 'kind', 'area').
-   groupId: varchar('group_id', { length: 64 }),
-});
+export const label = pgTable(
+   'label',
+   {
+      id: varchar('id', { length: 64 }).primaryKey(),
+      name: varchar('name', { length: 128 }).notNull(),
+      color: varchar('color', { length: 32 }).notNull(), // nome de cor, não hex
+      // Grupo de labels (paridade Linear): labels no mesmo grupo são mutuamente exclusivas
+      // por issue. NULL = label solta. O nome do grupo é a chave (ex.: 'kind', 'area').
+      groupId: varchar('group_id', { length: 64 }),
+   },
+   (t) => [
+      // Nome único sem diferenciar caixa/espaços das pontas (Ad#34 já checava isto em
+      // app-level, sem garantia sob concorrência — dois creates simultâneos com o mesmo
+      // nome passavam ambos na checagem e só um sobrevivia silenciosamente antes disto).
+      uniqueIndex('label_name_lower_unique').on(sql`lower(trim(${t.name}))`),
+   ]
+);
 
 // Grupo de labels (paridade Linear): cadastro do `label.group_id` (antes só uma chave
 // solta). Sem FK no `label.group_id` — excluir o grupo solta as labels (app-level,
@@ -931,6 +940,26 @@ export const reviewComment = pgTable(
    (t) => [index('idx_review_comment_review').on(t.reviewId)]
 );
 
+/**
+ * "Reviewed" persistido por (review, usuário, arquivo) — antes só localStorage
+ * (some ao trocar de navegador/limpar storage). A linha EXISTE só enquanto o arquivo
+ * está marcado como revisado; desmarcar apaga a linha (sem histórico de toggles).
+ */
+export const reviewFileState = pgTable(
+   'review_file_state',
+   {
+      reviewId: varchar('review_id', { length: 128 })
+         .notNull()
+         .references(() => review.id, { onDelete: 'cascade' }),
+      userId: varchar('user_id', { length: 36 })
+         .notNull()
+         .references(() => appUser.id),
+      path: varchar('path', { length: 512 }).notNull(),
+      reviewedAt: timestamp('reviewed_at').notNull().defaultNow(),
+   },
+   (t) => [primaryKey({ columns: [t.reviewId, t.userId, t.path] })]
+);
+
 export const teamDocument = pgTable('team_document', {
    id: varchar('id', { length: 36 }).primaryKey(),
    folderId: varchar('folder_id', { length: 64 })
@@ -1010,6 +1039,10 @@ export const agentMessage = pgTable(
          .references(() => agentChat.id),
       role: varchar('role', { length: 16 }).notNull(), // user|assistant
       content: text('content').notNull(),
+      // A chamada ao provedor falhou (#XX): o turno do usuário já tinha sido gravado
+      // ANTES da chamada, então a falha grava a resposta com error=true em vez de
+      // sumir — a UI mostra o erro e permite "Tentar de novo".
+      error: boolean('error').notNull().default(false),
       createdAt: timestamp('created_at').notNull().defaultNow(),
    },
    (t) => [index('idx_agent_message_chat').on(t.chatId, t.createdAt)]

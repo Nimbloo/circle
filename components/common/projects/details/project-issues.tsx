@@ -69,6 +69,7 @@ export default function ProjectIssues({ projectId }: ProjectIssuesProps) {
                   loading={loading}
                   error={error}
                   onRetry={() => hydrate()}
+                  currentProjectId={projectId}
                />
             </div>
          </div>

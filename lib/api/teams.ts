@@ -41,6 +41,7 @@ import {
    projectSnapshot,
    cycleSnapshot,
    importJob,
+   review as reviewT,
 } from '@/db/schema';
 import { getOrCreateUser } from './users';
 import { assertTeamParent } from './hierarchy';
@@ -519,6 +520,10 @@ export interface TeamDeletionImpact {
    folders: number;
    /** Documentos dentro das pastas. */
    documents: number;
+   /** Anexos das issues do time. */
+   attachments: number;
+   /** Reviews (PRs) que resolvem alguma issue do time — ficam com o vínculo limpo, não apagadas. */
+   reviews: number;
 }
 
 /**
@@ -532,8 +537,16 @@ export async function getTeamDeletionImpact(
    const existing = await db.select({ id: teamT.id }).from(teamT).where(eq(teamT.id, id)).limit(1);
    if (existing.length === 0) return null;
    const n = (rows: { n: number }[]) => Number(rows[0]?.n ?? 0);
-   const [issues, projects, cycles, views, folders, documents] = await Promise.all([
-      db.select({ n: count() }).from(issueT).where(eq(issueT.teamId, id)),
+   // ids/identifiers das issues do time — reusados pra contar anexos (FK) e reviews que
+   // resolvem alguma delas (por identifier, `review` não tem FK pra `issue`).
+   const teamIssues = await db
+      .select({ id: issueT.id, identifier: issueT.identifier })
+      .from(issueT)
+      .where(eq(issueT.teamId, id));
+   const teamIssueIds = teamIssues.map((r) => r.id);
+   const teamIdentifiers = teamIssues.map((r) => r.identifier);
+   const zero = Promise.resolve([{ n: 0 }]);
+   const [projects, cycles, views, folders, documents, attachments, reviews] = await Promise.all([
       db.select({ n: count() }).from(projectT).where(eq(projectT.teamId, id)),
       db.select({ n: count() }).from(cycleT).where(eq(cycleT.teamId, id)),
       db.select({ n: count() }).from(savedViewT).where(eq(savedViewT.teamId, id)),
@@ -543,14 +556,28 @@ export async function getTeamDeletionImpact(
          .from(teamDocument)
          .innerJoin(documentFolderT, eq(teamDocument.folderId, documentFolderT.id))
          .where(eq(documentFolderT.teamId, id)),
+      teamIssueIds.length
+         ? db
+              .select({ n: count() })
+              .from(attachmentT)
+              .where(inArray(attachmentT.issueId, teamIssueIds))
+         : zero,
+      teamIdentifiers.length
+         ? db
+              .select({ n: count() })
+              .from(reviewT)
+              .where(inArray(reviewT.resolvesIdentifier, teamIdentifiers))
+         : zero,
    ]);
    return {
-      issues: n(issues),
+      issues: teamIssueIds.length,
       projects: n(projects),
       cycles: n(cycles),
       views: n(views),
       folders: n(folders),
       documents: n(documents),
+      attachments: n(attachments),
+      reviews: n(reviews),
    };
 }
 
@@ -646,6 +673,22 @@ export async function deleteTeam(db: Db, id: string): Promise<boolean> {
             .from(attachmentT)
             .where(inArray(attachmentT.issueId, teamIssueIds()))
       ).map((r) => r.url);
+      // Identifiers ANTES do delete: `review.resolves_identifier` não é FK (guarda o
+      // identifier em texto), então a issue some e o review fica com identifier/título
+      // de uma issue inexistente — limpa (não apaga o review, só o vínculo).
+      const teamIdentifiers = (
+         await tx
+            .select({ identifier: issueT.identifier })
+            .from(issueT)
+            .where(eq(issueT.teamId, id))
+      ).map((r) => r.identifier);
+      const orphanedReviews = teamIdentifiers.length
+         ? await tx
+              .update(reviewT)
+              .set({ resolvesIdentifier: null, resolvesTitle: null })
+              .where(inArray(reviewT.resolvesIdentifier, teamIdentifiers))
+              .returning({ id: reviewT.id })
+         : [];
       await tx.delete(commentReaction).where(inArray(commentReaction.commentId, teamCommentIds()));
       await tx.delete(attachmentT).where(inArray(attachmentT.issueId, teamIssueIds()));
       await tx.delete(commentT).where(inArray(commentT.issueId, teamIssueIds()));
@@ -732,6 +775,7 @@ export async function deleteTeam(db: Db, id: string): Promise<boolean> {
          notifiedUserIds: new Set(notifications.map((r) => r.recipientId)),
          favoriteUserIds: new Set(favorites.map((r) => r.userId)),
          initiativeIds: [...new Set(initiativeLinks.map((r) => r.initiativeId))],
+         orphanedReviewIds: orphanedReviews.map((r) => r.id),
       };
    });
    if (!result) return false;
@@ -750,6 +794,10 @@ export async function deleteTeam(db: Db, id: string): Promise<boolean> {
       publishInternal({ entity: 'notification', action: 'deleted', recipientId });
    for (const recipientId of result.favoriteUserIds)
       publishInternal({ entity: 'favorite', action: 'deleted', recipientId });
+   // Reviews que resolviam uma issue apagada: identifier/título limpos, avisa quem tem
+   // o detalhe aberto (o `id` do evento de review é o do PR — repo#prNumber).
+   for (const reviewId of result.orphanedReviewIds)
+      publishInternal({ entity: 'review', action: 'updated', id: reviewId });
    publish({ entity: 'team', action: 'deleted', id, teamId: id });
    // Initiatives que perderam projeto: o rollup delas mudou.
    await publishInitiativeRollups(db, result.initiativeIds);

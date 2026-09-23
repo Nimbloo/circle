@@ -1,7 +1,8 @@
 # Pendências do Circle
 
-Estado em **2026-09-08**, com a v0.40.0 em produção (`main` e `develop` sincronizadas;
-há uma correção em revisão, descrita na última seção de Operacional).
+Estado em **2026-09-23**, com a v0.42.0 (rodadas de sanidade 2–5) a caminho de produção. As
+seções abaixo de "Operacional" até 10/09 são histórico; o detalhe das rodadas 2–5 vive em
+`docs/superpowers/specs/2026-09-1*-sanity-audit-*` e `2026-09-22-sanity-audit-5-*`.
 
 > **As [issues](https://github.com/Nimbloo/circle/issues) são a fonte da verdade** sobre
 > escopo. Este documento registra o que elas **não** capturam: bloqueios que vivem em
@@ -114,6 +115,18 @@ serve para emular viewport aqui: o app envia `frame-ancestors 'none'` e
 `X-Frame-Options: DENY` (correto).
 
 ---
+
+### Rodada 5 e varredura de débito (23/09/2026)
+
+- **`/api/metrics` estava público** (200 sem VPN). Fechado em `nimbloo-k8s#781`
+  (`directResponse 404` no VirtualService). Conferido depois do rollout: público → 404 e
+  `up{namespace="circle-prd"} = 1` no Prometheus, porque o ServiceMonitor raspa o Service direto.
+- **Dependências:** `pnpm audit --prod` zerado com `pnpm.overrides` (lodash 4.18.1, postcss
+  8.5.28, @babel/runtime 7.29.7). O que sobra no `pnpm audit` completo é só toolchain de
+  dev (eslint 9.21, vitest 3, lint-staged), que não entra na imagem; o vitest exige major 4.
+- **Fora deste repo, sem dono ainda:** o filtro Lua do Fluent Bit descarta registro com
+  `log` não-string, e os 5 lambdas no push público do Loki podem estar com token antigo
+  (seção "Peso do bundle e HTTP/2").
 
 ## Bloqueado em outro repositório
 

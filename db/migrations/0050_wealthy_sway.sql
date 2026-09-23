@@ -1,4 +1,4 @@
-CREATE TABLE "import_job" (
+CREATE TABLE IF NOT EXISTS "import_job" (
 	"id" varchar(36) PRIMARY KEY NOT NULL,
 	"owner_id" varchar(36) NOT NULL,
 	"team_id" varchar(16) NOT NULL,
@@ -27,9 +27,15 @@ UPDATE "issue" AS i
 SET "rank" = '0|' || lpad(to_hex((o.position * 2 + 1)::bigint), 8, '0')
 FROM ordered AS o
 WHERE i."id" = o."id";--> statement-breakpoint
-ALTER TABLE "import_job" ADD CONSTRAINT "import_job_owner_id_app_user_id_fk" FOREIGN KEY ("owner_id") REFERENCES "public"."app_user"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "import_job" ADD CONSTRAINT "import_job_team_id_team_id_fk" FOREIGN KEY ("team_id") REFERENCES "public"."team"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "idx_import_job_owner" ON "import_job" USING btree ("owner_id","created_at");--> statement-breakpoint
+DO $$ BEGIN
+	ALTER TABLE "import_job" ADD CONSTRAINT "import_job_owner_id_app_user_id_fk" FOREIGN KEY ("owner_id") REFERENCES "public"."app_user"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+	ALTER TABLE "import_job" ADD CONSTRAINT "import_job_team_id_team_id_fk" FOREIGN KEY ("team_id") REFERENCES "public"."team"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_import_job_owner" ON "import_job" USING btree ("owner_id","created_at");--> statement-breakpoint
 -- #35: mantém o cycle current mais recente por time e encerra os duplicados antes do
 -- índice único parcial. Nenhum cycle é apagado.
 WITH ranked_current AS (
@@ -42,5 +48,5 @@ WITH ranked_current AS (
 )
 UPDATE "cycle" SET "status" = 'completed'
 WHERE "id" IN (SELECT "id" FROM ranked_current WHERE rn > 1);--> statement-breakpoint
-CREATE UNIQUE INDEX "cycle_team_current_unique" ON "cycle" USING btree ("team_id") WHERE "cycle"."status" = 'current';--> statement-breakpoint
-CREATE INDEX "idx_review_created_at" ON "review" USING btree ("created_at");
+CREATE UNIQUE INDEX IF NOT EXISTS "cycle_team_current_unique" ON "cycle" USING btree ("team_id") WHERE "cycle"."status" = 'current';--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_review_created_at" ON "review" USING btree ("created_at");

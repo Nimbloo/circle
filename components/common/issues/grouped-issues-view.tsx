@@ -18,7 +18,7 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import { GroupIssues, IssueGroupDescriptor } from './group-issues';
 import { VirtualIssueList } from './virtual-issue-list';
 import { CustomDragLayer } from './issue-grid';
-import { IssueLineDragLayer } from './issue-line';
+import { IssueLineDragLayer, IssueLineProjectScopeProvider } from './issue-line';
 import { BulkActionsBar } from './bulk-actions-bar';
 import { useBulkSelectionKeys } from './use-bulk-selection-keys';
 import { useIssueDeleteShortcut } from './use-issue-delete-shortcut';
@@ -39,6 +39,8 @@ interface GroupedIssuesViewProps {
    error?: boolean;
    /** Re-tenta a hidratação (usado pelo estado de falha). */
    onRetry?: () => void;
+   /** Aba Issues de um projeto (`/project/:id`): esconde o chip de projeto redundante. */
+   currentProjectId?: string;
 }
 
 /**
@@ -220,6 +222,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
    loading,
    error,
    onRetry,
+   currentProjectId,
 }) => {
    // Troca de irmão (aba, item, layout) não pisca: só a primeira chegada de conteúdo.
    const fade = useEnterFade('issues-view');
@@ -450,32 +453,34 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
          : groups.filter((entry) => entry.issues.length === 0);
 
       return (
-         <DndProvider backend={HTML5Backend}>
-            <CustomDragLayer />
-            <BulkActionsBar />
-            <div className={cn(fade && 'content-enter', 'h-full flex flex-col')}>
-               <div className="flex-1 min-h-0 overflow-x-auto">
-                  <IssueContextMenuHost>
-                     <div className="flex h-full min-w-max gap-0 px-1">
-                        {boardGroups.map((entry) => (
-                           <GroupIssues
-                              key={entry.group.id}
-                              group={entry.group}
-                              issues={entry.issues}
-                              count={entry.issues.length}
-                           />
-                        ))}
-                        {hiddenGroups.length > 0 && <HiddenColumns entries={hiddenGroups} />}
-                     </div>
-                  </IssueContextMenuHost>
-               </div>
-               {showFooter && (
-                  <div className="shrink-0 border-t bg-container">
-                     <HiddenByFiltersFooter hiddenCount={hiddenCount} />
+         <IssueLineProjectScopeProvider projectId={currentProjectId}>
+            <DndProvider backend={HTML5Backend}>
+               <CustomDragLayer />
+               <BulkActionsBar />
+               <div className={cn(fade && 'content-enter', 'h-full flex flex-col')}>
+                  <div className="flex-1 min-h-0 overflow-x-auto">
+                     <IssueContextMenuHost>
+                        <div className="flex h-full min-w-max gap-0 px-1">
+                           {boardGroups.map((entry) => (
+                              <GroupIssues
+                                 key={entry.group.id}
+                                 group={entry.group}
+                                 issues={entry.issues}
+                                 count={entry.issues.length}
+                              />
+                           ))}
+                           {hiddenGroups.length > 0 && <HiddenColumns entries={hiddenGroups} />}
+                        </div>
+                     </IssueContextMenuHost>
                   </div>
-               )}
-            </div>
-         </DndProvider>
+                  {showFooter && (
+                     <div className="shrink-0 border-t bg-container">
+                        <HiddenByFiltersFooter hiddenCount={hiddenCount} />
+                     </div>
+                  )}
+               </div>
+            </DndProvider>
+         </IssueLineProjectScopeProvider>
       );
    }
 
@@ -483,26 +488,28 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
    const listGroups = groups.filter((entry) => showEmptyGroups || entry.issues.length > 0);
 
    return (
-      <DndProvider backend={HTML5Backend}>
-         <IssueLineDragLayer />
-         <BulkActionsBar />
-         {listGroups.length === 0 && !showFooter ? (
-            <IssuesEmptyState loading={loading} error={error} onRetry={onRetry} />
-         ) : (
-            <div className={cn(fade && 'content-enter', 'h-full flex flex-col min-h-0')}>
-               {/* Lista VIRTUALIZADA: só as linhas visíveis vão pro DOM (fluido a 1000+). */}
-               <div className="flex-1 min-h-0">
-                  <IssueContextMenuHost>
-                     <VirtualIssueList entries={listGroups} />
-                  </IssueContextMenuHost>
-               </div>
-               {showFooter && (
-                  <div className="shrink-0 border-t bg-container">
-                     <HiddenByFiltersFooter hiddenCount={hiddenCount} />
+      <IssueLineProjectScopeProvider projectId={currentProjectId}>
+         <DndProvider backend={HTML5Backend}>
+            <IssueLineDragLayer />
+            <BulkActionsBar />
+            {listGroups.length === 0 && !showFooter ? (
+               <IssuesEmptyState loading={loading} error={error} onRetry={onRetry} />
+            ) : (
+               <div className={cn(fade && 'content-enter', 'h-full flex flex-col min-h-0')}>
+                  {/* Lista VIRTUALIZADA: só as linhas visíveis vão pro DOM (fluido a 1000+). */}
+                  <div className="flex-1 min-h-0">
+                     <IssueContextMenuHost>
+                        <VirtualIssueList entries={listGroups} />
+                     </IssueContextMenuHost>
                   </div>
-               )}
-            </div>
-         )}
-      </DndProvider>
+                  {showFooter && (
+                     <div className="shrink-0 border-t bg-container">
+                        <HiddenByFiltersFooter hiddenCount={hiddenCount} />
+                     </div>
+                  )}
+               </div>
+            )}
+         </DndProvider>
+      </IssueLineProjectScopeProvider>
    );
 };

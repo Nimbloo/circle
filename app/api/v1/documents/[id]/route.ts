@@ -33,7 +33,7 @@ const UpdateSchema = z.object({
       .string()
       .trim()
       .min(1, 'name é obrigatório')
-      .max(128, 'name deve ter no máximo 128 caracteres')
+      .max(196, 'name deve ter no máximo 196 caracteres')
       .optional(),
    icon: z.string().max(16).nullish(),
    pinned: z.boolean().optional(),

@@ -25,12 +25,15 @@ beforeEach(async () => {
    fx = await seedWorkspaceFixture(db);
    await db.update(issueT).set({ rank: firstRank() }).where(eq(issueT.id, fx.issueId));
    await db.update(teamT).set({ issueSeq: 1 }).where(eq(teamT.id, fx.teamId));
+   // Nomes distintos dos já semeados ('Bug'/'Feature' em seed-catalogs.ts, grupo 'kind')
+   // — desde o índice único de nome (Ad#XX), um nome duplicado nem entra (onConflictDoNothing
+   // silencioso), o que fazia estes ids nunca serem gravados.
    await db
       .insert(labelT)
       .values([
-         { id: 'L-bug', name: 'Bug', color: 'red', groupId: 'kind' },
-         { id: 'L-feat', name: 'Feature', color: 'blue', groupId: 'kind' },
-         { id: 'L-ui', name: 'UI', color: 'green', groupId: null },
+         { id: 'L-bug', name: 'Defect', color: 'red', groupId: 'kind' },
+         { id: 'L-feat', name: 'Enhancement', color: 'blue', groupId: 'kind' },
+         { id: 'L-ui', name: 'Interface', color: 'green', groupId: null },
       ])
       .onConflictDoNothing();
    eventos = [];
