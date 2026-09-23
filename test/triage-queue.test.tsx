@@ -85,6 +85,9 @@ function fire(id?: string) {
 
 describe('fila de triagem (#28)', () => {
    it('ignora evento de issue de outro time ou fora da triagem; recarrega pelos da fila', async () => {
+      // Timer falso que anda sozinho: o waitFor segue valendo e a janela do debounce
+      // é atravessada na hora, sem dormir (antes: sleep fixo).
+      vi.useFakeTimers({ shouldAdvanceTime: true });
       apiMocks.queue.mockResolvedValue([SUGGESTION]);
       render(<TriageSuggestionsQueue />);
       await screen.findByText('Suggested');
@@ -92,7 +95,7 @@ describe('fila de triagem (#28)', () => {
 
       fire('x1'); // outro time
       fire('e2'); // mesmo time, fora da triagem e fora da fila
-      await new Promise((r) => setTimeout(r, 500));
+      await act(() => vi.advanceTimersByTimeAsync(500));
       expect(apiMocks.queue).toHaveBeenCalledTimes(1);
 
       fire('i1'); // card da fila
@@ -147,11 +150,14 @@ describe('fila de triagem (#28)', () => {
    });
 
    it('card alimentado pela fila não faz GET próprio em evento da issue', async () => {
+      // Timer falso que anda sozinho: o waitFor segue valendo e a janela do debounce
+      // é atravessada na hora, sem dormir (antes: sleep fixo).
+      vi.useFakeTimers({ shouldAdvanceTime: true });
       render(<TriageSuggestionCard issueId="i1" initial={SUGGESTION} />);
       await screen.findByText('Suggested');
       fire('i1');
       fire();
-      await new Promise((r) => setTimeout(r, 50));
+      await act(() => vi.advanceTimersByTimeAsync(50));
       expect(apiMocks.suggestion).not.toHaveBeenCalled();
    });
 });
