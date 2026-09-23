@@ -121,13 +121,15 @@ describe('sub-agrupamento: store', () => {
       expect(current().subGrouping).toBe('none');
    });
 
-   it('snapshot do servidor sem o campo mantém o sub-grupo local', () => {
+   it('snapshot com a view mas sem o campo (blob antigo) mantém o sub-grupo local', () => {
       store().setSubGrouping(VIEW_KEY, 'assignee');
       store().hydrateByView({ [VIEW_KEY]: { grouping: 'status', ordering: 'created' } });
       expect(current().ordering).toBe('created');
       expect(current().subGrouping).toBe('assignee');
+      // View ausente do snapshot = limpa em outro dispositivo ("servidor vence"): não volta.
       store().hydrateByView({});
-      expect(current().subGrouping).toBe('assignee');
+      expect(useDisplaySettingsStore.getState().byView[VIEW_KEY]).toBeUndefined();
+      store().setSubGrouping(VIEW_KEY, 'assignee');
       store().hydrateByView({ [VIEW_KEY]: { grouping: 'assignee' } });
       expect(current().subGrouping).toBe('none');
    });
