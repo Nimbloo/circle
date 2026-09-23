@@ -125,6 +125,11 @@ export default function TeamDocumentView({
             versionRef.current = dto.descriptionVersion;
             setDoc(dto);
          } catch (e) {
+            // Apagado por outra aba e o PATCH chegou antes do SSE: mesma tela do evento.
+            if (e instanceof ApiError && e.status === 404) {
+               setStatus('notfound');
+               return;
+            }
             if (!(e instanceof ApiError && e.status === 409)) {
                toast.error(errorReason(e, 'Could not save the document'));
                return;
