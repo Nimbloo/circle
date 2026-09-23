@@ -159,7 +159,6 @@ export interface UpdateLabelInput {
    groupId?: string | null;
 }
 
-/** Atualiza name e/ou color de um label. Retorna null se não existir. */
 /**
  * Teto de eventos individuais antes de virar um evento coarse por time (sem sobrecarregar
  * o cliente com uma rajada de GETs — mesmo critério do resync coarse de import/#7).
@@ -227,6 +226,7 @@ function publishGroupConflictResolution(affected: { issueId: string; teamId: str
       publish({ entity: 'issue', action: 'updated', id: issueId, teamId });
 }
 
+/** Atualiza name/color/groupId de um label. Retorna null se não existir. */
 export async function updateLabel(
    db: Db,
    id: string,
