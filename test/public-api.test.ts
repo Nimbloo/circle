@@ -164,6 +164,35 @@ describe('rotas /api/public/v1', () => {
       expect((await patched.json()).data.title).toBe('Renomeada');
    });
 
+   it('título só com espaços é 400 e espaços nas pontas são removidos', async () => {
+      const jwt = token({ roles: ['member'] });
+      const blank = await createPublicIssue(
+         req('http://x/api/public/v1/issues', jwt, {
+            method: 'POST',
+            body: JSON.stringify({ teamId: 'CORE', title: '   ' }),
+         })
+      );
+      expect(blank.status).toBe(400);
+
+      const created = await createPublicIssue(
+         req('http://x/api/public/v1/issues', jwt, {
+            method: 'POST',
+            body: JSON.stringify({ teamId: 'CORE', title: '  Via API  ' }),
+         })
+      );
+      const issue = (await created.json()).data;
+      expect(issue.title).toBe('Via API');
+
+      const patched = await patchPublicIssue(
+         req(`http://x/api/public/v1/issues/${issue.id}`, jwt, {
+            method: 'PATCH',
+            body: JSON.stringify({ title: '  ' }),
+         }),
+         { params: Promise.resolve({ id: issue.id }) }
+      );
+      expect(patched.status).toBe(400);
+   });
+
    it('service account Guest fica preso aos times dele, na leitura e na escrita', async () => {
       await seedUser(db, {
          name: 'Bot convidado',
