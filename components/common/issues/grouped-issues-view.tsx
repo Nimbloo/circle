@@ -392,7 +392,9 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                   <div className="flex-1 min-h-0 overflow-x-auto">
                      <IssueContextMenuHost>
                         {lanes ? (
-                           <div className="h-full overflow-y-auto">
+                           // "Hidden columns" à direita, como no board sem Rows (antes caía
+                           // embaixo de todas as swimlanes).
+                           <div className="flex h-full min-w-max items-start overflow-y-auto">
                               <BoardSwimlanes
                                  columns={boardGroups.map((entry) => ({
                                     group: entry.group,
@@ -400,11 +402,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                                  }))}
                                  lanes={lanes}
                               />
-                              {hiddenGroups.length > 0 && (
-                                 <div className="px-1">
-                                    <HiddenColumns entries={hiddenGroups} />
-                                 </div>
-                              )}
+                              {hiddenGroups.length > 0 && <HiddenColumns entries={hiddenGroups} />}
                            </div>
                         ) : (
                            <div className="flex h-full min-w-max gap-0 px-1">

@@ -211,6 +211,9 @@ describe('sub-agrupamento: lista e board', () => {
       expect(urgentLane.textContent).toContain('2');
       expect(within(lanes[0]).getByText('Um')).toBeTruthy();
       expect(within(lanes[1]).getByText('Tres')).toBeTruthy();
+      // Sem virtualização 2D: cada card pula layout/pintura fora da tela.
+      const card = within(lanes[0]).getByText('Um').closest('[data-slot="swimlane-card"]');
+      expect(card?.className).toContain('[content-visibility:auto]');
 
       await userEvent.setup().click(urgentLane);
       expect(within(lanes[0]).queryByText('Um')).toBeNull();

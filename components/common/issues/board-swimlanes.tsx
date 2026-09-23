@@ -28,7 +28,9 @@ interface BoardSwimlanesProps {
 
 /**
  * Célula coluna × swimlane: alvo de drop (muda coluna e swimlane) com os cards. Sem
- * virtualização própria — a rolagem é a do board inteiro; o `memo` dos cards segue valendo.
+ * virtualização (2D, com a rolagem do board inteiro, não compensa): cada card usa
+ * `content-visibility: auto`, então o navegador pula layout e pintura dos que estão fora
+ * da tela — com Rows ligado e muitas issues o custo fica no DOM, não no render.
  */
 function Cell({ group, issues }: SwimlaneCell) {
    const ref = useRef<HTMLDivElement>(null);
@@ -44,7 +46,14 @@ function Cell({ group, issues }: SwimlaneCell) {
          )}
       >
          {issues.map((issue) => (
-            <IssueGrid key={issue.id} issue={issue} getGroup={getGroup} layout={false} />
+            <div
+               key={issue.id}
+               data-slot="swimlane-card"
+               // 132px = altura típica do card (mesma estimativa da coluna virtualizada).
+               className="[content-visibility:auto] [contain-intrinsic-size:auto_132px]"
+            >
+               <IssueGrid issue={issue} getGroup={getGroup} layout={false} />
+            </div>
          ))}
       </div>
    );
