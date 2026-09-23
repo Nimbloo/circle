@@ -62,6 +62,21 @@ describe('Resources → Create document…', () => {
       expect(toastMocks.error).not.toHaveBeenCalled();
    });
 
+   it('recarregar os resources falhar não impede abrir o documento já criado', async () => {
+      seedStore(true);
+      const url = '/nimbloo/team/CORE/documents/d1';
+      apiMocks.createDocument.mockResolvedValue({
+         document: { id: 'd1', teamId: 'CORE', url },
+         resource: { id: 'r1', label: 'Checkout — doc', url },
+      });
+      const onChanged = vi.fn().mockRejectedValue(new Error('rede'));
+      const user = userEvent.setup();
+      render(<ProjectResources projectId="P1" resources={[]} onChanged={onChanged} />);
+      await user.click(screen.getByRole('button', { name: /Add document or link/ }));
+      await user.click(await screen.findByRole('menuitem', { name: /Create document/ }));
+      await waitFor(() => expect(push).toHaveBeenCalledWith(url));
+   });
+
    it('falha na API: toast de erro, sem sucesso nem navegação', async () => {
       seedStore(true);
       apiMocks.createDocument.mockRejectedValue(new Error('boom'));

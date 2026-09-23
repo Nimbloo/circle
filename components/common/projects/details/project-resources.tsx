@@ -77,8 +77,10 @@ export function ProjectResources({
       }
       // Documento e vínculo já confirmados pela API (mesma transação).
       toast.success('Documento criado');
-      await onChanged();
+      // Abre o documento de qualquer jeito: ele já existe. O refresh da lista é best-effort
+      // (falha nele não pode prender o usuário aqui nem virar rejeição solta).
       router.push(url);
+      void Promise.resolve(onChanged()).catch(() => {});
    };
 
    const addLink = async () => {
