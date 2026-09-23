@@ -25,10 +25,16 @@ export async function PATCH(req: Request, { params }: Params) {
       await assertInitiativeInScope(db, teamIds, id);
       const input = EditSchema.parse(await req.json());
       return ok(
-         await editInitiativeUpdate(db, id, uid, {
-            health: input.health as InitiativeUpdateHealth | undefined,
-            blocks: input.blocks as ContentBlock[] | undefined,
-         })
+         await editInitiativeUpdate(
+            db,
+            id,
+            uid,
+            {
+               health: input.health as InitiativeUpdateHealth | undefined,
+               blocks: input.blocks as ContentBlock[] | undefined,
+            },
+            email
+         )
       );
    }, req);
 }
@@ -39,7 +45,7 @@ export async function DELETE(req: Request, { params }: Params) {
       const email = await requireEmail(req);
       const { teamIds } = await scopeForEmail(db, email);
       await assertInitiativeInScope(db, teamIds, id);
-      const initiative = await deleteInitiativeUpdate(db, id, uid);
+      const initiative = await deleteInitiativeUpdate(db, id, uid, email);
       return initiative ? ok(initiative) : notFound(`Update '${uid}' não encontrado`);
    }, req);
 }
