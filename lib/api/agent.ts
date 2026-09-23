@@ -67,6 +67,8 @@ export async function invokeText(
 export interface AgentChatMessage {
    role: 'user' | 'assistant';
    content: string;
+   /** A resposta falhou (persistida mesmo assim — ver `sendAgentMessage`). */
+   error?: boolean;
 }
 
 const SYSTEM = `Você é o assistente do Circle, uma ferramenta de gestão de projetos estilo Linear da Nimbloo.
@@ -361,6 +363,9 @@ ${m.content}`;
    return capped;
 }
 
+/** Ferramentas que alteram dados (as demais só leem). */
+const WRITE_TOOLS = new Set(['create_issue', 'update_issue']);
+
 /**
  * Roda o loop de conversa com tool-use até a resposta final de texto.
  * `history` é o diálogo até agora (a última mensagem deve ser do usuário).
@@ -386,6 +391,9 @@ export async function runAgent(
       : SYSTEM;
 
    const toolConfig: ToolConfiguration = { tools: TOOLS };
+   // Escritas já feitas neste turno. Se o provedor cair depois delas, o turno NÃO pode
+   // virar erro com "Tentar de novo": reenviar a pergunta repetiria a escrita.
+   const writes: string[] = [];
 
    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       const res = await (async () => {
@@ -400,9 +408,15 @@ export async function runAgent(
                })
             );
          } catch (e) {
-            throw new AgentProviderError(e);
+            if (writes.length === 0) throw new AgentProviderError(e);
+            return null;
          }
       })();
+      if (!res)
+         return (
+            `Já fiz isto antes de o provedor do Agent falhar:\n${writes.map((w) => `- ${w}`).join('\n')}\n\n` +
+            'Não consegui terminar a resposta. Confira o resultado antes de pedir de novo.'
+         );
 
       const out = res.output?.message;
       if (!out) break;
@@ -414,6 +428,9 @@ export async function runAgent(
             const tu = block.toolUse;
             if (!tu?.name || !tu.toolUseId) continue;
             const result = await runTool(db, me.id, email, tu.name, (tu.input ?? {}) as ToolInput);
+            // Sucesso das ferramentas de escrita é JSON; recusa/erro é texto.
+            if (WRITE_TOOLS.has(tu.name) && result.startsWith('{'))
+               writes.push(`${tu.name}: ${result}`);
             toolResults.push({
                toolResult: { toolUseId: tu.toolUseId, content: [{ text: result }] },
             });
@@ -449,7 +466,8 @@ export async function listAgentChats(db: Db, email: string): Promise<AgentChatSu
    return rows.map((r) => ({ id: r.id, title: r.title, updatedAt: r.updatedAt.toISOString() }));
 }
 
-/** Mensagens de um chat (valida dono). */
+/** Mensagens de um chat (valida dono). `error`: a resposta do assistente falhou (o
+ * turno ficou salvo mesmo assim — não some no reload; a UI oferece "Tentar de novo"). */
 export async function getAgentChat(
    db: Db,
    email: string,
@@ -463,22 +481,28 @@ export async function getAgentChat(
       .limit(1);
    if (!chat) return null;
    const msgs = await db
-      .select({ role: agentMessage.role, content: agentMessage.content })
+      .select({ role: agentMessage.role, content: agentMessage.content, error: agentMessage.error })
       .from(agentMessage)
       .where(eq(agentMessage.chatId, chatId))
       .orderBy(asc(agentMessage.createdAt));
    return {
       id: chat.id,
       title: chat.title,
-      messages: msgs.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+      messages: msgs.map((m) => ({
+         role: m.role as 'user' | 'assistant',
+         content: m.content,
+         error: m.error || undefined,
+      })),
    };
 }
 
 /**
- * Envia uma mensagem: roda o agente com o histórico e, SÓ no sucesso, grava o par
- * user/assistant (e cria o chat se `chatId` for null; título = 1ª msg) numa transação.
- * Falha do Bedrock não deixa turno `user` órfão — antes o próximo envio levava dois
- * `user` seguidos e o Bedrock recusava o chat para sempre (#50).
+ * Envia uma mensagem: grava o turno do usuário ANTES de chamar o provedor — se o
+ * Bedrock falhar, o turno não some (a UI mostra a mensagem com erro e permite
+ * reenviar, em vez de o par inteiro desaparecer no reload). O histórico enviado ao
+ * modelo ignora respostas de erro já persistidas (não são conversa real);
+ * `normalizeHistory` funde os turnos `user` que ficam adjacentes por causa disso —
+ * mesma defesa que evitava dois `user` seguidos no Bedrock (#50).
  */
 export async function sendAgentMessage(
    db: Db,
@@ -493,42 +517,62 @@ export async function sendAgentMessage(
       const chat = await getAgentChat(db, email, chatId);
       if (!chat) throw new ApiError(404, 'Chat não encontrado');
       title = chat.title;
-      history = chat.messages;
+      history = chat.messages.filter((m) => !m.error);
    }
    const isNew = !chatId;
-   let reply: string;
-   try {
-      reply = await runAgent(db, email, [...history, { role: 'user', content }]);
-   } catch (e) {
-      if (e instanceof AgentProviderError)
-         throw new ApiError(
-            503,
-            'O provedor do Agent está indisponível. Sua mensagem não foi salva; tente novamente.'
-         );
-      throw e;
-   }
    const chatKey = chatId ?? randomUUID();
    if (isNew) title = content.trim().slice(0, 80) || 'New chat';
-   const now = new Date();
+
+   const userAt = new Date();
    await db.transaction(async (tx) => {
       if (isNew) {
          await tx
             .insert(agentChat)
-            .values({ id: chatKey, userId: me.id, title, createdAt: now, updatedAt: now });
+            .values({ id: chatKey, userId: me.id, title, createdAt: userAt, updatedAt: userAt });
       } else {
-         await tx.update(agentChat).set({ updatedAt: now }).where(eq(agentChat.id, chatKey));
+         await tx.update(agentChat).set({ updatedAt: userAt }).where(eq(agentChat.id, chatKey));
       }
-      // createdAt explícito: a leitura ordena por ele e o par precisa sair na ordem.
-      await tx.insert(agentMessage).values([
-         { id: randomUUID(), chatId: chatKey, role: 'user', content, createdAt: now },
-         {
+      await tx
+         .insert(agentMessage)
+         .values({ id: randomUUID(), chatId: chatKey, role: 'user', content, createdAt: userAt });
+   });
+
+   let reply: string;
+   try {
+      reply = await runAgent(db, email, [...history, { role: 'user', content }]);
+   } catch (e) {
+      const errorText =
+         e instanceof AgentProviderError
+            ? 'O provedor do Agent está indisponível. Tente de novo.'
+            : 'O Agent falhou ao responder. Tente de novo.';
+      const failedAt = new Date(userAt.getTime() + 1);
+      await db.transaction(async (tx) => {
+         await tx.insert(agentMessage).values({
             id: randomUUID(),
             chatId: chatKey,
             role: 'assistant',
-            content: reply,
-            createdAt: new Date(now.getTime() + 1),
-         },
-      ]);
+            content: errorText,
+            error: true,
+            createdAt: failedAt,
+         });
+         await tx.update(agentChat).set({ updatedAt: failedAt }).where(eq(agentChat.id, chatKey));
+      });
+      // O chat já está gravado: o cliente recebe o id para o retry não criar outro.
+      if (e instanceof AgentProviderError)
+         throw new ApiError(503, errorText, { chatId: chatKey, title });
+      throw e;
+   }
+
+   const now = new Date(userAt.getTime() + 1);
+   await db.transaction(async (tx) => {
+      await tx.insert(agentMessage).values({
+         id: randomUUID(),
+         chatId: chatKey,
+         role: 'assistant',
+         content: reply,
+         createdAt: now,
+      });
+      await tx.update(agentChat).set({ updatedAt: now }).where(eq(agentChat.id, chatKey));
    });
    return { chatId: chatKey, title, reply };
 }

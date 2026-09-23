@@ -345,17 +345,41 @@ function statusOf(pr: GitHubPr): string {
    return 'open';
 }
 
-/** Extrai o identifier da issue resolvida (ex "LNUI-701") do título, branch OU corpo do PR
- * (paridade Linear: reconhece o id no título, no nome do branch e na descrição). */
-function parseResolves(...sources: (string | null | undefined)[]): string | null {
+/** Candidatos a identifier de issue (ex "LNUI-701") no título, branch e corpo do PR, na
+ * ordem em que aparecem (paridade Linear: reconhece o id nos três lugares). */
+function resolveCandidates(...sources: (string | null | undefined)[]): string[] {
+   const out: string[] = [];
    for (const s of sources) {
       if (!s) continue;
-      // case-insensitive: branches usam minúsculo (core-42-...). Ids inexistentes são
-      // ignorados depois (linkPrsToIssues valida contra issues reais), então sem risco.
-      const m = s.match(/\b([A-Za-z]{2,}-\d+)\b/);
-      if (m) return m[1].toUpperCase();
+      // case-insensitive: branches usam minúsculo (core-42-...).
+      for (const m of s.matchAll(/\b([A-Za-z]{2,}-\d+)\b/g)) {
+         const id = m[1].toUpperCase();
+         if (!out.includes(id)) out.push(id);
+      }
    }
-   return null;
+   return out;
+}
+
+/** Tamanho do lote na busca de identifiers (bem abaixo do teto de parâmetros). */
+const IDENTIFIER_LOOKUP_CHUNK = 1000;
+
+/**
+ * Quais candidatos são issues que existem. Só esses viram `resolves_identifier`: "UTF-8"
+ * no título não é ticket, e o sync não pode restaurar o vínculo de uma issue apagada.
+ */
+async function existingIdentifiers(db: Db, candidates: string[]): Promise<Set<string>> {
+   const unique = [...new Set(candidates)];
+   const found = new Set<string>();
+   // Em lotes: o corpo de um PR pode listar muitos identifiers, e um sync junta centenas
+   // de PRs — uma lista só estouraria o teto de parâmetros do Postgres.
+   for (let i = 0; i < unique.length; i += IDENTIFIER_LOOKUP_CHUNK) {
+      const rows = await db
+         .select({ identifier: issueT.identifier })
+         .from(issueT)
+         .where(inArray(issueT.identifier, unique.slice(i, i + IDENTIFIER_LOOKUP_CHUNK)));
+      for (const r of rows) found.add(r.identifier);
+   }
+   return found;
 }
 
 export interface SyncOptions {
@@ -649,8 +673,12 @@ async function syncRepo(db: Db, repo: string, token: string, doFetch: FetchLike)
    // (ex.: CORE-123) viram linha em issue_pr_link, populando o painel "PR links" da
    // issue. Coletado no loop e resolvido em batch no fim (1 query por identifier set).
    const links: PrLinkInput[] = [];
+   const candidatesByPr = new Map(
+      prs.map((pr) => [pr.number, resolveCandidates(pr.title, pr.head?.ref, pr.body)])
+   );
+   const existing = await existingIdentifiers(db, [...candidatesByPr.values()].flat());
    for (const pr of prs) {
-      const resolvesId = parseResolves(pr.title, pr.head?.ref, pr.body);
+      const resolvesId = candidatesByPr.get(pr.number)?.find((id) => existing.has(id)) ?? null;
       const detail = detailByNumber.get(pr.number);
       const depth = depthByNumber.get(pr.number);
       const row = {
@@ -882,7 +910,9 @@ export async function handlePullRequestEvent(
    const pr = payload.pull_request;
    if (!repoFull || !pr) return { linked: null };
    const repo = clip(repoFull, 196) as string;
-   const resolvesId = parseResolves(pr.title, pr.head?.ref, pr.body);
+   const candidates = resolveCandidates(pr.title, pr.head?.ref, pr.body);
+   const existing = await existingIdentifiers(db, candidates);
+   const resolvesId = candidates.find((id) => existing.has(id)) ?? null;
    const status = statusOf(pr);
    const title = clip(pr.title, 512) as string;
    // `syncedAt` guarda "estado do PR conhecido até": o `updated_at` do GitHub no webhook,

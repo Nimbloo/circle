@@ -20,6 +20,12 @@ export interface ReviewCommentsHandle {
    meId?: string;
    isAdmin: boolean;
    mutate: (fn: (comments: ReviewComment[]) => ReviewComment[]) => void;
+   /**
+    * Marca/desmarca um arquivo como revisado (otimista no dono do estado). Rejeita se a
+    * API recusar, para o `DiffView` desfazer o próprio toggle. O estado vindo do servidor
+    * NÃO fica no handle: mudaria a identidade dele e re-renderizaria todos os arquivos.
+    */
+   setFileReviewed: (path: string, reviewed: boolean) => Promise<void>;
 }
 
 const VERDICT_LABEL: Record<ReviewVerdictKind, string> = {

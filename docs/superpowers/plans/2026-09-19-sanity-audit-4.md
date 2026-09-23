@@ -18,7 +18,7 @@
 - **Última verificação:** 2026-09-19, Claude:
    - `pnpm test` com 373 arquivos e 1.881 testes, exit 0; typecheck, lint e build limpos;
    - remedição no navegador de 15 achados graves, todos ✅ (spec, seção "Remedição").
-- **Próximo passo:** PR empilhado sobre `danilo/circle-loading`; o que não foi remedido no navegador (baixas, mobile e lacunas novas) fica para avaliação manual.
+- **Em produção:** release `v0.41.0` (PRs #170–#175), rollout em 2026-09-19; 52 migrations aplicadas no pod novo, sem restarts. As pendências desta rodada foram tratadas na rodada 5 (`2026-09-22-sanity-audit-5-findings.md`).
 - **Bloqueios:** nenhum. A extensão do Chrome não está conectada, então não houve comparação lado a lado com o Linear real.
 
 ## Decisões do usuário (2026-09-19)

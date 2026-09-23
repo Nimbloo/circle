@@ -1,6 +1,12 @@
 'use client';
 
-import { addReviewComment, fetchReview, latestVerdict } from '@/lib/adapters-reviews';
+import {
+   addReviewComment,
+   fetchReview,
+   fetchReviewedPaths,
+   latestVerdict,
+   setReviewFileState,
+} from '@/lib/adapters-reviews';
 import { EmptyState } from '@/components/common/empty-state';
 import { ErrorState } from '@/components/common/error-state';
 import { LoadingArea, useEnterFade } from '@/components/common/loading-area';
@@ -64,6 +70,9 @@ export function ReviewDetail({
    const [loading, setLoading] = useState(true);
    const [reloadKey, setReloadKey] = useState(0);
    const [verdictBusy, setVerdictBusy] = useState<ReviewVerdictKind | null>(null);
+   // "Reviewed" por arquivo (#XX): undefined enquanto o servidor não respondeu — o
+   // DiffView usa o localStorage como cache inicial até este set chegar.
+   const [reviewedPaths, setReviewedPaths] = useState<Set<string> | undefined>(undefined);
 
    useEffect(() => {
       let active = true;
@@ -87,6 +96,26 @@ export function ReviewDetail({
          })
          .finally(() => {
             if (active) setLoading(false);
+         });
+      return () => {
+         active = false;
+      };
+   }, [reviewId, reloadKey]);
+
+   // "Reviewed" por arquivo: carga independente (não bloqueia o detalhe) — refaz junto
+   // com `reloadKey` para pegar o que outra aba do mesmo usuário marcou (#XX).
+   // Toggle feito depois de um GET sair invalida a resposta dele (senão ela apagaria o
+   // otimista); o próximo reload traz o estado confirmado.
+   const reviewedToggleSeq = useRef(0);
+   useEffect(() => {
+      let active = true;
+      const seq = reviewedToggleSeq.current;
+      fetchReviewedPaths(reviewId)
+         .then((paths) => {
+            if (active && seq === reviewedToggleSeq.current) setReviewedPaths(new Set(paths));
+         })
+         .catch(() => {
+            // degrada: DiffView segue no cache do localStorage.
          });
       return () => {
          active = false;
@@ -122,9 +151,39 @@ export function ReviewDetail({
       });
    }, []);
 
+   /** Otimista + rollback (Ad#XX): toggle imediato, desfaz e avisa se a API recusar. */
+   const setFileReviewed = useCallback(
+      (path: string, reviewed: boolean) => {
+         ownMutationAtRef.current = Date.now();
+         reviewedToggleSeq.current++;
+         // Sem o set do servidor ainda, NÃO cria um parcial (zeraria os outros arquivos):
+         // o DiffView já aplicou o toggle localmente e desfaz se a API recusar.
+         const toggle = (prev: Set<string> | undefined, on: boolean) => {
+            if (!prev) return prev;
+            const next = new Set(prev);
+            if (on) next.add(path);
+            else next.delete(path);
+            return next;
+         };
+         setReviewedPaths((prev) => toggle(prev, reviewed));
+         return setReviewFileState(reviewId, path, reviewed).catch((e) => {
+            setReviewedPaths((prev) => toggle(prev, !reviewed));
+            toast.error('Could not save the reviewed state');
+            throw e;
+         });
+      },
+      [reviewId]
+   );
+
    const handle = useMemo<ReviewCommentsHandle>(
-      () => ({ reviewId, meId: me?.id, isAdmin: !!me?.admin, mutate: mutateComments }),
-      [reviewId, me?.id, me?.admin, mutateComments]
+      () => ({
+         reviewId,
+         meId: me?.id,
+         isAdmin: !!me?.admin,
+         mutate: mutateComments,
+         setFileReviewed,
+      }),
+      [reviewId, me?.id, me?.admin, mutateComments, setFileReviewed]
    );
 
    const submitVerdict = async (kind: ReviewVerdictKind) => {
@@ -233,7 +292,7 @@ export function ReviewDetail({
          </div>
          <div className="flex-1 min-h-0 overflow-hidden">
             {section === 'diff' ? (
-               <ReviewDiff review={review} handle={handle} />
+               <ReviewDiff review={review} handle={handle} reviewedPaths={reviewedPaths} />
             ) : section === 'guide' ? (
                <ReviewGuide review={review} />
             ) : (

@@ -25,9 +25,12 @@ export function countIssuesBy(issues: Issue[], keyOf: IssueCountKey): Map<string
  * no trigger acordava toda linha da lista a cada evento SSE. `keyOf` deve ser estável
  * (constante de módulo).
  */
-export function useIssueCounts(keyOf: IssueCountKey): Map<string, number> {
+export function useIssueCounts(keyOf: IssueCountKey, teamId?: string): Map<string, number> {
    const issues = useIssuesStore((s) => s.issues);
-   return useMemo(() => countIssuesBy(issues, keyOf), [issues, keyOf]);
+   return useMemo(() => {
+      const scoped = teamId ? issues.filter((i) => i.teamId === teamId) : issues;
+      return countIssuesBy(scoped, keyOf);
+   }, [issues, keyOf, teamId]);
 }
 
 /** Render-prop de `useIssueCounts` para envolver o conteúdo de um popover. */

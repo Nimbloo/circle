@@ -225,6 +225,7 @@ export function CreateNewIssue() {
                   <TemplateSelector teamId={formTeamId} onApply={applyTemplate} />
                   <StatusSelector
                      status={addIssueForm.status}
+                     teamId={formTeamId}
                      onChange={(newStatus) =>
                         setAddIssueForm({ ...addIssueForm, status: newStatus })
                      }

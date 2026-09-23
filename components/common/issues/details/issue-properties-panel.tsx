@@ -216,7 +216,7 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
          <Section title="Properties">
             <div className="flex flex-col">
                <PropertyRow label="Status">
-                  <StatusSelector status={issue.status} issueId={issue.id}>
+                  <StatusSelector status={issue.status} issueId={issue.id} teamId={issue.teamId}>
                      <PropertyValue
                         ref={setTrigger('status')}
                         placeholder="Add status"

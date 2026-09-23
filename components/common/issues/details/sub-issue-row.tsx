@@ -13,6 +13,8 @@ export interface SubIssueRowProps {
    status: Status;
    assignee: User | null;
    orgId: string;
+   /** Time dono da sub-issue (herda o da issue pai) — escopa a contagem do seletor. */
+   teamId?: string;
 }
 
 /**
@@ -20,10 +22,18 @@ export interface SubIssueRowProps {
  * seletores vivos FORA do link — antes ficavam dentro do `<Link>` e o clique
  * navegava em vez de abrir o menu.
  */
-export function SubIssueRow({ id, identifier, title, status, assignee, orgId }: SubIssueRowProps) {
+export function SubIssueRow({
+   id,
+   identifier,
+   title,
+   status,
+   assignee,
+   orgId,
+   teamId,
+}: SubIssueRowProps) {
    return (
       <div className="flex h-10 min-w-0 items-center gap-1.5 border-b border-border/50 px-1 text-sm hover:bg-sidebar/50 focus-within:bg-sidebar/50">
-         <StatusSelector status={status} issueId={id} />
+         <StatusSelector status={status} issueId={id} teamId={teamId} />
          <Link
             href={`/${orgId}/issue/${identifier}`}
             className="flex min-w-0 flex-1 items-center gap-2.5"

@@ -120,6 +120,7 @@ export const useAgentChatStore = create<AgentChatState>((set) => ({
                      id: `${chatId}-${i}`,
                      role: m.role,
                      content: m.content,
+                     error: m.error || undefined,
                   })),
                };
             }),

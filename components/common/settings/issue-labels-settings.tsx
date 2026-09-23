@@ -294,8 +294,10 @@ function GroupDialog({
 type LabelRowData = LabelInterface & { issues: number };
 
 function RowActions({ children }: { children: React.ReactNode }) {
+   // Largura ao conteúdo (não fixa): a linha de grupo tem 3 botões (Add/Rename/Delete)
+   // e a de label tem 2 (Edit/Delete) — uma largura fixa única estourava a de 3.
    return (
-      <div className="flex w-[84px] shrink-0 items-center justify-end gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/row:opacity-100 max-md:opacity-100">
+      <div className="flex shrink-0 items-center justify-end gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/row:opacity-100 max-md:opacity-100">
          {children}
       </div>
    );
@@ -537,7 +539,7 @@ export default function IssueLabelsSettings() {
                   />
                )
             ) : (
-               <SettingsCard>
+               <SettingsCard className="content-enter">
                   {grouped.map(({ group, labels: groupLabels, size }) => {
                      const open = !collapsed[group.id] || !!query.trim();
                      return (

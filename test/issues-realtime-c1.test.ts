@@ -215,9 +215,11 @@ describe('lexorank (#25)', () => {
 
 describe('label exclusiva (#32)', () => {
    it('adicionar label de grupo mantém uma por grupo', async () => {
+      // Nome distinto do já semeado ('Feature', grupo 'kind') — desde o índice único
+      // de nome (Ad#XX) um nome duplicado não entra.
       await db
          .insert(labelT)
-         .values({ id: 'feature-x', name: 'Feature', color: 'blue', groupId: 'kind' });
+         .values({ id: 'feature-x', name: 'Feature X', color: 'blue', groupId: 'kind' });
       await addLabel(db, fx.issueId, 'bug', fx.ownerEmail);
       await addLabel(db, fx.issueId, 'feature-x', fx.ownerEmail);
       const links = await db.select().from(issueLabel).where(eq(issueLabel.issueId, fx.issueId));

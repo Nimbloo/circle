@@ -1,9 +1,10 @@
-import { and, asc, eq, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    label as labelT,
    labelGroup as labelGroupT,
    initiativeLabel,
+   issue as issueT,
    issueLabel,
    projectLabel,
 } from '@/db/schema';
@@ -88,6 +89,19 @@ async function nameTaken(db: Db, name: string, exceptId?: string): Promise<boole
 /** Tentativas de sufixo para achar um slug livre (`x`, `x-2`, `x-3`…). */
 const MAX_SLUG_ATTEMPTS = 50;
 
+/** Violou o índice único `label_name_lower_unique` (23505 do Postgres)? Corrida entre
+ * criações/renomeações concorrentes com o mesmo name — a checagem `nameTaken` acima não
+ * é atômica sozinha; o índice é o cinto de segurança. */
+function isNameUniqueViolation(e: unknown): boolean {
+   // O driver (postgres-js/pglite) lança a exception nativa; o `db.transaction`/query
+   // builder do Drizzle às vezes embrulha em `DrizzleQueryError` com a causa original em
+   // `.cause` — checa os dois níveis.
+   const code = (e as { code?: string } | null)?.code;
+   if (code === '23505') return true;
+   const cause = (e as { cause?: { code?: string } } | null)?.cause;
+   return cause?.code === '23505';
+}
+
 /**
  * Cria um label. O NOME é único (409, sem diferenciar caixa — Ad#34). Sem id explícito,
  * o id é o slug do name, com sufixo quando outro nome já gerou o mesmo slug (antes dava
@@ -103,20 +117,32 @@ export async function createLabel(db: Db, input: CreateLabelInput): Promise<Labe
    const explicit = input.id?.trim();
    if (explicit) {
       if (await getLabelRow(db, explicit)) throw new ApiError(409, `Label '${explicit}' já existe`);
-      await db.insert(labelT).values({ id: explicit, name, color, groupId });
+      try {
+         await db.insert(labelT).values({ id: explicit, name, color, groupId });
+      } catch (e) {
+         if (isNameUniqueViolation(e)) throw new ApiError(409, `Label '${name}' já existe`);
+         throw e;
+      }
       return created(db, explicit);
    }
 
    const base = (slugify(name) || 'label').slice(0, 56);
    for (let n = 1; n <= MAX_SLUG_ATTEMPTS; n++) {
       const id = n === 1 ? base : `${base}-${n}`;
-      // `onConflictDoNothing`: outro create concorrente pode ter pego o mesmo slug.
-      const inserted = await db
-         .insert(labelT)
-         .values({ id, name, color, groupId })
-         .onConflictDoNothing()
-         .returning({ id: labelT.id });
-      if (inserted.length > 0) return created(db, id);
+      try {
+         // `onConflictDoNothing` mirado no id: outro create concorrente pode ter pego o
+         // mesmo slug — tenta o próximo sufixo. Conflito no NOME (índice único) não tem
+         // arbiter aqui, então lança normalmente e vira 409 claro no catch abaixo.
+         const inserted = await db
+            .insert(labelT)
+            .values({ id, name, color, groupId })
+            .onConflictDoNothing({ target: labelT.id })
+            .returning({ id: labelT.id });
+         if (inserted.length > 0) return created(db, id);
+      } catch (e) {
+         if (isNameUniqueViolation(e)) throw new ApiError(409, `Label '${name}' já existe`);
+         throw e;
+      }
    }
    throw new ApiError(409, `Não foi possível gerar um id livre para '${name}'`);
 }
@@ -133,7 +159,62 @@ export interface UpdateLabelInput {
    groupId?: string | null;
 }
 
-/** Atualiza name e/ou color de um label. Retorna null se não existir. */
+/**
+ * Teto de eventos individuais antes de virar um evento coarse por time (sem sobrecarregar
+ * o cliente com uma rajada de GETs — mesmo critério do resync coarse de import/#7).
+ */
+const COARSE_EVENT_THRESHOLD = 20;
+
+/**
+ * Ao mover uma label para um grupo (paridade Linear: no máximo uma label do grupo por
+ * issue — mesma regra de `addLabel`/create em issues.ts), alguma issue pode já ter OUTRA
+ * label do grupo destino. Escolha determinística: a label que já estava no grupo fica; a
+ * label movida é desvinculada dessas issues (ela troca de categoria — não faz sentido
+ * herdar um vínculo criado sob a categoria antiga). Roda dentro da transação do caller.
+ */
+async function unlinkMovedLabelFromGroupConflicts(
+   tx: Db,
+   movedLabelId: string,
+   targetGroupId: string
+): Promise<{ issueId: string; teamId: string }[]> {
+   // Tudo por subquery: uma label muito usada viraria milhares de parâmetros (teto do
+   // Postgres) se os ids das issues fossem materializados aqui.
+   const siblingIds = tx
+      .select({ id: labelT.id })
+      .from(labelT)
+      .where(and(eq(labelT.groupId, targetGroupId), ne(labelT.id, movedLabelId)));
+   const issuesWithSibling = tx
+      .select({ issueId: issueLabel.issueId })
+      .from(issueLabel)
+      .where(inArray(issueLabel.labelId, siblingIds));
+
+   const conflictOf = and(
+      eq(issueLabel.labelId, movedLabelId),
+      inArray(issueLabel.issueId, issuesWithSibling)
+   );
+   const affected = await tx
+      .select({ issueId: issueLabel.issueId, teamId: issueT.teamId })
+      .from(issueLabel)
+      .innerJoin(issueT, eq(issueT.id, issueLabel.issueId))
+      .where(conflictOf);
+   if (affected.length === 0) return [];
+   await tx.delete(issueLabel).where(conflictOf);
+   return affected;
+}
+
+/** Avisa as issues afetadas pela desvinculação acima; coarse por time se passar do teto. */
+function publishGroupConflictResolution(affected: { issueId: string; teamId: string }[]): void {
+   if (affected.length === 0) return;
+   if (affected.length > COARSE_EVENT_THRESHOLD) {
+      for (const teamId of new Set(affected.map((a) => a.teamId)))
+         publish({ entity: 'issue', action: 'updated', teamId });
+      return;
+   }
+   for (const { issueId, teamId } of affected)
+      publish({ entity: 'issue', action: 'updated', id: issueId, teamId });
+}
+
+/** Atualiza name/color/groupId de um label. Retorna null se não existir. */
 export async function updateLabel(
    db: Db,
    id: string,
@@ -154,7 +235,27 @@ export async function updateLabel(
    if (patch.groupId !== undefined) next.groupId = await resolveGroupId(db, patch.groupId);
 
    if (Object.keys(next).length > 0) {
-      await db.update(labelT).set(next).where(eq(labelT.id, id));
+      const movingIntoGroup = next.groupId != null && next.groupId !== existing.groupId;
+      let affected: { issueId: string; teamId: string }[] = [];
+      try {
+         if (movingIntoGroup) {
+            await db.transaction(async (tx) => {
+               await tx.update(labelT).set(next).where(eq(labelT.id, id));
+               affected = await unlinkMovedLabelFromGroupConflicts(
+                  tx as unknown as Db,
+                  id,
+                  next.groupId!
+               );
+            });
+         } else {
+            await db.update(labelT).set(next).where(eq(labelT.id, id));
+         }
+      } catch (e) {
+         if (isNameUniqueViolation(e) && next.name)
+            throw new ApiError(409, `Label '${next.name}' já existe`);
+         throw e;
+      }
+      publishGroupConflictResolution(affected);
    }
    publish({ entity: 'label', action: 'updated', id });
    return toDto({ ...existing, ...next });

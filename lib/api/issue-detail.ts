@@ -85,6 +85,8 @@ export interface SubIssueRef {
    identifier: string;
    title: string;
    statusId: string;
+   /** Time da filha: o seletor de status dela conta as issues deste time. */
+   teamId: string;
    assignee: UserRef | null;
 }
 
@@ -231,6 +233,7 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
                identifier: issueT.identifier,
                title: issueT.title,
                statusId: issueT.statusId,
+               teamId: issueT.teamId,
                assigneeId: issueT.assigneeId,
             })
             .from(issueT)
@@ -246,6 +249,7 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
       identifier: c.identifier,
       title: c.title,
       statusId: c.statusId,
+      teamId: c.teamId,
       assignee: userRef(c.assigneeId ? assignees.get(c.assigneeId) : undefined),
    }));
    return {

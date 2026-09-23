@@ -94,6 +94,54 @@ describe('github webhook: handlePullRequestEvent', () => {
       expect(await db.select().from(issuePrLink)).toHaveLength(0);
    });
 
+   it('identifier sem issue não é gravado como "resolves" (ex.: "UTF-8" no título)', async () => {
+      const db = await makeTestDb();
+      await seedTeam(db, 'ENG');
+      const res = await handlePullRequestEvent(
+         db,
+         prEvent({ title: 'UTF-8 no parser', head: { ref: 'x' } })
+      );
+      expect(res.linked).toBeNull();
+      const [rev] = await db.select().from(review);
+      expect(rev.resolvesIdentifier).toBeNull();
+      expect(rev.resolvesTitle).toBeNull();
+   });
+
+   it('pula o candidato inexistente e usa o primeiro identifier que é issue', async () => {
+      const db = await makeTestDb();
+      await seedIssue(db);
+      const res = await handlePullRequestEvent(
+         db,
+         prEvent({ title: 'UTF-8 no parser (ENG-1)', head: { ref: 'x' } })
+      );
+      expect(res.linked).toBe('ENG-1');
+      const [rev] = await db.select().from(review);
+      expect(rev.resolvesIdentifier).toBe('ENG-1');
+   });
+
+   it('re-entrega depois de a issue ser apagada não restaura o vínculo', async () => {
+      const db = await makeTestDb();
+      await seedIssue(db);
+      await handlePullRequestEvent(db, prEvent());
+      await db.delete(issuePrLink);
+      await db.delete(issue).where(eq(issue.id, 'iss-eng-1'));
+      await db.update(review).set({ resolvesIdentifier: null, resolvesTitle: null });
+      await handlePullRequestEvent(db, prEvent({ updated_at: '2030-01-01T00:00:00Z' }));
+      const [rev] = await db.select().from(review);
+      expect(rev.resolvesIdentifier).toBeNull();
+   });
+
+   it('corpo com milhares de identifiers: acha a issue real depois do 1º lote', async () => {
+      const db = await makeTestDb();
+      await seedIssue(db);
+      const noise = Array.from({ length: 2500 }, (_, i) => `ZZ-${i + 1}`).join(' ');
+      const res = await handlePullRequestEvent(
+         db,
+         prEvent({ title: 'release', head: { ref: 'x' }, body: `${noise} ENG-1` })
+      );
+      expect(res.linked).toBe('ENG-1');
+   });
+
    it('returns linked:null on a malformed payload', async () => {
       const db = await makeTestDb();
       expect((await handlePullRequestEvent(db, {})).linked).toBeNull();

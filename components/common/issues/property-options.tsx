@@ -39,14 +39,17 @@ function Count({ n }: { n: number }) {
 
 export function StatusOptions({
    value,
+   teamId,
    onSelect,
 }: {
    value: string | undefined;
+   /** Escopa a contagem ao time da issue/modal/rota — sem isto, conta issues de todos os times. */
+   teamId?: string;
    onSelect: (statusId: string) => void;
 }) {
    // is#19: ordem de workflow (triage → … → canceled), não a ordem crua do catálogo.
    const allStatus = useWorkflowOrderedStatuses();
-   const counts = useIssueCounts(byStatus);
+   const counts = useIssueCounts(byStatus, teamId);
    return (
       <Command>
          <CommandInput placeholder="Set status..." />

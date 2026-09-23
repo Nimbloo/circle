@@ -12,6 +12,8 @@ import { StatusOptions } from './property-options';
 interface StatusSelectorProps {
    status: Status;
    issueId: string;
+   /** Time dono da issue — escopa a contagem do seletor (senão conta todos os times). */
+   teamId?: string;
    /** Exibe o nome do status dentro do trigger (linha inteira clicável — padrão Linear). */
    showName?: boolean;
    /** Trigger de 16px usado dentro dos cards compactos do board. */
@@ -23,6 +25,7 @@ interface StatusSelectorProps {
 export function StatusSelector({
    status,
    issueId,
+   teamId,
    showName = false,
    compact = false,
    children,
@@ -76,7 +79,7 @@ export function StatusSelector({
                className="border-input w-full min-w-[var(--radix-popper-anchor-width)] p-0"
                align="start"
             >
-               <StatusOptions value={value} onSelect={handleStatusChange} />
+               <StatusOptions value={value} teamId={teamId} onSelect={handleStatusChange} />
             </PopoverContent>
          </Popover>
       </div>

@@ -45,7 +45,10 @@ beforeEach(() => {
    vi.clearAllMocks();
    vi.useFakeTimers();
    seedCatalog();
-   useIssuesStore.setState({ issues: [make('a'), make('b'), make('c')] });
+   useIssuesStore.setState({
+      issues: [make('a'), make('b'), make('c')],
+      remoteDeletedIds: new Set(),
+   });
    act(() => useBulkSelectionStore.getState().clear());
 });
 afterEach(() => vi.useRealTimers());
@@ -82,6 +85,20 @@ describe('excluir issue com Undo (is#16)', () => {
       expect(apiMocks.remove).not.toHaveBeenCalled();
    });
 
+   it('removeRemote durante a janela invalida o Undo (outra aba já apagou)', async () => {
+      act(() => void deleteIssuesWithUndo(['b']));
+      expect(ids()).toEqual(['a', 'c']);
+
+      act(() => useIssuesStore.getState().removeRemote('b'));
+      act(() => undoAction()?.onClick());
+      expect(ids()).toEqual(['a', 'c']); // não volta
+
+      await act(async () => {
+         vi.advanceTimersByTime(DELETE_UNDO_MS + 10);
+      });
+      expect(apiMocks.remove).not.toHaveBeenCalled(); // sem DELETE inútil (404)
+   });
+
    it('DELETE que falha devolve a issue para a lista', async () => {
       apiMocks.remove.mockRejectedValueOnce(new Error('boom'));
       act(() => void deleteIssuesWithUndo(['b']));
@@ -91,6 +108,26 @@ describe('excluir issue com Undo (is#16)', () => {
          await Promise.resolve();
       });
       expect(ids()).toEqual(['a', 'b', 'c']);
+   });
+
+   it('DELETE em voo que falha depois de outra aba apagar não devolve a issue', async () => {
+      let reject!: (e: unknown) => void;
+      apiMocks.remove.mockImplementationOnce(
+         () => new Promise((_, r) => (reject = r)) as Promise<{ deleted: boolean }>
+      );
+      act(() => void deleteIssuesWithUndo(['b']));
+      await act(async () => {
+         vi.advanceTimersByTime(DELETE_UNDO_MS + 10);
+      });
+      expect(apiMocks.remove).toHaveBeenCalledWith('b');
+      act(() => useIssuesStore.getState().removeRemote('b'));
+      await act(async () => {
+         reject(Object.assign(new Error('not found'), { status: 404 }));
+         await Promise.resolve();
+         await Promise.resolve();
+      });
+      expect(ids()).toEqual(['a', 'c']);
+      expect(toastMock.error).not.toHaveBeenCalled();
    });
 
    it('sair da página dentro da janela envia o DELETE na hora (sem perder a exclusão)', () => {

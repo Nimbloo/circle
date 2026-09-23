@@ -15,17 +15,24 @@ vi.mock('@aws-sdk/client-bedrock-runtime', () => ({
 
 import { randomUUID } from 'node:crypto';
 import { makeTestDb } from './helpers/db';
+import { seedTeam } from './helpers/fixtures';
 import { __setTestDb } from '@/db';
-import { agentChat, agentMessage } from '@/db/schema';
+import { agentChat, agentMessage, issue as issueT } from '@/db/schema';
 import { getOrCreateUser } from '@/lib/api/users';
 import { getAgentChat, listAgentChats, sendAgentMessage } from '@/lib/api/agent';
 import { POST as sendChat } from '@/app/api/v1/agent/chats/route';
+import { GET as getChat } from '@/app/api/v1/agent/chats/[id]/route';
 
 /**
  * #50 — falha do Bedrock gravava a mensagem do usuário sem resposta; o próximo envio
  * mandava dois turnos `user` seguidos e o Bedrock recusava (chat quebrado para sempre).
- * Agora o par user/assistant só é gravado no sucesso, histórico legado com turnos
- * repetidos é fundido e o histórico enviado ao modelo tem teto.
+ *
+ * A mensagem do usuário é gravada ANTES de chamar o provedor; na falha, a resposta
+ * também é gravada (role=assistant, error=true) em vez de sumir — o chat sobrevive ao
+ * reload e a UI pode oferecer "Tentar de novo". O histórico enviado ao modelo ignora
+ * respostas de erro (não são conversa real); os turnos `user` que ficam adjacentes por
+ * causa disso são fundidos por `normalizeHistory` — mesma defesa do #50, agora aplicada
+ * também aqui. Histórico legado com turnos repetidos é fundido e tem teto.
  */
 const ME = 'dev@nimbloo.ai';
 const reply = (text: string) => ({
@@ -39,15 +46,29 @@ const sentMessages = (call: number) => (sendMock.mock.calls[call][0].input as Se
 beforeEach(() => sendMock.mockReset());
 
 describe('agent: persistência robusta a falha do Bedrock (#50)', () => {
-   it('falha no 1º envio não cria chat nem grava mensagem', async () => {
+   it('falha no 1º envio cria o chat e grava o par user/assistant(error)', async () => {
       const db = await makeTestDb();
       sendMock.mockRejectedValueOnce(new Error('ThrottlingException'));
-      await expect(sendAgentMessage(db, ME, null, 'oi')).rejects.toThrow();
-      expect(await listAgentChats(db, ME)).toHaveLength(0);
-      expect(await db.select().from(agentMessage)).toHaveLength(0);
+      await expect(sendAgentMessage(db, ME, null, 'oi')).rejects.toMatchObject({ status: 503 });
+
+      const chats = await listAgentChats(db, ME);
+      expect(chats).toHaveLength(1);
+      const msgs = await db.select().from(agentMessage);
+      expect(msgs).toHaveLength(2);
+      expect(msgs.map((m) => [m.role, m.error])).toEqual([
+         ['user', false],
+         ['assistant', true],
+      ]);
+      expect(msgs[0].content).toBe('oi');
+
+      const chat = await getAgentChat(db, ME, chats[0].id);
+      expect(chat?.messages).toEqual([
+         { role: 'user', content: 'oi' },
+         { role: 'assistant', content: expect.any(String), error: true },
+      ]);
    });
 
-   it('rota avisa indisponibilidade do provedor com 503 e não persiste o chat falho', async () => {
+   it('rota avisa indisponibilidade do provedor com 503 mas persiste o turno (não some no reload)', async () => {
       const db = await makeTestDb();
       __setTestDb(db);
       sendMock.mockRejectedValueOnce(new Error('ThrottlingException'));
@@ -61,9 +82,13 @@ describe('agent: persistência robusta a falha do Bedrock (#50)', () => {
       );
 
       expect(res.status).toBe(503);
-      expect((await res.json()).detail).toContain('provedor do Agent');
-      expect(await listAgentChats(db, ME)).toHaveLength(0);
-      expect(await db.select().from(agentMessage)).toHaveLength(0);
+      const body = await res.json();
+      expect(body.detail).toContain('provedor do Agent');
+      // O chat já foi gravado: o cliente precisa do id para o retry não criar outro.
+      const chats = await listAgentChats(db, ME);
+      expect(chats).toHaveLength(1);
+      expect(body).toMatchObject({ chatId: chats[0].id, title: 'oi' });
+      expect(await db.select().from(agentMessage)).toHaveLength(2);
    });
 
    it('falha num chat existente não deixa turno user órfão; o reenvio funciona', async () => {
@@ -73,10 +98,14 @@ describe('agent: persistência robusta a falha do Bedrock (#50)', () => {
 
       sendMock.mockRejectedValueOnce(new Error('ThrottlingException'));
       await expect(sendAgentMessage(db, ME, chatId, 'e aí?')).rejects.toThrow();
-      expect((await getAgentChat(db, ME, chatId))?.messages).toHaveLength(2);
+      const failed = (await getAgentChat(db, ME, chatId))?.messages;
+      expect(failed).toHaveLength(4);
+      expect(failed?.at(-1)).toMatchObject({ role: 'assistant', error: true });
 
       sendMock.mockResolvedValueOnce(reply('tudo certo'));
       await sendAgentMessage(db, ME, chatId, 'e aí?');
+      // A resposta de erro já persistida não vai ao modelo — só os turnos reais, com
+      // os dois `user` adjacentes (o que falhou + o reenvio) fundidos em um.
       const roles = sentMessages(2).map((m) => m.role);
       expect(roles).toEqual(['user', 'assistant', 'user']);
       expect((await getAgentChat(db, ME, chatId))?.messages.map((m) => m.role)).toEqual([
@@ -84,6 +113,40 @@ describe('agent: persistência robusta a falha do Bedrock (#50)', () => {
          'assistant',
          'user',
          'assistant',
+         'user',
+         'assistant',
+      ]);
+   });
+
+   it('pela rota: mensagem com erro sobrevive ao "reload" (GET /agent/chats/{id})', async () => {
+      const db = await makeTestDb();
+      __setTestDb(db);
+      sendMock.mockRejectedValueOnce(new Error('ThrottlingException'));
+
+      const sendRes = await sendChat(
+         new Request('http://x/api/v1/agent/chats', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-forwarded-email': ME },
+            body: JSON.stringify({ content: 'oi, tudo bem?' }),
+         })
+      );
+      expect(sendRes.status).toBe(503);
+
+      const [chat] = await listAgentChats(db, ME);
+      expect(chat).toBeDefined();
+
+      // "Reload": GET pela rota, como a UI faria ao reabrir o chat.
+      const getRes = await getChat(
+         new Request(`http://x/api/v1/agent/chats/${chat.id}`, {
+            headers: { 'x-forwarded-email': ME },
+         }),
+         { params: Promise.resolve({ id: chat.id }) }
+      );
+      expect(getRes.status).toBe(200);
+      const body = await getRes.json();
+      expect(body.data.messages).toEqual([
+         { role: 'user', content: 'oi, tudo bem?' },
+         { role: 'assistant', content: expect.any(String), error: true },
       ]);
    });
 
@@ -146,5 +209,39 @@ describe('agent: persistência robusta a falha do Bedrock (#50)', () => {
       expect(msgs.length).toBeLessThanOrEqual(41);
       expect(msgs[0].role).toBe('user');
       expect(msgs.at(-1)?.content[0].text).toBe('última');
+   });
+
+   it('falha do provedor DEPOIS de criar uma issue: turno vira resposta com o que foi feito, sem retry', async () => {
+      const db = await makeTestDb();
+      await seedTeam(db, 'CORE');
+      sendMock
+         .mockResolvedValueOnce({
+            stopReason: 'tool_use',
+            output: {
+               message: {
+                  role: 'assistant',
+                  content: [
+                     {
+                        toolUse: {
+                           name: 'create_issue',
+                           toolUseId: 't1',
+                           input: { team: 'CORE', title: 'Bug do login' },
+                        },
+                     },
+                  ],
+               },
+            },
+         })
+         .mockRejectedValueOnce(new Error('ThrottlingException'));
+
+      const res = await sendAgentMessage(db, ME, null, 'cria uma issue de bug do login');
+
+      const issues = await db.select().from(issueT);
+      expect(issues).toHaveLength(1);
+      // Não é erro: o "Tentar de novo" reenviaria a pergunta e criaria a issue de novo.
+      expect(res.reply).toContain(issues[0].identifier);
+      const chat = await getAgentChat(db, ME, res.chatId);
+      expect(chat?.messages.at(-1)).toMatchObject({ role: 'assistant' });
+      expect(chat?.messages.at(-1)?.error).toBeFalsy();
    });
 });

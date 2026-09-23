@@ -42,6 +42,7 @@ import {
    useCallback,
    useContext,
    useEffect,
+   useLayoutEffect,
    useRef,
    useState,
    useSyncExternalStore,
@@ -53,6 +54,30 @@ import { healthColor } from './progress-colors';
 
 interface ProjectsTimelineProps {
    groups: ProjectGroup[];
+}
+
+/** Congela a ordem das linhas por ~300ms após soltar um arraste (pl#17). */
+const DRAG_ORDER_FREEZE_MS = 300;
+
+/** Aplica a ordem de IDs congelada por grupo; projetos novos entram no fim. */
+function applyFrozenOrder(groups: ProjectGroup[], frozen: Map<string, string[]>): ProjectGroup[] {
+   return groups.map((group) => {
+      const order = frozen.get(group.id);
+      if (!order) return group;
+      const byId = new Map(group.projects.map((project) => [project.id, project]));
+      const ordered: Project[] = [];
+      for (const id of order) {
+         const project = byId.get(id);
+         if (project) {
+            ordered.push(project);
+            byId.delete(id);
+         }
+      }
+      for (const project of group.projects) {
+         if (byId.has(project.id)) ordered.push(project);
+      }
+      return { ...group, projects: ordered };
+   });
 }
 
 /* A régua (intervalo, meses, zoom, data ↔ pixel) vive em `lib/timeline-scale.ts`,
@@ -197,12 +222,16 @@ function TimelineBar({
    selected,
    onSelect,
    onReschedule,
+   onDragStart,
+   onDragEnd,
 }: {
    project: Project;
    monthWidth: number;
    selected: boolean;
    onSelect: (projectId: string) => void;
    onReschedule: (project: Project, next: DateRange) => void;
+   onDragStart: () => void;
+   onDragEnd: () => void;
 }) {
    const displayProperties = useProjectsDisplayStore((s) => s.displayProperties);
    const reschedulable = isValidProjectDate(project.targetDate);
@@ -233,8 +262,23 @@ function TimelineBar({
    const dayWidth = dayWidthOf(monthWidth);
    const rangeLabel = projectDateRangeLabel(range.startDate, range.targetDate) ?? range.startDate;
 
+   // A linha pode sumir no meio do gesto (projeto apagado/filtrado): sem pointerup, o
+   // contador de arrastes do pai ficaria preso e a ordem, congelada para sempre.
+   const onDragEndRef = useRef(onDragEnd);
+   useLayoutEffect(() => {
+      onDragEndRef.current = onDragEnd;
+   }, [onDragEnd]);
+   useEffect(
+      () => () => {
+         if (dragRef.current?.moved) onDragEndRef.current();
+         dragRef.current = null;
+      },
+      []
+   );
+
    const beginDrag = (mode: RescheduleMode) => (event: React.PointerEvent) => {
-      if (!reschedulable || event.button !== 0) return;
+      // Um gesto por vez: trocar o dragRef no meio perderia o `moved` do anterior.
+      if (!reschedulable || event.button !== 0 || dragRef.current) return;
       event.stopPropagation();
       dragRef.current = { mode, pointerId: event.pointerId, startX: event.clientX, moved: false };
       // Captura no wrapper: move/up chegam nele mesmo quando o ponteiro sai da alça.
@@ -245,6 +289,7 @@ function TimelineBar({
       const drag = dragRef.current;
       if (!drag || drag.pointerId !== event.pointerId) return;
       const delta = daysFromPixels(event.clientX - drag.startX, dayWidth);
+      if (delta !== 0 && !drag.moved) onDragStart();
       if (delta !== 0) drag.moved = true;
       if (drag.moved) setDraft(rescheduleRange(base, drag.mode, delta));
    };
@@ -256,6 +301,7 @@ function TimelineBar({
       wrapperRef.current?.releasePointerCapture?.(event.pointerId);
       const next = draftRef.current;
       setDraft(null);
+      if (drag.moved) onDragEnd();
       if (commit && drag.moved && next && !sameRange(next, base)) onReschedule(project, next);
       // Clique (ponteiro parado): a captura no wrapper desvia o `click` do botão, então
       // é aqui que o peek abre (pl#1). O `click` que ainda possa chegar é descartado.
@@ -461,6 +507,8 @@ const TimelineRow = memo(function TimelineRow({
    onToggle,
    onReschedule,
    onJump,
+   onDragStart,
+   onDragEnd,
 }: {
    project: Project;
    monthWidth: number;
@@ -470,6 +518,8 @@ const TimelineRow = memo(function TimelineRow({
    onToggle: (projectId: string) => void;
    onReschedule: (project: Project, next: DateRange) => void;
    onJump: (contentX: number) => void;
+   onDragStart: () => void;
+   onDragEnd: () => void;
 }) {
    const displayProperties = useProjectsDisplayStore((s) => s.displayProperties);
    const hasStart = isValidProjectDate(project.startDate);
@@ -482,6 +532,8 @@ const TimelineRow = memo(function TimelineRow({
                selected={selected}
                onSelect={onToggle}
                onReschedule={onReschedule}
+               onDragStart={onDragStart}
+               onDragEnd={onDragEnd}
             />
          )}
          {showProjectList && (
@@ -543,6 +595,50 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
    const [peekProjectId, setPeekProjectId] = useState<string | null>(null);
    const scrollRef = useRef<HTMLDivElement>(null);
    const frameRef = useRef<number | null>(null);
+
+   // Ordem congelada (por grupo) enquanto um arraste está em andamento e por um
+   // curto período após soltar — evita a linha "pular" de posição no meio do gesto
+   // quando a ordenação é por data e o próprio arraste muda a data-chave (pl#17).
+   const [frozenOrder, setFrozenOrder] = useState<Map<string, string[]> | null>(null);
+   // Espelha só a ordem COMMITADA (um render descartado não pode vazar para o snapshot).
+   const groupsRef = useRef(groups);
+   useLayoutEffect(() => {
+      groupsRef.current = groups;
+   }, [groups]);
+   const activeDragsRef = useRef(0);
+   const unfreezeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+   const handleDragStart = useCallback(() => {
+      activeDragsRef.current += 1;
+      if (unfreezeTimerRef.current !== null) {
+         clearTimeout(unfreezeTimerRef.current);
+         unfreezeTimerRef.current = null;
+      }
+      setFrozenOrder(
+         (current) =>
+            current ??
+            new Map(groupsRef.current.map((group) => [group.id, group.projects.map((p) => p.id)]))
+      );
+   }, []);
+
+   const handleDragEnd = useCallback(() => {
+      activeDragsRef.current = Math.max(0, activeDragsRef.current - 1);
+      if (activeDragsRef.current > 0) return;
+      if (unfreezeTimerRef.current !== null) clearTimeout(unfreezeTimerRef.current);
+      unfreezeTimerRef.current = setTimeout(() => {
+         unfreezeTimerRef.current = null;
+         setFrozenOrder(null);
+      }, DRAG_ORDER_FREEZE_MS);
+   }, []);
+
+   useEffect(
+      () => () => {
+         if (unfreezeTimerRef.current !== null) clearTimeout(unfreezeTimerRef.current);
+      },
+      []
+   );
+
+   const displayGroups = frozenOrder ? applyFrozenOrder(groups, frozenOrder) : groups;
 
    const monthWidth = monthWidthOf(zoom);
    const totalWidth = totalWidthOf(monthWidth);
@@ -721,7 +817,7 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
 
                   {/* Groups */}
                   <div className="relative z-[5] pb-8">
-                     {groups.map((group) => (
+                     {displayGroups.map((group) => (
                         <div key={group.id}>
                            {group.id !== 'all' && (
                               <div className="sticky left-0 flex items-center gap-2 px-4 h-9 text-sm font-medium bg-[color-mix(in_oklab,var(--accent)_30%,var(--container))] border-y border-border/40 w-screen max-w-full">
@@ -744,6 +840,8 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
                                     onToggle={togglePeek}
                                     onReschedule={reschedule}
                                     onJump={jumpTo}
+                                    onDragStart={handleDragStart}
+                                    onDragEnd={handleDragEnd}
                                  />
                               ))}
                            </div>

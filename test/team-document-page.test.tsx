@@ -123,6 +123,18 @@ describe('página do documento (corpo com editor de blocos)', () => {
       await waitFor(() => expect(screen.getByTestId('editor-doc').textContent).toContain('da Ana'));
    });
 
+   it('404 no autosave (apagado por outra aba antes do SSE) mostra "não encontrado"', async () => {
+      apiMocks.get.mockResolvedValueOnce(dto());
+      apiMocks.update.mockRejectedValueOnce(new ApiError(404, 'x'));
+      renderView();
+      await screen.findByDisplayValue('RFC 1');
+      await act(async () => {
+         fireEvent.click(screen.getByText('fake-save'));
+      });
+      expect(await screen.findByText('Document not found')).toBeTruthy();
+      expect(toastMocks.error).not.toHaveBeenCalled();
+   });
+
    it('documento inexistente mostra "não encontrado"; falha de rede mostra retry', async () => {
       apiMocks.get.mockRejectedValueOnce(new ApiError(404, 'x'));
       const { unmount } = renderView();

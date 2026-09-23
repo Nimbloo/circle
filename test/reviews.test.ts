@@ -55,6 +55,16 @@ const fakeFetch = (async (url: string) => {
 describe('reviews (GitHub ingestion)', () => {
    it('syncs PRs into review table with status/resolves parsing', async () => {
       const db = await makeTestDb();
+      await seedTeam(db, 'LNUI');
+      await db.insert(issue).values({
+         id: 'iss-701',
+         identifier: 'LNUI-701',
+         teamId: 'LNUI',
+         title: 'Combobox perde foco',
+         statusId: 'to-do',
+         priorityId: 'low',
+         rank: 'a',
+      });
       const n = await syncFromGitHub(db, { repos: ['x/y'], token: 'fake', fetchImpl: fakeFetch });
       expect(n).toBe(2);
 
@@ -66,6 +76,13 @@ describe('reviews (GitHub ingestion)', () => {
       const open = items.find((r) => r.prNumber === 42)!;
       expect(open.status).toBe('open');
       expect(open.resolves?.identifier).toBe('LNUI-701'); // parseado do título
+   });
+
+   it('identifier do título sem issue correspondente não vira "resolves"', async () => {
+      const db = await makeTestDb();
+      await syncFromGitHub(db, { repos: ['x/y'], token: 'fake', fetchImpl: fakeFetch });
+      const open = await getReview(db, 'x/y#42');
+      expect(open?.resolves ?? null).toBeNull();
    });
 
    it('fills additions/deletions from the individual PR GET (open PRs)', async () => {
