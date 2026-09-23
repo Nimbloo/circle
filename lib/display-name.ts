@@ -18,5 +18,5 @@ export function formatUserName(user: Named, mode: string): string {
  * que mostram pessoas re-renderizam ao voltar para elas.
  */
 export function userDisplayName(user: Named): string {
-   return formatUserName(user, usePreferencesStore.getState().displayNames);
+   return formatUserName(user, usePreferencesStore.getState().nameDisplay);
 }

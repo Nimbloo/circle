@@ -70,7 +70,7 @@ const NotificationsSchema = z
 const PreferencesSchema = z
    .object({
       defaultHomeView: z.string().optional(),
-      displayNames: z.string().optional(),
+      nameDisplay: z.string().optional(),
       firstDayOfWeek: z.string().optional(),
       convertEmoticons: z.boolean().optional(),
       sendCommentsOn: z.string().optional(),
@@ -95,6 +95,9 @@ const PreferencesSchema = z
       requireSignedCommits: z.boolean().optional(),
       gitAttachmentFormat: z.string().optional(),
       aiUsageFeedback: z.boolean().optional(),
+      // Era o default ("Username") quando a opção não fazia nada: todo blob salvo o tem.
+      // Honrá-lo trocaria nomes por handles de repente; a opção vive em `nameDisplay`.
+      displayNames: z.string().optional(),
    })
    .strict();
 

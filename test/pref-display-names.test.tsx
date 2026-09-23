@@ -34,7 +34,7 @@ const bob: User = {
 describe('preferência "Display names"', () => {
    it('Full name mostra o nome; Username mostra o handle (slug, ou prefixo do e-mail)', () => {
       useWorkspaceStore.setState({ users: [ana, bob], me: null });
-      act(() => usePreferencesStore.getState().setPref('displayNames', 'Full name'));
+      act(() => usePreferencesStore.getState().setPref('nameDisplay', 'Full name'));
       const { rerender } = render(
          <TooltipProvider>
             <AssigneeAvatars users={[ana, bob]} />
@@ -44,7 +44,7 @@ describe('preferência "Display names"', () => {
       expect(screen.getByLabelText('Assignees: Ana Souza e Bob Lima')).toBeTruthy();
       expect(screen.getByRole('combobox', { name: 'Assignees: Ana Souza' })).toBeTruthy();
 
-      act(() => usePreferencesStore.getState().setPref('displayNames', 'Username'));
+      act(() => usePreferencesStore.getState().setPref('nameDisplay', 'Username'));
       rerender(
          <TooltipProvider>
             <AssigneeAvatars users={[ana, bob]} />

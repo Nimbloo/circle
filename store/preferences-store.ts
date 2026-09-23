@@ -20,7 +20,8 @@ import { DEFAULT_HOME_VIEW } from '@/lib/home-view';
 export interface Preferences {
    // General
    defaultHomeView: string;
-   displayNames: string;
+   /** "Full name" | "Username". Substitui a antiga `displayNames` (ver lib/api/settings.ts). */
+   nameDisplay: string;
    firstDayOfWeek: string;
    convertEmoticons: boolean;
    sendCommentsOn: string;
@@ -47,7 +48,7 @@ export const CODE_FONT_MEDIUM = '13px, Medium';
 
 export const DEFAULT_PREFERENCES: Preferences = {
    defaultHomeView: DEFAULT_HOME_VIEW,
-   displayNames: 'Full name',
+   nameDisplay: 'Full name',
    firstDayOfWeek: 'Monday',
    convertEmoticons: true,
    sendCommentsOn: '⌘+Enter',

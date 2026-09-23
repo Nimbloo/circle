@@ -45,8 +45,8 @@ export default function Preferences() {
                      <SelectMenu
                         ariaLabel="Display names"
                         options={['Full name', 'Username']}
-                        value={prefs.displayNames}
-                        onChange={(v) => prefs.setPref('displayNames', v)}
+                        value={prefs.nameDisplay}
+                        onChange={(v) => prefs.setPref('nameDisplay', v)}
                      />
                   }
                />

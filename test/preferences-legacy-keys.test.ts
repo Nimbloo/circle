@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SettingsSchema } from '@/lib/api/settings';
 import { DEFAULT_PREFERENCES, usePreferencesStore } from '@/store/preferences-store';
+import { userDisplayName } from '@/lib/display-name';
 
 /** Chaves de opções removidas da UI (dependiam de algo que o Circle não faz). */
 const LEGACY = {
@@ -14,6 +15,9 @@ const LEGACY = {
    requireSignedCommits: true,
    gitAttachmentFormat: 'URL',
    aiUsageFeedback: false,
+   // Era o DEFAULT antigo e não fazia nada: todo usuário com preferência salva o tem.
+   // Honrá-lo trocaria nomes por handles de repente — a opção vive agora em `nameDisplay`.
+   displayNames: 'Username',
 };
 
 describe('preferências removidas — retrocompatibilidade', () => {
@@ -32,5 +36,11 @@ describe('preferências removidas — retrocompatibilidade', () => {
       const state = usePreferencesStore.getState() as unknown as Record<string, unknown>;
       expect(state.fontSize).toBe('Small');
       for (const key of Object.keys(LEGACY)) expect(state).not.toHaveProperty(key);
+   });
+
+   it('blob antigo com displayNames "Username" continua mostrando o nome completo', () => {
+      usePreferencesStore.setState({ ...DEFAULT_PREFERENCES });
+      usePreferencesStore.getState().hydratePrefs({ displayNames: 'Username' } as never);
+      expect(userDisplayName({ name: 'Ana Lima', slug: 'ana' })).toBe('Ana Lima');
    });
 });
