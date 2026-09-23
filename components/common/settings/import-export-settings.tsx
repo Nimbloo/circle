@@ -304,39 +304,44 @@ export default function ImportExportSettings() {
                      />
                   </SettingsCard>
 
-                  <div className="rounded-[10px] bg-card p-4">
-                     <h3 className="text-[13px] font-medium">
-                        Amostra ({preview.sample.length} de {preview.totalRows} linha(s))
-                     </h3>
-                     <div className="mt-3 overflow-x-auto">
-                        <table className="w-full text-left text-[13px]">
-                           <thead className="text-muted-foreground">
-                              <tr>
-                                 <th className="pb-2 pr-4 font-normal">Título</th>
-                                 <th className="pb-2 pr-4 font-normal">Status</th>
-                                 <th className="pb-2 pr-4 font-normal">Prioridade</th>
-                                 <th className="pb-2 font-normal">Ação</th>
-                              </tr>
-                           </thead>
-                           <tbody>
-                              {preview.sample.map((row, i) => (
-                                 <tr key={`${row.externalId ?? 'row'}-${i}`} className="align-top">
-                                    <td className="py-1 pr-4">{row.title || '—'}</td>
-                                    <td className="py-1 pr-4 text-muted-foreground">
-                                       {row.statusRaw ?? '—'}
-                                    </td>
-                                    <td className="py-1 pr-4 text-muted-foreground">
-                                       {row.priorityRaw ?? '—'}
-                                    </td>
-                                    <td className="py-1 text-muted-foreground">
-                                       {row.existing ? 'Atualizar' : 'Criar'}
-                                    </td>
+                  <SettingsCard>
+                     <div className="p-4">
+                        <h3 className="text-[13px] font-medium">
+                           Amostra ({preview.sample.length} de {preview.totalRows} linha(s))
+                        </h3>
+                        <div className="mt-3 overflow-x-auto">
+                           <table className="w-full text-left text-[13px]">
+                              <thead className="text-muted-foreground">
+                                 <tr>
+                                    <th className="pb-2 pr-4 font-normal">Título</th>
+                                    <th className="pb-2 pr-4 font-normal">Status</th>
+                                    <th className="pb-2 pr-4 font-normal">Prioridade</th>
+                                    <th className="pb-2 font-normal">Ação</th>
                                  </tr>
-                              ))}
-                           </tbody>
-                        </table>
+                              </thead>
+                              <tbody>
+                                 {preview.sample.map((row, i) => (
+                                    <tr
+                                       key={`${row.externalId ?? 'row'}-${i}`}
+                                       className="align-top"
+                                    >
+                                       <td className="py-1 pr-4">{row.title || '—'}</td>
+                                       <td className="py-1 pr-4 text-muted-foreground">
+                                          {row.statusRaw ?? '—'}
+                                       </td>
+                                       <td className="py-1 pr-4 text-muted-foreground">
+                                          {row.priorityRaw ?? '—'}
+                                       </td>
+                                       <td className="py-1 text-muted-foreground">
+                                          {row.existing ? 'Atualizar' : 'Criar'}
+                                       </td>
+                                    </tr>
+                                 ))}
+                              </tbody>
+                           </table>
+                        </div>
                      </div>
-                  </div>
+                  </SettingsCard>
 
                   <div className="flex justify-end gap-2">
                      <Button variant="ghost" onClick={reset}>

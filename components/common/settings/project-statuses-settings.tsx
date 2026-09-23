@@ -37,7 +37,7 @@ import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { errorReason } from '@/lib/error-reason';
-import { SettingsShell } from './shared';
+import { SettingsCard, SettingsShell } from './shared';
 
 const CATEGORY_GROUPS: { label: string; categories: StatusCategory[] }[] = [
    { label: 'Backlog', categories: ['backlog', 'triage'] },
@@ -239,7 +239,7 @@ export default function ProjectStatusesSettings() {
          title="Issue statuses"
          description="Os estágios do workflow das issues (por categoria). Vale para todo o workspace. Projetos têm seus próprios status (Backlog/Planned/In Progress/Completed/Canceled)."
       >
-         <div className="overflow-hidden rounded-[10px] bg-card">
+         <SettingsCard>
             {CATEGORY_GROUPS.map((group) => {
                const items = statuses.filter((s) => group.categories.includes(s.category));
                return (
@@ -339,7 +339,7 @@ export default function ProjectStatusesSettings() {
                   </div>
                );
             })}
-         </div>
+         </SettingsCard>
 
          <StatusDialog
             editing={editing}

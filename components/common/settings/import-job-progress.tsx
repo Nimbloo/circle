@@ -1,6 +1,7 @@
 'use client';
 
 import { api } from '@/lib/client';
+import { SettingsCard } from './shared';
 import type { ImportJobDto } from '@/lib/api/import';
 import { IMPORT_JOB_EVENT, useLiveReload } from '@/lib/use-live-sync';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -58,28 +59,30 @@ export function ImportJobProgress({
    const processed = job?.processed ?? 0;
    const pct = total > 0 ? Math.round((processed / total) * 100) : 0;
    return (
-      <div className="flex flex-col gap-2 rounded-[10px] bg-card p-4" aria-live="polite">
-         <div className="flex items-center justify-between text-[13px]">
-            <span className="font-medium">Importando…</span>
-            <span className="text-muted-foreground">
-               {job ? `${processed} de ${total} linha(s)` : 'Preparando…'}
-            </span>
+      <SettingsCard>
+         <div className="flex flex-col gap-2 p-4" aria-live="polite">
+            <div className="flex items-center justify-between text-[13px]">
+               <span className="font-medium">Importando…</span>
+               <span className="text-muted-foreground">
+                  {job ? `${processed} de ${total} linha(s)` : 'Preparando…'}
+               </span>
+            </div>
+            <div
+               role="progressbar"
+               aria-label="Progresso do import"
+               aria-valuemin={0}
+               aria-valuemax={100}
+               aria-valuenow={pct}
+               className="relative h-2 w-full overflow-hidden rounded-full bg-primary/20"
+            >
+               <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+            </div>
+            {offline && (
+               <p className="text-[12px] text-muted-foreground">
+                  Sem conexão com o servidor — tentando de novo. O import continua rodando.
+               </p>
+            )}
          </div>
-         <div
-            role="progressbar"
-            aria-label="Progresso do import"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={pct}
-            className="relative h-2 w-full overflow-hidden rounded-full bg-primary/20"
-         >
-            <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
-         </div>
-         {offline && (
-            <p className="text-[12px] text-muted-foreground">
-               Sem conexão com o servidor — tentando de novo. O import continua rodando.
-            </p>
-         )}
-      </div>
+      </SettingsCard>
    );
 }
