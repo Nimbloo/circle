@@ -211,6 +211,18 @@ async function seedDoomedTeam() {
       { id: 'f3', userId: ana, entityType: 'view', entityId: 'dv1' },
       { id: 'f4', userId: ana, entityType: 'issue', entityId: 'k1' },
    ]);
+
+   // Review que resolve a issue d1 (`review.resolves_identifier` não é FK — some a
+   // issue, o review sobrevive com um identifier/título órfãos se ninguém limpar).
+   await db.insert(s.review).values({
+      id: 'x/y#1',
+      title: 'Fix D1',
+      status: 'open',
+      repo: 'x/y',
+      prNumber: 1,
+      resolvesIdentifier: 'D1',
+      resolvesTitle: 'Issue d1',
+   });
 }
 
 const count = async (table: PgTable, where?: SQL) =>
@@ -237,6 +249,8 @@ describe('getTeamDeletionImpact', () => {
          views: 1,
          folders: 1,
          documents: 2,
+         attachments: 2,
+         reviews: 1,
       });
       expect(await getTeamDeletionImpact(db, 'KEEP')).toMatchObject({ issues: 3, projects: 1 });
    });
@@ -304,6 +318,12 @@ describe('deleteTeam apaga o time e todo o conteúdo em cascata', () => {
       // Sub-time reancorado no avô (DOOM era de topo).
       const [sub] = await db.select().from(s.team).where(eq(s.team.id, 'SUB'));
       expect(sub.parentId).toBeNull();
+
+      // O review NÃO é apagado (não pertence ao time) — só o vínculo órfão é limpo.
+      const [review] = await db.select().from(s.review).where(eq(s.review.id, 'x/y#1'));
+      expect(review).toBeDefined();
+      expect(review.resolvesIdentifier).toBeNull();
+      expect(review.resolvesTitle).toBeNull();
    });
 
    it('remove do storage os objetos dos anexos (da issue e dos comentários) depois do commit', async () => {
@@ -392,6 +412,8 @@ describe('deleteTeam apaga o time e todo o conteúdo em cascata', () => {
       expect(k1.parentId).toBe('d1');
       expect(await count(s.issueRelation)).toBe(3);
       expect(await count(s.teamMember, eq(s.teamMember.teamId, 'DOOM'))).toBe(2);
+      const [review] = await db.select().from(s.review).where(eq(s.review.id, 'x/y#1'));
+      expect(review.resolvesIdentifier).toBe('D1');
       // Nada publicado nem apagado do storage quando a transação volta.
       expect(events).toEqual([]);
       expect(s3.deleteAsset).not.toHaveBeenCalled();
@@ -421,6 +443,8 @@ describe('GET /teams/:key/deletion-impact', () => {
          views: 1,
          folders: 1,
          documents: 2,
+         attachments: 2,
+         reviews: 1,
       });
    });
 
