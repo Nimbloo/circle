@@ -131,6 +131,17 @@ describe('github webhook: handlePullRequestEvent', () => {
       expect(rev.resolvesIdentifier).toBeNull();
    });
 
+   it('corpo com milhares de identifiers: acha a issue real depois do 1º lote', async () => {
+      const db = await makeTestDb();
+      await seedIssue(db);
+      const noise = Array.from({ length: 2500 }, (_, i) => `ZZ-${i + 1}`).join(' ');
+      const res = await handlePullRequestEvent(
+         db,
+         prEvent({ title: 'release', head: { ref: 'x' }, body: `${noise} ENG-1` })
+      );
+      expect(res.linked).toBe('ENG-1');
+   });
+
    it('returns linked:null on a malformed payload', async () => {
       const db = await makeTestDb();
       expect((await handlePullRequestEvent(db, {})).linked).toBeNull();
