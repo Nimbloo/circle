@@ -64,6 +64,16 @@ export function TriageSuggestionCard({
    // Saída animada (list-exit): o card colapsa por `MOTION_MS.content` antes de sumir.
    // Rollback (API recusou) devolve `hidden=false` e o card volta inteiro.
    const [exited, setExited] = useState(false);
+   // A API confirmou: o pai é avisado (e recarrega a fila) só DEPOIS da saída — senão uma
+   // resposta rápida tirava o card da fila no meio da animação.
+   const [resolved, setResolved] = useState(false);
+   const onResolvedRef = useRef(onResolved);
+   useEffect(() => {
+      onResolvedRef.current = onResolved;
+   }, [onResolved]);
+   useEffect(() => {
+      if (resolved && exited) onResolvedRef.current?.();
+   }, [resolved, exited]);
    useEffect(() => {
       if (!hidden) {
          setExited(false);
@@ -162,7 +172,7 @@ export function TriageSuggestionCard({
          );
          toast.success('Suggestion applied');
          void useIssuesStore.getState().applyRemote(issueId);
-         onResolved?.();
+         setResolved(true);
       } catch (e) {
          setHidden(false); // rollback
          toast.error(e instanceof Error ? e.message : 'Falha ao aplicar a sugestão');
@@ -176,7 +186,7 @@ export function TriageSuggestionCard({
       setHidden(true);
       try {
          await api.triage.dismiss(issueId);
-         onResolved?.();
+         setResolved(true);
       } catch {
          setHidden(false);
          toast.error('Falha ao descartar a sugestão');
