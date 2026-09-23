@@ -241,7 +241,7 @@ export const api = {
          get<{
             id: string;
             title: string;
-            messages: { role: 'user' | 'assistant'; content: string }[];
+            messages: { role: 'user' | 'assistant'; content: string; error?: boolean }[];
          }>(`/agent/chats/${id}`),
       send: (chatId: string | null, content: string) =>
          post<{ chatId: string; title: string; reply: string }>('/agent/chats', {

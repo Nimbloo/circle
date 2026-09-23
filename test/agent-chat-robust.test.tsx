@@ -94,6 +94,39 @@ describe('agent chat store (#50)', () => {
       expect(last.streaming).toBe(false);
    });
 
+   it('"Tentar de novo" na bolha de erro reenvia a última pergunta', async () => {
+      apiMocks.chats.mockReturnValue(new Promise(() => {}));
+      useAgentChatStore.setState({
+         activeChatId: 'chat-1',
+         chats: [
+            {
+               id: 'chat-1',
+               title: 'Falhou',
+               persisted: true,
+               loadState: 'ready',
+               messages: [
+                  { id: 'u1', role: 'user', content: 'Oi, tudo bem?' },
+                  { id: 'a1', role: 'assistant', content: 'Erro ao responder', error: true },
+               ],
+            },
+         ],
+      });
+      apiMocks.send.mockResolvedValueOnce({
+         chatId: 'chat-1',
+         title: 'Falhou',
+         reply: 'Tudo certo!',
+      });
+      render(<AgentChat />);
+
+      await act(async () => {
+         fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
+      });
+
+      expect(apiMocks.send).toHaveBeenCalledWith('chat-1', 'Oi, tudo bem?');
+      const messages = useAgentChatStore.getState().chats[0].messages;
+      expect(messages.at(-1)).toMatchObject({ content: 'Tudo certo!' });
+   });
+
    it('abrir chat ainda não carregado mostra estado de carregamento', async () => {
       apiMocks.chats.mockReturnValue(new Promise(() => {}));
       apiMocks.getChat.mockReturnValue(new Promise(() => {}));

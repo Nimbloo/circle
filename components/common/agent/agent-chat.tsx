@@ -118,7 +118,14 @@ const AgentMessageBody = memo(function AgentMessageBody({
 });
 
 /** Uma bolha do chat; memoizada pela referência da mensagem (o store preserva as demais). */
-const ChatMessage = memo(function ChatMessage({ message }: { message: AgentMessage }) {
+const ChatMessage = memo(function ChatMessage({
+   message,
+   onRetry,
+}: {
+   message: AgentMessage;
+   /** Presente só na bolha de erro: reenvia a pergunta que falhou. */
+   onRetry?: () => void;
+}) {
    const avatarUrl = useWorkspaceStore((s) => s.me?.avatarUrl);
    const name = useWorkspaceStore((s) => s.me?.name) ?? 'You';
 
@@ -144,6 +151,11 @@ const ChatMessage = memo(function ChatMessage({ message }: { message: AgentMessa
          </span>
          <div className={cn('min-w-0 flex-1', message.error && 'text-destructive')}>
             <AgentMessageBody content={message.content} streaming={message.streaming} />
+            {message.error && onRetry && (
+               <Button variant="outline" size="sm" className="mt-2" onClick={onRetry}>
+                  Tentar de novo
+               </Button>
+            )}
          </div>
       </div>
    );
@@ -346,8 +358,21 @@ export default function AgentChat() {
                      </Button>
                   </div>
                )}
-               {activeChat.messages.map((message) => (
-                  <ChatMessage key={message.id} message={message} />
+               {activeChat.messages.map((message, index) => (
+                  <ChatMessage
+                     key={message.id}
+                     message={message}
+                     onRetry={
+                        message.error
+                           ? () => {
+                                const lastUser = [...activeChat.messages.slice(0, index)]
+                                   .reverse()
+                                   .find((m) => m.role === 'user');
+                                if (lastUser) void handleSend(lastUser.content);
+                             }
+                           : undefined
+                     }
+                  />
                ))}
             </div>
          </div>
