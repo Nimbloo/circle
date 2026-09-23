@@ -24,11 +24,11 @@ export const Emoticons = Extension.create<EmoticonsOptions>({
                const $from = state.doc.resolve(range.from);
                if ($from.parent.type.spec.code) return null;
                if (state.schema.marks.code?.isInSet($from.marks())) return null;
-               // `range` cobre o trecho JÁ no doc (o último caractere ainda não entrou);
-               // pula o espaço inicial do match para trocar só o emoticon.
-               const emoticon = match[1];
-               const from = range.from + match[0].lastIndexOf(emoticon);
-               state.tr.insertText(EMOTICONS[emoticon], from, range.to);
+               // `range` cobre o trecho JÁ no doc (o espaço digitado ainda não entrou): troca
+               // só o emoticon (pulando o espaço inicial do match) e insere o espaço junto.
+               const [, emoticon, space] = match;
+               const from = range.from + match[0].lastIndexOf(emoticon + space);
+               state.tr.insertText(EMOTICONS[emoticon] + space, from, range.to);
             },
          }),
       ];
