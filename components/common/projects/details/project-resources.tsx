@@ -68,7 +68,7 @@ export function ProjectResources({
       setBusy(true);
       let url: string;
       try {
-         url = (await api.projects.createDocument(projectId, { orgId })).document.url;
+         url = (await api.projects.createDocument(projectId)).document.url;
       } catch {
          toast.error('Não foi possível criar o documento');
          return;
@@ -79,7 +79,7 @@ export function ProjectResources({
       toast.success('Documento criado');
       // Abre o documento de qualquer jeito: ele já existe. O refresh da lista é best-effort
       // (falha nele não pode prender o usuário aqui nem virar rejeição solta).
-      router.push(url);
+      router.push(`/${orgId}${url}`);
       void Promise.resolve(onChanged()).catch(() => {});
    };
 
@@ -153,7 +153,8 @@ export function ProjectResources({
                   >
                      {isInternal(r.url) ? (
                         <Link
-                           href={r.url}
+                           // Link interno é relativo ao workspace: prefixa a org da rota.
+                           href={`/${orgId}${r.url}`}
                            className="inline-flex items-center gap-1.5 text-xs min-w-0"
                         >
                            <FileText className="size-3.5 text-muted-foreground shrink-0" />

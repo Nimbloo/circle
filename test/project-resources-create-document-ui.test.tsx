@@ -43,7 +43,7 @@ beforeEach(() => vi.clearAllMocks());
 describe('Resources → Create document…', () => {
    it('cria o documento, avisa só após a API, recarrega e abre o documento', async () => {
       seedStore(true);
-      const url = '/nimbloo/team/CORE/documents/d1';
+      const url = '/team/CORE/documents/d1'; // relativo ao workspace
       apiMocks.createDocument.mockResolvedValue({
          document: { id: 'd1', teamId: 'CORE', url },
          resource: { id: 'r1', label: 'Checkout — doc', url },
@@ -55,8 +55,8 @@ describe('Resources → Create document…', () => {
       await user.click(screen.getByRole('button', { name: /Add document or link/ }));
       await user.click(await screen.findByRole('menuitem', { name: /Create document/ }));
 
-      await waitFor(() => expect(push).toHaveBeenCalledWith(url));
-      expect(apiMocks.createDocument).toHaveBeenCalledWith('P1', { orgId: 'nimbloo' });
+      await waitFor(() => expect(push).toHaveBeenCalledWith(`/nimbloo${url}`));
+      expect(apiMocks.createDocument).toHaveBeenCalledWith('P1');
       expect(toastMocks.success).toHaveBeenCalledTimes(1);
       expect(onChanged).toHaveBeenCalled();
       expect(toastMocks.error).not.toHaveBeenCalled();
@@ -64,7 +64,7 @@ describe('Resources → Create document…', () => {
 
    it('recarregar os resources falhar não impede abrir o documento já criado', async () => {
       seedStore(true);
-      const url = '/nimbloo/team/CORE/documents/d1';
+      const url = '/team/CORE/documents/d1'; // relativo ao workspace
       apiMocks.createDocument.mockResolvedValue({
          document: { id: 'd1', teamId: 'CORE', url },
          resource: { id: 'r1', label: 'Checkout — doc', url },
@@ -74,7 +74,7 @@ describe('Resources → Create document…', () => {
       render(<ProjectResources projectId="P1" resources={[]} onChanged={onChanged} />);
       await user.click(screen.getByRole('button', { name: /Add document or link/ }));
       await user.click(await screen.findByRole('menuitem', { name: /Create document/ }));
-      await waitFor(() => expect(push).toHaveBeenCalledWith(url));
+      await waitFor(() => expect(push).toHaveBeenCalledWith(`/nimbloo${url}`));
    });
 
    it('falha na API: toast de erro, sem sucesso nem navegação', async () => {
@@ -113,7 +113,7 @@ describe('Resources → Create document…', () => {
          <ProjectResources
             projectId="P1"
             resources={[
-               { id: 'r1', label: 'Checkout — doc', url: '/nimbloo/team/CORE/documents/d1' },
+               { id: 'r1', label: 'Checkout — doc', url: '/team/CORE/documents/d1' },
                { id: 'r2', label: 'example.com', url: 'https://example.com' },
             ]}
             onChanged={vi.fn()}

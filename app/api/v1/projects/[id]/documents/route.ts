@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import { db } from '@/db';
 import { ok } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
@@ -9,17 +8,14 @@ export const dynamic = 'force-dynamic';
 
 type Params = { params: Promise<{ id: string }> };
 
-const CreateSchema = z.object({
-   /** Segmento `[orgId]` da URL atual: compõe o link interno salvo no resource. */
-   orgId: z.string().min(1).max(64),
-});
-
-/** Cria um documento no time do projeto e o vincula como resource (atômico). */
+/**
+ * Cria um documento no time do projeto e o vincula como resource (atômico). Sem corpo: o
+ * link salvo é relativo ao workspace e o cliente prefixa a org da rota atual.
+ */
 export async function POST(req: Request, { params }: Params) {
    return handle(async () => {
       const { id } = await params;
       const email = await requireEmail(req);
-      const input = CreateSchema.parse(await req.json());
-      return ok(await createProjectDocument(db, id, input, email));
+      return ok(await createProjectDocument(db, id, email));
    }, req);
 }

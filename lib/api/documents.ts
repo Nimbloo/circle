@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { and, eq, inArray, asc } from 'drizzle-orm';
+import { and, eq, inArray, asc, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    documentFolder,
@@ -401,8 +401,6 @@ export async function deleteDocument(db: Db, id: string, actorEmail: string): Pr
 export const PROJECT_DOCUMENTS_FOLDER = 'Projects';
 const PROJECT_DOC_SUFFIX = ' — doc';
 const NAME_MAX = 196;
-/** Segmento `[orgId]` da rota: só slug, para o link salvo não virar caminho arbitrário. */
-const ORG_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 export interface ProjectDocumentDto {
    document: DocumentDto & { teamId: string; url: string };
@@ -411,18 +409,18 @@ export interface ProjectDocumentDto {
 
 /**
  * "Create document…" do Resources do projeto: cria um documento no time do projeto e o
- * vincula como resource (link para a página interna do documento). Pasta: a "Projects"
- * do time; sem ela, a primeira pasta do time; sem nenhuma, cria "Projects". Tudo numa
- * transação: se o vínculo falhar, nem documento nem pasta nova ficam órfãos.
+ * vincula como resource. O link é RELATIVO ao workspace (`/team/…`, sem `/<orgId>`), como
+ * os caminhos da busca: o cliente prefixa a org da rota atual — o servidor não guarda um
+ * slug vindo do cliente. Pasta: a "Projects" do time; sem ela, a primeira pasta do time;
+ * sem nenhuma, cria "Projects". Tudo numa transação com trava por time (duas criações
+ * simultâneas não criam duas pastas); se o vínculo falhar, nada fica órfão.
  * Exige o projeto no escopo do ator e ser membro do time (mesma regra de criar documento).
  */
 export async function createProjectDocument(
    db: Db,
    projectId: string,
-   input: { orgId: string },
    actorEmail: string
 ): Promise<ProjectDocumentDto> {
-   if (!ORG_ID_RE.test(input.orgId ?? '')) throw new ApiError(400, 'orgId inválido');
    const [proj] = await db
       .select({ name: projectT.name, teamId: projectT.teamId })
       .from(projectT)
@@ -432,32 +430,36 @@ export async function createProjectDocument(
    await assertCanWriteProject(db, actorEmail, projectId);
    const creator = await assertTeamMember(db, proj.teamId, actorEmail);
 
-   const folders = await db
-      .select({ id: documentFolder.id, name: documentFolder.name })
-      .from(documentFolder)
-      .where(eq(documentFolder.teamId, proj.teamId))
-      .orderBy(asc(documentFolder.name));
-   const existing =
-      folders.find((f) => f.name.trim().toLowerCase() === PROJECT_DOCUMENTS_FOLDER.toLowerCase()) ??
-      folders[0];
-   const folderId = existing?.id ?? randomUUID();
-
    const name = `${proj.name.trim().slice(0, NAME_MAX - PROJECT_DOC_SUFFIX.length)}${PROJECT_DOC_SUFFIX}`;
    const id = randomUUID();
    const resourceId = randomUUID();
-   const url = `/${input.orgId}/team/${proj.teamId}/documents/${id}`;
+   const url = `/team/${proj.teamId}/documents/${id}`;
    const now = new Date();
-   await db.transaction(async (tx) => {
+   const { folderId, folderCreated } = await db.transaction(async (tx) => {
+      // Trava por time: a escolha/criação da pasta e os inserts são serializados.
+      await tx.execute(
+         sql`select pg_advisory_xact_lock(hashtext(${'project-doc:' + proj.teamId}))`
+      );
+      const folders = await tx
+         .select({ id: documentFolder.id, name: documentFolder.name })
+         .from(documentFolder)
+         .where(eq(documentFolder.teamId, proj.teamId))
+         .orderBy(asc(documentFolder.name));
+      const existing =
+         folders.find(
+            (f) => f.name.trim().toLowerCase() === PROJECT_DOCUMENTS_FOLDER.toLowerCase()
+         ) ?? folders[0];
+      const folder = existing?.id ?? randomUUID();
       if (!existing)
          await tx.insert(documentFolder).values({
-            id: folderId,
+            id: folder,
             teamId: proj.teamId,
             name: PROJECT_DOCUMENTS_FOLDER,
             icon: '📁',
          });
       await tx.insert(teamDocument).values({
          id,
-         folderId,
+         folderId: folder,
          name,
          icon: null,
          creatorId: creator.id,
@@ -466,10 +468,11 @@ export async function createProjectDocument(
          updatedAt: now,
       });
       await tx.insert(projectResource).values({ id: resourceId, projectId, label: name, url });
+      return { folderId: folder, folderCreated: !existing };
    });
 
    const teamId = proj.teamId;
-   if (!existing) publish({ entity: 'document', action: 'created', id: folderId, teamId });
+   if (folderCreated) publish({ entity: 'document', action: 'created', id: folderId, teamId });
    publish({ entity: 'document', action: 'created', id, actorEmail, teamId });
    publish({ entity: 'project', action: 'updated', id: projectId, actorEmail, teamId });
    return {
