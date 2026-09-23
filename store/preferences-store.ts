@@ -51,7 +51,7 @@ export interface Preferences {
 
 export const DEFAULT_PREFERENCES: Preferences = {
    defaultHomeView: DEFAULT_HOME_VIEW,
-   displayNames: 'Username',
+   displayNames: 'Full name',
    firstDayOfWeek: 'Monday',
    convertEmoticons: true,
    sendCommentsOn: '⌘+Enter',

@@ -1,5 +1,6 @@
 'use client';
 
+import { userDisplayName } from '@/lib/display-name';
 import { Button } from '@/components/ui/button';
 import {
    Command,
@@ -63,8 +64,8 @@ export function AssigneeSelector({ assignees, onChange, children }: AssigneeSele
       assignees.length === 0
          ? 'Unassigned'
          : assignees.length === 1
-           ? assignees[0].name
-           : `${assignees[0].name} +${assignees.length - 1}`;
+           ? userDisplayName(assignees[0])
+           : `${userDisplayName(assignees[0])} +${assignees.length - 1}`;
 
    return (
       <div className="*:not-first:mt-2">
@@ -152,7 +153,7 @@ export function AssigneeSelector({ assignees, onChange, children }: AssigneeSele
                                           />
                                           <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
                                        </Avatar>
-                                       {user.name}
+                                       {userDisplayName(user)}
                                     </div>
                                     {isSelected(user.id) && (
                                        <CheckIcon size={16} className="ml-auto" />

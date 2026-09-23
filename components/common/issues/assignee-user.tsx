@@ -16,6 +16,7 @@ import { useIssuesStore } from '@/store/issues-store';
 import { CheckIcon, UserIcon, UserRoundCheck } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { userDisplayName } from '@/lib/display-name';
 import { AssigneeAvatars, assigneeNames } from './assignee-avatars';
 
 interface AssigneeUserProps {
@@ -133,7 +134,7 @@ export function AssigneeUser({ users, user, issueId, compact = false }: Assignee
                                  <AvatarImage src={m.avatarUrl || undefined} alt={m.name} />
                                  <AvatarFallback>{m.name[0]}</AvatarFallback>
                               </Avatar>
-                              <span>{m.name}</span>
+                              <span>{userDisplayName(m)}</span>
                            </div>
                            {isSelected(m.id) && <CheckIcon className="ml-auto size-4" />}
                         </CommandItem>
