@@ -36,6 +36,11 @@ export function deleteIssuesWithUndo(ids: readonly string[]): void {
       issues: state.issues.filter((i) => !removedIds.has(i.id)),
    }));
 
+   // Uma issue pode chegar apagada por OUTRA aba/servidor durante a janela (live-sync ->
+   // removeRemote). Essas não voltam no Undo, nem levam um DELETE (404 inútil).
+   const restorable = () =>
+      removed.filter((i) => !useIssuesStore.getState().remoteDeletedIds.has(i.id));
+
    let settled = false;
    const pending: { timer?: ReturnType<typeof setTimeout> } = {};
    // Envia o DELETE de verdade. Falhou: a issue volta para a lista (o store já avisa o
@@ -45,7 +50,7 @@ export function deleteIssuesWithUndo(ids: readonly string[]): void {
       settled = true;
       clearTimeout(pending.timer);
       window.removeEventListener('pagehide', commit);
-      for (const issue of removed) {
+      for (const issue of restorable()) {
          void useIssuesStore
             .getState()
             .deleteIssue(issue.id)
@@ -69,7 +74,13 @@ export function deleteIssuesWithUndo(ids: readonly string[]): void {
                settled = true;
                clearTimeout(pending.timer);
                window.removeEventListener('pagehide', commit);
-               restore(removed);
+               const stillGone = restorable();
+               if (stillGone.length === 0) {
+                  // O servidor já apagou (outra aba) antes do clique: nada a desfazer.
+                  toast(removed.length === 1 ? 'Issue was deleted' : 'Issues were deleted');
+                  return;
+               }
+               restore(stillGone);
             },
          },
       }
