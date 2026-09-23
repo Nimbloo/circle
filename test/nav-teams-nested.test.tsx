@@ -73,4 +73,23 @@ describe('sidebar com sub-times (#100)', () => {
          .find((a) => a.textContent === 'Home');
       expect(home?.getAttribute('href')).toBe('/nimbloo/team/WEB/overview');
    });
+
+   it('membro só do pai vê os sub-times aninhados (a API já os inclui no escopo)', () => {
+      useWorkspaceStore.setState({
+         teams: [
+            team('CORE', 'Core', null),
+            { ...team('WEB', 'Web', 'CORE'), joined: false },
+            { ...team('OPS', 'Ops', null), joined: false },
+         ],
+      });
+      render(
+         <SidebarProvider>
+            <NavTeams />
+         </SidebarProvider>
+      );
+      const parentItem = screen.getByRole('button', { name: /^Core/ }).closest('li') as HTMLElement;
+      expect(within(parentItem).getByRole('button', { name: /^Web/ })).toBeTruthy();
+      // Time sem vínculo nenhum continua fora de "Your teams".
+      expect(screen.queryByRole('button', { name: /^Ops/ })).toBeNull();
+   });
 });
