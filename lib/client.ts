@@ -184,6 +184,7 @@ async function postForm<T>(path: string, form: FormData): Promise<T> {
 const get = <T>(p: string) => request<T>('GET', p);
 const post = <T>(p: string, b?: unknown) => request<T>('POST', p, b ?? {});
 const patch = <T>(p: string, b: unknown) => request<T>('PATCH', p, b);
+const put = <T>(p: string, b: unknown) => request<T>('PUT', p, b);
 const del = <T>(p: string) => request<T>('DELETE', p);
 
 /** Serializa filtros de issue em query string (params planos multivalorados). */
@@ -241,7 +242,7 @@ export const api = {
          get<{
             id: string;
             title: string;
-            messages: { role: 'user' | 'assistant'; content: string }[];
+            messages: { role: 'user' | 'assistant'; content: string; error?: boolean }[];
          }>(`/agent/chats/${id}`),
       send: (chatId: string | null, content: string) =>
          post<{ chatId: string; title: string; reply: string }>('/agent/chats', {
@@ -658,6 +659,17 @@ export const api = {
       removeComment: (id: string, commentId: string) =>
          del<{ deleted: boolean }>(
             `/reviews/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`
+         ),
+      /** "Reviewed" persistido por arquivo (escopo do usuário) — cache inicial do diff. */
+      listFileStates: (id: string) =>
+         get<string[]>(`/reviews/${encodeURIComponent(id)}/file-states`),
+      setFileState: (id: string, path: string, reviewed: boolean) =>
+         put<{ path: string; reviewed: boolean }>(
+            `/reviews/${encodeURIComponent(id)}/file-states/${path
+               .split('/')
+               .map(encodeURIComponent)
+               .join('/')}`,
+            { reviewed }
          ),
    },
 

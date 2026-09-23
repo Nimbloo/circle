@@ -1,6 +1,12 @@
 'use client';
 
-import { addReviewComment, fetchReview, latestVerdict } from '@/lib/adapters-reviews';
+import {
+   addReviewComment,
+   fetchReview,
+   fetchReviewedPaths,
+   latestVerdict,
+   setReviewFileState,
+} from '@/lib/adapters-reviews';
 import { EmptyState } from '@/components/common/empty-state';
 import { ErrorState } from '@/components/common/error-state';
 import { LoadingArea, useEnterFade } from '@/components/common/loading-area';
@@ -64,6 +70,9 @@ export function ReviewDetail({
    const [loading, setLoading] = useState(true);
    const [reloadKey, setReloadKey] = useState(0);
    const [verdictBusy, setVerdictBusy] = useState<ReviewVerdictKind | null>(null);
+   // "Reviewed" por arquivo (#XX): undefined enquanto o servidor não respondeu — o
+   // DiffView usa o localStorage como cache inicial até este set chegar.
+   const [reviewedPaths, setReviewedPaths] = useState<Set<string> | undefined>(undefined);
 
    useEffect(() => {
       let active = true;
@@ -87,6 +96,22 @@ export function ReviewDetail({
          })
          .finally(() => {
             if (active) setLoading(false);
+         });
+      return () => {
+         active = false;
+      };
+   }, [reviewId, reloadKey]);
+
+   // "Reviewed" por arquivo: carga independente (não bloqueia o detalhe) — refaz junto
+   // com `reloadKey` para pegar o que outra aba do mesmo usuário marcou (#XX).
+   useEffect(() => {
+      let active = true;
+      fetchReviewedPaths(reviewId)
+         .then((paths) => {
+            if (active) setReviewedPaths(new Set(paths));
+         })
+         .catch(() => {
+            // degrada: DiffView segue no cache do localStorage.
          });
       return () => {
          active = false;
@@ -122,9 +147,39 @@ export function ReviewDetail({
       });
    }, []);
 
+   /** Otimista + rollback (Ad#XX): toggle imediato, desfaz e avisa se a API recusar. */
+   const setFileReviewed = useCallback(
+      (path: string, reviewed: boolean) => {
+         ownMutationAtRef.current = Date.now();
+         setReviewedPaths((prev) => {
+            const next = new Set(prev ?? []);
+            if (reviewed) next.add(path);
+            else next.delete(path);
+            return next;
+         });
+         setReviewFileState(reviewId, path, reviewed).catch(() => {
+            setReviewedPaths((prev) => {
+               const next = new Set(prev ?? []);
+               if (reviewed) next.delete(path);
+               else next.add(path);
+               return next;
+            });
+            toast.error('Could not save the reviewed state');
+         });
+      },
+      [reviewId]
+   );
+
    const handle = useMemo<ReviewCommentsHandle>(
-      () => ({ reviewId, meId: me?.id, isAdmin: !!me?.admin, mutate: mutateComments }),
-      [reviewId, me?.id, me?.admin, mutateComments]
+      () => ({
+         reviewId,
+         meId: me?.id,
+         isAdmin: !!me?.admin,
+         mutate: mutateComments,
+         reviewedPaths,
+         setFileReviewed,
+      }),
+      [reviewId, me?.id, me?.admin, mutateComments, reviewedPaths, setFileReviewed]
    );
 
    const submitVerdict = async (kind: ReviewVerdictKind) => {

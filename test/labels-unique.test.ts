@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { makeTestDb } from './helpers/db';
-import { createLabel, updateLabel } from '@/lib/api/labels';
+import { createLabel, updateLabel, listLabels } from '@/lib/api/labels';
 
 /**
  * Ad#34 — renomear aceitava nome duplicado, e criar dava 409 quando só o SLUG colidia
@@ -40,5 +40,29 @@ describe('labels: nome único e slug único (Ad#34)', () => {
          status: 409,
       });
       expect(await updateLabel(db, 'b', { name: 'BETA' })).toMatchObject({ name: 'BETA' });
+   });
+
+   /**
+    * Índice único `label_name_lower_unique` no banco (case/espaço-insensitive): a
+    * checagem `nameTaken` do app não é atômica — duas criações concorrentes com o
+    * MESMO nome passam ambas na checagem antes de qualquer insert. Uma sobrevive, a
+    * outra bate no índice único e vira 409 claro (não 500).
+    */
+   it('criações concorrentes com o mesmo nome: uma passa, a outra dá 409', async () => {
+      const db = await makeTestDb();
+
+      const results = await Promise.allSettled([
+         createLabel(db, { name: 'Corrida', color: 'red' }),
+         createLabel(db, { name: 'Corrida', color: 'blue' }),
+      ]);
+
+      const fulfilled = results.filter((r) => r.status === 'fulfilled');
+      const rejected = results.filter((r) => r.status === 'rejected');
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({ status: 409 });
+
+      const list = await listLabels(db);
+      expect(list.filter((l) => l.name === 'Corrida')).toHaveLength(1);
    });
 });

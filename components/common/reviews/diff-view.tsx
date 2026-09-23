@@ -10,7 +10,7 @@ import {
    FileCode2,
    MessageSquarePlus,
 } from 'lucide-react';
-import { Fragment, memo, useMemo, useState } from 'react';
+import { Fragment, memo, useEffect, useMemo, useState } from 'react';
 import {
    ReviewCommentComposer,
    ReviewCommentItem,
@@ -23,7 +23,11 @@ export const LARGE_DIFF_LINES = 400;
 
 const NO_COMMENTS: ReviewComment[] = [];
 
-/** "Reviewed" por review+arquivo, lembrado no navegador (conveniência local). */
+/**
+ * "Reviewed" por review+arquivo: persistido no servidor (escopo do usuário — #XX), o
+ * localStorage vira só CACHE INICIAL (pinta na hora, antes do `GET file-states`
+ * responder) e é reconciliado assim que `handle.reviewedPaths` chega.
+ */
 function reviewedKey(reviewId: string) {
    return `circle:review-viewed:${reviewId}`;
 }
@@ -74,6 +78,13 @@ function DiffViewImpl({
    // "Reviewed" colapsa o arquivo (e é lembrado por review); arquivo grande começa
    // colapsado até pedir "Load diff" (#47).
    const [reviewed, setReviewed] = useState(() => readReviewed(handle?.reviewId, path));
+   // O servidor é a fonte da verdade assim que responde — reconcilia e atualiza o cache.
+   useEffect(() => {
+      if (!handle?.reviewedPaths) return;
+      const serverValue = handle.reviewedPaths.has(path);
+      setReviewed(serverValue);
+      writeReviewed(handle.reviewId, path, serverValue);
+   }, [handle?.reviewedPaths, handle?.reviewId, path]);
    const [loadLarge, setLoadLarge] = useState(false);
    const large = diff.lines.length > LARGE_DIFF_LINES;
    const showBody = !reviewed && (!large || loadLarge);
@@ -122,6 +133,7 @@ function DiffViewImpl({
                         const next = value === true;
                         setReviewed(next);
                         writeReviewed(handle.reviewId, path, next);
+                        handle.setFileReviewed(path, next);
                      }}
                   />
                   Reviewed

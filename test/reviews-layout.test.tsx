@@ -15,6 +15,8 @@ vi.mock('@/lib/adapters-reviews', () => ({
    addReviewComment: (...args: unknown[]) => addReviewComment(...args),
    latestVerdict: () => null,
    syncReviews: vi.fn(),
+   fetchReviewedPaths: vi.fn().mockResolvedValue([]),
+   setReviewFileState: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('@/lib/client', () => ({ api: {} }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));

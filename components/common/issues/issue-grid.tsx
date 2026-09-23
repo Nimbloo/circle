@@ -47,7 +47,12 @@ function IssueDragPreview({ issue }: { issue: Issue }) {
                   {issue.identifier}
                </span>
                <div className="mt-1.5 flex h-4 items-center gap-1.5">
-                  <StatusSelector compact status={issue.status} issueId={issue.id} />
+                  <StatusSelector
+                     compact
+                     status={issue.status}
+                     issueId={issue.id}
+                     teamId={issue.teamId}
+                  />
                   <h3 className="line-clamp-2 text-[13px] font-medium leading-4">{issue.title}</h3>
                </div>
             </div>
@@ -180,7 +185,12 @@ function IssueGridComponent({ issue, getGroup, layout = true }: IssueGridProps) 
                )}
                <div className="mt-1.5 flex h-4 items-center gap-1.5">
                   {displayProperties.status && (
-                     <StatusSelector compact status={issue.status} issueId={issue.id} />
+                     <StatusSelector
+                        compact
+                        status={issue.status}
+                        issueId={issue.id}
+                        teamId={issue.teamId}
+                     />
                   )}
                   <MaybeLink
                      href={

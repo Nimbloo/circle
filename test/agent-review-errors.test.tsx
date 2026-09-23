@@ -27,6 +27,8 @@ vi.mock('@/lib/adapters-reviews', () => ({
    fetchReview: (...a: unknown[]) => reviewApi.fetchReview(...a),
    addReviewComment: vi.fn(),
    markReviewViewed: vi.fn(),
+   fetchReviewedPaths: vi.fn().mockResolvedValue([]),
+   setReviewFileState: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('next/navigation', () => ({ useParams: () => ({ orgId: 'nimbloo' }) }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
