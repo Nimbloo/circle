@@ -1,10 +1,19 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { and, eq, inArray, asc } from 'drizzle-orm';
 import type { Db } from '@/db';
-import { documentFolder, teamDocument, teamMember, appUser } from '@/db/schema';
+import {
+   documentFolder,
+   teamDocument,
+   teamMember,
+   appUser,
+   project as projectT,
+   projectResource,
+} from '@/db/schema';
 import { getOrCreateUser, type UserRow } from './users';
 import { isAdmin } from './auth';
+import { assertCanWriteProject } from './scope';
 import type { UserRef } from './issues';
+import type { ProjectResourceDto } from './project-detail';
 import { ApiError } from './errors';
 import { publish } from './events';
 import { projectDescriptionDoc } from './description-doc';
@@ -386,4 +395,102 @@ export async function deleteDocument(db: Db, id: string, actorEmail: string): Pr
       .returning({ id: teamDocument.id });
    if (res.length > 0) publish({ entity: 'document', action: 'deleted', id, actorEmail, teamId });
    return res.length > 0;
+}
+
+/** Pasta onde nascem os documentos criados a partir de um projeto. */
+export const PROJECT_DOCUMENTS_FOLDER = 'Projects';
+const PROJECT_DOC_SUFFIX = ' — doc';
+const NAME_MAX = 196;
+/** Segmento `[orgId]` da rota: só slug, para o link salvo não virar caminho arbitrário. */
+const ORG_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+export interface ProjectDocumentDto {
+   document: DocumentDto & { teamId: string; url: string };
+   resource: ProjectResourceDto;
+}
+
+/**
+ * "Create document…" do Resources do projeto: cria um documento no time do projeto e o
+ * vincula como resource (link para a página interna do documento). Pasta: a "Projects"
+ * do time; sem ela, a primeira pasta do time; sem nenhuma, cria "Projects". Tudo numa
+ * transação: se o vínculo falhar, nem documento nem pasta nova ficam órfãos.
+ * Exige o projeto no escopo do ator e ser membro do time (mesma regra de criar documento).
+ */
+export async function createProjectDocument(
+   db: Db,
+   projectId: string,
+   input: { orgId: string },
+   actorEmail: string
+): Promise<ProjectDocumentDto> {
+   if (!ORG_ID_RE.test(input.orgId ?? '')) throw new ApiError(400, 'orgId inválido');
+   const [proj] = await db
+      .select({ name: projectT.name, teamId: projectT.teamId })
+      .from(projectT)
+      .where(eq(projectT.id, projectId))
+      .limit(1);
+   if (!proj) throw new ApiError(404, `Project '${projectId}' não encontrado`);
+   await assertCanWriteProject(db, actorEmail, projectId);
+   const creator = await assertTeamMember(db, proj.teamId, actorEmail);
+
+   const folders = await db
+      .select({ id: documentFolder.id, name: documentFolder.name })
+      .from(documentFolder)
+      .where(eq(documentFolder.teamId, proj.teamId))
+      .orderBy(asc(documentFolder.name));
+   const existing =
+      folders.find((f) => f.name.trim().toLowerCase() === PROJECT_DOCUMENTS_FOLDER.toLowerCase()) ??
+      folders[0];
+   const folderId = existing?.id ?? randomUUID();
+
+   const name = `${proj.name.trim().slice(0, NAME_MAX - PROJECT_DOC_SUFFIX.length)}${PROJECT_DOC_SUFFIX}`;
+   const id = randomUUID();
+   const resourceId = randomUUID();
+   const url = `/${input.orgId}/team/${proj.teamId}/documents/${id}`;
+   const now = new Date();
+   await db.transaction(async (tx) => {
+      if (!existing)
+         await tx.insert(documentFolder).values({
+            id: folderId,
+            teamId: proj.teamId,
+            name: PROJECT_DOCUMENTS_FOLDER,
+            icon: '📁',
+         });
+      await tx.insert(teamDocument).values({
+         id,
+         folderId,
+         name,
+         icon: null,
+         creatorId: creator.id,
+         pinned: false,
+         createdAt: now,
+         updatedAt: now,
+      });
+      await tx.insert(projectResource).values({ id: resourceId, projectId, label: name, url });
+   });
+
+   const teamId = proj.teamId;
+   if (!existing) publish({ entity: 'document', action: 'created', id: folderId, teamId });
+   publish({ entity: 'document', action: 'created', id, actorEmail, teamId });
+   publish({ entity: 'project', action: 'updated', id: projectId, actorEmail, teamId });
+   return {
+      document: {
+         id,
+         folderId,
+         teamId,
+         url,
+         name,
+         icon: null,
+         creator: {
+            id: creator.id,
+            slug: creator.slug,
+            name: creator.name,
+            email: creator.email,
+            avatarUrl: creator.avatarUrl,
+         },
+         pinned: false,
+         createdAt: now.toISOString(),
+         updatedAt: now.toISOString(),
+      },
+      resource: { id: resourceId, label: name, url },
+   };
 }
