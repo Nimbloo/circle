@@ -67,4 +67,11 @@ describe('preferência "On move to started status, assign to yourself"', () => {
       await useIssuesStore.getState().updateIssueStatus('i1', byId('in-progress'));
       expect(updateMock.mock.calls[2][1]).toEqual({ statusId: 'in-progress' });
    });
+
+   it('entre dois status "started" não atribui (não é iniciar a issue)', async () => {
+      usePreferencesStore.getState().setPref('assignSelfOnStart', true);
+      useIssuesStore.setState({ issues: [{ ...base, status: byId('in-progress') }] });
+      await useIssuesStore.getState().updateIssueStatus('i1', byId('technical-review'));
+      expect(updateMock.mock.calls[0][1]).toEqual({ statusId: 'technical-review' });
+   });
 });
