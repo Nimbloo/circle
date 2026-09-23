@@ -11,10 +11,9 @@ import { ThemePreferences } from './theme-preferences';
 
 /**
  * Personal "Preferences" settings. Toda escolha persiste por-usuário
- * (preferences-store → PUT /settings, sincronizado entre dispositivos).
- * `Font size`, `Use pointer cursors` e `Underline links` são honrados no app
- * inteiro pelo PreferencesApplier; as demais persistem (o efeito no fluxo quente
- * depende de subsistemas ainda não construídos).
+ * (preferences-store → PUT /settings, sincronizado entre dispositivos) e tem efeito
+ * real: `Font size`, `Use pointer cursors` e `Underline links` pelo PreferencesApplier;
+ * as demais no ponto de uso (ver o comentário de store/preferences-store.ts).
  */
 export default function Preferences() {
    const [customizeOpen, setCustomizeOpen] = useState(false);

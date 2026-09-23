@@ -1,7 +1,5 @@
 'use client';
 
-import { Switch } from '@/components/ui/switch';
-import { usePreferencesStore } from '@/store/preferences-store';
 import { Bot, Radar, RefreshCcw, Sparkles, Terminal } from 'lucide-react';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
 
@@ -37,29 +35,11 @@ const AGENT_FEATURES = [
 
 /** Workspace "AI & Agents" settings. */
 export default function AiAgents() {
-   const usageFeedback = usePreferencesStore((s) => s.aiUsageFeedback);
-   const setPref = usePreferencesStore((s) => s.setPref);
    return (
       <SettingsShell
          title="AI & Agents"
          description="Automate your product development processes and operations with AI"
       >
-         <SettingsSection>
-            <SettingsCard>
-               <SettingsRow
-                  title="Enable usage feedback"
-                  description="Improve AI functionality by sharing usage feedback. Never used to train models"
-                  trailing={
-                     <Switch
-                        aria-label="Enable usage feedback"
-                        checked={usageFeedback}
-                        onCheckedChange={(v) => setPref('aiUsageFeedback', v)}
-                     />
-                  }
-               />
-            </SettingsCard>
-         </SettingsSection>
-
          <SettingsSection
             title="Nimbloo Agent"
             description="Create issues and answer questions about your workspace"

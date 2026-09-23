@@ -4,16 +4,18 @@ import { DEFAULT_HOME_VIEW } from '@/lib/home-view';
 
 /**
  * Preferências por-usuário das telas de Settings (Preferences, Code & reviews,
- * AI & Agents, Agent personalization) que NÃO têm subsistema dedicado.
+ * Agent personalization) que NÃO têm subsistema dedicado.
  *
  * Persistidas em localStorage (cache/no-flash) e sincronizadas server-side via
  * `user-settings-sync` (fonte da verdade = banco, blob `user_settings.data`).
  * Selects guardam o rótulo exibido; toggles guardam boolean.
  *
- * As três preferências visuais (`fontSize`, `pointerCursors`, `underlineLinks`)
- * são HONRADAS no app inteiro pelo `PreferencesApplier` (atributos em <html> +
- * regras em globals.css). As demais persistem por-usuário (o efeito no fluxo
- * quente depende de subsistemas ainda não construídos).
+ * TODA chave aqui tem efeito real no app (guarda: test/preferences-consumed-guard.test.ts).
+ * As visuais (`fontSize`, `pointerCursors`, `underlineLinks`) pelo `PreferencesApplier`;
+ * as demais no ponto de uso (landing da org, criação/status de issue, composers,
+ * calendários, editor, nomes de pessoas, diff dos reviews, copiar branch/prompt, agente).
+ * Opção que dependia de algo que o Circle não faz foi removida da UI e daqui; o schema
+ * do servidor (`lib/api/settings.ts`) ainda aceita essas chaves legadas nos blobs gravados.
  */
 export interface Preferences {
    // General
@@ -31,20 +33,10 @@ export interface Preferences {
    assignSelfOnStart: boolean;
    // Code & reviews
    codeReviewsEnabled: boolean;
-   autoConvertDrafts: boolean;
-   mergeStrategy: string;
-   codeTheme: string;
    codeFont: string;
-   reviewComments: string;
-   reviewRequests: boolean;
-   githubTeamRequests: boolean;
-   checksMergeQueue: boolean;
-   requireSignedCommits: boolean;
-   gitAttachmentFormat: string;
    gitBranchCopyMoveStarted: boolean;
+   /** "On copy as prompt, move issue to started status" (nome legado da chave). */
    openCodingToolMoveStarted: boolean;
-   // AI & Agents
-   aiUsageFeedback: boolean;
    // Agent personalization
    agentGuidance: string;
 }
@@ -65,19 +57,9 @@ export const DEFAULT_PREFERENCES: Preferences = {
    autoAssignSelf: true,
    assignSelfOnStart: true,
    codeReviewsEnabled: true,
-   autoConvertDrafts: false,
-   mergeStrategy: 'Squash and merge',
-   codeTheme: 'Nimbloo Light',
    codeFont: CODE_FONT_DEFAULT,
-   reviewComments: 'Exclude Bots',
-   reviewRequests: true,
-   githubTeamRequests: true,
-   checksMergeQueue: true,
-   requireSignedCommits: false,
-   gitAttachmentFormat: 'Title',
    gitBranchCopyMoveStarted: true,
    openCodingToolMoveStarted: true,
-   aiUsageFeedback: true,
    agentGuidance: '',
 };
 
