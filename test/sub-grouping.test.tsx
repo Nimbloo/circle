@@ -156,6 +156,16 @@ describe('sub-agrupamento: popover Display', () => {
       await user.click(screen.getByRole('option', { name: 'Assignee' }));
       expect(current().subGrouping).toBe('assignee');
    });
+
+   it('sem grupo principal o select (desabilitado) mostra "No grouping", não fica em branco', async () => {
+      store().setGrouping(VIEW_KEY, 'none');
+      const user = userEvent.setup();
+      render(<DisplayOptions />);
+      await user.click(screen.getByRole('button', { name: /Display options/ }));
+      const select = screen.getByRole('combobox', { name: 'Sub-grouping' });
+      expect(select.hasAttribute('disabled')).toBe(true);
+      expect(select.textContent).toContain('No grouping');
+   });
 });
 
 describe('sub-agrupamento: lista e board', () => {

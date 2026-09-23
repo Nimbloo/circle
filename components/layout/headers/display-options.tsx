@@ -85,8 +85,11 @@ export function DisplayOptions() {
       displayProperties,
    });
 
-   // Sub-grupo: as mesmas dimensões do grupo, menos a escolhida no grupo principal.
-   const subGroupings = GROUPINGS.filter((option) => option.value !== grouping);
+   // Sub-grupo: as mesmas dimensões do grupo, menos a escolhida no grupo principal. "No
+   // grouping" fica sempre (sem ele, com o grupo principal em none, o select ficava em branco).
+   const subGroupings = GROUPINGS.filter(
+      (option) => option.value === 'none' || option.value !== grouping
+   );
    const subGroupingLabel = viewType === 'grid' ? 'Rows' : 'Sub-grouping';
 
    return (
