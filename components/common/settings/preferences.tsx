@@ -133,21 +133,6 @@ export default function Preferences() {
             <ThemePreferences />
          </SettingsSection>
 
-         <SettingsSection title="Desktop application">
-            <SettingsCard>
-               <SettingsRow
-                  title="Open in desktop app"
-                  description="Em breve"
-                  muted
-                  trailing={
-                     <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                        Soon
-                     </span>
-                  }
-               />
-            </SettingsCard>
-         </SettingsSection>
-
          <SettingsSection title="Automations and workflows">
             <SettingsCard>
                <SettingsRow

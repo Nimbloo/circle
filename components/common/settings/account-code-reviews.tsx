@@ -151,29 +151,11 @@ export default function AccountCodeReviews() {
                      />
                   }
                />
-               <SettingsRow
-                  title="No signing key added"
-                  trailing={
-                     <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                        Soon
-                     </span>
-                  }
-               />
             </SettingsCard>
          </SettingsSection>
 
          <SettingsSection title="External tools">
             <SettingsCard>
-               <SettingsRow
-                  title="Configure coding tools"
-                  description="Configure the external coding tools you can open issues in"
-                  muted
-                  trailing={
-                     <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                        Soon
-                     </span>
-                  }
-               />
                <SettingsRow
                   title="Git attachment format"
                   description="The format of GitHub/GitLab attachments on issues"

@@ -2,7 +2,7 @@
 
 import { Switch } from '@/components/ui/switch';
 import { useNotificationPrefsStore } from '@/store/notification-prefs-store';
-import { Mail, Monitor, Slack, Smartphone } from 'lucide-react';
+import { Mail, Slack } from 'lucide-react';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
 
 /** Personal notification settings (push channels + product updates). */
@@ -38,18 +38,6 @@ export default function AccountNotifications() {
                         onCheckedChange={(v) => prefs.setPref('slackNotifications', v)}
                      />
                   }
-               />
-               <SettingsRow
-                  icon={<Monitor className="size-4" />}
-                  title="Desktop"
-                  description="Em breve"
-                  muted
-               />
-               <SettingsRow
-                  icon={<Smartphone className="size-4" />}
-                  title="Mobile"
-                  description="Em breve"
-                  muted
                />
             </SettingsCard>
          </SettingsSection>

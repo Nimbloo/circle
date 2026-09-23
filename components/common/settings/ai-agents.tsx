@@ -1,10 +1,8 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { usePreferencesStore } from '@/store/preferences-store';
-import { Slack } from 'lucide-react';
-import { Bot, MessageCircleQuestion, Radar, RefreshCcw, Sparkles, Terminal } from 'lucide-react';
+import { Bot, Radar, RefreshCcw, Sparkles, Terminal } from 'lucide-react';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
 
 const AGENT_FEATURES = [
@@ -84,46 +82,6 @@ export default function AiAgents() {
                      description={feature.description}
                   />
                ))}
-            </SettingsCard>
-         </SettingsSection>
-
-         <SettingsSection
-            title="Agent integrations"
-            description="Integrations available to the agent"
-            action={
-               <div className="flex items-center gap-2">
-                  <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                     Soon
-                  </span>
-                  <Button size="xs" variant="secondary" disabled>
-                     Browse integrations
-                  </Button>
-               </div>
-            }
-         >
-            <SettingsCard>
-               <SettingsRow
-                  icon={<Slack className="size-4" />}
-                  title="Slack"
-                  description="Settings and additional guidance for creating issues from Slack messages"
-                  muted
-                  trailing={
-                     <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                        Soon
-                     </span>
-                  }
-               />
-               <SettingsRow
-                  icon={<MessageCircleQuestion className="size-4" />}
-                  title="Asks for Slack"
-                  description="Settings and issue templates for creating issues from Asks for Slack"
-                  muted
-                  trailing={
-                     <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                        Soon
-                     </span>
-                  }
-               />
             </SettingsCard>
          </SettingsSection>
       </SettingsShell>
