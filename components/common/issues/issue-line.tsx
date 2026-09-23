@@ -155,7 +155,7 @@ function IssueRow({
                </span>
             )}
             {displayProperties.status && (
-               <StatusSelector status={issue.status} issueId={issue.id} />
+               <StatusSelector status={issue.status} issueId={issue.id} teamId={issue.teamId} />
             )}
          </div>
          {/* Issue otimista ainda sem identifier (Is#17): sem link até o servidor responder. */}
