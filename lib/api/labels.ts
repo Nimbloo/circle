@@ -88,6 +88,19 @@ async function nameTaken(db: Db, name: string, exceptId?: string): Promise<boole
 /** Tentativas de sufixo para achar um slug livre (`x`, `x-2`, `x-3`…). */
 const MAX_SLUG_ATTEMPTS = 50;
 
+/** Violou o índice único `label_name_lower_unique` (23505 do Postgres)? Corrida entre
+ * criações/renomeações concorrentes com o mesmo name — a checagem `nameTaken` acima não
+ * é atômica sozinha; o índice é o cinto de segurança. */
+function isNameUniqueViolation(e: unknown): boolean {
+   // O driver (postgres-js/pglite) lança a exception nativa; o `db.transaction`/query
+   // builder do Drizzle às vezes embrulha em `DrizzleQueryError` com a causa original em
+   // `.cause` — checa os dois níveis.
+   const code = (e as { code?: string } | null)?.code;
+   if (code === '23505') return true;
+   const cause = (e as { cause?: { code?: string } } | null)?.cause;
+   return cause?.code === '23505';
+}
+
 /**
  * Cria um label. O NOME é único (409, sem diferenciar caixa — Ad#34). Sem id explícito,
  * o id é o slug do name, com sufixo quando outro nome já gerou o mesmo slug (antes dava
@@ -103,20 +116,32 @@ export async function createLabel(db: Db, input: CreateLabelInput): Promise<Labe
    const explicit = input.id?.trim();
    if (explicit) {
       if (await getLabelRow(db, explicit)) throw new ApiError(409, `Label '${explicit}' já existe`);
-      await db.insert(labelT).values({ id: explicit, name, color, groupId });
+      try {
+         await db.insert(labelT).values({ id: explicit, name, color, groupId });
+      } catch (e) {
+         if (isNameUniqueViolation(e)) throw new ApiError(409, `Label '${name}' já existe`);
+         throw e;
+      }
       return created(db, explicit);
    }
 
    const base = (slugify(name) || 'label').slice(0, 56);
    for (let n = 1; n <= MAX_SLUG_ATTEMPTS; n++) {
       const id = n === 1 ? base : `${base}-${n}`;
-      // `onConflictDoNothing`: outro create concorrente pode ter pego o mesmo slug.
-      const inserted = await db
-         .insert(labelT)
-         .values({ id, name, color, groupId })
-         .onConflictDoNothing()
-         .returning({ id: labelT.id });
-      if (inserted.length > 0) return created(db, id);
+      try {
+         // `onConflictDoNothing` mirado no id: outro create concorrente pode ter pego o
+         // mesmo slug — tenta o próximo sufixo. Conflito no NOME (índice único) não tem
+         // arbiter aqui, então lança normalmente e vira 409 claro no catch abaixo.
+         const inserted = await db
+            .insert(labelT)
+            .values({ id, name, color, groupId })
+            .onConflictDoNothing({ target: labelT.id })
+            .returning({ id: labelT.id });
+         if (inserted.length > 0) return created(db, id);
+      } catch (e) {
+         if (isNameUniqueViolation(e)) throw new ApiError(409, `Label '${name}' já existe`);
+         throw e;
+      }
    }
    throw new ApiError(409, `Não foi possível gerar um id livre para '${name}'`);
 }
@@ -154,7 +179,13 @@ export async function updateLabel(
    if (patch.groupId !== undefined) next.groupId = await resolveGroupId(db, patch.groupId);
 
    if (Object.keys(next).length > 0) {
-      await db.update(labelT).set(next).where(eq(labelT.id, id));
+      try {
+         await db.update(labelT).set(next).where(eq(labelT.id, id));
+      } catch (e) {
+         if (isNameUniqueViolation(e) && next.name)
+            throw new ApiError(409, `Label '${next.name}' já existe`);
+         throw e;
+      }
    }
    publish({ entity: 'label', action: 'updated', id });
    return toDto({ ...existing, ...next });
