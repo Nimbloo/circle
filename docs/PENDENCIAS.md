@@ -1,6 +1,6 @@
 # Pendências do Circle
 
-Estado em **2026-09-23**, com a v0.42.0 (rodadas de sanidade 2–5) a caminho de produção. As
+Estado em **2026-09-23**, com a v0.42.0 (rodadas de sanidade 2–5) em produção. As
 seções abaixo de "Operacional" até 10/09 são histórico; o detalhe das rodadas 2–5 vive em
 `docs/superpowers/specs/2026-09-1*-sanity-audit-*` e `2026-09-22-sanity-audit-5-*`.
 
