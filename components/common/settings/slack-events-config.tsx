@@ -2,6 +2,7 @@
 
 import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/client';
+import { SettingsCard } from './shared';
 import type { SlackConfigDto } from '@/lib/api/integrations/slack';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -50,7 +51,7 @@ export function SlackEventsConfig() {
    if (!cfg) return null;
 
    return (
-      <div className="divide-y divide-border/60 overflow-hidden rounded-[10px] bg-card">
+      <SettingsCard>
          <div className="px-4 py-2.5">
             <span className="text-sm font-medium">Notificações no canal</span>
             <p className="text-xs text-muted-foreground">
@@ -73,6 +74,6 @@ export function SlackEventsConfig() {
                />
             </label>
          ))}
-      </div>
+      </SettingsCard>
    );
 }

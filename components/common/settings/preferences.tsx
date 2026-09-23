@@ -3,6 +3,7 @@
 import { CustomizeSidebarDialog } from '@/components/layout/sidebar/customize-sidebar-dialog';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { DEFAULT_HOME_VIEW, HOME_VIEW_OPTIONS } from '@/lib/home-view';
 import { usePreferencesStore } from '@/store/preferences-store';
 import { useState } from 'react';
 import { SelectMenu, SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
@@ -10,10 +11,9 @@ import { ThemePreferences } from './theme-preferences';
 
 /**
  * Personal "Preferences" settings. Toda escolha persiste por-usuário
- * (preferences-store → PUT /settings, sincronizado entre dispositivos).
- * `Font size`, `Use pointer cursors` e `Underline links` são honrados no app
- * inteiro pelo PreferencesApplier; as demais persistem (o efeito no fluxo quente
- * depende de subsistemas ainda não construídos).
+ * (preferences-store → PUT /settings, sincronizado entre dispositivos) e tem efeito
+ * real: `Font size`, `Use pointer cursors` e `Underline links` pelo PreferencesApplier;
+ * as demais no ponto de uso (ver o comentário de store/preferences-store.ts).
  */
 export default function Preferences() {
    const [customizeOpen, setCustomizeOpen] = useState(false);
@@ -28,8 +28,12 @@ export default function Preferences() {
                   trailing={
                      <SelectMenu
                         ariaLabel="Default home view"
-                        options={['Agent (default)', 'Inbox', 'My issues']}
-                        value={prefs.defaultHomeView}
+                        options={[...HOME_VIEW_OPTIONS]}
+                        value={
+                           (HOME_VIEW_OPTIONS as readonly string[]).includes(prefs.defaultHomeView)
+                              ? prefs.defaultHomeView
+                              : DEFAULT_HOME_VIEW
+                        }
                         onChange={(v) => prefs.setPref('defaultHomeView', v)}
                      />
                   }
@@ -40,9 +44,9 @@ export default function Preferences() {
                   trailing={
                      <SelectMenu
                         ariaLabel="Display names"
-                        options={['Username', 'Full name']}
-                        value={prefs.displayNames}
-                        onChange={(v) => prefs.setPref('displayNames', v)}
+                        options={['Full name', 'Username']}
+                        value={prefs.nameDisplay}
+                        onChange={(v) => prefs.setPref('nameDisplay', v)}
                      />
                   }
                />
@@ -131,21 +135,6 @@ export default function Preferences() {
                />
             </SettingsCard>
             <ThemePreferences />
-         </SettingsSection>
-
-         <SettingsSection title="Desktop application">
-            <SettingsCard>
-               <SettingsRow
-                  title="Open in desktop app"
-                  description="Em breve"
-                  muted
-                  trailing={
-                     <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                        Soon
-                     </span>
-                  }
-               />
-            </SettingsCard>
          </SettingsSection>
 
          <SettingsSection title="Automations and workflows">

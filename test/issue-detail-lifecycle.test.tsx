@@ -117,6 +117,9 @@ describe('detalhe da issue', () => {
    });
 
    it('#27: eco da própria ação no feed não recarrega o detail inteiro', async () => {
+      // Timer falso que anda sozinho: o waitFor segue valendo e a janela do debounce
+      // é atravessada na hora, sem dormir (antes: sleep fixo).
+      vi.useFakeTimers({ shouldAdvanceTime: true });
       const { IssueDetailView } = await import('@/components/common/issues/details/issue-details');
       apiMocks.issues.detail.mockResolvedValue(dto('CORE-1'));
       render(<IssueDetailView issue={make('a', 'CORE-1')} />);
@@ -127,7 +130,7 @@ describe('detalhe da issue', () => {
       act(() => {
          window.dispatchEvent(new CustomEvent(ISSUE_CHANGED_EVENT, { detail: { id: 'a' } }));
       });
-      await new Promise((r) => setTimeout(r, 50));
+      await act(() => vi.advanceTimersByTimeAsync(50));
       expect(apiMocks.issues.detail).toHaveBeenCalledTimes(1);
    });
 
@@ -159,6 +162,9 @@ describe('detalhe da issue', () => {
    });
 
    it('#27: rajada de comentários de outra pessoa recarrega só o feed, uma vez', async () => {
+      // Timer falso que anda sozinho: o waitFor segue valendo e a janela do debounce
+      // é atravessada na hora, sem dormir (antes: sleep fixo).
+      vi.useFakeTimers({ shouldAdvanceTime: true });
       const { IssueDetailView } = await import('@/components/common/issues/details/issue-details');
       apiMocks.issues.detail.mockResolvedValue(dto('CORE-1'));
       render(<IssueDetailView issue={make('a', 'CORE-1')} />);
@@ -172,7 +178,7 @@ describe('detalhe da issue', () => {
             );
       });
       await waitFor(() => expect(apiMocks.issues.activity).toHaveBeenCalledTimes(1));
-      await new Promise((r) => setTimeout(r, 300));
+      await act(() => vi.advanceTimersByTimeAsync(300));
       expect(apiMocks.issues.activity).toHaveBeenCalledTimes(1);
       expect(apiMocks.issues.detail).toHaveBeenCalledTimes(1);
    });

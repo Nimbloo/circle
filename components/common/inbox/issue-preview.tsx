@@ -5,6 +5,7 @@ import {
    DetailPanelToggle,
    DetailSidePanelTrigger,
 } from '@/components/common/detail-side-panel';
+import { userDisplayName } from '@/lib/display-name';
 import { IssueDetailView } from '@/components/common/issues/details/issue-details';
 import { LoadingArea } from '@/components/common/loading-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -63,7 +64,7 @@ function NotificationContext({ notification }: { notification: InboxPreviewItem 
             </div>
          </div>
          <div className="min-w-0 text-sm">
-            <span className="font-medium">{notification.user.name}</span>{' '}
+            <span className="font-medium">{userDisplayName(notification.user)}</span>{' '}
             <span className="text-muted-foreground">· {when}</span>
             <p className="text-foreground/90 mt-0.5">{notification.content}</p>
          </div>

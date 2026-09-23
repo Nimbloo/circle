@@ -16,6 +16,8 @@ interface OpenApiSchema {
    enum?: string[];
    $ref?: string;
    description?: string;
+   minLength?: number;
+   maxLength?: number;
 }
 
 interface OpenApiParameter {
@@ -399,7 +401,12 @@ export const OPENAPI_DOCUMENT: OpenApiDocument = {
             required: ['teamId', 'title'],
             properties: {
                teamId: { type: 'string' },
-               title: { type: 'string' },
+               title: {
+                  type: 'string',
+                  minLength: 1,
+                  maxLength: 512,
+                  description: 'Espaços nas pontas são removidos; só espaços é recusado (400).',
+               },
                statusId: { type: 'string' },
                priorityId: { type: 'string' },
                assigneeId: { type: 'string', nullable: true },
@@ -414,7 +421,12 @@ export const OPENAPI_DOCUMENT: OpenApiDocument = {
          IssuePatch: {
             type: 'object',
             properties: {
-               title: { type: 'string' },
+               title: {
+                  type: 'string',
+                  minLength: 1,
+                  maxLength: 512,
+                  description: 'Espaços nas pontas são removidos; só espaços é recusado (400).',
+               },
                statusId: { type: 'string' },
                priorityId: { type: 'string' },
                assigneeId: { type: 'string', nullable: true },

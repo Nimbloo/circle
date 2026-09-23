@@ -9,6 +9,7 @@ import {
    SelectValue,
 } from '@/components/ui/select';
 import { api } from '@/lib/client';
+import { MOTION_MS } from '@/lib/motion';
 import type { TriageSuggestionDto } from '@/lib/api/triage';
 import { ISSUE_CHANGED_EVENT } from '@/lib/use-live-sync';
 import { useIssuesStore } from '@/store/issues-store';
@@ -60,6 +61,17 @@ export function TriageSuggestionCard({
 
    const [suggestion, setSuggestion] = useState<TriageSuggestionDto | null>(null);
    const [hidden, setHidden] = useState(false);
+   // Saída animada (list-exit): o card colapsa por `MOTION_MS.content` antes de sumir.
+   // Rollback (API recusou) devolve `hidden=false` e o card volta inteiro.
+   const [exited, setExited] = useState(false);
+   useEffect(() => {
+      if (!hidden) {
+         setExited(false);
+         return;
+      }
+      const timer = setTimeout(() => setExited(true), MOTION_MS.content);
+      return () => clearTimeout(timer);
+   }, [hidden]);
    const [pending, setPending] = useState(false);
    const [editing, setEditing] = useState(false);
    const [teamDraft, setTeamDraft] = useState<string>(NONE);
@@ -124,7 +136,7 @@ export function TriageSuggestionCard({
       return () => window.removeEventListener(ISSUE_CHANGED_EVENT, onChanged);
    }, [issueId, load, fedByQueue]);
 
-   if (!suggestion || hidden || suggestion.appliedAt || suggestion.dismissedAt) return null;
+   if (!suggestion || exited || suggestion.appliedAt || suggestion.dismissedAt) return null;
    const isHeuristic = suggestion.source === 'heuristic';
    // Fallback sem duplicata não tem o que sugerir — não ocupa espaço na tela.
    if (isHeuristic && suggestion.duplicates.length === 0) return null;
@@ -176,7 +188,7 @@ export function TriageSuggestionCard({
    const toggle = (list: string[], id: string) =>
       list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
 
-   return (
+   const card = (
       <section
          aria-label="Suggested triage"
          className={`rounded-md border border-border bg-container px-3 py-2.5 text-sm ${className ?? ''}`}
@@ -339,6 +351,12 @@ export function TriageSuggestionCard({
             </Button>
          </div>
       </section>
+   );
+   if (!hidden) return card;
+   return (
+      <div aria-hidden className={`list-exit ${className ?? ''}`}>
+         <div>{card}</div>
+      </div>
    );
 }
 

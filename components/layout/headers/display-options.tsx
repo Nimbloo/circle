@@ -54,6 +54,7 @@ export function DisplayOptions() {
    const { viewType, setViewType } = useViewStore();
    const {
       grouping,
+      subGrouping,
       ordering,
       orderCompletedByRecency,
       completedIssues,
@@ -61,6 +62,7 @@ export function DisplayOptions() {
       showSubIssues,
       displayProperties,
       setGrouping,
+      setSubGrouping,
       setOrdering,
       setOrderCompletedByRecency,
       setCompletedIssues,
@@ -74,6 +76,7 @@ export function DisplayOptions() {
    // o ponto no botão acende para QUALQUER desvio, e o Reset volta tudo.
    const isDefault = isDefaultDisplaySettings({
       grouping,
+      subGrouping,
       ordering,
       orderCompletedByRecency,
       completedIssues,
@@ -81,6 +84,10 @@ export function DisplayOptions() {
       showSubIssues,
       displayProperties,
    });
+
+   // Sub-grupo: as mesmas dimensões do grupo, menos a escolhida no grupo principal.
+   const subGroupings = GROUPINGS.filter((option) => option.value !== grouping);
+   const subGroupingLabel = viewType === 'grid' ? 'Rows' : 'Sub-grouping';
 
    return (
       <Popover>
@@ -161,17 +168,22 @@ export function DisplayOptions() {
                </div>
 
                <div className="flex items-center justify-between gap-2">
-                  <span className="pl-5 text-xs text-muted-foreground">
-                     {viewType === 'grid' ? 'Rows' : 'Sub-grouping'}
-                  </span>
-                  <Select value="none" disabled>
-                     <SelectTrigger className="h-7 w-36 text-xs">
-                        <SelectValue placeholder="No grouping" />
+                  <span className="pl-5 text-xs text-muted-foreground">{subGroupingLabel}</span>
+                  <Select
+                     value={subGrouping}
+                     onValueChange={(v) => setSubGrouping(v as GroupingKey)}
+                     // Sem grupo principal não há o que sub-agrupar.
+                     disabled={grouping === 'none'}
+                  >
+                     <SelectTrigger className="h-7 w-36 text-xs" aria-label={subGroupingLabel}>
+                        <SelectValue />
                      </SelectTrigger>
                      <SelectContent>
-                        <SelectItem value="none" className="text-xs">
-                           No grouping
-                        </SelectItem>
+                        {subGroupings.map((option) => (
+                           <SelectItem key={option.value} value={option.value} className="text-xs">
+                              {option.label}
+                           </SelectItem>
+                        ))}
                      </SelectContent>
                   </Select>
                </div>

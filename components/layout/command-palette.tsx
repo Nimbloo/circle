@@ -61,7 +61,14 @@ import {
    openShortcutsHelp,
    shortcutTokens,
 } from '@/lib/shortcuts';
-import { issueBranchName, issueUrl as buildIssueUrl, useContextIssue } from './context-issue';
+import { currentWeekStart, daysUntilWeekEnd } from '@/lib/week-start';
+import {
+   issueBranchName,
+   issueUrl as buildIssueUrl,
+   startIssueOnBranchCopy,
+   startIssueOnPromptCopy,
+   useContextIssue,
+} from './context-issue';
 
 type PaletteRoute =
    | 'root'
@@ -586,18 +593,24 @@ function CommandPaletteBody({
                               <ClipboardType className="text-muted-foreground" />
                               <span>Copy issue content as Markdown</span>
                            </CommandItem>
-                           <CommandItem onSelect={() => copy('Branch name', branchName)}>
+                           <CommandItem
+                              onSelect={() => {
+                                 void copy('Branch name', branchName);
+                                 startIssueOnBranchCopy(issue);
+                              }}
+                           >
                               <GitBranch className="text-muted-foreground" />
                               <span>Copy git branch name</span>
                               <Keys id="copy.branch" />
                            </CommandItem>
                            <CommandItem
-                              onSelect={() =>
-                                 copy(
+                              onSelect={() => {
+                                 void copy(
                                     'Prompt',
                                     `Work on the following issue.\n\nIssue ${issue.identifier}: ${issue.title}\n${issue.description || ''}\nStatus: ${issue.status.name} — Priority: ${issue.priority.name}`
-                                 )
-                              }
+                                 );
+                                 startIssueOnPromptCopy(issue);
+                              }}
                            >
                               <ClipboardList className="text-muted-foreground" />
                               <span>Copy as prompt</span>
@@ -1003,7 +1016,10 @@ function CommandPaletteBody({
                            [
                               ['Today', 0],
                               ['Tomorrow', 1],
-                              ['End of this week', (7 - new Date().getDay()) % 7],
+                              [
+                                 'End of this week',
+                                 daysUntilWeekEnd(new Date().getDay(), currentWeekStart()),
+                              ],
                               ['In one week', 7],
                            ] as const
                         ).map(([label, days]) => (

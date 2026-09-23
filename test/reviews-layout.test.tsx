@@ -128,6 +128,9 @@ describe('reviews: lista persistente entre rotas (#8)', () => {
 
 describe('reviews: tempo real sem apagar o "carregar mais" (#48)', () => {
    it('rajada de eventos = um refetch, com limit = carregados', async () => {
+      // Timer falso que anda sozinho: o waitFor segue valendo e a janela do debounce
+      // é atravessada na hora, sem dormir (antes: sleep fixo).
+      vi.useFakeTimers({ shouldAdvanceTime: true });
       fetchReviews.mockResolvedValueOnce(page(1, 50, 120));
       fetchReviews.mockResolvedValueOnce(page(51, 50, 120));
       render(<ReviewsShell />);
@@ -141,7 +144,7 @@ describe('reviews: tempo real sem apagar o "carregar mais" (#48)', () => {
       });
       await waitFor(() => expect(fetchReviews).toHaveBeenCalledTimes(3), { timeout: 3000 });
       expect(fetchReviews.mock.calls[2][0]).toMatchObject({ limit: 100, offset: 0 });
-      await new Promise((r) => setTimeout(r, 800));
+      await act(() => vi.advanceTimersByTimeAsync(800));
       expect(fetchReviews).toHaveBeenCalledTimes(3);
       expect(screen.getByText('PR 100')).toBeTruthy();
    });
@@ -160,6 +163,9 @@ describe('reviews: tempo real sem apagar o "carregar mais" (#48)', () => {
    });
 
    it('eco da própria ação no detalhe não refaz o fetch', async () => {
+      // Timer falso que anda sozinho: o waitFor segue valendo e a janela do debounce
+      // é atravessada na hora, sem dormir (antes: sleep fixo).
+      vi.useFakeTimers({ shouldAdvanceTime: true });
       go('/nimbloo/review/x%2Fy%231', '', { reviewId: 'x%2Fy%231' });
       fetchReviews.mockResolvedValue(page(1, 1, 1));
       fetchReview.mockResolvedValue(review(1));
@@ -179,7 +185,7 @@ describe('reviews: tempo real sem apagar o "carregar mais" (#48)', () => {
       act(() => {
          window.dispatchEvent(new CustomEvent(REVIEW_CHANGED_EVENT, { detail: { id: 'x/y#1' } }));
       });
-      await new Promise((r) => setTimeout(r, 800));
+      await act(() => vi.advanceTimersByTimeAsync(800));
       expect(fetchReview).toHaveBeenCalledTimes(1);
    });
 });

@@ -26,6 +26,8 @@ export interface IssueGroupDescriptor {
    status?: Status;
    /** Campo aplicado à issue solta neste grupo vinda de outro. Ausente = drop recusado. */
    drop?: GroupDropValue;
+   /** Sub-grupo (lista) / swimlane (board): campo da 2ª dimensão, aplicado junto do `drop`. */
+   subDrop?: GroupDropValue;
 }
 
 /** Grupo + suas issues na ordem exibida — lido no momento do drop (getter estável). */
@@ -123,10 +125,59 @@ const IssueGridList: FC<{ issues: Issue[]; group: IssueGroupDescriptor }> = ({ i
    );
 };
 
+/** Cabeçalho do grupo (coluna do board / grupo da lista): ícone, nome, contagem e "+". */
+export function GroupHeaderBar({
+   group,
+   count,
+   isViewTypeGrid,
+}: {
+   group: IssueGroupDescriptor;
+   count: number;
+   isViewTypeGrid: boolean;
+}) {
+   const { openModal } = useCreateIssueStore();
+   return (
+      <div
+         className={cn(
+            'sticky top-0 z-10 w-full',
+            isViewTypeGrid ? 'h-[50px] px-1 pt-1' : 'h-9 px-2'
+         )}
+      >
+         {/* Header neutro (padrão Linear): só o ícone de status é colorido, sem tinta de fundo. */}
+         <div
+            className={cn(
+               'flex h-full w-full items-center justify-between',
+               isViewTypeGrid ? 'h-[46px] rounded-t-md bg-background/40 px-3.5' : ''
+            )}
+         >
+            <div className="flex items-center gap-2">
+               {group.icon}
+               <span className="text-[13px] font-medium">{group.name}</span>
+               <span className="text-xs tabular-nums text-muted-foreground">{count}</span>
+            </div>
+
+            <Button
+               className="size-6"
+               size="icon"
+               variant="ghost"
+               aria-label={`Create issue in ${group.name}`}
+               onClick={(e) => {
+                  e.stopPropagation();
+                  // is#24: o "+" pré-preenche o campo da coluna (status/priority/
+                  // assignee/project) — antes só status funcionava.
+                  openModal(group.drop);
+               }}
+            >
+               <Plus className="size-4" />
+            </Button>
+         </div>
+      </div>
+   );
+}
+
 export function GroupIssues({ group, issues, count }: GroupIssuesProps) {
    const { viewType } = useViewStore();
    const isViewTypeGrid = viewType === 'grid';
-   const { openModal } = useCreateIssueStore();
    const getGroup = useGroupGetter(group, issues);
 
    return (
@@ -135,41 +186,7 @@ export function GroupIssues({ group, issues, count }: GroupIssuesProps) {
             isViewTypeGrid ? 'flex h-full w-[348px] flex-shrink-0 flex-col overflow-hidden' : ''
          )}
       >
-         <div
-            className={cn(
-               'sticky top-0 z-10 w-full',
-               isViewTypeGrid ? 'h-[50px] px-1 pt-1' : 'h-9 px-2'
-            )}
-         >
-            {/* Header neutro (padrão Linear): só o ícone de status é colorido, sem tinta de fundo. */}
-            <div
-               className={cn(
-                  'flex h-full w-full items-center justify-between',
-                  isViewTypeGrid ? 'h-[46px] rounded-t-md bg-background/40 px-3.5' : ''
-               )}
-            >
-               <div className="flex items-center gap-2">
-                  {group.icon}
-                  <span className="text-[13px] font-medium">{group.name}</span>
-                  <span className="text-xs tabular-nums text-muted-foreground">{count}</span>
-               </div>
-
-               <Button
-                  className="size-6"
-                  size="icon"
-                  variant="ghost"
-                  aria-label={`Create issue in ${group.name}`}
-                  onClick={(e) => {
-                     e.stopPropagation();
-                     // is#24: o "+" pré-preenche o campo da coluna (status/priority/
-                     // assignee/project) — antes só status funcionava.
-                     openModal(group.drop);
-                  }}
-               >
-                  <Plus className="size-4" />
-               </Button>
-            </div>
-         </div>
+         <GroupHeaderBar group={group} count={count} isViewTypeGrid={isViewTypeGrid} />
 
          {viewType === 'list' ? (
             <div className="space-y-0">

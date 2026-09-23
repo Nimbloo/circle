@@ -26,7 +26,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 }
 
 const patchSchema = z.object({
-   title: z.string().min(1).max(512).optional(),
+   title: z.string().trim().min(1, 'title é obrigatório').max(512, 'title deve ter no máximo 512 caracteres').optional(),
    statusId: z.string().optional(),
    priorityId: z.string().optional(),
    assigneeId: z.string().nullable().optional(),

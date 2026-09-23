@@ -37,7 +37,11 @@ export async function GET(req: Request, { params }: Params) {
 }
 
 const CreateSchema = z.object({
-   name: z.string().min(1).max(128),
+   name: z
+      .string()
+      .trim()
+      .min(1, 'name é obrigatório')
+      .max(128, 'name deve ter no máximo 128 caracteres'),
    trigger: z.enum(AUTOMATION_TRIGGERS),
    action: z.enum(AUTOMATION_ACTIONS),
    config: ConfigSchema.optional(),

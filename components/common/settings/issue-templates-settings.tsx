@@ -39,7 +39,7 @@ import { FileText, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { errorReason } from '@/lib/error-reason';
-import { SettingsShell } from './shared';
+import { SettingsCard, SettingsShell } from './shared';
 import { useAsyncResource } from '@/hooks/use-async-resource';
 import { CATALOG_CHANGED_EVENT, useLiveReload } from '@/lib/use-live-sync';
 
@@ -256,7 +256,7 @@ export default function IssueTemplatesSettings() {
             </Select>
          </div>
 
-         <div className="overflow-hidden rounded-[10px] bg-card">
+         <SettingsCard>
             {loading ? (
                <LoadingArea rows={4} />
             ) : resource.error ? (
@@ -282,7 +282,7 @@ export default function IssueTemplatesSettings() {
                   {templates.map((tmpl) => (
                      <div
                         key={tmpl.id}
-                        className="flex items-center gap-3 px-4 py-3 border-b last:border-b-0 border-border/50"
+                        className="flex items-center gap-3 px-4 py-3 border-b last:border-b-0 border-border/60"
                      >
                         <FileText className="size-4 text-muted-foreground shrink-0" />
                         <div className="min-w-0 flex-1">
@@ -325,7 +325,7 @@ export default function IssueTemplatesSettings() {
                   ))}
                </div>
             )}
-         </div>
+         </SettingsCard>
 
          {teamId && (
             <TemplateDialog

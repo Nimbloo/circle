@@ -8,6 +8,7 @@ import { Issue } from '@/data/issues';
 import { usePriorities, useStatuses } from '@/store/catalog-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
+import { usePreferencesStore } from '@/store/preferences-store';
 import { toast } from 'sonner';
 import { StatusSelector } from './status-selector';
 import { PrioritySelector } from './priority-selector';
@@ -76,6 +77,12 @@ export function CreateNewIssue() {
    const joinedTeams = teams.filter((t) => t.joined);
    const pickable = joinedTeams.length > 0 ? joinedTeams : teams;
    const teamId = params?.teamId ?? contextIssueTeam ?? pickable[0]?.id ?? '';
+   // Preferência "Auto-assign to self": a issue nova já vem com o usuário corrente como
+   // responsável (removível no seletor); o "+" de uma coluna de assignee tem precedência.
+   const autoAssignSelf = usePreferencesStore((s) => s.autoAssignSelf);
+   const meUser = useWorkspaceStore((s) =>
+      s.me ? s.users.find((u) => u.id === s.me?.id) : undefined
+   );
 
    const createDefaultData = useCallback(() => {
       const base: Issue = {
@@ -88,8 +95,8 @@ export function CreateNewIssue() {
          descriptionDoc: null,
          // 1º status "unstarted" do catálogo (Is#17), não um id fixo que pode não existir.
          status: status.find((s) => s.category === 'unstarted') || status[0],
-         assignee: null,
-         assignees: [],
+         assignee: autoAssignSelf && meUser ? meUser : null,
+         assignees: autoAssignSelf && meUser ? [meUser] : [],
          priority: priorities.find((p) => p.id === 'no-priority')!,
          labels: [],
          createdAt: new Date().toISOString(),
@@ -103,7 +110,7 @@ export function CreateNewIssue() {
          rank: new LexoRank('a3c').toString(),
       };
       return applyGroupDrop(base, defaultDrop);
-   }, [defaultDrop, status, priorities, teamId]);
+   }, [defaultDrop, status, priorities, teamId, autoAssignSelf, meUser]);
 
    const [addIssueForm, setAddIssueForm] = useState<Issue>(createDefaultData);
 

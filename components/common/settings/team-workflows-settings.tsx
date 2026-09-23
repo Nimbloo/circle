@@ -9,6 +9,7 @@ import {
    AlertDialogFooter,
    AlertDialogHeader,
    AlertDialogTitle,
+   useLatchedTarget,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import {
@@ -434,6 +435,8 @@ export default function TeamWorkflowsSettings({ teamId }: { teamId: string }) {
    const [dialogOpen, setDialogOpen] = useState(false);
    const [editing, setEditing] = useState<TeamAutomationDto | null>(null);
    const [removing, setRemoving] = useState<TeamAutomationDto | null>(null);
+   // O nome segue no texto enquanto o diálogo anima a saída (o estado vira null no clique).
+   const removingTarget = useLatchedTarget(removing);
 
    useEffect(() => {
       let alive = true;
@@ -630,7 +633,7 @@ export default function TeamWorkflowsSettings({ teamId }: { teamId: string }) {
                <AlertDialogHeader>
                   <AlertDialogTitle>Excluir automação</AlertDialogTitle>
                   <AlertDialogDescription>
-                     {removing ? `"${removing.name}" deixa de rodar neste time.` : null}
+                     {removingTarget ? `"${removingTarget.name}" deixa de rodar neste time.` : null}
                   </AlertDialogDescription>
                </AlertDialogHeader>
                <AlertDialogFooter>

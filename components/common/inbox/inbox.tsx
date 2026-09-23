@@ -1,5 +1,6 @@
 'use client';
 
+import { MOTION_MS } from '@/lib/motion';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNotificationsStore, type InboxNotification } from '@/store/notifications-store';
 import { useIssuesStore } from '@/store/issues-store';
@@ -56,8 +57,6 @@ import { isTypingTarget, hasOpenOverlay } from '@/lib/keyboard-guard';
 import { findShortcut } from '@/lib/shortcuts';
 import { CircleLoading } from '@/components/common/circle-loading';
 
-/** Duracao da saida de linha (colapso), alinhada ao `transition` da `IssueLine`. */
-const ROW_EXIT_MS = 150;
 /** Parametro da notificacao aberta na URL (mobile: o "voltar" do navegador fecha). */
 const SELECTED_PARAM = 'n';
 
@@ -302,7 +301,7 @@ export default function Inbox() {
             next.delete(id);
             return next;
          });
-      }, ROW_EXIT_MS);
+      }, MOTION_MS.content);
    }, []);
 
    const navRef = useRef({ filteredNotifications, selectedId });

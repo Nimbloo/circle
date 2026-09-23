@@ -18,7 +18,12 @@ export const dynamic = 'force-dynamic';
 type Params = { params: Promise<{ teamKey: string; id: string }> };
 
 const PatchSchema = z.object({
-   name: z.string().min(1).max(128).optional(),
+   name: z
+      .string()
+      .trim()
+      .min(1, 'name é obrigatório')
+      .max(128, 'name deve ter no máximo 128 caracteres')
+      .optional(),
    trigger: z.enum(AUTOMATION_TRIGGERS).optional(),
    action: z.enum(AUTOMATION_ACTIONS).optional(),
    config: z

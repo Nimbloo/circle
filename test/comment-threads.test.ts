@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import type { Db } from '@/db';
 import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
 import { createIssue } from '@/lib/api/issues';
@@ -18,8 +19,14 @@ const CAROL = 'carol@nimbloo.ai'; // participante
 const DAN = 'dan@nimbloo.ai'; // admin
 const EVE = 'eve@nimbloo.ai'; // sem relação
 
-/** As notificações são fire-and-forget: dá uma volta no event loop antes de ler o inbox. */
-const settle = () => new Promise((r) => setTimeout(r, 20));
+/**
+ * As notificações são fire-and-forget: espera a caixa de entrada chegar ao esperado
+ * (condição), em vez de dormir um tempo fixo que estoura com a máquina carregada.
+ */
+const commentsIn = async (db: Db, userId: string) =>
+   (await listInbox(db, userId)).filter((n) => n.type === 'comment');
+const untilComments = (db: Db, userId: string, n: number) =>
+   vi.waitFor(async () => expect(await commentsIn(db, userId)).toHaveLength(n));
 
 async function setup(opts: { assignee?: boolean } = {}) {
    const db = await makeTestDb();
@@ -101,14 +108,14 @@ describe('threads de comentário (#98) — notificações', () => {
       const { db, issueId, ana, bob, carol } = await setup();
       const root = await addComment(db, issueId, 'raiz', ANA);
       await addComment(db, issueId, 'r1', BOB, root.id);
-      await settle();
       // r1 (Bob) → só Ana (raiz) até aqui
-      expect((await listInbox(db, ana)).filter((n) => n.type === 'comment')).toHaveLength(1);
+      await untilComments(db, ana, 1);
       expect((await listInbox(db, bob)).filter((n) => n.type === 'comment')).toHaveLength(0);
 
       // r2 (Carol) → Ana (raiz) + Bob (participante), uma vez cada; Carol nada
       await addComment(db, issueId, 'r2', CAROL, root.id);
-      await settle();
+      await untilComments(db, ana, 2);
+      await untilComments(db, bob, 1);
       const anaInbox = (await listInbox(db, ana)).filter((n) => n.type === 'comment');
       const bobInbox = (await listInbox(db, bob)).filter((n) => n.type === 'comment');
       expect(anaInbox).toHaveLength(2);
@@ -124,19 +131,17 @@ describe('threads de comentário (#98) — notificações', () => {
       await addComment(db, issueId, 'r1', BOB, root.id);
       await addComment(db, issueId, 'r2', BOB, root.id);
       await addComment(db, issueId, 'r3', CAROL, root.id);
-      await settle();
-      expect((await listInbox(db, bob)).filter((n) => n.type === 'comment')).toHaveLength(1);
+      await untilComments(db, bob, 1);
    });
 
    it('assignee que participa da thread não é notificado duas vezes', async () => {
       const { db, issueId, bob } = await setup({ assignee: true });
       const root = await addComment(db, issueId, 'raiz', ANA);
-      await settle();
+      await untilComments(db, bob, 1);
       await addComment(db, issueId, 'r1', BOB, root.id);
       await addComment(db, issueId, 'r2', CAROL, root.id);
-      await settle();
       // raiz da Ana (1) + r2 da Carol (1); r1 é do próprio Bob
-      expect((await listInbox(db, bob)).filter((n) => n.type === 'comment')).toHaveLength(2);
+      await untilComments(db, bob, 2);
    });
 
    it('e-mail de resposta cita o texto da raiz como contexto (escapado)', () => {

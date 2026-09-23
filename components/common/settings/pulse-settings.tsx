@@ -5,7 +5,7 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { LoadingArea } from '@/components/common/loading-area';
-import { SettingsShell } from './shared';
+import { SettingsCard, SettingsShell } from './shared';
 
 interface Bucket {
    key: string;
@@ -16,11 +16,13 @@ interface Bucket {
 
 function StatCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
    return (
-      <div className="overflow-hidden rounded-[10px] bg-card px-4 py-3">
-         <div className="text-2xl font-semibold tabular-nums">{value}</div>
-         <div className="text-sm text-muted-foreground">{label}</div>
-         {hint && <div className="text-xs text-muted-foreground/70 mt-0.5">{hint}</div>}
-      </div>
+      <SettingsCard>
+         <div className="px-4 py-3">
+            <div className="text-2xl font-semibold tabular-nums">{value}</div>
+            <div className="text-sm text-muted-foreground">{label}</div>
+            {hint && <div className="text-xs text-muted-foreground/70 mt-0.5">{hint}</div>}
+         </div>
+      </SettingsCard>
    );
 }
 
@@ -28,29 +30,33 @@ function StatCard({ label, value, hint }: { label: string; value: string; hint?:
 function BarList({ title, buckets }: { title: string; buckets: Bucket[] }) {
    const max = Math.max(1, ...buckets.map((b) => b.count));
    return (
-      <div className="overflow-hidden rounded-[10px] bg-card p-4">
-         <h3 className="text-sm font-medium mb-3">{title}</h3>
-         <div className="flex flex-col gap-2">
-            {buckets.length === 0 && <div className="text-xs text-muted-foreground">Sem dados</div>}
-            {buckets.map((b) => (
-               <div key={b.key} className="flex items-center gap-3">
-                  <div className="w-28 shrink-0 text-xs text-muted-foreground truncate">
-                     {b.label}
+      <SettingsCard>
+         <div className="p-4">
+            <h3 className="text-sm font-medium mb-3">{title}</h3>
+            <div className="flex flex-col gap-2">
+               {buckets.length === 0 && (
+                  <div className="text-xs text-muted-foreground">Sem dados</div>
+               )}
+               {buckets.map((b) => (
+                  <div key={b.key} className="flex items-center gap-3">
+                     <div className="w-28 shrink-0 text-xs text-muted-foreground truncate">
+                        {b.label}
+                     </div>
+                     <div className="flex-1 h-2.5 rounded-full bg-muted/40 overflow-hidden">
+                        <div
+                           className="h-full rounded-full"
+                           style={{
+                              width: `${(b.count / max) * 100}%`,
+                              backgroundColor: b.color ?? 'var(--primary)',
+                           }}
+                        />
+                     </div>
+                     <div className="w-8 shrink-0 text-right text-xs tabular-nums">{b.count}</div>
                   </div>
-                  <div className="flex-1 h-2.5 rounded-full bg-muted/40 overflow-hidden">
-                     <div
-                        className="h-full rounded-full"
-                        style={{
-                           width: `${(b.count / max) * 100}%`,
-                           backgroundColor: b.color ?? 'var(--primary)',
-                        }}
-                     />
-                  </div>
-                  <div className="w-8 shrink-0 text-right text-xs tabular-nums">{b.count}</div>
-               </div>
-            ))}
+               ))}
+            </div>
          </div>
-      </div>
+      </SettingsCard>
    );
 }
 

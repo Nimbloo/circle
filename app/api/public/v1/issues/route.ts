@@ -37,7 +37,7 @@ export async function GET(req: Request) {
 
 const createSchema = z.object({
    teamId: z.string().min(1),
-   title: z.string().min(1).max(512),
+   title: z.string().trim().min(1, 'title é obrigatório').max(512, 'title deve ter no máximo 512 caracteres'),
    statusId: z.string().optional(),
    priorityId: z.string().optional(),
    assigneeId: z.string().nullable().optional(),

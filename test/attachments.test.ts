@@ -189,8 +189,8 @@ describe('deleteAttachment / cascades', () => {
       expect(await deleteAttachment(db, b.id, DAN)).toBe(true);
       expect(await deleteAttachment(db, a.id, ANA)).toBe(false);
       expect(await listIssueAttachments(db, issueId)).toHaveLength(0);
-      await new Promise((r) => setTimeout(r, 10));
-      expect(s3.deleteAsset).toHaveBeenCalledTimes(2);
+      // A remoção no S3 é best-effort em background: espera a condição, não um tempo fixo.
+      await vi.waitFor(() => expect(s3.deleteAsset).toHaveBeenCalledTimes(2));
       expect(s3.deleteAsset.mock.calls[0][0]).toMatch(/^uploads\/.*\.txt$/);
    });
 

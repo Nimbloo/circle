@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { DayPicker } from 'react-day-picker';
 
 import { cn } from '@/lib/utils';
+import { useWeekStartsOn } from '@/lib/week-start';
 import { buttonVariants } from '@/components/ui/button';
 
 function Calendar({
@@ -13,9 +14,12 @@ function Calendar({
    showOutsideDays = true,
    ...props
 }: React.ComponentProps<typeof DayPicker>) {
+   // Preferência "First day of the week" (Settings → Preferences); prop explícita vence.
+   const weekStartsOn = useWeekStartsOn();
    return (
       <DayPicker
          showOutsideDays={showOutsideDays}
+         weekStartsOn={weekStartsOn}
          className={cn('p-3', className)}
          classNames={{
             months: 'flex flex-col sm:flex-row gap-2',

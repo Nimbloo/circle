@@ -4,7 +4,7 @@ import './setup-dom';
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { IssueViewTabs } from '@/components/layout/headers/issues/header-nav';
+import { IssueViewTabs, issuesHeaderTitle } from '@/components/layout/headers/issues/header-nav';
 
 /**
  * is#23: a página de Triage reaproveitava o header de Issues, mas nenhuma das abas
@@ -24,5 +24,11 @@ describe('IssueViewTabs — aba Triage (is#23)', () => {
       const triageTab = screen.getByText('Triage');
       expect(triageTab.className).toContain('bg-accent');
       expect(triageTab.closest('a')?.getAttribute('href')).toBe('/nimbloo/team/ENG/triage');
+   });
+
+   it('o título do header acompanha a Triagem (como no Linear) e fica "Issues" nas outras abas', () => {
+      expect(issuesHeaderTitle('/nimbloo/team/ENG/triage')).toBe('Triage');
+      expect(issuesHeaderTitle('/nimbloo/team/ENG/active')).toBe('Issues');
+      expect(issuesHeaderTitle('/nimbloo/team/ENG/all')).toBe('Issues');
    });
 });
