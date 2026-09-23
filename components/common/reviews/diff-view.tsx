@@ -64,12 +64,15 @@ function DiffViewImpl({
    filePath,
    comments = NO_COMMENTS,
    handle,
+   serverReviewed,
 }: {
    diff: FileDiff;
    /** Caminho completo do arquivo (âncora `path` dos comentários). Default: `path/name`. */
    filePath?: string;
    comments?: ReviewComment[];
    handle?: ReviewCommentsHandle;
+   /** "Reviewed" deste arquivo no servidor; `undefined` enquanto ele não respondeu. */
+   serverReviewed?: boolean;
 }) {
    const path = filePath ?? (diff.path ? `${diff.path}/${diff.name}` : diff.name);
    const [fileComposer, setFileComposer] = useState(false);
@@ -79,12 +82,12 @@ function DiffViewImpl({
    // colapsado até pedir "Load diff" (#47).
    const [reviewed, setReviewed] = useState(() => readReviewed(handle?.reviewId, path));
    // O servidor é a fonte da verdade assim que responde — reconcilia e atualiza o cache.
+   const reviewId = handle?.reviewId;
    useEffect(() => {
-      if (!handle?.reviewedPaths) return;
-      const serverValue = handle.reviewedPaths.has(path);
-      setReviewed(serverValue);
-      writeReviewed(handle.reviewId, path, serverValue);
-   }, [handle?.reviewedPaths, handle?.reviewId, path]);
+      if (serverReviewed === undefined) return;
+      setReviewed(serverReviewed);
+      writeReviewed(reviewId, path, serverReviewed);
+   }, [serverReviewed, reviewId, path]);
    const [loadLarge, setLoadLarge] = useState(false);
    const large = diff.lines.length > LARGE_DIFF_LINES;
    const showBody = !reviewed && (!large || loadLarge);
@@ -133,7 +136,10 @@ function DiffViewImpl({
                         const next = value === true;
                         setReviewed(next);
                         writeReviewed(handle.reviewId, path, next);
-                        handle.setFileReviewed(path, next);
+                        handle.setFileReviewed(path, next).catch(() => {
+                           setReviewed(!next);
+                           writeReviewed(handle.reviewId, path, !next);
+                        });
                      }}
                   />
                   Reviewed
@@ -266,6 +272,7 @@ export const DiffView = memo(DiffViewImpl, (prev, next) => {
       a.lines === b.lines &&
       prev.filePath === next.filePath &&
       prev.comments === next.comments &&
-      prev.handle === next.handle
+      prev.handle === next.handle &&
+      prev.serverReviewed === next.serverReviewed
    );
 });

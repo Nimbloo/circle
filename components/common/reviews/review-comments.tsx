@@ -21,13 +21,11 @@ export interface ReviewCommentsHandle {
    isAdmin: boolean;
    mutate: (fn: (comments: ReviewComment[]) => ReviewComment[]) => void;
    /**
-    * "Reviewed" persistido por arquivo (escopo do usuário; #XX). `undefined` enquanto o
-    * servidor ainda não respondeu — o `DiffView` usa o localStorage como cache inicial
-    * até este set chegar.
+    * Marca/desmarca um arquivo como revisado (otimista no dono do estado). Rejeita se a
+    * API recusar, para o `DiffView` desfazer o próprio toggle. O estado vindo do servidor
+    * NÃO fica no handle: mudaria a identidade dele e re-renderizaria todos os arquivos.
     */
-   reviewedPaths?: Set<string>;
-   /** Marca/desmarca um arquivo como revisado (otimista + rollback no dono do estado). */
-   setFileReviewed: (path: string, reviewed: boolean) => void;
+   setFileReviewed: (path: string, reviewed: boolean) => Promise<void>;
 }
 
 const VERDICT_LABEL: Record<ReviewVerdictKind, string> = {

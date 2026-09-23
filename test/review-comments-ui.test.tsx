@@ -108,7 +108,7 @@ function Harness({
       meId,
       isAdmin,
       mutate: (fn) => setComments((cs) => fn(cs)),
-      setFileReviewed: () => {},
+      setFileReviewed: async () => {},
    };
    return <>{children(comments, handle)}</>;
 }
