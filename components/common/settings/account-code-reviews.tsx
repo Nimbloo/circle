@@ -1,7 +1,11 @@
 'use client';
 
 import { Switch } from '@/components/ui/switch';
-import { usePreferencesStore } from '@/store/preferences-store';
+import {
+   CODE_FONT_DEFAULT,
+   CODE_FONT_MEDIUM,
+   usePreferencesStore,
+} from '@/store/preferences-store';
 import { SelectMenu, SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
 
 /**
@@ -76,7 +80,7 @@ export default function AccountCodeReviews() {
                   trailing={
                      <SelectMenu
                         ariaLabel="Code font"
-                        options={['12px, Regular, Default', '13px, Medium']}
+                        options={[CODE_FONT_DEFAULT, CODE_FONT_MEDIUM]}
                         value={prefs.codeFont}
                         onChange={(v) => prefs.setPref('codeFont', v)}
                      />

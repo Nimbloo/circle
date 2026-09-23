@@ -49,6 +49,10 @@ export interface Preferences {
    agentGuidance: string;
 }
 
+/** Opções do select "Font" (Code & reviews), honradas no diff dos reviews. */
+export const CODE_FONT_DEFAULT = '12px, Regular, Default';
+export const CODE_FONT_MEDIUM = '13px, Medium';
+
 export const DEFAULT_PREFERENCES: Preferences = {
    defaultHomeView: DEFAULT_HOME_VIEW,
    displayNames: 'Full name',
@@ -64,7 +68,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
    autoConvertDrafts: false,
    mergeStrategy: 'Squash and merge',
    codeTheme: 'Nimbloo Light',
-   codeFont: '12px, Regular, Default',
+   codeFont: CODE_FONT_DEFAULT,
    reviewComments: 'Exclude Bots',
    reviewRequests: true,
    githubTeamRequests: true,
