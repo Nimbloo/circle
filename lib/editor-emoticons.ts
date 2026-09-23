@@ -1,36 +1,5 @@
 import { Extension, InputRule } from '@tiptap/core';
-
-/** Emoticon de texto → emoji (preferência "Convert text emoticons into emojis"). */
-export const EMOTICONS: Readonly<Record<string, string>> = {
-   ':)': '🙂',
-   ':-)': '🙂',
-   ':(': '🙁',
-   ':-(': '🙁',
-   ':D': '😄',
-   ':-D': '😄',
-   ';)': '😉',
-   ';-)': '😉',
-   ':P': '😛',
-   ':-P': '😛',
-   ':p': '😛',
-   ':-p': '😛',
-   ':O': '😮',
-   ':-O': '😮',
-   ':o': '😮',
-   ":'(": '😢',
-   '<3': '❤️',
-   '</3': '💔',
-};
-
-const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-// Mais longos primeiro (":-)" antes de ":)"); só no início do bloco ou após espaço, para
-// não mexer em URLs/código ("http://x:D" continua intacto).
-const FIND = new RegExp(
-   `(?:^|\\s)(${Object.keys(EMOTICONS)
-      .sort((a, b) => b.length - a.length)
-      .map(escape)
-      .join('|')})$`
-);
+import { EMOTICONS, EMOTICON_BEFORE_CARET as FIND } from './emoticons';
 
 export interface EmoticonsOptions {
    /** Lido a cada tecla: a preferência pode mudar com o editor aberto. */

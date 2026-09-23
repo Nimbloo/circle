@@ -12,6 +12,7 @@ import { useMemo, useRef, useState, type DragEvent } from 'react';
 import { toast } from 'sonner';
 import { AttachmentChip } from './attachment-chip';
 import { isCommentSubmitKey } from '@/lib/comment-submit-key';
+import { textWithEmoticons } from '@/lib/comment-emoticons';
 
 /** Slug do usuário: o real (do backend) quando disponível, senão o prefixo do e-mail. */
 function slugOf(user: { email: string; slug?: string }): string {
@@ -190,7 +191,7 @@ export function CommentComposer({
             ref={ref}
             autoFocus={autoFocus}
             value={draft}
-            onChange={(event) => sync(event.target.value)}
+            onChange={(event) => sync(textWithEmoticons(event))}
             onPaste={(event) => {
                const pasted = filesOf(event.clipboardData?.files);
                if (pasted.length) {

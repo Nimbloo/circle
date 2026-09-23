@@ -59,6 +59,7 @@ import { toast } from 'sonner';
 import { ContentBlocks } from './content-blocks';
 import { isCommentSubmitKey } from '@/lib/comment-submit-key';
 import { userDisplayName } from '@/lib/display-name';
+import { textWithEmoticons } from '@/lib/comment-emoticons';
 
 const EVENT_ICONS: Record<string, ReactNode> = {
    created: <PenLine className="size-3.5" />,
@@ -497,7 +498,7 @@ function CommentCard({
                         aria-label="Edit comment"
                         autoFocus
                         value={draft}
-                        onChange={(e) => setDraft(e.target.value)}
+                        onChange={(e) => setDraft(textWithEmoticons(e))}
                         onKeyDown={(e) => {
                            // is#22: mesmos atalhos do composer (tecla de envio da preferência
                            // "Send comments on..."), Esc cancela.
