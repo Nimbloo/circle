@@ -97,14 +97,17 @@ describe('user-settings-sync (layout)', () => {
 
       const body = put.mock.calls[0][0] as { layout: Record<string, unknown> };
       expect(Object.keys(body)).toEqual(['layout']);
+      // `subGrouping` ainda não vai para o servidor (schema strict): só no localStorage.
+      const synced: Partial<typeof DEFAULT_DISPLAY_SETTINGS> = { ...DEFAULT_DISPLAY_SETTINGS };
+      delete synced.subGrouping;
       expect(body.layout).toEqual({
          displayByView: {
             'my-issues': {
-               ...DEFAULT_DISPLAY_SETTINGS,
+               ...synced,
                grouping: 'assignee',
                displayProperties: { ...DEFAULT_DISPLAY_SETTINGS.displayProperties, cycle: true },
             },
-            'team/ENG/all': { ...DEFAULT_DISPLAY_SETTINGS, ordering: 'title' },
+            'team/ENG/all': { ...synced, ordering: 'title' },
          },
          viewTypeByView: { 'team/ENG/all': 'grid', 'my-issues': 'grid' },
          sidebarTeams: { openById: { t1: false, t2: true } },
