@@ -57,6 +57,7 @@ import { ReactNode, useState } from 'react';
 import { useCustomEmojis, customEmojiUrl } from '@/hooks/use-custom-emojis';
 import { toast } from 'sonner';
 import { ContentBlocks } from './content-blocks';
+import { isCommentSubmitKey } from '@/lib/comment-submit-key';
 
 const EVENT_ICONS: Record<string, ReactNode> = {
    created: <PenLine className="size-3.5" />,
@@ -496,8 +497,9 @@ function CommentCard({
                         value={draft}
                         onChange={(e) => setDraft(e.target.value)}
                         onKeyDown={(e) => {
-                           // is#22: mesmos atalhos do composer — Ctrl/⌘+Enter salva, Esc cancela.
-                           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                           // is#22: mesmos atalhos do composer (tecla de envio da preferência
+                           // "Send comments on..."), Esc cancela.
+                           if (isCommentSubmitKey(e)) {
                               e.preventDefault();
                               void save();
                            } else if (e.key === 'Escape') {

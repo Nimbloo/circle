@@ -11,6 +11,7 @@ import { Paperclip } from 'lucide-react';
 import { useMemo, useRef, useState, type DragEvent } from 'react';
 import { toast } from 'sonner';
 import { AttachmentChip } from './attachment-chip';
+import { isCommentSubmitKey } from '@/lib/comment-submit-key';
 
 /** Slug do usuário: o real (do backend) quando disponível, senão o prefixo do e-mail. */
 function slugOf(user: { email: string; slug?: string }): string {
@@ -229,7 +230,9 @@ export function CommentComposer({
                   fileInputRef.current?.click();
                   return;
                }
-               if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+               // Tecla de envio conforme "Send comments on..." (Settings → Preferences).
+               if (isCommentSubmitKey(event)) {
+                  event.preventDefault();
                   void submit();
                }
             }}
