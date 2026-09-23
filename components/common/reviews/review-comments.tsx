@@ -20,6 +20,14 @@ export interface ReviewCommentsHandle {
    meId?: string;
    isAdmin: boolean;
    mutate: (fn: (comments: ReviewComment[]) => ReviewComment[]) => void;
+   /**
+    * "Reviewed" persistido por arquivo (escopo do usuário; #XX). `undefined` enquanto o
+    * servidor ainda não respondeu — o `DiffView` usa o localStorage como cache inicial
+    * até este set chegar.
+    */
+   reviewedPaths?: Set<string>;
+   /** Marca/desmarca um arquivo como revisado (otimista + rollback no dono do estado). */
+   setFileReviewed: (path: string, reviewed: boolean) => void;
 }
 
 const VERDICT_LABEL: Record<ReviewVerdictKind, string> = {
