@@ -13,6 +13,7 @@ import { adaptIssues } from '@/lib/adapters';
 import { rankBetween } from '@/lib/api/rank';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useCatalogStore } from '@/store/catalog-store';
+import { usePreferencesStore } from '@/store/preferences-store';
 import type {
    CreateIssueInput,
    IssueDto,
@@ -177,6 +178,22 @@ function upsertDto(issues: Issue[], dto: IssueDto): Issue[] {
  *  Evita o flash de "Nenhuma issue" no deep-link frio, antes do hydrate começar. */
 export const selectIssuesLoading = (s: IssuesState): boolean =>
    s.loading || (!s.loaded && !s.error);
+
+/**
+ * Preferência "On move to started status, assign to yourself": mover uma issue SEM
+ * responsável para um status `started` a atribui ao usuário corrente, na mesma PATCH
+ * (vale para todo caminho de troca de status do cliente: seletor, board, ⌘K, bulk).
+ */
+function withSelfOnStart(prev: Issue | undefined, patch: Partial<Issue>): Partial<Issue> {
+   const next = patch.status;
+   if (!prev || !next || next.category !== 'started' || prev.status.id === next.id) return patch;
+   if ('assignee' in patch || 'assignees' in patch) return patch;
+   if (prev.assignee || (prev.assignees?.length ?? 0) > 0) return patch;
+   if (!usePreferencesStore.getState().assignSelfOnStart) return patch;
+   const { me, users } = useWorkspaceStore.getState();
+   const self = me ? users.find((u) => u.id === me.id) : undefined;
+   return self ? { ...patch, assignee: self, assignees: [self] } : patch;
+}
 
 /** Mapeia um Partial<Issue> (objetos ricos) para o patch da API (ids). */
 function toUpdateInput(updated: Partial<Issue>): UpdateIssueInput {
@@ -490,10 +507,11 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
    // Retorna a promise e RE-LANÇA no erro (após rollback + toast.error): assim os
    // chamadores (⌘K, bulk) podem toastar sucesso SÓ quando a API confirma, sem o
    // duplo-toast contraditório. O toast de erro segue fonte única aqui.
-   updateIssue: (id: string, updatedIssue: Partial<Issue>) => {
+   updateIssue: (id: string, patch: Partial<Issue>) => {
       // Rollback DIRECIONADO: só os campos alterados desta issue (não o store inteiro,
       // que apagaria mudanças remotas que chegaram no intervalo).
       const prev = get().getIssueById(id);
+      const updatedIssue = withSelfOnStart(prev, patch);
       const keys = Object.keys(updatedIssue) as (keyof Issue)[];
       // Issue FORA do store (deep-link frio, ⌘K/context menu antes do hydrate): não há
       // otimista possível, mas a API é chamada e o DTO da RESPOSTA entra no store (upsert,
