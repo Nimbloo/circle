@@ -88,7 +88,8 @@ export function planIssueDrop({
       if (subDrop && !issueHasValue(item, subDrop)) {
          return { kind: 'move', value: drop, subValue: subDrop };
       }
-      if (subDrop && issueHasValue(item, drop)) return { kind: 'none' };
+      // Já no grupo principal e sem 2ª dimensão a mudar: não há o que gravar.
+      if (issueHasValue(item, drop)) return { kind: 'none' };
       return { kind: 'move', value: drop };
    }
    if (!targetIssueId || targetIssueId === item.id) return { kind: 'none' };

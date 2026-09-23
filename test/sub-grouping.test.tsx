@@ -261,4 +261,24 @@ describe('sub-agrupamento: drag-and-drop entre swimlanes', () => {
       });
       expect(plan).toEqual({ kind: 'move', value: { field: 'status', status: inProgress } });
    });
+
+   it('sub-grupo por label (sem destino) com a issue já no grupo principal: não faz nada', () => {
+      const item = issue({ id: 'X', title: 'X', status: inProgress });
+      const plan = planIssueDrop({
+         item,
+         target: {
+            group: {
+               id: `${inProgress.id}::bug`,
+               name: 'Bug',
+               icon: null,
+               drop: { field: 'status' as const, status: inProgress },
+            },
+            issues: [],
+         },
+         targetIssueId: null,
+         dropAbove: false,
+         ordering: 'manual',
+      });
+      expect(plan).toEqual({ kind: 'none' });
+   });
 });
