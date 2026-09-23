@@ -4,9 +4,9 @@ Auditoria somente leitura concluída. Nenhum arquivo produtivo foi alterado; os 
 
 Li:
 
-- [AGENTS.md](/C:/Projetos/.codex-worktrees/circle-s5-probe/AGENTS.md)
-- [findings](/C:/Projetos/.codex-worktrees/circle-s5-probe/docs/superpowers/specs/2026-09-19-sanity-audit-4-findings.md)
-- [plano](/C:/Projetos/.codex-worktrees/circle-s5-probe/docs/superpowers/plans/2026-09-19-sanity-audit-4.md)
+- [AGENTS.md](../../../AGENTS.md)
+- [findings](../../../docs/superpowers/specs/2026-09-19-sanity-audit-4-findings.md)
+- [plano](../../../docs/superpowers/plans/2026-09-19-sanity-audit-4.md)
 
 Validações executadas:
 
@@ -28,25 +28,25 @@ A migration 0051 passou no caso de label legada com `group_id` sem grupo: ela cr
 
 ### 1. Corpo de documento
 
-- Abrir o mesmo documento em duas abas, editar textos diferentes e salvar quase simultaneamente. Esperado: primeira gravação vence; segunda recebe `409` e carrega a versão atual. O lock e `descriptionVersion` estão em [documents.ts:359](/C:/Projetos/.codex-worktrees/circle-s5-probe/lib/api/documents.ts:359). O cenário sequencial equivalente passou em [document-body.test.ts:80](/C:/Projetos/.codex-worktrees/circle-s5-probe/test/document-body.test.ts:80).
+- Abrir o mesmo documento em duas abas, editar textos diferentes e salvar quase simultaneamente. Esperado: primeira gravação vence; segunda recebe `409` e carrega a versão atual. O lock e `descriptionVersion` estão em [documents.ts:359](../../../lib/api/documents.ts#L359). O cenário sequencial equivalente passou em [document-body.test.ts:80](../../../test/document-body.test.ts#L80).
 
-- Excluir o documento em uma aba enquanto a outra está editando. Se o evento SSE chegar, a tela vira “Document not found”. Porém, se o PATCH retornar primeiro, `saveBody` apenas exibe toast e mantém o editor em estado `ready`; não muda para `notfound` ([team-document.tsx:127](/C:/Projetos/.codex-worktrees/circle-s5-probe/components/common/teams/team-document.tsx:127)). Suspeita de editor obsoleto.
+- Excluir o documento em uma aba enquanto a outra está editando. Se o evento SSE chegar, a tela vira “Document not found”. Porém, se o PATCH retornar primeiro, `saveBody` apenas exibe toast e mantém o editor em estado `ready`; não muda para `notfound` ([team-document.tsx:127](../../../components/common/teams/team-document.tsx#L127)). Suspeita de editor obsoleto.
 
-- Limpar o nome e sair do campo. O cliente ignora silenciosamente a string vazia ([team-document.tsx:143](/C:/Projetos/.codex-worktrees/circle-s5-probe/components/common/teams/team-document.tsx:143)); esperado seria feedback explícito ou restauração visível.
+- Limpar o nome e sair do campo. O cliente ignora silenciosamente a string vazia ([team-document.tsx:143](../../../components/common/teams/team-document.tsx#L143)); esperado seria feedback explícito ou restauração visível.
 
-- Digitar 129–196 caracteres. O input aceita 196, mas a API aceita apenas 128 ([team-document.tsx:286](/C:/Projetos/.codex-worktrees/circle-s5-probe/components/common/teams/team-document.tsx:286), [route.ts:31](/C:/Projetos/.codex-worktrees/circle-s5-probe/app/api/v1/documents/[id]/route.ts:31)). O título otimista é revertido após erro; risco de UX.
+- Digitar 129–196 caracteres. O input aceita 196, mas a API aceita apenas 128 ([team-document.tsx:286](../../../components/common/teams/team-document.tsx#L286), [route.ts:31](../../../app/api/v1/documents/[id]/route.ts#L31)). O título otimista é revertido após erro; risco de UX.
 
-- Guest membro do time pode editar o corpo; Guest de outro time recebe `403`. Teste existente passou. Metadados continuam restritos a criador/admin ([documents.ts:328](/C:/Projetos/.codex-worktrees/circle-s5-probe/lib/api/documents.ts:328)).
+- Guest membro do time pode editar o corpo; Guest de outro time recebe `403`. Teste existente passou. Metadados continuam restritos a criador/admin ([documents.ts:328](../../../lib/api/documents.ts#L328)).
 
-- Eventos de criação, edição e exclusão carregam `teamId`; teste existente passou ([documents-joinrequests-events.test.ts:28](/C:/Projetos/.codex-worktrees/circle-s5-probe/test/documents-joinrequests-events.test.ts:28)).
+- Eventos de criação, edição e exclusão carregam `teamId`; teste existente passou ([documents-joinrequests-events.test.ts:28](../../../test/documents-joinrequests-events.test.ts#L28)).
 
 ### 2. Grupos de label
 
-- Criar ou adicionar duas labels do mesmo grupo à issue: exclusividade funciona; testes existentes passaram ([issues.ts:1718](/C:/Projetos/.codex-worktrees/circle-s5-probe/lib/api/issues.ts:1718)).
+- Criar ou adicionar duas labels do mesmo grupo à issue: exclusividade funciona; testes existentes passaram ([issues.ts:1718](../../../lib/api/issues.ts#L1718)).
 
 - Criar issue com labels A e B do mesmo grupo também é validado pelo serviço.
 
-- Criar issue com A sem grupo e B no grupo; depois editar A para o grupo de B. Esperado: conflito resolvido deterministicamente, permanecendo uma só label. Resultado real do probe: duas labels permanecem. O PATCH apenas atualiza a label ([labels.ts:137](/C:/Projetos/.codex-worktrees/circle-s5-probe/lib/api/labels.ts:137)). Falha confirmada.
+- Criar issue com A sem grupo e B no grupo; depois editar A para o grupo de B. Esperado: conflito resolvido deterministicamente, permanecendo uma só label. Resultado real do probe: duas labels permanecem. O PATCH apenas atualiza a label ([labels.ts:137](../../../lib/api/labels.ts#L137)). Falha confirmada.
 
 - Apagar grupo com labels: labels ficam sem grupo; teste existente passou.
 
@@ -56,35 +56,35 @@ A migration 0051 passou no caso de label legada com `group_id` sem grupo: ela cr
 
 ### 3. Hierarquia de times
 
-- A → B; tentar mover A para dentro de B. Rejeitado pelo `assertTeamParent`; testes existentes passaram ([teams.ts:502](/C:/Projetos/.codex-worktrees/circle-s5-probe/lib/api/teams.ts:502)).
+- A → B; tentar mover A para dentro de B. Rejeitado pelo `assertTeamParent`; testes existentes passaram ([teams.ts:502](../../../lib/api/teams.ts#L502)).
 
-- Criar árvore com quatro ou mais níveis. Não há limite de três: serviço aceita até 64 níveis e a árvore visual protege até 32 ([hierarchy.ts:15](/C:/Projetos/.codex-worktrees/circle-s5-probe/lib/api/hierarchy.ts:15), [team-tree.ts:13](/C:/Projetos/.codex-worktrees/circle-s5-probe/lib/team-tree.ts:13)). Sem falha observada.
+- Criar árvore com quatro ou mais níveis. Não há limite de três: serviço aceita até 64 níveis e a árvore visual protege até 32 ([hierarchy.ts:15](../../../lib/api/hierarchy.ts#L15), [team-tree.ts:13](../../../lib/team-tree.ts#L13)). Sem falha observada.
 
-- Excluir pai com filhos. Os filhos são reancorados no avô ([teams.ts:717](/C:/Projetos/.codex-worktrees/circle-s5-probe/lib/api/teams.ts:717)); teste existente passou.
+- Excluir pai com filhos. Os filhos são reancorados no avô ([teams.ts:717](../../../lib/api/teams.ts#L717)); teste existente passou.
 
 - Guest membro direto apenas do sub-time: `visibleTeamIds` inclui esse time e seus descendentes; o sub-time aparece como raiz na árvore. Comportamento coerente.
 
-- Guest membro apenas do pai: a API inclui os sub-times no escopo, mas a sidebar renderiza somente `teams.filter(t => t.joined)` ([nav-teams.tsx:212](/C:/Projetos/.codex-worktrees/circle-s5-probe/components/layout/sidebar/nav-teams.tsx:212)). O sub-time pode ser acessível por URL, mas não aparecer em “Your teams”. Suspeita de divergência UI/API.
+- Guest membro apenas do pai: a API inclui os sub-times no escopo, mas a sidebar renderiza somente `teams.filter(t => t.joined)` ([nav-teams.tsx:212](../../../components/layout/sidebar/nav-teams.tsx#L212)). O sub-time pode ser acessível por URL, mas não aparecer em “Your teams”. Suspeita de divergência UI/API.
 
 ### 4. Updates de projeto e initiative
 
-- Editar update de projeto criado por outro usuário membro. O probe esperava `403`, mas a operação foi aceita. A rota verifica apenas permissão de escrita no projeto ([project-detail.ts:627](/C:/Projetos/.codex-worktrees/circle-s5-probe/lib/api/project-detail.ts:627)); não verifica `authorId`.
+- Editar update de projeto criado por outro usuário membro. O probe esperava `403`, mas a operação foi aceita. A rota verifica apenas permissão de escrita no projeto ([project-detail.ts:627](../../../lib/api/project-detail.ts#L627)); não verifica `authorId`.
 
-- A mesma lacuna existe em initiative: a rota verifica escopo, mas `editInitiativeUpdate` não recebe ator nem verifica autoria ([initiative-detail.ts:156](/C:/Projetos/.codex-worktrees/circle-s5-probe/lib/api/initiative-detail.ts:156), [route.ts:20](/C:/Projetos/.codex-worktrees/circle-s5-probe/app/api/v1/initiatives/[id]/updates/[uid]/route.ts:20)).
+- A mesma lacuna existe em initiative: a rota verifica escopo, mas `editInitiativeUpdate` não recebe ator nem verifica autoria ([initiative-detail.ts:156](../../../lib/api/initiative-detail.ts#L156), [route.ts:20](../../../app/api/v1/initiatives/[id]/updates/[uid]/route.ts#L20)).
 
 - Excluir o último update deve retornar health para `no-update`; testes existentes passaram.
 
-- Editar/excluir simultaneamente: há TOCTOU. O update é lido antes da transação e depois atualizado/apagado sem verificar quantidade afetada ([project-detail.ts:635](/C:/Projetos/.codex-worktrees/circle-s5-probe/lib/api/project-detail.ts:635), [project-detail.ts:685](/C:/Projetos/.codex-worktrees/circle-s5-probe/lib/api/project-detail.ts:685)). Uma resposta pode declarar sucesso e publicar evento após o registro já ter sido removido.
+- Editar/excluir simultaneamente: há TOCTOU. O update é lido antes da transação e depois atualizado/apagado sem verificar quantidade afetada ([project-detail.ts:635](../../../lib/api/project-detail.ts#L635), [project-detail.ts:685](../../../lib/api/project-detail.ts#L685)). Uma resposta pode declarar sucesso e publicar evento após o registro já ter sido removido.
 
 ### 5. Reordenação de favoritos
 
-- ID inexistente: ignorado; favoritos próprios omitidos são anexados depois. Testes existentes passaram ([favorites.ts:154](/C:/Projetos/.codex-worktrees/circle-s5-probe/lib/api/favorites.ts:154)).
+- ID inexistente: ignorado; favoritos próprios omitidos são anexados depois. Testes existentes passaram ([favorites.ts:154](../../../lib/api/favorites.ts#L154)).
 
 - ID de outro usuário: ignorado porque a lista é filtrada pelos favoritos do usuário atual. Teste passou.
 
 - Ordem parcial: itens não enviados preservam presença e vão ao final. Teste passou.
 
-- Ordem duplicada, por exemplo `{ order: [A, A] }`: o schema não exige unicidade ([route.ts:31](/C:/Projetos/.codex-worktrees/circle-s5-probe/app/api/v1/favorites/route.ts:31)). Pode retornar `reordered: 2` e atribuir posição duplicada intermediária. Suspeita não coberta.
+- Ordem duplicada, por exemplo `{ order: [A, A] }`: o schema não exige unicidade ([route.ts:31](../../../app/api/v1/favorites/route.ts#L31)). Pode retornar `reordered: 2` e atribuir posição duplicada intermediária. Suspeita não coberta.
 
 ### 6. Exclusão em cascata de time
 
@@ -94,9 +94,9 @@ A migration 0051 passou no caso de label legada com `group_id` sem grupo: ela cr
 
 - Anexos de issues/comentários: linhas de banco e objetos S3 são removidos; teste passou.
 
-- Review com `resolves_identifier = CORE-1`: após excluir o time, a issue desaparece, mas a review continua com `CORE-1` e o título antigo. Probe falhou. Não há tratamento de `review` em [teams.ts:571](/C:/Projetos/.codex-worktrees/circle-s5-probe/lib/api/teams.ts:571).
+- Review com `resolves_identifier = CORE-1`: após excluir o time, a issue desaparece, mas a review continua com `CORE-1` e o título antigo. Probe falhou. Não há tratamento de `review` em [teams.ts:571](../../../lib/api/teams.ts#L571).
 
-- O modal de impacto não conta anexos, reviews nem vínculos de initiative; só conta issues, projetos, ciclos, views, pastas e documentos ([teams.ts:528](/C:/Projetos/.codex-worktrees/circle-s5-probe/lib/api/teams.ts:528)). A confirmação subestima o impacto real.
+- O modal de impacto não conta anexos, reviews nem vínculos de initiative; só conta issues, projetos, ciclos, views, pastas e documentos ([teams.ts:528](../../../lib/api/teams.ts#L528)). A confirmação subestima o impacto real.
 
 ### 7. Undo de exclusão de issue
 
@@ -104,7 +104,7 @@ A migration 0051 passou no caso de label legada com `group_id` sem grupo: ela cr
 
 - Excluir duas vezes seguidas a mesma issue: a segunda chamada encontra a issue ausente e não gera novo DELETE efetivo. Não há teste específico, mas o fluxo é consistente com o código.
 
-- Excluir localmente, receber `issue.deleted` de outra aba durante os 6 segundos e clicar Undo: esperado é não restaurar. Resultado real: a issue volta ao Zustand. `removeRemote` só remove do store ([issues-store.ts:371](/C:/Projetos/.codex-worktrees/circle-s5-probe/store/issues-store.ts:371)); não marca o Undo como encerrado. Falha confirmada.
+- Excluir localmente, receber `issue.deleted` de outra aba durante os 6 segundos e clicar Undo: esperado é não restaurar. Resultado real: a issue volta ao Zustand. `removeRemote` só remove do store ([issues-store.ts:371](../../../store/issues-store.ts#L371)); não marca o Undo como encerrado. Falha confirmada.
 
 ### 8. Cache de catálogos e LISTEN
 
@@ -113,9 +113,9 @@ O `subscribe` não ouve apenas eventos locais.
 O caminho é:
 
 1. `pg` recebe `notification`.
-2. `runListener` faz `JSON.parse` ([events.ts:281](/C:/Projetos/.codex-worktrees/circle-s5-probe/lib/api/events.ts:281)).
-3. O listener remove `__inst` e chama `fanOutLocal` ([events.ts:339](/C:/Projetos/.codex-worktrees/circle-s5-probe/lib/api/events.ts:339)).
-4. `catalogs.ts` está inscrito e executa `resetCatalogCache` para `catalog`/`label` ([catalogs.ts:46](/C:/Projetos/.codex-worktrees/circle-s5-probe/lib/api/catalogs.ts:46)).
+2. `runListener` faz `JSON.parse` ([events.ts:281](../../../lib/api/events.ts#L281)).
+3. O listener remove `__inst` e chama `fanOutLocal` ([events.ts:339](../../../lib/api/events.ts#L339)).
+4. `catalogs.ts` está inscrito e executa `resetCatalogCache` para `catalog`/`label` ([catalogs.ts:46](../../../lib/api/catalogs.ts#L46)).
 
 Os testes unitários de listener e cache passaram. Não foi feito teste real multi-pod contra PostgreSQL; a conclusão é OK por código e cobertura do listener, não por navegador/infra real.
 
@@ -125,11 +125,11 @@ Os testes unitários de listener e cache passaram. Não foi feito teste real mul
 
    `relation "import_job" already exists`
 
-- Mesmo ultrapassando isso, 0050 também recria constraints e índices sem proteção ([0050](/C:/Projetos/.codex-worktrees/circle-s5-probe/db/migrations/0050_wealthy_sway.sql:1)).
+- Mesmo ultrapassando isso, 0050 também recria constraints e índices sem proteção ([0050](../../../db/migrations/0050_wealthy_sway.sql#L1)).
 
-- 0051 também não é idempotente: recria `label_group` e adiciona `description_doc` sem `IF NOT EXISTS` ([0051](/C:/Projetos/.codex-worktrees/circle-s5-probe/db/migrations/0051_label_group_document_body.sql:1)).
+- 0051 também não é idempotente: recria `label_group` e adiciona `description_doc` sem `IF NOT EXISTS` ([0051](../../../db/migrations/0051_label_group_document_body.sql#L1)).
 
-- Label legada com `group_id = 'gone'`: o `INSERT ... SELECT DISTINCT ... ON CONFLICT DO NOTHING` cria o grupo placeholder; probe passou ([0051:11](/C:/Projetos/.codex-worktrees/circle-s5-probe/db/migrations/0051_label_group_document_body.sql:11)).
+- Label legada com `group_id = 'gone'`: o `INSERT ... SELECT DISTINCT ... ON CONFLICT DO NOTHING` cria o grupo placeholder; probe passou ([0051:11](../../../db/migrations/0051_label_group_document_body.sql#L11)).
 
 ## Tabela cenário × resultado
 
