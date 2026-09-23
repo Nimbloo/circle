@@ -33,11 +33,11 @@ integrador em produção e no build local, e duas frentes de correção (servido
 - Nome do documento: UI e API alinhadas em 196 (a API estava em 128 por erro meu na integração da rodada 4); nome vazio avisa em vez de sumir em silêncio.
 - **Busca em comentários com trigram: NÃO feita, por decisão.** As migrations 0044/0047 documentam que `pg_trgm`/`unaccent` não existem no RDS compartilhado; zero `CREATE EXTENSION` no histórico.
 
-## Suspeitas do Codex não confirmadas / deixadas
+## Suspeitas do Codex — fechadas no fim da rodada (2026-09-23)
 
-- Guest membro só do time pai não vê os sub-times na sidebar (`nav-teams.tsx:213` filtra `joined`), embora a API os inclua no escopo. Baixa; registrado.
-- `PATCH /favorites {order}` aceita ids duplicados (200). Baixa; registrado.
-- Documento apagado com editor aberto: se o PATCH voltar antes do SSE, o editor fica obsoleto com toast. Não reproduzido no navegador.
+- Sub-times de quem é membro só do time pai: agora aparecem aninhados em "Your teams" (`nav-teams.tsx` usa `teamWithDescendants` dos times do usuário), como no Linear e como o escopo da API.
+- `PATCH /favorites {order}` com ids repetidos: deduplicado no serviço (`reordered` conta uma vez, posições contíguas). O contrato não muda (continua 200).
+- Documento apagado com o editor aberto: um 404 no autosave leva à tela "Document not found", a mesma do evento SSE.
 
 ## Remedição no build de produção local (develop integrada, banco clonado do dev, 53 migrations)
 
