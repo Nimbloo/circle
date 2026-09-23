@@ -3,6 +3,7 @@
 import { CustomizeSidebarDialog } from '@/components/layout/sidebar/customize-sidebar-dialog';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { DEFAULT_HOME_VIEW, HOME_VIEW_OPTIONS } from '@/lib/home-view';
 import { usePreferencesStore } from '@/store/preferences-store';
 import { useState } from 'react';
 import { SelectMenu, SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
@@ -28,8 +29,12 @@ export default function Preferences() {
                   trailing={
                      <SelectMenu
                         ariaLabel="Default home view"
-                        options={['Agent (default)', 'Inbox', 'My issues']}
-                        value={prefs.defaultHomeView}
+                        options={[...HOME_VIEW_OPTIONS]}
+                        value={
+                           (HOME_VIEW_OPTIONS as readonly string[]).includes(prefs.defaultHomeView)
+                              ? prefs.defaultHomeView
+                              : DEFAULT_HOME_VIEW
+                        }
                         onChange={(v) => prefs.setPref('defaultHomeView', v)}
                      />
                   }

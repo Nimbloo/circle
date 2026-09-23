@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { DEFAULT_HOME_VIEW } from '@/lib/home-view';
 
 /**
  * Preferências por-usuário das telas de Settings (Preferences, Code & reviews,
@@ -49,7 +50,7 @@ export interface Preferences {
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
-   defaultHomeView: 'Agent (default)',
+   defaultHomeView: DEFAULT_HOME_VIEW,
    displayNames: 'Username',
    firstDayOfWeek: 'Monday',
    convertEmoticons: true,
