@@ -57,6 +57,8 @@ import { ReactNode, useState } from 'react';
 import { useCustomEmojis, customEmojiUrl } from '@/hooks/use-custom-emojis';
 import { toast } from 'sonner';
 import { ContentBlocks } from './content-blocks';
+import { isCommentSubmitKey } from '@/lib/comment-submit-key';
+import { userDisplayName } from '@/lib/display-name';
 
 const EVENT_ICONS: Record<string, ReactNode> = {
    created: <PenLine className="size-3.5" />,
@@ -99,7 +101,8 @@ function EventRow({ item }: { item: Extract<ActivityItem, { kind: 'event' }> }) 
             {EVENT_ICONS[item.event] ?? <CircleDot className="size-3.5" />}
          </span>
          <span className="min-w-0 truncate">
-            <span className="text-foreground/90 font-medium">{item.actor.name}</span> {item.text}
+            <span className="text-foreground/90 font-medium">{userDisplayName(item.actor)}</span>{' '}
+            {item.text}
          </span>
          <span className="shrink-0 text-xs">· {item.timeAgo}</span>
       </div>
@@ -379,12 +382,12 @@ function CommentCard({
                className="group/comment flex w-full items-center gap-2 rounded-lg border border-border/60 bg-container px-3.5 py-2 text-left text-sm hover:bg-accent/40"
             >
                <CheckCircle2 className="size-4 shrink-0 text-green-500" />
-               <span className="font-medium">{item.actor.name}</span>
+               <span className="font-medium">{userDisplayName(item.actor)}</span>
                <span className="min-w-0 flex-1 truncate text-muted-foreground">
                   {previewText(item)}
                </span>
                <span className="shrink-0 text-xs text-muted-foreground">
-                  Resolved{item.resolvedBy ? ` by ${item.resolvedBy.name}` : ''}
+                  Resolved{item.resolvedBy ? ` by ${userDisplayName(item.resolvedBy)}` : ''}
                   {replies.length > 0 &&
                      ` · ${replies.length} ${replies.length === 1 ? 'reply' : 'replies'}`}
                </span>
@@ -401,7 +404,7 @@ function CommentCard({
                      <AvatarImage src={item.actor.avatarUrl || undefined} alt={item.actor.name} />
                      <AvatarFallback>{item.actor.name[0]}</AvatarFallback>
                   </Avatar>
-                  <span className="text-sm font-medium">{item.actor.name}</span>
+                  <span className="text-sm font-medium">{userDisplayName(item.actor)}</span>
                   <span className="text-xs text-muted-foreground">{item.timeAgo}</span>
                   {item.updatedAt && (
                      <span
@@ -496,8 +499,9 @@ function CommentCard({
                         value={draft}
                         onChange={(e) => setDraft(e.target.value)}
                         onKeyDown={(e) => {
-                           // is#22: mesmos atalhos do composer — Ctrl/⌘+Enter salva, Esc cancela.
-                           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                           // is#22: mesmos atalhos do composer (tecla de envio da preferência
+                           // "Send comments on..."), Esc cancela.
+                           if (isCommentSubmitKey(e)) {
                               e.preventDefault();
                               void save();
                            } else if (e.key === 'Escape') {

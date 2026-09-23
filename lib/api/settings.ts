@@ -59,9 +59,13 @@ const NotificationsSchema = z
 
 /**
  * Preferências das telas de Settings sem subsistema dedicado (Preferences,
- * Code & reviews, AI & Agents, Agent personalization). Espelha `Preferences`
- * de store/preferences-store.ts. `.strict()` rejeita chaves desconhecidas.
+ * Code & reviews, Agent personalization). Espelha `Preferences` de
+ * store/preferences-store.ts. `.strict()` rejeita chaves desconhecidas.
  * Selects guardam o rótulo (string); toggles guardam boolean.
+ *
+ * LEGADAS: chaves de opções removidas da UI (dependiam de algo que o Circle não faz).
+ * Continuam ACEITAS para não recusar com 400 o save de blobs antigos (abas abertas com o
+ * bundle anterior, localStorage); o cliente atual não as envia nem as lê.
  */
 const PreferencesSchema = z
    .object({
@@ -76,20 +80,21 @@ const PreferencesSchema = z
       autoAssignSelf: z.boolean().optional(),
       assignSelfOnStart: z.boolean().optional(),
       codeReviewsEnabled: z.boolean().optional(),
+      codeFont: z.string().optional(),
+      gitBranchCopyMoveStarted: z.boolean().optional(),
+      openCodingToolMoveStarted: z.boolean().optional(),
+      agentGuidance: z.string().max(8000).optional(),
+      // Legadas (ver acima).
       autoConvertDrafts: z.boolean().optional(),
       mergeStrategy: z.string().optional(),
       codeTheme: z.string().optional(),
-      codeFont: z.string().optional(),
       reviewComments: z.string().optional(),
       reviewRequests: z.boolean().optional(),
       githubTeamRequests: z.boolean().optional(),
       checksMergeQueue: z.boolean().optional(),
       requireSignedCommits: z.boolean().optional(),
       gitAttachmentFormat: z.string().optional(),
-      gitBranchCopyMoveStarted: z.boolean().optional(),
-      openCodingToolMoveStarted: z.boolean().optional(),
       aiUsageFeedback: z.boolean().optional(),
-      agentGuidance: z.string().max(8000).optional(),
    })
    .strict();
 

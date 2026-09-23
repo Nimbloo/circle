@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import type { Review, ReviewComment, ReviewVerdictKind } from '@/data/reviews';
 import { addReviewComment, removeReviewComment, updateReviewComment } from '@/lib/adapters-reviews';
 import { cn } from '@/lib/utils';
+import { isCommentSubmitKey } from '@/lib/comment-submit-key';
 import { Check, CircleSlash, MessageSquare, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -58,7 +59,8 @@ function byCreatedAt(a: ReviewComment, b: ReviewComment): number {
 }
 
 /**
- * Composer de comentário de review (textarea simples, Cmd/Ctrl+Enter envia). `path`/`line`
+ * Composer de comentário de review (textarea simples; tecla de envio da preferência
+ * "Send comments on..."). `path`/`line`
  * ancoram no arquivo/linha do diff. Só chama `onPosted` depois que a API confirma.
  */
 export function ReviewCommentComposer({
@@ -116,7 +118,10 @@ export function ReviewCommentComposer({
                   onCancel();
                   return;
                }
-               if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) void submit();
+               if (isCommentSubmitKey(event)) {
+                  event.preventDefault();
+                  void submit();
+               }
             }}
             placeholder={placeholder}
             aria-label={
@@ -260,7 +265,10 @@ export function ReviewCommentItem({
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
                   onKeyDown={(event) => {
-                     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) void save();
+                     if (isCommentSubmitKey(event)) {
+                        event.preventDefault();
+                        void save();
+                     }
                      if (event.key === 'Escape') setEditing(false);
                   }}
                   rows={2}

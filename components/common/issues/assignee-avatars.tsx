@@ -4,6 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { User } from '@/data/users';
 import { cn } from '@/lib/utils';
+import { userDisplayName } from '@/lib/display-name';
 import { CircleUserRound } from 'lucide-react';
 
 const SIZE = {
@@ -23,7 +24,7 @@ interface AssigneeAvatarsProps {
 
 /** Nomes dos responsáveis para tooltip/aria ("Ana, Bob e Lia"). */
 export function assigneeNames(users: User[]): string {
-   const names = users.map((u) => u.name);
+   const names = users.map(userDisplayName);
    if (names.length <= 1) return names[0] ?? '';
    return `${names.slice(0, -1).join(', ')} e ${names[names.length - 1]}`;
 }

@@ -8,6 +8,7 @@ import {
    CommandItem,
    CommandList,
 } from '@/components/ui/command';
+import { userDisplayName } from '@/lib/display-name';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useIssuesStore } from '@/store/issues-store';
 import { IssueDetail } from '@/data/issue-details';
@@ -260,8 +261,8 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
                         aria-label="Assign issue"
                      >
                         {issue.assignees.length === 1
-                           ? issue.assignees[0].name
-                           : `${issue.assignees[0]?.name} +${issue.assignees.length - 1}`}
+                           ? userDisplayName(issue.assignees[0])
+                           : `${issue.assignees[0] ? userDisplayName(issue.assignees[0]) : ''} +${issue.assignees.length - 1}`}
                      </PropertyValue>
                   </AssigneeSelector>
                </PropertyRow>

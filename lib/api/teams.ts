@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { eq, count, and, inArray, ne, or } from 'drizzle-orm';
 import type { Db } from '@/db';
+import { homeViewPath } from '@/lib/home-view';
+import { getUserSettings } from './settings';
 import {
    team as teamT,
    teamMember,
@@ -807,6 +809,12 @@ export async function deleteTeam(db: Db, id: string): Promise<boolean> {
 export async function orgLandingPath(db: Db, email: string | null): Promise<string> {
    if (!email) return 'settings/teams/new';
    const me = await getOrCreateUser(db, email);
+   // Preferência "Default home view" (Settings → Preferences).
+   const prefs = (await getUserSettings(db, me.id)).preferences as
+      | { defaultHomeView?: unknown }
+      | undefined;
+   const preferred = homeViewPath(prefs?.defaultHomeView);
+   if (preferred) return preferred;
    const joined = await listTeams(db, { membership: ['Joined'] }, me.id);
    if (joined.length > 0) return `team/${joined[0].id}/all`;
    if (me.role === 'Guest') return 'my-issues';
