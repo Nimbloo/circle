@@ -81,8 +81,12 @@ describe('agent: persistência robusta a falha do Bedrock (#50)', () => {
       );
 
       expect(res.status).toBe(503);
-      expect((await res.json()).detail).toContain('provedor do Agent');
-      expect(await listAgentChats(db, ME)).toHaveLength(1);
+      const body = await res.json();
+      expect(body.detail).toContain('provedor do Agent');
+      // O chat já foi gravado: o cliente precisa do id para o retry não criar outro.
+      const chats = await listAgentChats(db, ME);
+      expect(chats).toHaveLength(1);
+      expect(body).toMatchObject({ chatId: chats[0].id, title: 'oi' });
       expect(await db.select().from(agentMessage)).toHaveLength(2);
    });
 

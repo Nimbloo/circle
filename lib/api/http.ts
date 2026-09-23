@@ -190,7 +190,7 @@ export async function handle(fn: () => Promise<Response>, req?: Request): Promis
       );
    } catch (e) {
       if (e instanceof ApiError) {
-         res = problem(e.status, titleFor(e.status), e.message);
+         res = problem(e.status, titleFor(e.status), e.message, e.extensions);
       } else if (e instanceof z.ZodError) {
          res = problem(400, 'Bad Request', 'Payload inválido', { errors: e.flatten() });
       } else if (e instanceof SyntaxError) {
