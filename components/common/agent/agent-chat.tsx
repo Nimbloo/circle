@@ -276,7 +276,14 @@ export default function AgentChat() {
          if (!persisted) rekeyChat(chatId, res.chatId, res.title);
          resolveMessage(res.chatId, assistantMessageId, res.reply);
       } catch (error) {
-         failMessage(chatId, assistantMessageId, agentErrorMessage(error));
+         // 1º envio que falhou depois de o servidor gravar o chat: adota o id dele, senão
+         // o retry mandaria `chatId: null` e criaria um segundo chat.
+         const saved = (error as { problem?: { chatId?: unknown; title?: unknown } }).problem;
+         const failedChatId =
+            !persisted && typeof saved?.chatId === 'string' ? saved.chatId : chatId;
+         if (failedChatId !== chatId)
+            rekeyChat(chatId, failedChatId, typeof saved?.title === 'string' ? saved.title : '');
+         failMessage(failedChatId, assistantMessageId, agentErrorMessage(error));
       }
    };
 
@@ -363,7 +370,8 @@ export default function AgentChat() {
                      key={message.id}
                      message={message}
                      onRetry={
-                        message.error
+                        // Só o erro mais recente: um antigo reenviaria uma pergunta já respondida.
+                        message.error && index === activeChat.messages.length - 1
                            ? () => {
                                 const lastUser = [...activeChat.messages.slice(0, index)]
                                    .reverse()

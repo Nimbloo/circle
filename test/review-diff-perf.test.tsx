@@ -51,7 +51,7 @@ const handle: ReviewCommentsHandle = {
    meId: 'u1',
    isAdmin: false,
    mutate: () => {},
-   setFileReviewed: () => {},
+   setFileReviewed: async () => {},
 };
 
 const comment = (path: string): ReviewComment => ({
@@ -111,5 +111,35 @@ describe('diff eficiente (#47)', () => {
          fireEvent.click(screen.getByRole('checkbox', { name: /Reviewed/ }));
       });
       expect(screen.queryByText('line 1')).toBeNull();
+   });
+
+   it('Reviewed vindo do servidor re-renderiza só o arquivo que mudou', () => {
+      const files = [file('a.ts'), file('b.ts'), file('c.ts')];
+      const review = baseReview(files);
+      const { rerender } = render(
+         <ReviewDiff review={review} handle={handle} reviewedPaths={new Set()} />
+      );
+      statRenders.n = 0;
+      rerender(
+         <ReviewDiff review={review} handle={handle} reviewedPaths={new Set(['src/b.ts'])} />
+      );
+      // Só b.ts: 1 render pela prop + 1 pela reconciliação do estado local. Com o set no
+      // handle, os 3 arquivos re-renderizavam (≥ 4).
+      expect(statRenders.n).toBe(2);
+   });
+
+   it('PUT recusado antes do GET chegar desfaz o toggle do próprio arquivo', async () => {
+      const failing: ReviewCommentsHandle = {
+         ...handle,
+         setFileReviewed: () => Promise.reject(new Error('500')),
+      };
+      render(<ReviewDiff review={baseReview([file('a.ts')])} handle={failing} />);
+      await act(async () => {
+         fireEvent.click(screen.getByRole('checkbox', { name: /Reviewed/ }));
+      });
+      expect(screen.getByText('line 1')).toBeTruthy();
+      expect(window.localStorage.getItem('circle:review-viewed:x/y#1') ?? '[]').not.toContain(
+         'a.ts'
+      );
    });
 });

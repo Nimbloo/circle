@@ -542,21 +542,21 @@ export async function sendAgentMessage(
          });
          await tx.update(agentChat).set({ updatedAt: failedAt }).where(eq(agentChat.id, chatKey));
       });
-      if (e instanceof AgentProviderError) throw new ApiError(503, errorText);
+      // O chat já está gravado: o cliente recebe o id para o retry não criar outro.
+      if (e instanceof AgentProviderError)
+         throw new ApiError(503, errorText, { chatId: chatKey, title });
       throw e;
    }
 
    const now = new Date(userAt.getTime() + 1);
    await db.transaction(async (tx) => {
-      await tx
-         .insert(agentMessage)
-         .values({
-            id: randomUUID(),
-            chatId: chatKey,
-            role: 'assistant',
-            content: reply,
-            createdAt: now,
-         });
+      await tx.insert(agentMessage).values({
+         id: randomUUID(),
+         chatId: chatKey,
+         role: 'assistant',
+         content: reply,
+         createdAt: now,
+      });
       await tx.update(agentChat).set({ updatedAt: now }).where(eq(agentChat.id, chatKey));
    });
    return { chatId: chatKey, title, reply };

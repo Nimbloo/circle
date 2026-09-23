@@ -128,4 +128,12 @@ describe('issues-store — mutação em issue fora do store', () => {
       expect(() => useIssuesStore.getState().applyDto(dto({ status: undefined }))).not.toThrow();
       expect(useIssuesStore.getState().issues).toHaveLength(0);
    });
+
+   it('issue que volta por DTO autoritativo limpa a marca de apagada remotamente', () => {
+      // 403 transitório marcou como apagada; depois o acesso voltou.
+      useIssuesStore.getState().removeRemote('cold-1');
+      expect(useIssuesStore.getState().remoteDeletedIds.has('cold-1')).toBe(true);
+      useIssuesStore.getState().applyDto(dto());
+      expect(useIssuesStore.getState().remoteDeletedIds.has('cold-1')).toBe(false);
+   });
 });

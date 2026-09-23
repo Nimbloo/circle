@@ -34,7 +34,7 @@ function Harness() {
 
 const rowOrder = () =>
    screen
-      .getAllByRole('button', { name: /^(Alpha|Beta),/ })
+      .getAllByRole('button', { name: /^(Alpha|Beta|Gamma),/ })
       .map((el) => (el.getAttribute('aria-label') ?? '').split(',')[0]);
 
 /** Largura de um dia no zoom inicial (Year: 76px por mês). */
@@ -98,6 +98,49 @@ describe('ProjectsTimeline — ordem estável durante o arraste (pl#17)', () => 
             vi.advanceTimersByTime(10);
          });
          expect(rowOrder()).toEqual(['Beta', 'Alpha']);
+      } finally {
+         vi.useRealTimers();
+      }
+   });
+
+   it('linha que some no meio do arraste não deixa a ordem congelada para sempre', () => {
+      vi.useFakeTimers();
+      try {
+         useWorkspaceStore.setState({
+            projects: [
+               ...useWorkspaceStore.getState().projects,
+               makeProject({
+                  id: 'p3',
+                  name: 'Gamma',
+                  startDate: '2026-09-08',
+                  targetDate: '2026-09-20',
+               }),
+            ],
+         });
+         render(<Harness />);
+         const alpha = screen.getByRole('button', { name: /^Alpha,/ });
+         fireEvent.pointerDown(alpha, { button: 0, pointerId: 1, clientX: 0 });
+         fireEvent.pointerMove(alpha.parentElement!, { pointerId: 1, clientX: DAY_WIDTH * 10 });
+
+         // Outra aba apagou Alpha durante o gesto: a barra desmonta sem pointerup.
+         act(() => {
+            useWorkspaceStore.setState({
+               projects: useWorkspaceStore.getState().projects.filter((p) => p.id !== 'p1'),
+            });
+         });
+         act(() => {
+            vi.advanceTimersByTime(400);
+         });
+
+         // Gamma passa a começar antes de Beta: a ordem precisa reagir.
+         act(() => {
+            useWorkspaceStore.setState({
+               projects: useWorkspaceStore
+                  .getState()
+                  .projects.map((p) => (p.id === 'p3' ? { ...p, startDate: '2026-09-01' } : p)),
+            });
+         });
+         expect(rowOrder()).toEqual(['Gamma', 'Beta']);
       } finally {
          vi.useRealTimers();
       }

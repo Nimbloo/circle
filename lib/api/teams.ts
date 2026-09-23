@@ -537,40 +537,35 @@ export async function getTeamDeletionImpact(
    const existing = await db.select({ id: teamT.id }).from(teamT).where(eq(teamT.id, id)).limit(1);
    if (existing.length === 0) return null;
    const n = (rows: { n: number }[]) => Number(rows[0]?.n ?? 0);
-   // ids/identifiers das issues do time — reusados pra contar anexos (FK) e reviews que
-   // resolvem alguma delas (por identifier, `review` não tem FK pra `issue`).
-   const teamIssues = await db
-      .select({ id: issueT.id, identifier: issueT.identifier })
-      .from(issueT)
-      .where(eq(issueT.teamId, id));
-   const teamIssueIds = teamIssues.map((r) => r.id);
-   const teamIdentifiers = teamIssues.map((r) => r.identifier);
-   const zero = Promise.resolve([{ n: 0 }]);
-   const [projects, cycles, views, folders, documents, attachments, reviews] = await Promise.all([
-      db.select({ n: count() }).from(projectT).where(eq(projectT.teamId, id)),
-      db.select({ n: count() }).from(cycleT).where(eq(cycleT.teamId, id)),
-      db.select({ n: count() }).from(savedViewT).where(eq(savedViewT.teamId, id)),
-      db.select({ n: count() }).from(documentFolderT).where(eq(documentFolderT.teamId, id)),
-      db
-         .select({ n: count() })
-         .from(teamDocument)
-         .innerJoin(documentFolderT, eq(teamDocument.folderId, documentFolderT.id))
-         .where(eq(documentFolderT.teamId, id)),
-      teamIssueIds.length
-         ? db
-              .select({ n: count() })
-              .from(attachmentT)
-              .where(inArray(attachmentT.issueId, teamIssueIds))
-         : zero,
-      teamIdentifiers.length
-         ? db
-              .select({ n: count() })
-              .from(reviewT)
-              .where(inArray(reviewT.resolvesIdentifier, teamIdentifiers))
-         : zero,
-   ]);
+   // Anexos (FK) e reviews que resolvem issues do time (por identifier: `review` não tem
+   // FK pra `issue`) contados por SUBQUERY — uma lista de ids estouraria o limite de
+   // parâmetros do Postgres num time grande.
+   const teamIssues = () => db.select({ id: issueT.id }).from(issueT).where(eq(issueT.teamId, id));
+   const teamIdentifiers = () =>
+      db.select({ identifier: issueT.identifier }).from(issueT).where(eq(issueT.teamId, id));
+   const [issues, projects, cycles, views, folders, documents, attachments, reviews] =
+      await Promise.all([
+         db.select({ n: count() }).from(issueT).where(eq(issueT.teamId, id)),
+         db.select({ n: count() }).from(projectT).where(eq(projectT.teamId, id)),
+         db.select({ n: count() }).from(cycleT).where(eq(cycleT.teamId, id)),
+         db.select({ n: count() }).from(savedViewT).where(eq(savedViewT.teamId, id)),
+         db.select({ n: count() }).from(documentFolderT).where(eq(documentFolderT.teamId, id)),
+         db
+            .select({ n: count() })
+            .from(teamDocument)
+            .innerJoin(documentFolderT, eq(teamDocument.folderId, documentFolderT.id))
+            .where(eq(documentFolderT.teamId, id)),
+         db
+            .select({ n: count() })
+            .from(attachmentT)
+            .where(inArray(attachmentT.issueId, teamIssues())),
+         db
+            .select({ n: count() })
+            .from(reviewT)
+            .where(inArray(reviewT.resolvesIdentifier, teamIdentifiers())),
+      ]);
    return {
-      issues: teamIssueIds.length,
+      issues: n(issues),
       projects: n(projects),
       cycles: n(cycles),
       views: n(views),
@@ -676,19 +671,19 @@ export async function deleteTeam(db: Db, id: string): Promise<boolean> {
       // Identifiers ANTES do delete: `review.resolves_identifier` não é FK (guarda o
       // identifier em texto), então a issue some e o review fica com identifier/título
       // de uma issue inexistente — limpa (não apaga o review, só o vínculo).
-      const teamIdentifiers = (
-         await tx
-            .select({ identifier: issueT.identifier })
-            .from(issueT)
-            .where(eq(issueT.teamId, id))
-      ).map((r) => r.identifier);
-      const orphanedReviews = teamIdentifiers.length
-         ? await tx
-              .update(reviewT)
-              .set({ resolvesIdentifier: null, resolvesTitle: null })
-              .where(inArray(reviewT.resolvesIdentifier, teamIdentifiers))
-              .returning({ id: reviewT.id })
-         : [];
+      const orphanedReviews = await tx
+         .update(reviewT)
+         .set({ resolvesIdentifier: null, resolvesTitle: null })
+         .where(
+            inArray(
+               reviewT.resolvesIdentifier,
+               tx
+                  .select({ identifier: issueT.identifier })
+                  .from(issueT)
+                  .where(eq(issueT.teamId, id))
+            )
+         )
+         .returning({ id: reviewT.id });
       await tx.delete(commentReaction).where(inArray(commentReaction.commentId, teamCommentIds()));
       await tx.delete(attachmentT).where(inArray(attachmentT.issueId, teamIssueIds()));
       await tx.delete(commentT).where(inArray(commentT.issueId, teamIssueIds()));

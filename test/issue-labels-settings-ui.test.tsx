@@ -55,7 +55,7 @@ describe('IssueLabelsSettings — grupos (pl mobile audit)', () => {
       expect(actions).toBeTruthy();
       // Regressão: a largura NÃO pode mais ser travada em 84px fixos (estourava com
       // os 3 botões de Add/Rename/Delete do grupo).
-      expect(actions.className).not.toMatch(/\bw-\[84px\]\b/);
+      expect(actions.classList.contains('w-[84px]')).toBe(false);
       expect(actions.querySelectorAll('button').length).toBe(3);
    });
 

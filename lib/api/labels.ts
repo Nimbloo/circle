@@ -177,41 +177,29 @@ async function unlinkMovedLabelFromGroupConflicts(
    movedLabelId: string,
    targetGroupId: string
 ): Promise<{ issueId: string; teamId: string }[]> {
-   const siblings = await tx
+   // Tudo por subquery: uma label muito usada viraria milhares de parâmetros (teto do
+   // Postgres) se os ids das issues fossem materializados aqui.
+   const siblingIds = tx
       .select({ id: labelT.id })
       .from(labelT)
       .where(and(eq(labelT.groupId, targetGroupId), ne(labelT.id, movedLabelId)));
-   if (siblings.length === 0) return [];
-   const siblingIds = siblings.map((s) => s.id);
-
-   const withMoved = await tx
+   const issuesWithSibling = tx
       .select({ issueId: issueLabel.issueId })
       .from(issueLabel)
-      .where(eq(issueLabel.labelId, movedLabelId));
-   if (withMoved.length === 0) return [];
-   const movedIssueIds = withMoved.map((r) => r.issueId);
+      .where(inArray(issueLabel.labelId, siblingIds));
 
-   const conflictRows = await tx
+   const conflictOf = and(
+      eq(issueLabel.labelId, movedLabelId),
+      inArray(issueLabel.issueId, issuesWithSibling)
+   );
+   const affected = await tx
       .select({ issueId: issueLabel.issueId, teamId: issueT.teamId })
       .from(issueLabel)
       .innerJoin(issueT, eq(issueT.id, issueLabel.issueId))
-      .where(
-         and(inArray(issueLabel.issueId, movedIssueIds), inArray(issueLabel.labelId, siblingIds))
-      );
-
-   const conflicts = new Map(conflictRows.map((r) => [r.issueId, r.teamId]));
-   if (conflicts.size === 0) return [];
-
-   await tx
-      .delete(issueLabel)
-      .where(
-         and(
-            eq(issueLabel.labelId, movedLabelId),
-            inArray(issueLabel.issueId, [...conflicts.keys()])
-         )
-      );
-
-   return [...conflicts.entries()].map(([issueId, teamId]) => ({ issueId, teamId }));
+      .where(conflictOf);
+   if (affected.length === 0) return [];
+   await tx.delete(issueLabel).where(conflictOf);
+   return affected;
 }
 
 /** Avisa as issues afetadas pela desvinculação acima; coarse por time se passar do teto. */

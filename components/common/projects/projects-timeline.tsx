@@ -42,6 +42,7 @@ import {
    useCallback,
    useContext,
    useEffect,
+   useLayoutEffect,
    useRef,
    useState,
    useSyncExternalStore,
@@ -261,8 +262,23 @@ function TimelineBar({
    const dayWidth = dayWidthOf(monthWidth);
    const rangeLabel = projectDateRangeLabel(range.startDate, range.targetDate) ?? range.startDate;
 
+   // A linha pode sumir no meio do gesto (projeto apagado/filtrado): sem pointerup, o
+   // contador de arrastes do pai ficaria preso e a ordem, congelada para sempre.
+   const onDragEndRef = useRef(onDragEnd);
+   useLayoutEffect(() => {
+      onDragEndRef.current = onDragEnd;
+   }, [onDragEnd]);
+   useEffect(
+      () => () => {
+         if (dragRef.current?.moved) onDragEndRef.current();
+         dragRef.current = null;
+      },
+      []
+   );
+
    const beginDrag = (mode: RescheduleMode) => (event: React.PointerEvent) => {
-      if (!reschedulable || event.button !== 0) return;
+      // Um gesto por vez: trocar o dragRef no meio perderia o `moved` do anterior.
+      if (!reschedulable || event.button !== 0 || dragRef.current) return;
       event.stopPropagation();
       dragRef.current = { mode, pointerId: event.pointerId, startX: event.clientX, moved: false };
       // Captura no wrapper: move/up chegam nele mesmo quando o ponteiro sai da alça.
@@ -584,8 +600,11 @@ export default function ProjectsTimeline({ groups }: ProjectsTimelineProps) {
    // curto período após soltar — evita a linha "pular" de posição no meio do gesto
    // quando a ordenação é por data e o próprio arraste muda a data-chave (pl#17).
    const [frozenOrder, setFrozenOrder] = useState<Map<string, string[]> | null>(null);
+   // Espelha só a ordem COMMITADA (um render descartado não pode vazar para o snapshot).
    const groupsRef = useRef(groups);
-   groupsRef.current = groups;
+   useLayoutEffect(() => {
+      groupsRef.current = groups;
+   }, [groups]);
    const activeDragsRef = useRef(0);
    const unfreezeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 

@@ -37,7 +37,16 @@ import {
 import { useMemo, useRef, useState } from 'react';
 
 /** Diff tab: Files / Commits toolbar, file list and stacked unified diffs (comentáveis). */
-export function ReviewDiff({ review, handle }: { review: Review; handle: ReviewCommentsHandle }) {
+export function ReviewDiff({
+   review,
+   handle,
+   reviewedPaths,
+}: {
+   review: Review;
+   handle: ReviewCommentsHandle;
+   /** "Reviewed" do servidor (escopo do usuário); `undefined` enquanto não respondeu. */
+   reviewedPaths?: Set<string>;
+}) {
    const [query, setQuery] = useState('');
    const [showFileTree, setShowFileTree] = useState(true);
 
@@ -193,6 +202,7 @@ export function ReviewDiff({ review, handle }: { review: Review; handle: ReviewC
                                  filePath={path}
                                  comments={commentsByPath.get(path)}
                                  handle={handle}
+                                 serverReviewed={reviewedPaths?.has(path)}
                               />
                            ) : (
                               // Sem patch (binário/arquivo grande): só o cabeçalho com o stat.

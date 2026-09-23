@@ -79,6 +79,53 @@ describe('agent chat store (#50)', () => {
       expect(useAgentChatStore.getState().activeChatId).toBe('srv-1');
    });
 
+   it('falha no 1º envio com o chat já gravado: adota o id do servidor e o retry não cria outro', async () => {
+      apiMocks.chats.mockReturnValue(new Promise(() => {}));
+      apiMocks.send.mockRejectedValueOnce(
+         Object.assign(new Error('indisponível'), {
+            status: 503,
+            problem: { status: 503, detail: 'indisponível', chatId: 'srv-1', title: 'Oi' },
+         })
+      );
+      render(<AgentChat />);
+      const textarea = screen.getByPlaceholderText('Ask the agent…');
+      fireEvent.change(textarea, { target: { value: 'Oi' } });
+      await act(async () => {
+         fireEvent.keyDown(textarea, { key: 'Enter' });
+      });
+      expect(useAgentChatStore.getState().activeChatId).toBe('srv-1');
+      expect(useAgentChatStore.getState().chats[0]).toMatchObject({ id: 'srv-1', persisted: true });
+
+      apiMocks.send.mockResolvedValueOnce({ chatId: 'srv-1', title: 'Oi', reply: 'Olá!' });
+      await act(async () => {
+         fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
+      });
+      expect(apiMocks.send).toHaveBeenLastCalledWith('srv-1', 'Oi');
+   });
+
+   it('"Tentar de novo" só aparece no erro que é a última mensagem', async () => {
+      apiMocks.chats.mockReturnValue(new Promise(() => {}));
+      useAgentChatStore.setState({
+         activeChatId: 'chat-1',
+         chats: [
+            {
+               id: 'chat-1',
+               title: 'Falhou',
+               persisted: true,
+               loadState: 'ready',
+               messages: [
+                  { id: 'u1', role: 'user', content: 'Oi' },
+                  { id: 'a1', role: 'assistant', content: 'Erro', error: true },
+                  { id: 'u2', role: 'user', content: 'Oi' },
+                  { id: 'a2', role: 'assistant', content: 'Olá!' },
+               ],
+            },
+         ],
+      });
+      render(<AgentChat />);
+      expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
+   });
+
    it('resposta revelada de uma vez (sem digitação simulada)', async () => {
       apiMocks.chats.mockReturnValue(new Promise(() => {}));
       const reply = Array.from({ length: 60 }, (_, i) => `w${i}`).join(' ');

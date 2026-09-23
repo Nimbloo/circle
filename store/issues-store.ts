@@ -197,6 +197,21 @@ function toUpdateInput(updated: Partial<Issue>): UpdateIssueInput {
    return patch;
 }
 
+/**
+ * Tira de `remoteDeletedIds` as issues que o servidor acabou de confirmar como vivas
+ * (DTO, hydrate, resync). A marca vem de um 404/403 e não pode sobreviver ao retorno
+ * da issue: com ela, um Undo posterior pularia o DELETE. Mesma referência se nada mudou.
+ */
+function clearRemoteDeleted(current: Set<string>, ids: Iterable<string>): Set<string> {
+   let next = current;
+   for (const id of ids) {
+      if (!next.has(id)) continue;
+      if (next === current) next = new Set(current);
+      next.delete(id);
+   }
+   return next;
+}
+
 export const useIssuesStore = create<IssuesState>((set, get) => ({
    // Estado inicial vazio; hydrate() carrega da API. `loaded:false` faz a tela mostrar
    // carregando (não "Nenhuma issue") até a 1ª carga terminar.
@@ -246,6 +261,10 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
                   });
                   return {
                      issues,
+                     remoteDeletedIds: clearRemoteDeleted(
+                        state.remoteDeletedIds,
+                        sorted.map((i) => i.id)
+                     ),
                      loading: !done && progressive,
                      loaded: state.loaded || done,
                      error: false,
@@ -337,6 +356,9 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
             for (const dto of data) next = upsertDto(next, dto);
             // Lápides: sumiu dos ids vivos = apagada ou fora do escopo (a otimista fica).
             const kept = next.filter((i) => alive.has(i.id) || pendingCreates.has(i.id));
+            const remoteDeletedIds = clearRemoteDeleted(state.remoteDeletedIds, alive);
+            if (remoteDeletedIds !== state.remoteDeletedIds)
+               return { issues: kept, remoteDeletedIds };
             return kept.length === state.issues.length && next === state.issues
                ? {}
                : { issues: kept };
@@ -349,6 +371,8 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
    applyDto: (dto) =>
       set((state) => {
          const issues = upsertDto(state.issues, dto);
+         const remoteDeletedIds = clearRemoteDeleted(state.remoteDeletedIds, [dto.id]);
+         if (remoteDeletedIds !== state.remoteDeletedIds) return { issues, remoteDeletedIds };
          return issues === state.issues ? {} : { issues };
       }),
 
@@ -500,6 +524,10 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
       return api.issues
          .remove(id)
          .catch((e) => {
+            // Já não existe (404) ou outra aba apagou enquanto o DELETE voava: o
+            // resultado é o pedido — sem rollback e sem toast de falha.
+            if ((e as { status?: unknown })?.status === 404 || get().remoteDeletedIds.has(id))
+               return;
             // Rollback direcionado: devolve só a issue apagada (na posição do rank).
             if (removed)
                set((state) =>
