@@ -61,7 +61,12 @@ import {
    openShortcutsHelp,
    shortcutTokens,
 } from '@/lib/shortcuts';
-import { issueBranchName, issueUrl as buildIssueUrl, useContextIssue } from './context-issue';
+import {
+   issueBranchName,
+   issueUrl as buildIssueUrl,
+   startIssueOnBranchCopy,
+   useContextIssue,
+} from './context-issue';
 
 type PaletteRoute =
    | 'root'
@@ -586,7 +591,12 @@ function CommandPaletteBody({
                               <ClipboardType className="text-muted-foreground" />
                               <span>Copy issue content as Markdown</span>
                            </CommandItem>
-                           <CommandItem onSelect={() => copy('Branch name', branchName)}>
+                           <CommandItem
+                              onSelect={() => {
+                                 void copy('Branch name', branchName);
+                                 startIssueOnBranchCopy(issue);
+                              }}
+                           >
                               <GitBranch className="text-muted-foreground" />
                               <span>Copy git branch name</span>
                               <Keys id="copy.branch" />

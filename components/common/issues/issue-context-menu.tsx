@@ -46,6 +46,7 @@ import { useStatuses, usePriorities, useLabels } from '@/store/catalog-store';
 import { toast } from 'sonner';
 import { labelColor } from '@/components/common/palette';
 import { deleteIssuesWithUndo } from './delete-with-undo';
+import { startIssueOnBranchCopy } from '@/components/layout/context-issue';
 
 interface IssueContextMenuProps {
    issueId?: string;
@@ -219,6 +220,7 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
          .replace(/^-+|-+$/g, '')
          .slice(0, 60);
       copyToClipboard(`${issue.identifier.toLowerCase()}-${slug}`, 'Branch copiada');
+      startIssueOnBranchCopy(issue);
    };
 
    // Cycles do time da issue (Linear lista os cycles do time da própria issue).

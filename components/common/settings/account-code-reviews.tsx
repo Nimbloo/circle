@@ -170,7 +170,7 @@ export default function AccountCodeReviews() {
                />
                <SettingsRow
                   title="On git branch copy, move issue to started status"
-                  description="After copying the git branch name, issue status is moved to the team's first started workflow status. Hold ⌥ to disable."
+                  description="After copying the git branch name, issue status is moved to the team's first started workflow status"
                   trailing={
                      <Switch
                         aria-label="On git branch copy, move issue to started status"
