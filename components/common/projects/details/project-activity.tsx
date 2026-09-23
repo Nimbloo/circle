@@ -106,16 +106,16 @@ function UpdateCard({
 
    return (
       <div className="border rounded-lg p-4">
-         <div className="flex items-center gap-2 text-sm">
-            <Avatar className="size-5">
+         <div className="flex min-w-0 items-center gap-2 text-sm">
+            <Avatar className="size-5 shrink-0">
                <AvatarImage src={update.author.avatarUrl || undefined} alt={update.author.name} />
                <AvatarFallback>{update.author.name[0]}</AvatarFallback>
             </Avatar>
-            <span className="font-medium">{update.author.name}</span>
-            <span className="text-xs text-muted-foreground">
+            <span className="min-w-0 truncate font-medium">{update.author.name}</span>
+            <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
                {format(parseISO(update.date), 'MMM d')}
             </span>
-            <span className="ml-auto flex items-center gap-1">
+            <span className="ml-auto flex shrink-0 items-center gap-1">
                {draft === null ? (
                   <HealthBadge health={update.health} />
                ) : (

@@ -45,7 +45,10 @@ beforeEach(() => {
    vi.clearAllMocks();
    vi.useFakeTimers();
    seedCatalog();
-   useIssuesStore.setState({ issues: [make('a'), make('b'), make('c')] });
+   useIssuesStore.setState({
+      issues: [make('a'), make('b'), make('c')],
+      remoteDeletedIds: new Set(),
+   });
    act(() => useBulkSelectionStore.getState().clear());
 });
 afterEach(() => vi.useRealTimers());
@@ -80,6 +83,20 @@ describe('excluir issue com Undo (is#16)', () => {
          vi.advanceTimersByTime(DELETE_UNDO_MS + 10);
       });
       expect(apiMocks.remove).not.toHaveBeenCalled();
+   });
+
+   it('removeRemote durante a janela invalida o Undo (outra aba já apagou)', async () => {
+      act(() => void deleteIssuesWithUndo(['b']));
+      expect(ids()).toEqual(['a', 'c']);
+
+      act(() => useIssuesStore.getState().removeRemote('b'));
+      act(() => undoAction()?.onClick());
+      expect(ids()).toEqual(['a', 'c']); // não volta
+
+      await act(async () => {
+         vi.advanceTimersByTime(DELETE_UNDO_MS + 10);
+      });
+      expect(apiMocks.remove).not.toHaveBeenCalled(); // sem DELETE inútil (404)
    });
 
    it('DELETE que falha devolve a issue para a lista', async () => {

@@ -119,6 +119,26 @@ describe('editar e excluir update de projeto (pl#11)', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Delete update' }));
       await waitFor(() => expect(apiMocks.removeUpdate).toHaveBeenCalledWith('p1', 'u1'));
    });
+
+   it('mobile (390px): nome longo do autor trunca em vez de estourar a linha', async () => {
+      apiMocks.detail.mockResolvedValue({
+         projectId: 'p1',
+         summary: '',
+         description: [],
+         descriptionDoc: null,
+         milestones: [],
+         resources: [],
+         updates: [
+            { ...update, author: { ...update.author, name: 'Christopher Alexander-Montgomery' } },
+         ],
+         activity: [],
+      });
+      render(<ProjectActivity projectId="p1" />);
+      const author = await screen.findByText('Christopher Alexander-Montgomery');
+      const header = author.closest('div')!;
+      expect(header.className).toContain('min-w-0');
+      expect(author.className).toContain('truncate');
+   });
 });
 
 describe('blocos ↔ markdown do composer (pl#11)', () => {

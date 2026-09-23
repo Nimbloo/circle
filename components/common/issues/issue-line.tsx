@@ -28,7 +28,15 @@ import { EstimateSelector } from '@/components/layout/sidebar/create-new-issue/e
 import { DueDateSelector } from '@/components/layout/sidebar/create-new-issue/due-date-selector';
 import { estimateLabel, normalizeScale } from '@/data/estimate-scales';
 import { motion } from 'motion/react';
-import { memo, useEffect, useRef, type Ref } from 'react';
+import {
+   createContext,
+   memo,
+   useContext,
+   useEffect,
+   useRef,
+   type ReactNode,
+   type Ref,
+} from 'react';
 import { DragSourceMonitor, useDrag, useDragLayer } from 'react-dnd';
 import { getEmptyImage } from 'react-dnd-html5-backend';
 
@@ -52,6 +60,27 @@ interface IssueLineProps {
 const propertyChipClass =
    'inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-border bg-background px-2 text-xs text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground';
 
+/**
+ * Projeto da tela atual (ex.: aba Issues de `/project/:id`). Dentro desse escopo, o
+ * chip de projeto da própria linha é redundante (e quebra em 2 linhas) — some só
+ * quando o projeto da issue É o projeto da tela; outras listas seguem mostrando.
+ */
+const IssueLineProjectScopeContext = createContext<string | null>(null);
+
+export function IssueLineProjectScopeProvider({
+   projectId,
+   children,
+}: {
+   projectId?: string | null;
+   children: ReactNode;
+}) {
+   return (
+      <IssueLineProjectScopeContext.Provider value={projectId ?? null}>
+         {children}
+      </IssueLineProjectScopeContext.Provider>
+   );
+}
+
 function IssueRow({
    ref,
    issue,
@@ -72,6 +101,9 @@ function IssueRow({
    // Selector estreito: assina só displayProperties (não o store inteiro) — senão toda
    // linha memoizada re-renderiza a qualquer mudança do display-store (ex.: showEmptyGroups).
    const displayProperties = useDisplaySetting('displayProperties');
+   const scopeProjectId = useContext(IssueLineProjectScopeContext);
+   const showProjectChip =
+      displayProperties.project && !!issue.project && issue.project.id !== scopeProjectId;
    // Chamada DENTRO do seletor (referencia estavel: `find`), senao a linha nao
    // acorda quando o ciclo muda.
    const cycle = useWorkspaceStore((s) =>
@@ -180,7 +212,7 @@ function IssueRow({
                      </button>
                   </LabelSelector>
                )}
-               {displayProperties.project && issue.project && (
+               {showProjectChip && issue.project && (
                   <ProjectSelector
                      project={issue.project}
                      teamId={issue.teamId}
