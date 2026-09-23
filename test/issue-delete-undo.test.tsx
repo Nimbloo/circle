@@ -110,6 +110,26 @@ describe('excluir issue com Undo (is#16)', () => {
       expect(ids()).toEqual(['a', 'b', 'c']);
    });
 
+   it('DELETE em voo que falha depois de outra aba apagar não devolve a issue', async () => {
+      let reject!: (e: unknown) => void;
+      apiMocks.remove.mockImplementationOnce(
+         () => new Promise((_, r) => (reject = r)) as Promise<{ deleted: boolean }>
+      );
+      act(() => void deleteIssuesWithUndo(['b']));
+      await act(async () => {
+         vi.advanceTimersByTime(DELETE_UNDO_MS + 10);
+      });
+      expect(apiMocks.remove).toHaveBeenCalledWith('b');
+      act(() => useIssuesStore.getState().removeRemote('b'));
+      await act(async () => {
+         reject(Object.assign(new Error('not found'), { status: 404 }));
+         await Promise.resolve();
+         await Promise.resolve();
+      });
+      expect(ids()).toEqual(['a', 'c']);
+      expect(toastMock.error).not.toHaveBeenCalled();
+   });
+
    it('sair da página dentro da janela envia o DELETE na hora (sem perder a exclusão)', () => {
       act(() => void deleteIssuesWithUndo(['b']));
       expect(apiMocks.remove).not.toHaveBeenCalled();

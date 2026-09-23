@@ -54,7 +54,10 @@ export function deleteIssuesWithUndo(ids: readonly string[]): void {
          void useIssuesStore
             .getState()
             .deleteIssue(issue.id)
-            .catch(() => restore([issue]));
+            .catch(() => {
+               // Rechecado na hora do rollback: a marca pode ter chegado com o DELETE em voo.
+               if (!useIssuesStore.getState().remoteDeletedIds.has(issue.id)) restore([issue]);
+            });
       }
    };
    pending.timer = setTimeout(commit, DELETE_UNDO_MS);
