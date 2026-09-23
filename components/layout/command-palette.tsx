@@ -61,6 +61,7 @@ import {
    openShortcutsHelp,
    shortcutTokens,
 } from '@/lib/shortcuts';
+import { currentWeekStart, daysUntilWeekEnd } from '@/lib/week-start';
 import {
    issueBranchName,
    issueUrl as buildIssueUrl,
@@ -1013,7 +1014,10 @@ function CommandPaletteBody({
                            [
                               ['Today', 0],
                               ['Tomorrow', 1],
-                              ['End of this week', (7 - new Date().getDay()) % 7],
+                              [
+                                 'End of this week',
+                                 daysUntilWeekEnd(new Date().getDay(), currentWeekStart()),
+                              ],
                               ['In one week', 7],
                            ] as const
                         ).map(([label, days]) => (
