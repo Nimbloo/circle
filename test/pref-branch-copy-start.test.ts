@@ -5,7 +5,7 @@ import { seedCatalog, status } from './helpers/catalog-fixture';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { usePreferencesStore } from '@/store/preferences-store';
-import { startIssueOnBranchCopy } from '@/components/layout/context-issue';
+import { startIssueOnBranchCopy, startIssueOnPromptCopy } from '@/components/layout/context-issue';
 
 const updateMock = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/client', () => ({ api: { issues: { update: updateMock } } }));
@@ -53,6 +53,29 @@ describe('preferência "On git branch copy, move issue to started status"', () =
       usePreferencesStore.getState().setPref('gitBranchCopyMoveStarted', true);
       startIssueOnBranchCopy(issueIn('technical-review'));
       startIssueOnBranchCopy(issueIn('done'));
+      expect(updateMock).not.toHaveBeenCalled();
+   });
+});
+
+describe('preferência "On copy as prompt, move issue to started status"', () => {
+   beforeEach(() => {
+      seedCatalog();
+      updateMock.mockReset();
+      updateMock.mockResolvedValue(undefined);
+      useWorkspaceStore.setState({ users: [], me: null });
+   });
+
+   it('segue a própria preferência, independente da do branch', () => {
+      usePreferencesStore.getState().setPref('gitBranchCopyMoveStarted', false);
+      usePreferencesStore.getState().setPref('openCodingToolMoveStarted', true);
+      const issue = issueIn('to-do');
+      useIssuesStore.setState({ issues: [issue] });
+      startIssueOnPromptCopy(issue);
+      expect(updateMock).toHaveBeenCalledWith('i1', { statusId: 'in-progress' });
+
+      updateMock.mockClear();
+      usePreferencesStore.getState().setPref('openCodingToolMoveStarted', false);
+      startIssueOnPromptCopy(issue);
       expect(updateMock).not.toHaveBeenCalled();
    });
 });

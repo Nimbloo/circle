@@ -55,12 +55,20 @@ export function issueBranchName(issue: Pick<Issue, 'identifier' | 'title'>, me: 
 }
 
 /**
- * Preferência "On git branch copy, move issue to started status": depois de copiar o
- * nome do branch, uma issue ainda não iniciada (backlog/unstarted) vai para o 1º status
- * `started` do workflow. Chamado por todos os "Copy git branch" (menu, ⌘K, atalho).
+ * Preferências "On git branch copy / On copy as prompt, move issue to started status":
+ * depois de copiar, uma issue ainda não iniciada (backlog/unstarted) vai para o 1º status
+ * `started` do workflow. Branch: todos os "Copy git branch" (menu, ⌘K, atalho); prompt:
+ * o "Copy as prompt" do ⌘K.
  */
 export function startIssueOnBranchCopy(issue: Pick<Issue, 'id' | 'status'>): void {
-   if (!usePreferencesStore.getState().gitBranchCopyMoveStarted) return;
+   if (usePreferencesStore.getState().gitBranchCopyMoveStarted) moveToStarted(issue);
+}
+
+export function startIssueOnPromptCopy(issue: Pick<Issue, 'id' | 'status'>): void {
+   if (usePreferencesStore.getState().openCodingToolMoveStarted) moveToStarted(issue);
+}
+
+function moveToStarted(issue: Pick<Issue, 'id' | 'status'>): void {
    if (issue.status.category !== 'backlog' && issue.status.category !== 'unstarted') return;
    const started = useCatalogStore.getState().statuses.find((s) => s.category === 'started');
    if (!started) return;

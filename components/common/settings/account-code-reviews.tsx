@@ -184,11 +184,11 @@ export default function AccountCodeReviews() {
                   }
                />
                <SettingsRow
-                  title="On open in coding tool, move issue to started status"
-                  description="After opening an issue in a coding tool or copying as prompt, issue status is moved to the team's first started workflow status. Hold ⌥ to disable."
+                  title="On copy as prompt, move issue to started status"
+                  description="After copying an issue as a prompt, issue status is moved to the team's first started workflow status"
                   trailing={
                      <Switch
-                        aria-label="On open in coding tool, move issue to started status"
+                        aria-label="On copy as prompt, move issue to started status"
                         checked={prefs.openCodingToolMoveStarted}
                         onCheckedChange={(v) => prefs.setPref('openCodingToolMoveStarted', v)}
                      />

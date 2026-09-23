@@ -66,6 +66,7 @@ import {
    issueBranchName,
    issueUrl as buildIssueUrl,
    startIssueOnBranchCopy,
+   startIssueOnPromptCopy,
    useContextIssue,
 } from './context-issue';
 
@@ -603,12 +604,13 @@ function CommandPaletteBody({
                               <Keys id="copy.branch" />
                            </CommandItem>
                            <CommandItem
-                              onSelect={() =>
-                                 copy(
+                              onSelect={() => {
+                                 void copy(
                                     'Prompt',
                                     `Work on the following issue.\n\nIssue ${issue.identifier}: ${issue.title}\n${issue.description || ''}\nStatus: ${issue.status.name} — Priority: ${issue.priority.name}`
-                                 )
-                              }
+                                 );
+                                 startIssueOnPromptCopy(issue);
+                              }}
                            >
                               <ClipboardList className="text-muted-foreground" />
                               <span>Copy as prompt</span>
