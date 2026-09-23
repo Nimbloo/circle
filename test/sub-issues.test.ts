@@ -151,6 +151,7 @@ describe('sub-issues (#95) — pai canônico em issue.parent_id', () => {
       let detailA = await getIssueDetail(db, a.id);
       expect(detailA?.subIssueIds).toEqual([c.id]);
       expect(detailA?.subIssues.map((s) => s.identifier)).toEqual([c.identifier]);
+      expect(detailA?.subIssues[0].teamId).toBe(c.teamId);
       let detailC = await getIssueDetail(db, c.id);
       expect(detailC?.parent).toEqual({ id: a.id, identifier: a.identifier, title: 'A' });
 

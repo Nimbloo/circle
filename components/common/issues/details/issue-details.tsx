@@ -486,7 +486,7 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
                                        subIssue.assignee ? adaptUser(subIssue.assignee) : null
                                     }
                                     orgId={orgId ?? 'nimbloo'}
-                                    teamId={issue.teamId}
+                                    teamId={subIssue.teamId ?? issue.teamId}
                                  />
                               );
                            })}
