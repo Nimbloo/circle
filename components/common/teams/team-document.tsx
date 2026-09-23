@@ -144,7 +144,12 @@ export default function TeamDocumentView({
       if (nameDraft === null || !doc) return;
       const value = nameDraft.trim();
       setNameDraft(null);
-      if (!value || value === doc.name) return;
+      if (!value) {
+         // Nome em branco: volta ao anterior e avisa (antes era descartado em silêncio).
+         toast.error('Document name cannot be empty');
+         return;
+      }
+      if (value === doc.name) return;
       const prev = doc;
       setDoc({ ...doc, name: value }); // otimista
       try {
