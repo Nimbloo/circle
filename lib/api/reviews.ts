@@ -360,17 +360,26 @@ function resolveCandidates(...sources: (string | null | undefined)[]): string[] 
    return out;
 }
 
+/** Tamanho do lote na busca de identifiers (bem abaixo do teto de parâmetros). */
+const IDENTIFIER_LOOKUP_CHUNK = 1000;
+
 /**
  * Quais candidatos são issues que existem. Só esses viram `resolves_identifier`: "UTF-8"
  * no título não é ticket, e o sync não pode restaurar o vínculo de uma issue apagada.
  */
 async function existingIdentifiers(db: Db, candidates: string[]): Promise<Set<string>> {
-   if (candidates.length === 0) return new Set();
-   const rows = await db
-      .select({ identifier: issueT.identifier })
-      .from(issueT)
-      .where(inArray(issueT.identifier, [...new Set(candidates)]));
-   return new Set(rows.map((r) => r.identifier));
+   const unique = [...new Set(candidates)];
+   const found = new Set<string>();
+   // Em lotes: o corpo de um PR pode listar muitos identifiers, e um sync junta centenas
+   // de PRs — uma lista só estouraria o teto de parâmetros do Postgres.
+   for (let i = 0; i < unique.length; i += IDENTIFIER_LOOKUP_CHUNK) {
+      const rows = await db
+         .select({ identifier: issueT.identifier })
+         .from(issueT)
+         .where(inArray(issueT.identifier, unique.slice(i, i + IDENTIFIER_LOOKUP_CHUNK)));
+      for (const r of rows) found.add(r.identifier);
+   }
+   return found;
 }
 
 export interface SyncOptions {
