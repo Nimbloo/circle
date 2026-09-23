@@ -126,14 +126,9 @@ function preferencesSlice(): Preferences {
  * mantém o blob pequeno e faz o "servidor vence" também limpar a view em outro device.
  */
 function layoutSlice(): LayoutBlob {
-   const displayByView: Record<string, Partial<ViewDisplaySettings>> = {};
+   const displayByView: Record<string, ViewDisplaySettings> = {};
    Object.entries(useDisplaySettingsStore.getState().byView).forEach(([viewKey, settings]) => {
-      // O schema do servidor (strict) ainda não aceita `subGrouping`: enviá-lo derrubaria o
-      // PATCH de layout inteiro. Até o servidor aceitar, ele vive só no localStorage.
-      const synced: Partial<ViewDisplaySettings> = { ...settings };
-      delete synced.subGrouping;
-      if (!isDefaultDisplaySettings({ ...settings, subGrouping: 'none' }))
-         displayByView[viewKey] = synced;
+      if (!isDefaultDisplaySettings(settings)) displayByView[viewKey] = settings;
    });
    const viewTypeByView: Record<string, ViewType> = {};
    Object.entries(useViewTypeStore.getState().viewTypeByView).forEach(([viewKey, viewType]) => {

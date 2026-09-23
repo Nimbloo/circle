@@ -103,6 +103,9 @@ const PreferencesSchema = z
 const ViewDisplaySchema = z
    .object({
       grouping: z.enum(['status', 'assignee', 'priority', 'project', 'label', 'none']).optional(),
+      subGrouping: z
+         .enum(['status', 'assignee', 'priority', 'project', 'label', 'none'])
+         .optional(),
       ordering: z.enum(['priority', 'created', 'title', 'manual', 'dueDate']).optional(),
       orderCompletedByRecency: z.boolean().optional(),
       completedIssues: z.enum(['all', 'none']).optional(),
