@@ -121,6 +121,31 @@ describe('fila de triagem (#28)', () => {
       expect(screen.getByRole('button', { name: 'Bug', pressed: false })).toBeTruthy();
    });
 
+   it('dispensar anima a saída do card (list-exit) antes de ele sumir', async () => {
+      const user = userEvent.setup();
+      apiMocks.dismiss.mockResolvedValue(undefined);
+      render(<TriageSuggestionCard issueId="i1" initial={SUGGESTION} />);
+      await screen.findByText('Suggested');
+      await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+      // Saindo: ainda no DOM, dentro do wrapper que colapsa a altura.
+      const card = screen.getByLabelText('Suggested triage', { selector: 'section' });
+      expect(card.closest('.list-exit')).toBeTruthy();
+      await waitFor(() => expect(screen.queryByText('Suggested')).toBeNull(), { timeout: 1000 });
+   });
+
+   it('dispensa recusada: o card volta inteiro, sem ficar preso na saída', async () => {
+      const user = userEvent.setup();
+      apiMocks.dismiss.mockRejectedValue(new Error('500'));
+      render(<TriageSuggestionCard issueId="i1" initial={SUGGESTION} />);
+      await screen.findByText('Suggested');
+      await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+      await waitFor(() =>
+         expect(
+            screen.getByLabelText('Suggested triage', { selector: 'section' }).closest('.list-exit')
+         ).toBeNull()
+      );
+   });
+
    it('card alimentado pela fila não faz GET próprio em evento da issue', async () => {
       render(<TriageSuggestionCard issueId="i1" initial={SUGGESTION} />);
       await screen.findByText('Suggested');
