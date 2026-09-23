@@ -363,6 +363,9 @@ ${m.content}`;
    return capped;
 }
 
+/** Ferramentas que alteram dados (as demais só leem). */
+const WRITE_TOOLS = new Set(['create_issue', 'update_issue']);
+
 /**
  * Roda o loop de conversa com tool-use até a resposta final de texto.
  * `history` é o diálogo até agora (a última mensagem deve ser do usuário).
@@ -388,6 +391,9 @@ export async function runAgent(
       : SYSTEM;
 
    const toolConfig: ToolConfiguration = { tools: TOOLS };
+   // Escritas já feitas neste turno. Se o provedor cair depois delas, o turno NÃO pode
+   // virar erro com "Tentar de novo": reenviar a pergunta repetiria a escrita.
+   const writes: string[] = [];
 
    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       const res = await (async () => {
@@ -402,9 +408,15 @@ export async function runAgent(
                })
             );
          } catch (e) {
-            throw new AgentProviderError(e);
+            if (writes.length === 0) throw new AgentProviderError(e);
+            return null;
          }
       })();
+      if (!res)
+         return (
+            `Já fiz isto antes de o provedor do Agent falhar:\n${writes.map((w) => `- ${w}`).join('\n')}\n\n` +
+            'Não consegui terminar a resposta. Confira o resultado antes de pedir de novo.'
+         );
 
       const out = res.output?.message;
       if (!out) break;
@@ -416,6 +428,9 @@ export async function runAgent(
             const tu = block.toolUse;
             if (!tu?.name || !tu.toolUseId) continue;
             const result = await runTool(db, me.id, email, tu.name, (tu.input ?? {}) as ToolInput);
+            // Sucesso das ferramentas de escrita é JSON; recusa/erro é texto.
+            if (WRITE_TOOLS.has(tu.name) && result.startsWith('{'))
+               writes.push(`${tu.name}: ${result}`);
             toolResults.push({
                toolResult: { toolUseId: tu.toolUseId, content: [{ text: result }] },
             });

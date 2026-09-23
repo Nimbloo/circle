@@ -15,8 +15,9 @@ vi.mock('@aws-sdk/client-bedrock-runtime', () => ({
 
 import { randomUUID } from 'node:crypto';
 import { makeTestDb } from './helpers/db';
+import { seedTeam } from './helpers/fixtures';
 import { __setTestDb } from '@/db';
-import { agentChat, agentMessage } from '@/db/schema';
+import { agentChat, agentMessage, issue as issueT } from '@/db/schema';
 import { getOrCreateUser } from '@/lib/api/users';
 import { getAgentChat, listAgentChats, sendAgentMessage } from '@/lib/api/agent';
 import { POST as sendChat } from '@/app/api/v1/agent/chats/route';
@@ -208,5 +209,39 @@ describe('agent: persistência robusta a falha do Bedrock (#50)', () => {
       expect(msgs.length).toBeLessThanOrEqual(41);
       expect(msgs[0].role).toBe('user');
       expect(msgs.at(-1)?.content[0].text).toBe('última');
+   });
+
+   it('falha do provedor DEPOIS de criar uma issue: turno vira resposta com o que foi feito, sem retry', async () => {
+      const db = await makeTestDb();
+      await seedTeam(db, 'CORE');
+      sendMock
+         .mockResolvedValueOnce({
+            stopReason: 'tool_use',
+            output: {
+               message: {
+                  role: 'assistant',
+                  content: [
+                     {
+                        toolUse: {
+                           name: 'create_issue',
+                           toolUseId: 't1',
+                           input: { team: 'CORE', title: 'Bug do login' },
+                        },
+                     },
+                  ],
+               },
+            },
+         })
+         .mockRejectedValueOnce(new Error('ThrottlingException'));
+
+      const res = await sendAgentMessage(db, ME, null, 'cria uma issue de bug do login');
+
+      const issues = await db.select().from(issueT);
+      expect(issues).toHaveLength(1);
+      // Não é erro: o "Tentar de novo" reenviaria a pergunta e criaria a issue de novo.
+      expect(res.reply).toContain(issues[0].identifier);
+      const chat = await getAgentChat(db, ME, res.chatId);
+      expect(chat?.messages.at(-1)).toMatchObject({ role: 'assistant' });
+      expect(chat?.messages.at(-1)?.error).toBeFalsy();
    });
 });
