@@ -1,9 +1,10 @@
-import { and, asc, eq, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    label as labelT,
    labelGroup as labelGroupT,
    initiativeLabel,
+   issue as issueT,
    issueLabel,
    projectLabel,
 } from '@/db/schema';
@@ -159,6 +160,73 @@ export interface UpdateLabelInput {
 }
 
 /** Atualiza name e/ou color de um label. Retorna null se não existir. */
+/**
+ * Teto de eventos individuais antes de virar um evento coarse por time (sem sobrecarregar
+ * o cliente com uma rajada de GETs — mesmo critério do resync coarse de import/#7).
+ */
+const COARSE_EVENT_THRESHOLD = 20;
+
+/**
+ * Ao mover uma label para um grupo (paridade Linear: no máximo uma label do grupo por
+ * issue — mesma regra de `addLabel`/create em issues.ts), alguma issue pode já ter OUTRA
+ * label do grupo destino. Escolha determinística: a label que já estava no grupo fica; a
+ * label movida é desvinculada dessas issues (ela troca de categoria — não faz sentido
+ * herdar um vínculo criado sob a categoria antiga). Roda dentro da transação do caller.
+ */
+async function unlinkMovedLabelFromGroupConflicts(
+   tx: Db,
+   movedLabelId: string,
+   targetGroupId: string
+): Promise<{ issueId: string; teamId: string }[]> {
+   const siblings = await tx
+      .select({ id: labelT.id })
+      .from(labelT)
+      .where(and(eq(labelT.groupId, targetGroupId), ne(labelT.id, movedLabelId)));
+   if (siblings.length === 0) return [];
+   const siblingIds = siblings.map((s) => s.id);
+
+   const withMoved = await tx
+      .select({ issueId: issueLabel.issueId })
+      .from(issueLabel)
+      .where(eq(issueLabel.labelId, movedLabelId));
+   if (withMoved.length === 0) return [];
+   const movedIssueIds = withMoved.map((r) => r.issueId);
+
+   const conflictRows = await tx
+      .select({ issueId: issueLabel.issueId, teamId: issueT.teamId })
+      .from(issueLabel)
+      .innerJoin(issueT, eq(issueT.id, issueLabel.issueId))
+      .where(
+         and(inArray(issueLabel.issueId, movedIssueIds), inArray(issueLabel.labelId, siblingIds))
+      );
+
+   const conflicts = new Map(conflictRows.map((r) => [r.issueId, r.teamId]));
+   if (conflicts.size === 0) return [];
+
+   await tx
+      .delete(issueLabel)
+      .where(
+         and(
+            eq(issueLabel.labelId, movedLabelId),
+            inArray(issueLabel.issueId, [...conflicts.keys()])
+         )
+      );
+
+   return [...conflicts.entries()].map(([issueId, teamId]) => ({ issueId, teamId }));
+}
+
+/** Avisa as issues afetadas pela desvinculação acima; coarse por time se passar do teto. */
+function publishGroupConflictResolution(affected: { issueId: string; teamId: string }[]): void {
+   if (affected.length === 0) return;
+   if (affected.length > COARSE_EVENT_THRESHOLD) {
+      for (const teamId of new Set(affected.map((a) => a.teamId)))
+         publish({ entity: 'issue', action: 'updated', teamId });
+      return;
+   }
+   for (const { issueId, teamId } of affected)
+      publish({ entity: 'issue', action: 'updated', id: issueId, teamId });
+}
+
 export async function updateLabel(
    db: Db,
    id: string,
@@ -179,13 +247,27 @@ export async function updateLabel(
    if (patch.groupId !== undefined) next.groupId = await resolveGroupId(db, patch.groupId);
 
    if (Object.keys(next).length > 0) {
+      const movingIntoGroup = next.groupId != null && next.groupId !== existing.groupId;
+      let affected: { issueId: string; teamId: string }[] = [];
       try {
-         await db.update(labelT).set(next).where(eq(labelT.id, id));
+         if (movingIntoGroup) {
+            await db.transaction(async (tx) => {
+               await tx.update(labelT).set(next).where(eq(labelT.id, id));
+               affected = await unlinkMovedLabelFromGroupConflicts(
+                  tx as unknown as Db,
+                  id,
+                  next.groupId!
+               );
+            });
+         } else {
+            await db.update(labelT).set(next).where(eq(labelT.id, id));
+         }
       } catch (e) {
          if (isNameUniqueViolation(e) && next.name)
             throw new ApiError(409, `Label '${next.name}' já existe`);
          throw e;
       }
+      publishGroupConflictResolution(affected);
    }
    publish({ entity: 'label', action: 'updated', id });
    return toDto({ ...existing, ...next });
