@@ -24,6 +24,11 @@ const ISSUE_VIEW_TABS = [
    { label: 'All issues', segment: 'all' },
 ];
 
+/** Título do header: a Triagem tem nome próprio (Linear); as outras abas são "Issues". */
+export function issuesHeaderTitle(pathname: string): string {
+   return pathname.endsWith('/triage') ? 'Triage' : 'Issues';
+}
+
 export function IssueViewTabs() {
    const { orgId, teamId } = useParams<{ orgId: string; teamId: string }>();
    const pathname = usePathname();
@@ -62,6 +67,7 @@ export default function HeaderNav() {
    const searchContainerRef = useRef<HTMLDivElement>(null);
    const previousValueRef = useRef<string>('');
    const { orgId, teamId } = useParams<{ orgId: string; teamId: string }>();
+   const pathname = usePathname();
    const teams = useWorkspaceStore((state) => state.teams);
    const team = teams.find((item) => item.id === teamId) ?? teams[0];
 
@@ -107,7 +113,7 @@ export default function HeaderNav() {
                   <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
                </>
             )}
-            <HeaderTitle>Issues</HeaderTitle>
+            <HeaderTitle>{issuesHeaderTitle(pathname)}</HeaderTitle>
          </HeaderGroup>
 
          <HeaderActions>
