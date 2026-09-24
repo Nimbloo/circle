@@ -62,6 +62,7 @@ import { errorReason } from '@/lib/error-reason';
 import { landingHref } from '@/lib/landing';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
 import { useSeedOnOpen } from '@/hooks/use-seed-on-open';
+import { LoadingArea } from '@/components/common/loading-area';
 
 interface TeamSettingsProps {
    teamId: string;
@@ -386,6 +387,7 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
    const router = useRouter();
    const teams = useWorkspaceStore((s) => s.teams);
    const me = useWorkspaceStore((s) => s.me);
+   const loaded = useWorkspaceStore((s) => s.loaded);
    const applyTeamMembers = useWorkspaceStore((s) => s.applyTeamMembers);
    // Deriva da fatia assinada: `getCyclesByTeam` devolve array NOVO a cada leitura,
    // entao nao pode ir dentro do seletor (referencia nova = re-render infinito).
@@ -401,6 +403,8 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
    const isAdmin = me?.admin ?? false;
 
    if (!team) {
+      // Deep-link frio: "not found" só depois que o workspace hidratou.
+      if (!loaded) return <LoadingArea rows={8} className="h-full" />;
       return <SettingsShell title="Team not found">{null}</SettingsShell>;
    }
 
