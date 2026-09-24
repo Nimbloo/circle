@@ -4,7 +4,12 @@ import { api } from '@/lib/client';
 import { cn } from '@/lib/utils';
 import { EMPTY_DOC, type EditorDoc } from '@/lib/editor-doc';
 import { editorExtensions } from '@/lib/editor-extensions';
-import { docHasPendingUploads, resolveUploadPlaceholders, settleUploads } from '@/lib/editor-image';
+import {
+   docHasPendingUploads,
+   resolveUploadPlaceholders,
+   settleUploads,
+   validateEditorImage,
+} from '@/lib/editor-image';
 import { HeadingAnchors } from '@/lib/editor-heading-anchors';
 import { IssueRef } from '@/lib/editor-issue-ref';
 import { Emoticons } from '@/lib/editor-emoticons';
@@ -385,6 +390,8 @@ export function BlockEditor({
          ...editorExtensions({
             placeholder,
             upload: (file) => (onUploadRef.current ?? uploadViaApi)(file),
+            // Tipo/tamanho que `POST /uploads` recusaria: avisa sem ler o arquivo.
+            validate: validateEditorImage,
             onUploadError: (error) => {
                const detail = error instanceof Error && error.message ? `: ${error.message}` : '';
                toast.error(`Falha ao enviar a imagem${detail}`);

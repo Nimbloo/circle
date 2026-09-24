@@ -53,7 +53,11 @@ export function editorExtensions(options: EditorExtensionOptions = {}): Extensio
       PasteLists,
       Placeholder.configure({ placeholder: options.placeholder ?? DEFAULT_PLACEHOLDER }),
       ImageNode,
-      ImageUpload.configure({ upload: options.upload, onUploadError: options.onUploadError }),
+      ImageUpload.configure({
+         upload: options.upload,
+         onUploadError: options.onUploadError,
+         validate: options.validate,
+      }),
       Video,
       options.issueRef ?? IssueRef,
    ];

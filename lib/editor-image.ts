@@ -16,6 +16,24 @@ export interface ImageUploadOptions {
    /** Sobe o arquivo e devolve a URL pública. Sem ele, arquivos são ignorados. */
    upload?: (file: File) => Promise<string>;
    onUploadError?: (error: unknown, file: File) => void;
+   /**
+    * Pré-validação ANTES do placeholder e da leitura do arquivo: devolve a mensagem de
+    * recusa (vai para `onUploadError`) ou null. Ex.: `validateEditorImage`.
+    */
+   validate?: (file: File) => string | null;
+}
+
+/** Tipos que `POST /uploads` aceita (`lib/api/uploads.ts`: raster comum, sem SVG). */
+export const EDITOR_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+/** Limite de `POST /uploads` (`MAX_UPLOAD_BYTES` do servidor). */
+export const EDITOR_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+
+/** Recusa no cliente o que o servidor recusaria — sem ler o arquivo em base64 à toa. */
+export function validateEditorImage(file: File): string | null {
+   if (!EDITOR_IMAGE_TYPES.includes(file.type))
+      return `${file.name}: formato não suportado — use PNG, JPEG, WebP ou GIF`;
+   if (file.size > EDITOR_IMAGE_MAX_BYTES) return `${file.name}: a imagem passa de 5 MB`;
+   return null;
 }
 
 declare module '@tiptap/core' {
@@ -162,7 +180,7 @@ export const ImageUpload = Extension.create<ImageUploadOptions, ImageUploadStora
    name: 'imageUpload',
 
    addOptions() {
-      return { upload: undefined, onUploadError: undefined };
+      return { upload: undefined, onUploadError: undefined, validate: undefined };
    },
 
    addStorage() {
@@ -174,9 +192,17 @@ export const ImageUpload = Extension.create<ImageUploadOptions, ImageUploadStora
          uploadImages:
             (files, pos) =>
             ({ editor, commands, dispatch }) => {
-               const images = files.filter((f) => f.type.startsWith('image/'));
-               if (images.length === 0 || !this.options.upload) return false;
+               const candidates = files.filter((f) => f.type.startsWith('image/'));
+               if (candidates.length === 0 || !this.options.upload) return false;
                if (!dispatch) return true;
+               const { validate, onUploadError } = this.options;
+               const images = candidates.filter((file) => {
+                  const problem = validate?.(file) ?? null;
+                  if (problem) onUploadError?.(new Error(problem), file);
+                  return !problem;
+               });
+               // Tudo recusado: consumido (o aviso já saiu), sem placeholder.
+               if (images.length === 0) return true;
                // Placeholders entram na MESMA transação do comando; cada upload corre em
                // paralelo e resolve o próprio nó (pelo `src` do placeholder) ao terminar.
                const pending: PendingUpload[] = images.map((file) => ({
@@ -209,7 +235,7 @@ export const ImageUpload = Extension.create<ImageUploadOptions, ImageUploadStora
                if (!this.options.upload || typeof document === 'undefined') return false;
                const input = document.createElement('input');
                input.type = 'file';
-               input.accept = 'image/*';
+               input.accept = this.options.validate ? EDITOR_IMAGE_TYPES.join(',') : 'image/*';
                input.multiple = true;
                input.onchange = () => {
                   const files = imageFiles(input.files);

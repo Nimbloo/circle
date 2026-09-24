@@ -7,10 +7,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '@tiptap/react';
 import { BlockEditor } from '@/components/common/editor/block-editor';
 import { blocksToDoc, type EditorDoc } from '@/lib/editor-doc';
+import { EDITOR_IMAGE_MAX_BYTES } from '@/lib/editor-image';
+import { MAX_UPLOAD_BYTES } from '@/lib/api/uploads';
 
 vi.mock('next/navigation', () => ({
    useParams: () => ({ orgId: 'nimbloo' }),
 }));
+const toastMocks = vi.hoisted(() => ({
+   success: vi.fn(),
+   error: vi.fn(),
+   warning: vi.fn(),
+   info: vi.fn(),
+}));
+vi.mock('sonner', () => ({ toast: toastMocks }));
 
 const paragraph = (text: string): EditorDoc => blocksToDoc([{ type: 'paragraph', text }]);
 
@@ -102,5 +111,48 @@ describe('BlockEditor — upload de imagem e autosave', () => {
       expect(saved).toContain('https://cdn.test/uploads/tela.png');
       expect(saved).toContain('texto');
       expect(saved).not.toContain('blob:');
+   });
+});
+
+describe('BlockEditor — pré-validação do upload de imagem', () => {
+   it('tipo que o servidor recusa (svg/heic) não sobe nem vira placeholder; avisa', async () => {
+      const onUpload = vi.fn(async () => 'https://cdn.test/x.png');
+      const { editor } = await mount({ onUpload });
+      toastMocks.error.mockClear();
+      act(() => {
+         editor.commands.uploadImages([
+            new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' }),
+            new File(['x'], 'foto.heic', { type: 'image/heic' }),
+         ]);
+      });
+      await act(async () => {
+         await new Promise((r) => setTimeout(r, 10));
+      });
+      expect(onUpload).not.toHaveBeenCalled();
+      expect(JSON.stringify(editor.getJSON())).not.toContain('"type":"image"');
+      expect(toastMocks.error).toHaveBeenCalledTimes(2);
+      expect(String(toastMocks.error.mock.calls[0][0])).toMatch(/PNG, JPEG, WebP ou GIF/);
+   });
+
+   it('arquivo acima do limite do servidor não é lido nem enviado; avisa', async () => {
+      const onUpload = vi.fn(async () => 'https://cdn.test/x.png');
+      const { editor } = await mount({ onUpload });
+      toastMocks.error.mockClear();
+      const big = new File([new Uint8Array(MAX_UPLOAD_BYTES + 1)], 'grande.png', {
+         type: 'image/png',
+      });
+      act(() => {
+         editor.commands.uploadImages([big]);
+      });
+      await act(async () => {
+         await new Promise((r) => setTimeout(r, 10));
+      });
+      expect(onUpload).not.toHaveBeenCalled();
+      expect(JSON.stringify(editor.getJSON())).not.toContain('"type":"image"');
+      expect(String(toastMocks.error.mock.calls[0][0])).toMatch(/5 MB/);
+   });
+
+   it('limites do cliente batem com os do servidor', () => {
+      expect(EDITOR_IMAGE_MAX_BYTES).toBe(MAX_UPLOAD_BYTES);
    });
 });
