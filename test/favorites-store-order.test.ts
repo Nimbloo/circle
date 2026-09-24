@@ -59,3 +59,22 @@ describe('favoritos — ordem', () => {
       expect(useFavoritesStore.getState().isFavorite('project', 'e-nova')).toBe(false);
    });
 });
+
+describe('favoritos — falha dupla (mutação e recarga)', () => {
+   it('favoritar que falha com a recarga também falhando apaga a estrela', async () => {
+      api.add.mockRejectedValueOnce(new Error('offline'));
+      api.list.mockRejectedValueOnce(new Error('offline'));
+      await useFavoritesStore.getState().toggle('project', 'e-z');
+      expect(toast.error).toHaveBeenCalled();
+      expect(useFavoritesStore.getState().isFavorite('project', 'e-z')).toBe(false);
+   });
+
+   it('desfavoritar que falha com a recarga também falhando devolve a estrela', async () => {
+      api.remove.mockRejectedValueOnce(new Error('offline'));
+      api.list.mockRejectedValueOnce(new Error('offline'));
+      await useFavoritesStore.getState().toggle('project', 'e-b');
+      expect(toast.error).toHaveBeenCalled();
+      expect(useFavoritesStore.getState().isFavorite('project', 'e-b')).toBe(true);
+      expect(useFavoritesStore.getState().items.map((f) => f.id)).toEqual(['a', 'b', 'c']);
+   });
+});
