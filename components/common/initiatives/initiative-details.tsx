@@ -44,6 +44,7 @@ import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { errorReason } from '@/lib/error-reason';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import type { InitiativeUpdateDto } from '@/lib/api/initiative-detail';
@@ -232,10 +233,16 @@ function SubInitiativesSection({ initiative }: { initiative: Initiative }) {
       try {
          // A resposta é a FILHA; a mãe precisa do childIds/rollup novos.
          applyInitiative(await api.initiatives.update(childId, { parentId }));
+      } catch (err) {
+         toast.error(errorReason(err, 'Não foi possível atualizar as sub-initiatives'));
+         return;
+      }
+      toast.success(parentId ? 'Sub-initiative adicionada' : 'Sub-initiative removida');
+      // Recarga da mãe: a mudança já está salva — falhar aqui é aviso de recarga, não erro.
+      try {
          applyInitiative(await api.initiatives.get(initiative.id));
-         toast.success(parentId ? 'Sub-initiative adicionada' : 'Sub-initiative removida');
       } catch {
-         toast.error('Não foi possível atualizar as sub-initiatives');
+         toast.warning('Não foi possível recarregar a initiative');
       }
    };
 
