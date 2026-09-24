@@ -30,6 +30,7 @@ import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { errorReason } from '@/lib/error-reason';
+import { landingHref } from '@/lib/landing';
 
 const IMPACT_ROWS: {
    key: keyof TeamDeletionImpact;
@@ -99,7 +100,7 @@ export function DeleteTeamDialog({
             pathname?.startsWith(`${base}/team/${team.id}/`) ||
             pathname === `${base}/team/${team.id}` ||
             pathname?.startsWith(`${base}/settings/teams/${team.id}`);
-         if (onTeamScreen) router.push(base);
+         if (onTeamScreen) router.push(landingHref(orgId));
       } catch (e) {
          toast.error(errorReason(e, 'Não foi possível excluir o time'));
       } finally {

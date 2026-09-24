@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { eq, count, and, inArray, ne, or } from 'drizzle-orm';
 import type { Db } from '@/db';
-import { homeViewPath } from '@/lib/home-view';
+import { homeViewPath, landingPath } from '@/lib/home-view';
 import { getUserSettings } from './settings';
 import {
    team as teamT,
@@ -813,11 +813,8 @@ export async function orgLandingPath(db: Db, email: string | null): Promise<stri
    const prefs = (await getUserSettings(db, me.id)).preferences as
       | { defaultHomeView?: unknown }
       | undefined;
-   const preferred = homeViewPath(prefs?.defaultHomeView);
-   if (preferred) return preferred;
-   const joined = await listTeams(db, { membership: ['Joined'] }, me.id);
-   if (joined.length > 0) return `team/${joined[0].id}/all`;
-   if (me.role === 'Guest') return 'my-issues';
-   const all = await listTeams(db, {}, me.id);
-   return all.length > 0 ? `team/${all[0].id}/all` : 'settings/teams/new';
+   const homeView = prefs?.defaultHomeView;
+   // Com view fixa escolhida, os times nem entram na conta.
+   const teams = homeViewPath(homeView) ? [] : await listTeams(db, {}, me.id);
+   return landingPath({ homeView, role: me.role, teams });
 }
