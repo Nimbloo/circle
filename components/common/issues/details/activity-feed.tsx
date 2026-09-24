@@ -53,7 +53,7 @@ import {
    UserRound,
    Workflow,
 } from 'lucide-react';
-import { ReactNode, useState } from 'react';
+import { memo, ReactNode, useCallback, useMemo, useRef, useState } from 'react';
 import { useCustomEmojis, customEmojiUrl } from '@/hooks/use-custom-emojis';
 import { toast } from 'sonner';
 import { ContentBlocks } from './content-blocks';
@@ -142,6 +142,17 @@ function commentText(item: CommentItem): string {
    return item.source ?? blocksToMarkdown(item.body);
 }
 
+/** Rótulo do chip de reação para leitor de tela: emoji, contagem e se eu reagi. */
+function reactionLabel(reaction: CommentReaction): string {
+   const custom = reaction.emoji.match(/^:(.+):$/);
+   const name = custom ? custom[1] : reaction.emoji;
+   const count = `${reaction.count} ${reaction.count === 1 ? 'reaction' : 'reactions'}`;
+   return `${name}: ${count}${reaction.reactedByMe ? ', including you' : ''}`;
+}
+
+/** Lista vazia estável (prop de card memoizado não muda de identidade à toa). */
+const NO_REPLIES: CommentItem[] = [];
+
 /** Primeira linha legível do comentário (resumo da thread resolvida). */
 function previewText(item: CommentItem): string {
    for (const b of item.body) {
@@ -155,7 +166,11 @@ function previewText(item: CommentItem): string {
    return '';
 }
 
-function CommentCard({
+/**
+ * Card de comentário. Memoizado (feed longo): com props estáveis do dono do estado, uma
+ * reação/edição num comentário re-renderiza só aquele card.
+ */
+const CommentCard = memo(function CommentCard({
    item,
    canManage,
    canResolve = false,
@@ -164,12 +179,13 @@ function CommentCard({
    issueContext,
    meId,
    isAdmin = false,
-   replies = [],
+   replies = NO_REPLIES,
    isReply = false,
    onReply,
    onPatch,
    onOwnAction,
    onIssueChanged,
+   onRemoved,
    meUser = null,
 }: {
    item: CommentItem;
@@ -191,8 +207,11 @@ function CommentCard({
    onOwnAction?: () => void;
    /** Ação que muda a issue além do feed (ex.: sub-issue criada). */
    onIssueChanged?: () => void;
+   /** Comentário excluído (o dono tira do feed e devolve o foco a um lugar útil). */
+   onRemoved?: (id: string) => void;
    meUser?: User | null;
 }) {
+   const replyButtonRef = useRef<HTMLButtonElement>(null);
    const [editing, setEditing] = useState(false);
    const [draft, setDraft] = useState('');
    const [busy, setBusy] = useState(false);
@@ -275,6 +294,7 @@ function CommentCard({
       try {
          onOwnAction?.();
          await api.comments.remove(item.id);
+         onRemoved?.(item.id);
          onChanged?.();
       } catch {
          toast.error('Could not delete the comment');
@@ -563,6 +583,7 @@ function CommentCard({
                         onClick={() => void react(reaction.emoji)}
                         disabled={busy}
                         aria-pressed={reaction.reactedByMe}
+                        aria-label={reactionLabel(reaction)}
                         className={cn(
                            'inline-flex items-center gap-1 text-xs border rounded-full px-2 py-0.5 disabled:opacity-40',
                            reaction.reactedByMe
@@ -597,6 +618,7 @@ function CommentCard({
                   </button>
                   {issueId && (
                      <button
+                        ref={replyButtonRef}
                         type="button"
                         onClick={openReply}
                         className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
@@ -683,6 +705,7 @@ function CommentCard({
                         onPatch={onPatch}
                         onOwnAction={onOwnAction}
                         onIssueChanged={onIssueChanged}
+                        onRemoved={onRemoved}
                         meUser={meUser}
                      />
                   ))
@@ -694,10 +717,14 @@ function CommentCard({
                      autoFocus
                      placeholder="Reply… (@ to mention)"
                      onCancel={() => setReplying(false)}
-                     onPosted={() => {
-                        setReplying(false);
-                        onOwnAction?.();
+                     onSubmitStart={onOwnAction}
+                     onPosted={(result) => {
                         onChanged?.();
+                        // Anexo que falhou mantém o composer aberto (com "Retry upload").
+                        if (result?.failed) return;
+                        setReplying(false);
+                        // O composer sai da tela: o foco volta ao "Reply" da thread, não ao body.
+                        requestAnimationFrame(() => replyButtonRef.current?.focus());
                      }}
                   />
                )}
@@ -730,7 +757,7 @@ function CommentCard({
          </AlertDialog>
       </div>
    );
-}
+});
 
 /**
  * Issue activity: interleaved events and comments, plus a comment composer
@@ -745,6 +772,10 @@ export function ActivityFeed({
    onCommentPatch,
    onOwnAction,
    onIssueChanged,
+   onCommentRemoved,
+   hasOlder = false,
+   loadingOlder = false,
+   onLoadOlder,
 }: {
    activity: ActivityItem[];
    issueId?: string;
@@ -758,8 +789,15 @@ export function ActivityFeed({
    onOwnAction?: () => void;
    /** Ação que muda a issue além do feed (sub-issue criada a partir do comentário). */
    onIssueChanged?: () => void;
+   /** Comentário excluído: o dono tira ele (e as respostas) do feed local. */
+   onCommentRemoved?: (id: string) => void;
+   /** Há atividade mais antiga que a carregada ("Show older activity" no topo). */
+   hasOlder?: boolean;
+   loadingOlder?: boolean;
+   onLoadOlder?: () => void | Promise<void>;
 }) {
    const items = activity;
+   const composerRef = useRef<HTMLTextAreaElement>(null);
    const me = useWorkspaceStore((s) => s.me);
    const meId = me?.id;
    const meUser = useWorkspaceStore((s) => (meId ? s.users.find((u) => u.id === meId) : undefined));
@@ -767,16 +805,41 @@ export function ActivityFeed({
 
    // Threading: separa as respostas (parentId != null) dos itens de topo e as
    // agrupa por pai. Respostas NÃO aparecem no feed cronológico de topo — vão
-   // aninhadas sob o comentário-raiz.
-   const repliesByParent = new Map<string, CommentItem[]>();
-   for (const it of items) {
-      if (it.kind === 'comment' && it.parentId) {
-         const arr = repliesByParent.get(it.parentId) ?? [];
-         arr.push(it);
-         repliesByParent.set(it.parentId, arr);
+   // aninhadas sob o comentário-raiz. Resposta cuja raiz não está no feed (fora da
+   // página carregada) vira item de topo em vez de sumir. A lista de respostas de cada
+   // raiz reaproveita a anterior quando nada mudou (prop estável pro card memoizado).
+   const repliesCache = useRef(new Map<string, CommentItem[]>());
+   const { topLevel, repliesByParent } = useMemo(() => {
+      const roots = new Set(
+         items.flatMap((it) => (it.kind === 'comment' && !it.parentId ? [it.id] : []))
+      );
+      const grouped = new Map<string, CommentItem[]>();
+      const top: ActivityItem[] = [];
+      for (const it of items) {
+         if (it.kind === 'comment' && it.parentId && roots.has(it.parentId)) {
+            const arr = grouped.get(it.parentId) ?? [];
+            arr.push(it);
+            grouped.set(it.parentId, arr);
+         } else top.push(it);
       }
-   }
-   const topLevel = items.filter((it) => !(it.kind === 'comment' && it.parentId));
+      const stable = new Map<string, CommentItem[]>();
+      for (const [parentId, arr] of grouped) {
+         const prev = repliesCache.current.get(parentId);
+         const same = prev && prev.length === arr.length && prev.every((r, i) => r === arr[i]);
+         stable.set(parentId, same ? prev : arr);
+      }
+      repliesCache.current = stable;
+      return { topLevel: top, repliesByParent: stable };
+   }, [items]);
+
+   // Depois de excluir, o card some: o foco vai ao composer (senão cai no body).
+   const handleRemoved = useCallback(
+      (id: string) => {
+         onCommentRemoved?.(id);
+         requestAnimationFrame(() => composerRef.current?.focus());
+      },
+      [onCommentRemoved]
+   );
 
    return (
       <div className="mt-10">
@@ -785,6 +848,16 @@ export function ActivityFeed({
          </div>
 
          <div className="flex flex-col">
+            {hasOlder && (
+               <button
+                  type="button"
+                  onClick={() => void onLoadOlder?.()}
+                  disabled={loadingOlder}
+                  className="self-start py-1 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+               >
+                  {loadingOlder ? 'Loading older activity…' : 'Show older activity'}
+               </button>
+            )}
             {topLevel.map((item) =>
                item.kind === 'event' ? (
                   <EventRow key={item.id} item={item} />
@@ -794,6 +867,7 @@ export function ActivityFeed({
                      item={item}
                      canManage={!!meId && item.actor.id === meId}
                      canResolve={
+                        !item.parentId &&
                         !!meId &&
                         (isAdmin || item.actor.id === meId || issueContext?.assigneeId === meId)
                      }
@@ -802,10 +876,11 @@ export function ActivityFeed({
                      issueContext={issueContext}
                      meId={meId}
                      isAdmin={isAdmin}
-                     replies={repliesByParent.get(item.id) ?? []}
+                     replies={repliesByParent.get(item.id) ?? NO_REPLIES}
                      onPatch={onCommentPatch}
                      onOwnAction={onOwnAction}
                      onIssueChanged={onIssueChanged}
+                     onRemoved={handleRemoved}
                      meUser={meUser ?? null}
                   />
                )
@@ -815,10 +890,11 @@ export function ActivityFeed({
          {issueId && (
             <CommentComposer
                issueId={issueId}
-               onPosted={() => {
-                  onOwnAction?.();
-                  onCommentAdded?.();
-               }}
+               inputRef={composerRef}
+               // A ação própria é marcada ANTES do POST: o eco do SSE chega antes da
+               // resposta e, sem a marca, disparava um GET do feed além do `onPosted`.
+               onSubmitStart={onOwnAction}
+               onPosted={() => onCommentAdded?.()}
             />
          )}
       </div>
