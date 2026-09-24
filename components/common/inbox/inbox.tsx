@@ -1,6 +1,7 @@
 'use client';
 
 import { MOTION_MS } from '@/lib/motion';
+import { useListMotion } from '@/lib/list-motion';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNotificationsStore, type InboxNotification } from '@/store/notifications-store';
 import { useIssuesStore } from '@/store/issues-store';
@@ -86,6 +87,7 @@ function NotificationRows({
    showStatusIcon,
    onOpen,
    onSnooze,
+   resetKey,
 }: {
    items: { item: InboxNotification; isSnoozed: boolean }[];
    selectedId: string | undefined;
@@ -94,9 +96,15 @@ function NotificationRows({
    showStatusIcon: boolean;
    onOpen: (notification: InboxNotification) => void;
    onSnooze: (id: string, until: string) => void;
+   /** Filtros/ordem da lista: mudou, a próxima troca é de contexto e não anima. */
+   resetKey: string;
 }) {
    const issues = useIssuesStore((s) => s.issues);
    const unsnooze = useNotificationsStore((s) => s.unsnooze);
+   // Notificação que chega pelo realtime abre espaço (altura + fade) em vez de empurrar a
+   // lista de uma vez; carga, "Load more" e troca de filtro não animam.
+   const ids = useMemo(() => items.map(({ item }) => item.id), [items]);
+   const { entering } = useListMotion(ids, resetKey);
    // Um tick por minuto para a lista toda: o "2m" anda sem re-hidratar.
    const now = useNow();
    const statusByIdentifier = useMemo(
@@ -112,6 +120,7 @@ function NotificationRows({
             now={now}
             statusId={statusByIdentifier.get(notification.identifier)}
             onUnsnooze={unsnooze}
+            entering={entering.has(notification.id)}
             showId={showId}
             showStatusIcon={showStatusIcon}
          />
@@ -123,6 +132,7 @@ function NotificationRows({
             statusId={statusByIdentifier.get(notification.identifier)}
             isSelected={selectedId === notification.id}
             leaving={leaving.has(notification.id)}
+            entering={entering.has(notification.id)}
             onOpen={onOpen}
             onSnooze={onSnooze}
             showId={showId}
@@ -652,6 +662,7 @@ export default function Inbox() {
                      showStatusIcon={showStatusIcon}
                      onOpen={openNotification}
                      onSnooze={snoozeRow}
+                     resetKey={`${showRead}|${showSnoozed}|${showUnreadFirst}|${ordering}|${[...typeFilter].join(',')}`}
                   />
                </div>
             )}

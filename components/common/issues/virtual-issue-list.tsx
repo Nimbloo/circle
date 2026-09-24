@@ -10,6 +10,7 @@ import type { IssueGroupContext, IssueGroupDescriptor } from './group-issues';
 import { useGroupDropTarget } from './use-issue-drop-target';
 import { isKeyNavBlocked, navDirectionOf } from '@/store/issue-navigation-store';
 import { useViewKey } from '@/lib/view-key';
+import { useListMotion } from '@/lib/list-motion';
 
 /**
  * Offset do scroll por view (is#14): abrir uma issue e voltar recomeçava a lista do topo.
@@ -46,6 +47,14 @@ type Row =
 
 export const ISSUE_GROUP_HEADER_HEIGHT = 36;
 export const ISSUE_ROW_HEIGHT = 44;
+
+/**
+ * Chave da linha pela issue (não pelo índice): ao reordenar, a linha montada — e um popover
+ * aberto nela — continua ligada à mesma issue. O grupo entra na chave porque, por label, a
+ * mesma issue aparece em mais de um grupo.
+ */
+const rowKey = (row: Row) =>
+   row.kind === 'issue' ? `issue:${row.groupId}:${row.issue.id}` : `${row.kind}:${row.group.id}`;
 
 /**
  * Header do grupo: colapsável (como no Linear) e alvo de drop — grupo vazio (show empty
@@ -225,19 +234,17 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
       getScrollElement: () => parentRef.current,
       estimateSize: (i) =>
          rows[i].kind === 'issue' ? ISSUE_ROW_HEIGHT : ISSUE_GROUP_HEADER_HEIGHT,
-      // Chave pela issue (não pelo índice): ao reordenar, a linha montada — e um popover
-      // aberto nela — continua ligada à mesma issue. O grupo entra na chave porque, por
-      // label, a mesma issue aparece em mais de um grupo.
-      getItemKey: (i) => {
-         const row = rows[i];
-         if (row.kind === 'issue') return `issue:${row.groupId}:${row.issue.id}`;
-         return `${row.kind}:${row.group.id}`;
-      },
+      getItemKey: (i) => rowKey(rows[i]),
       overscan: 14,
    });
 
    // Guarda e restaura a posição do scroll desta view.
    const viewKey = useViewKey();
+
+   // Realtime: a issue que chega entra com fade e as vizinhas deslizam até o lugar novo.
+   // Recolher/abrir grupo e trocar de view não animam (o `resetKey` muda junto).
+   const rowKeys = useMemo(() => rows.map(rowKey), [rows]);
+   const listMotion = useListMotion(rowKeys, `${viewKey}|${[...collapsed].join(',')}`);
    const restored = useRef(false);
    const rowCount = rows.length;
    useEffect(() => {
@@ -307,7 +314,11 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
                      key={vi.key}
                      data-index={vi.index}
                      data-active={active || undefined}
-                     className={active ? 'bg-accent/40' : undefined}
+                     className={cn(
+                        active && 'bg-accent/40',
+                        listMotion.moving && 'list-move',
+                        listMotion.entering.has(String(vi.key)) && 'list-enter'
+                     )}
                      style={{
                         position: 'absolute',
                         top: 0,
@@ -333,9 +344,7 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
                            onToggle={toggleGroup}
                         />
                      ) : (
-                        // layoutId=false: sem animação de layout do framer-motion (brigaria
-                        // com o mount/unmount da virtualização).
-                        <IssueLine issue={row.issue} getGroup={row.getGroup} layoutId={false} />
+                        <IssueLine issue={row.issue} getGroup={row.getGroup} />
                      )}
                   </div>
                );

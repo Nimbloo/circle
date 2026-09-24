@@ -28,6 +28,9 @@
      .list-exit       linha saindo da lista (snooze, excluir): colapsa a altura (grid-rows) +
                       opacity em 150ms. Vai num WRAPPER de filho único da linha; remova o item
                       no `animationend` (ou após `MOTION_MS.content`).
+     .list-move / .list-enter / .list-grow  lista viva (realtime): desliza para a posição
+                      nova (transform 160ms), chegada com fade ou abrindo a altura. Ligadas
+                      pelo `useListMotion` só em mudança pequena (≤5), nunca na carga/lote.
    AlertDialog com "alvo travado": título e descrição leem `useLatchedTarget(alvo)`
    (components/ui/alert-dialog.tsx), não o alvo cru. Ao fechar, o alvo vira null mas o texto
    mantém o nome até o fim da saída (nada de `Delete label “”?`).
@@ -721,6 +724,28 @@ html[data-underline-links='true'] [data-slot='view-bar'] a[href] {
    overflow: hidden;
 }
 
+/* Lista viva (realtime): quem liga é o `useListMotion` (lib/list-motion.ts), só no render
+   em que chegou uma mudança pequena — nunca na carga, na troca de view ou em lote. */
+/* Linha de lista virtualizada (posição por `transform`) desliza até o lugar novo. */
+.list-move {
+   transition: transform var(--dur-base) var(--ease-std);
+}
+/* Linha que acabou de chegar: fade. Só `opacity` — o `transform` é da posição. */
+.list-enter {
+   animation: motion-fade-in var(--dur-content) var(--ease-out) backwards;
+}
+/* Linha de altura fixa num fluxo normal (inbox): abre a altura e aparece, empurrando as
+   vizinhas em vez de saltá-las. O alvo é a própria altura da classe da linha. */
+@keyframes list-grow {
+   from {
+      height: 0;
+      opacity: 0;
+   }
+}
+.list-grow {
+   animation: list-grow var(--dur-base) var(--ease-std) backwards;
+}
+
 /* Toast (sonner) com a pele do popover: cores/raio pelas vars do sonner (ui/sonner.tsx) e,
    aqui, sombra e tempos. O sonner injeta o CSS dele sem layer: `[data-sonner-toaster]` na
    frente dá a especificidade para vencer. Entra 200ms (translateY 8px + opacity), sai 150ms. */
@@ -767,8 +792,13 @@ html[data-underline-links='true'] [data-slot='view-bar'] a[href] {
    .circle-loading,
    .circle-loading-arc,
    .content-enter,
-   .route-enter {
+   .route-enter,
+   .list-enter,
+   .list-grow {
       animation: none;
+   }
+   .list-move {
+      transition: none;
    }
 }
 
