@@ -14,9 +14,12 @@ import { execSync } from 'node:child_process';
  * a ser uma decisão consciente, com este teste falhando até alguém atualizar a lista.
  */
 
-/** Chamada de gate de escopo: os asserts de `lib/api/scope.ts`. */
+/**
+ * Chamada de gate de escopo: os asserts de `lib/api/scope.ts` e `assertCanWriteComment`
+ * (`lib/api/issue-detail.ts`: resolve a issue do comentário e chama `assertCanWriteIssue`).
+ */
 const SCOPE_GATE =
-   /\bassert(?:CanWrite(?:Team|Issue|Project)|(?:Team|Issue|Project|Initiative)InScope|ChildOfProject|TeamMember)\s*\(/;
+   /\bassert(?:CanWrite(?:Team|Issue|Project|Comment)|(?:Team|Issue|Project|Initiative)InScope|ChildOfProject|TeamMember)\s*\(/;
 /** Gate por PAPEL: rota de administração não tem escopo de time a validar. */
 const ROLE_GATE = /\b(?:isAdmin|requireAdmin|assertAdmin)\s*\(/;
 /** Gate por PROPRIEDADE: recurso pessoal, autorizado pelo dono (ou admin). */
@@ -65,11 +68,9 @@ const EXEMPT: ReadonlySet<string> = new Set([
    'POST /integrations/sentry/issues/create',
    'POST /integrations/sentry/issues/link',
 
-   // 4. Dono do recurso: comentário e review são do autor (checagem de autoria no serviço).
-   'PATCH /comments/[id]',
-   'DELETE /comments/[id]',
-   'POST /comments/[id]/reactions',
-   'DELETE /comments/[id]/reactions',
+   // 4. Review é do repositório no GitHub, não de um time: não há escopo de time a
+   //    validar (autoria no serviço). Comentário de ISSUE saiu daqui (auditoria 23/09):
+   //    reação não é autoria, e autoria não substitui escopo — o serviço checa escopo.
    'POST /reviews/[id]/comments',
    'PATCH /reviews/[id]/comments/[commentId]',
    'DELETE /reviews/[id]/comments/[commentId]',
