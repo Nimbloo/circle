@@ -84,7 +84,13 @@ export default function Profile() {
 
    const saveName = async () => {
       const next = name.trim();
-      if (!me || savingName || !next || next === me.name) return;
+      if (!me || savingName) return;
+      // Nome em branco não é salvo: o campo volta ao atual em vez de ficar vazio.
+      if (!next) {
+         setName(me.name);
+         return;
+      }
+      if (next === me.name) return;
       setSavingName(true);
       try {
          applyMe(await api.me.update({ name: next }));
