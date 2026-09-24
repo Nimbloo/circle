@@ -108,7 +108,7 @@ export default function NewTeam() {
 
          <SettingsSection title="Entrar num time existente">
             <SettingsCard>
-               {notJoined.length === 0 ? (
+               {isGuest || notJoined.length === 0 ? (
                   <div className="p-4 text-sm text-muted-foreground">
                      {isGuest
                         ? 'Convidados entram em times pelas mãos de um admin.'
