@@ -244,10 +244,14 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
    // Cycles do time da issue (Linear lista os cycles do time da própria issue).
    const issue = issueId ? getIssueById(issueId) : undefined;
    const teamCycles = issue?.teamId ? allCycles.filter((c) => c.teamId === issue.teamId) : [];
+   // Projetos do time da issue (como o ProjectSelector): o servidor recusa os de outro time.
+   const teamProjects = issue?.teamId
+      ? projects.filter((p) => p.teamId === issue.teamId)
+      : projects;
    const [projectQuery, setProjectQuery] = useState('');
    const filteredProjects = projectQuery.trim()
-      ? projects.filter((p) => p.name.toLowerCase().includes(projectQuery.trim().toLowerCase()))
-      : projects;
+      ? teamProjects.filter((p) => p.name.toLowerCase().includes(projectQuery.trim().toLowerCase()))
+      : teamProjects;
 
    return (
       <>
