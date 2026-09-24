@@ -511,7 +511,11 @@ export function BlockEditor({
          editorRef.current = created;
          onReadyRef.current?.(created);
       },
-      onUpdate: ({ editor: updated }) => {
+      onUpdate: ({ editor: updated, transaction }) => {
+         // Só a transação raiz é edição. Se o doc mudou apenas pelas anexadas por plugins
+         // (o `TrailingNode` do StarterKit põe um parágrafo no fim na 1ª transação de
+         // QUALQUER tipo — vazia, só meta, só seleção), é normalização: não salva.
+         if (!transaction.docChanged) return;
          const json = updated.getJSON();
          onChangeRef.current?.(json);
          if (onSaveRef.current) schedule(json);
@@ -524,7 +528,10 @@ export function BlockEditor({
    }, [editor, editable]);
 
    // Placeholder novo: a decoration só é recalculada numa transação — uma vazia basta
-   // (só quando ele MUDA; na montagem a decoration já nasce certa).
+   // (só quando ele MUDA; na montagem a decoration já nasce certa). A guarda não é de
+   // correção — transação vazia é inócua —, mas na montagem ela deixaria o `TrailingNode`
+   // pôr o parágrafo final, o doc divergiria do prop e o efeito abaixo faria um
+   // `setContent` inútil (remontando os NodeViews).
    const shownPlaceholder = useRef(placeholder);
    useEffect(() => {
       if (!editor || editor.isDestroyed || shownPlaceholder.current === placeholder) return;

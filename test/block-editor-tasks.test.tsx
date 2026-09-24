@@ -5,6 +5,7 @@ import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '@tiptap/react';
+import { TextSelection } from '@tiptap/pm/state';
 import { BlockEditor } from '@/components/common/editor/block-editor';
 import { blocksToDoc, docToText, type EditorDoc } from '@/lib/editor-doc';
 import { status } from './helpers/catalog-fixture';
@@ -56,6 +57,32 @@ async function mount(props: Partial<React.ComponentProps<typeof BlockEditor>> = 
 
 /** JSON do doc sem o tipo estreito do `getJSON()` do Tiptap 3 (asserções por caminho). */
 const json = (editor: Editor): EditorDoc => editor.getJSON() as EditorDoc;
+
+/**
+ * Cursor no fim do texto `text`, achado no doc. Não usar `focus('end')` para cair num
+ * item: depois da primeira transação (qualquer uma, até vazia) o `TrailingNode` do
+ * StarterKit acrescenta um parágrafo vazio no fim, e o "fim" deixa de ser o item.
+ */
+function cursorAtEndOf(editor: Editor, text: string) {
+   let pos: number | null = null;
+   editor.state.doc.descendants((node, at) => {
+      if (pos === null && node.isText && node.text?.includes(text)) {
+         pos = at + node.text.indexOf(text) + text.length;
+      }
+   });
+   if (pos === null) throw new Error(`texto não encontrado: ${text}`);
+   editor.chain().focus().setTextSelection(pos).run();
+}
+
+/** Transações que não editam: vazia, só com meta e só de seleção (mesmo lugar). */
+function dispatchNonEditing(editor: Editor) {
+   const { view } = editor;
+   view.dispatch(view.state.tr);
+   view.dispatch(view.state.tr.setMeta('someMeta', true));
+   view.dispatch(
+      view.state.tr.setSelection(TextSelection.create(view.state.doc, view.state.selection.from))
+   );
+}
 
 /** Cola texto puro com o ClipboardEvent/DataTransfer do setup-dom. */
 function pasteText(editor: Editor, text: string, html?: string) {
@@ -113,7 +140,7 @@ describe('BlockEditor — checklist (paridade Linear)', () => {
    it('Tab aninha o item no anterior e Shift-Tab desaninha', async () => {
       const { editor } = await mount({ doc: CHECKLIST });
       act(() => {
-         editor.commands.focus('end');
+         cursorAtEndOf(editor, 'segunda');
       });
       act(() => {
          editor.commands.keyboardShortcut('Tab');
@@ -122,6 +149,54 @@ describe('BlockEditor — checklist (paridade Linear)', () => {
       expect(list.content).toHaveLength(1);
       expect(list.content![0].content!.map((n) => n.type)).toEqual(['paragraph', 'taskList']);
       act(() => {
+         editor.commands.keyboardShortcut('Shift-Tab');
+      });
+      list = json(editor).content![0];
+      expect(list.content).toHaveLength(2);
+   });
+
+   it('transação vazia, só com meta ou só de seleção não conta como edição (sem onChange/onSave)', async () => {
+      const onChange = vi.fn();
+      const onSave = vi.fn();
+      // Doc terminando em lista: a primeira transação faz o `TrailingNode` acrescentar
+      // um parágrafo — normalização do editor, não edição do usuário.
+      const { editor } = await mount({ doc: CHECKLIST, onChange, onSave });
+      act(() => {
+         dispatchNonEditing(editor);
+      });
+      await act(async () => {
+         await new Promise((r) => setTimeout(r, 10));
+      });
+      expect(onChange).not.toHaveBeenCalled();
+      expect(onSave).not.toHaveBeenCalled();
+      // Edição real depois continua salvando (com o doc inteiro, já normalizado).
+      act(() => {
+         cursorAtEndOf(editor, 'segunda');
+         editor.commands.insertContent('!');
+      });
+      await act(async () => {
+         await new Promise((r) => setTimeout(r, 10));
+      });
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onSave).toHaveBeenCalledTimes(1);
+      expect(docToText(onSave.mock.calls[0][0])).toContain('- [ ] segunda!');
+   });
+
+   it('Tab/Shift-Tab seguem corretos com transações não-editoras antes e no meio do fluxo', async () => {
+      const { editor } = await mount({ doc: CHECKLIST });
+      act(() => {
+         dispatchNonEditing(editor);
+         cursorAtEndOf(editor, 'segunda');
+         dispatchNonEditing(editor);
+      });
+      act(() => {
+         editor.commands.keyboardShortcut('Tab');
+      });
+      let list = json(editor).content![0];
+      expect(list.content).toHaveLength(1);
+      expect(list.content![0].content!.map((n) => n.type)).toEqual(['paragraph', 'taskList']);
+      act(() => {
+         dispatchNonEditing(editor);
          editor.commands.keyboardShortcut('Shift-Tab');
       });
       list = json(editor).content![0];
@@ -214,7 +289,8 @@ describe('BlockEditor — task item → sub-issue (com contexto de issue)', () =
       });
       // Edição pendente (debounce longo) — a conversão precisa descarregar antes da API.
       act(() => {
-         editor.chain().focus('end').insertContent('!').run();
+         cursorAtEndOf(editor, 'escrever testes');
+         editor.commands.insertContent('!');
       });
       expect(onSave).not.toHaveBeenCalled();
 
@@ -268,7 +344,7 @@ describe('BlockEditor — task item → sub-issue (com contexto de issue)', () =
    it('Mod-Shift-O com o cursor no item também converte', async () => {
       const { editor, container } = await mount({ doc: CHECKLIST, context: CONTEXT });
       act(() => {
-         editor.commands.focus('end'); // cursor em "segunda"
+         cursorAtEndOf(editor, 'segunda');
       });
       await act(async () => {
          editor.commands.keyboardShortcut('Mod-Shift-o');
@@ -280,6 +356,48 @@ describe('BlockEditor — task item → sub-issue (com contexto de issue)', () =
          expect(items[1].querySelector('.issue-ref[data-identifier="ENG-9"]')).not.toBeNull();
          expect(items[0].textContent).toContain('primeira');
       });
+   });
+
+   it('transações não-editoras no meio do fluxo não afetam Mod-Shift-O nem o botão', async () => {
+      const onSave = vi.fn();
+      const { editor, container } = await mount({
+         doc: CHECKLIST,
+         context: CONTEXT,
+         onSave,
+         saveDelayMs: 5000,
+      });
+      act(() => {
+         dispatchNonEditing(editor);
+         cursorAtEndOf(editor, 'segunda');
+         dispatchNonEditing(editor);
+      });
+      await act(async () => {
+         editor.commands.keyboardShortcut('Mod-Shift-o');
+      });
+      expect(apiMocks.create).toHaveBeenCalledTimes(1);
+      expect(apiMocks.create.mock.calls[0][0]).toMatchObject({ title: 'segunda' });
+      // Nada de edição pendente: a conversão não descarrega um save fantasma.
+      expect(onSave).not.toHaveBeenCalled();
+      await waitFor(() => {
+         const items = container.querySelectorAll('ul[data-type="taskList"] > li');
+         expect(items[1].querySelector('.issue-ref[data-identifier="ENG-9"]')).not.toBeNull();
+      });
+
+      // Botão do item restante, com transações não-editoras depois de uma edição pendente.
+      apiMocks.create.mockClear();
+      act(() => {
+         cursorAtEndOf(editor, 'primeira');
+         editor.commands.insertContent('!');
+         dispatchNonEditing(editor);
+      });
+      const button = container.querySelector<HTMLButtonElement>(
+         'button[aria-label="Create sub-issue"]'
+      )!;
+      await act(async () => {
+         fireEvent.click(button);
+      });
+      expect(apiMocks.create).toHaveBeenCalledTimes(1);
+      expect(apiMocks.create.mock.calls[0][0]).toMatchObject({ title: 'primeira!' });
    });
 
    it('sub-issue concluída regrava o atributo `checked` do item vinculado (projeção acompanha)', async () => {
