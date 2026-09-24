@@ -52,6 +52,11 @@ interface IssuesState {
    /** IDs apagados por evento remoto (outra aba/servidor) — consultado pelo Undo do
     *  delete local (is#16) para não reviver, nem re-enviar DELETE, do que já se foi. */
    remoteDeletedIds: Set<string>;
+   /** IDs com exclusão local pendente (janela do Undo + DELETE em voo): hydrate, resync
+    *  e applyDto não os trazem de volta, porque o servidor ainda os tem. */
+   pendingDeleteIds: Set<string>;
+   /** Marca (`pending=true`) ou libera ids com exclusão pendente. */
+   setPendingDelete: (ids: Iterable<string>, pending: boolean) => void;
    /** Projeto/ciclo removido: limpa a referência nas issues (sem refetch). */
    detachProject: (projectId: string) => void;
    detachCycle: (cycleId: string) => void;
@@ -243,6 +248,17 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
    loaded: false,
    error: false,
    remoteDeletedIds: new Set(),
+   pendingDeleteIds: new Set(),
+
+   setPendingDelete: (ids, pending) =>
+      set((state) => {
+         const next = new Set(state.pendingDeleteIds);
+         for (const id of ids) {
+            if (pending) next.add(id);
+            else next.delete(id);
+         }
+         return { pendingDeleteIds: next };
+      }),
 
    hydrate: async (opts?: IssueListOptions) => {
       const seq = ++hydrateSeq;
@@ -278,9 +294,11 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
                   // Não sobrescreve item mais novo que já está no store (applyRemote que
                   // chegou durante a paginação).
                   const current = new Map(state.issues.map((i) => [i.id, i]));
-                  const issues = sorted.map((fresh) => {
+                  const issues = sorted.flatMap((fresh) => {
+                     // Excluída aqui, DELETE ainda não confirmado: o servidor a tem.
+                     if (state.pendingDeleteIds.has(fresh.id)) return [];
                      const cur = current.get(fresh.id);
-                     return cur && isOlder(fresh, cur) ? cur : fresh;
+                     return [cur && isOlder(fresh, cur) ? cur : fresh];
                   });
                   return {
                      issues,
@@ -376,7 +394,8 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          const alive = new Set(meta.ids);
          set((state) => {
             let next = state.issues;
-            for (const dto of data) next = upsertDto(next, dto);
+            for (const dto of data)
+               if (!state.pendingDeleteIds.has(dto.id)) next = upsertDto(next, dto);
             // Lápides: sumiu dos ids vivos = apagada ou fora do escopo (a otimista fica).
             const kept = next.filter((i) => alive.has(i.id) || pendingCreates.has(i.id));
             const remoteDeletedIds = clearRemoteDeleted(state.remoteDeletedIds, alive);
@@ -393,7 +412,9 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
 
    applyDto: (dto) =>
       set((state) => {
-         const issues = upsertDto(state.issues, dto);
+         const issues = state.pendingDeleteIds.has(dto.id)
+            ? state.issues
+            : upsertDto(state.issues, dto);
          const remoteDeletedIds = clearRemoteDeleted(state.remoteDeletedIds, [dto.id]);
          if (remoteDeletedIds !== state.remoteDeletedIds) return { issues, remoteDeletedIds };
          return issues === state.issues ? {} : { issues };
