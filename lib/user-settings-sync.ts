@@ -75,6 +75,8 @@ let timer: ReturnType<typeof setTimeout> | null = null;
 let loadAttempts = 0;
 /** Seções alteradas desde a última gravação confirmada. */
 const dirty = new Set<Section>();
+/** Um reload chegou com gravação local pendente: relê o servidor depois que ela salvar. */
+let reloadAfterFlush = false;
 
 let syncError: SettingsSyncError = null;
 const errorListeners = new Set<() => void>();
@@ -213,7 +215,12 @@ function flush() {
    api.settings
       .patch(sectionsSnapshot(sections) as Record<string, unknown>)
       .then(() => {
-         if (dirty.size === 0) setSyncError(null);
+         if (dirty.size !== 0) return;
+         setSyncError(null);
+         if (reloadAfterFlush) {
+            reloadAfterFlush = false;
+            void load();
+         }
       })
       .catch(() => {
          setSyncError('save');
@@ -314,7 +321,11 @@ export async function startUserSettingsSync(): Promise<void> {
 export async function reloadUserSettings(): Promise<void> {
    if (!started) return;
    // Gravação local pendente (debounce ou retry após falha de rede): aplicar o GET agora
-   // sobrescreveria a edição não salva. Ela sai no próximo flush e vence de qualquer jeito.
-   if (dirty.size > 0) return;
+   // sobrescreveria a edição não salva. Ela sai no próximo flush e vence de qualquer jeito;
+   // o reload fica adiado para depois dela (a outra aba pode ter mudado outra seção).
+   if (dirty.size > 0) {
+      reloadAfterFlush = true;
+      return;
+   }
    await load();
 }

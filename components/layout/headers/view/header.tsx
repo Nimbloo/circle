@@ -123,7 +123,11 @@ export default function Header() {
    );
 }
 
-/** Contador da view de issues: mesma fonte do corpo (`useViewIssues`). */
+/**
+ * Contador da view de issues: mesma fonte do corpo (`useViewIssues`). Sem resultado da
+ * saved search (carregando ou falhou) não há contagem — "0" afirmaria uma lista vazia.
+ */
 function IssueViewCount({ view }: { view: View }) {
-   return <>{useViewIssues(view).issues.length}</>;
+   const { issues, searching, searchError } = useViewIssues(view);
+   return <>{searching || searchError ? '–' : issues.length}</>;
 }

@@ -43,6 +43,27 @@ describe('NewTeam (settings/teams/new)', () => {
       expect(screen.queryByText(/crie o primeiro acima/)).toBeNull();
    });
 
+   it('convidado não vê "Solicitar entrada" nos sub-times visíveis que não integra', async () => {
+      useWorkspaceStore.setState({ me: { id: 'g', role: 'Guest', admin: false } as never });
+      list.mockResolvedValue([
+         {
+            id: 'SUB',
+            name: 'Sub-time',
+            icon: '🧩',
+            joined: false,
+            requested: false,
+            memberCount: 2,
+            projectCount: 0,
+         },
+      ]);
+      mount();
+      await waitFor(() => expect(list).toHaveBeenCalled());
+      await waitFor(() =>
+         expect(screen.getByText('Convidados entram em times pelas mãos de um admin.')).toBeTruthy()
+      );
+      expect(screen.queryByRole('button', { name: /Solicitar entrada/ })).toBeNull();
+   });
+
    it('membro vê o formulário de criar time', async () => {
       useWorkspaceStore.setState({ me: { id: 'm', role: 'Member', admin: false } as never });
       mount();

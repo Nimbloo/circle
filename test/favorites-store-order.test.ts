@@ -77,4 +77,19 @@ describe('favoritos — falha dupla (mutação e recarga)', () => {
       expect(useFavoritesStore.getState().isFavorite('project', 'e-b')).toBe(true);
       expect(useFavoritesStore.getState().items.map((f) => f.id)).toEqual(['a', 'b', 'c']);
    });
+
+   it('desfavoritar durante o add em voo, com as duas chamadas falhando, mantém a estrela', async () => {
+      // O add gravou, mas a recarga dele ainda voa: `keys` tem a estrela, `items` não.
+      api.list.mockReturnValueOnce(new Promise(() => {}));
+      void useFavoritesStore.getState().toggle('project', 'e-z');
+      await vi.waitFor(() => expect(api.list).toHaveBeenCalledTimes(1));
+      expect(useFavoritesStore.getState().isFavorite('project', 'e-z')).toBe(true);
+
+      api.remove.mockRejectedValueOnce(new Error('offline'));
+      api.list.mockRejectedValueOnce(new Error('offline'));
+      await useFavoritesStore.getState().toggle('project', 'e-z');
+
+      expect(useFavoritesStore.getState().isFavorite('project', 'e-z')).toBe(true);
+      expect(useFavoritesStore.getState().isFavorite('project', 'e-a')).toBe(true);
+   });
 });
