@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, gte, inArray, lte, ne, notInArray, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, lte, ne, notInArray, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    cycle as cycleT,
@@ -207,7 +207,7 @@ function toDto(
 ): CycleDto {
    // Ciclo fechado: o rollover já levou as abertas para o próximo, então o agregado atual
    // só tem o que ficou (quase tudo concluído). O retrato do FECHAMENTO é a medida certa.
-   const closing = final && final.date >= row.endDate && final.scope > 0 ? final : null;
+   const closing = final && final.scope > 0 ? final : null;
    const successRate =
       row.status !== 'completed'
          ? null
@@ -277,15 +277,18 @@ async function snapshotsByCycle(
    return result;
 }
 
-/** Último snapshot de cada ciclo (o do fechamento, nos ciclos concluídos). */
-async function lastSnapshots(db: Db, cycleIds: string[]): Promise<Map<string, SnapshotRow>> {
+/**
+ * Snapshot do FECHAMENTO de cada ciclo: o datado no `endDate` (gravado pelo rollover).
+ * Um snapshot posterior ao fim (ex.: `endDate` encurtado depois de medições) não conta.
+ */
+async function closingSnapshots(db: Db, cycleIds: string[]): Promise<Map<string, SnapshotRow>> {
    if (cycleIds.length === 0) return new Map();
    const rows = await db
-      .selectDistinctOn([snapshotT.cycleId])
+      .select({ snapshot: snapshotT })
       .from(snapshotT)
-      .where(inArray(snapshotT.cycleId, cycleIds))
-      .orderBy(asc(snapshotT.cycleId), desc(snapshotT.date));
-   return new Map(rows.map((r) => [r.cycleId, r]));
+      .innerJoin(cycleT, and(eq(cycleT.id, snapshotT.cycleId), eq(cycleT.endDate, snapshotT.date)))
+      .where(inArray(snapshotT.cycleId, cycleIds));
+   return new Map(rows.map(({ snapshot }) => [snapshot.cycleId, snapshot]));
 }
 
 /**
@@ -361,7 +364,7 @@ async function toDtos(
    const [aggs, snaps, finals] = await Promise.all([
       aggregatesByCycle(db, ids, burnupIds),
       snapshotsByCycle(db, ids, burnupIds),
-      lastSnapshots(db, completedIds),
+      closingSnapshots(db, completedIds),
    ]);
    const today = workspaceDay(now);
    const withBurnup = new Set(burnupIds);

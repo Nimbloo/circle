@@ -153,3 +153,30 @@ describe('scopeDelta e burn-up a partir dos snapshots (#24)', () => {
       expect(dto.scopeDelta).toBe(0);
    });
 });
+
+describe('success rate do cycle concluído', () => {
+   it('usa o snapshot do fechamento (data = endDate), não um posterior', async () => {
+      const db = await setup('completed', '2026-01-10');
+      await addIssue(db, 1, 'done', 4);
+      await db.insert(cycleSnapshot).values([
+         { cycleId: 'c1', date: '2026-01-10', scope: 10, started: 0, completed: 8 },
+         // Snapshot gravado depois do fim (ex.: endDate encurtado após medições).
+         { cycleId: 'c1', date: '2026-01-12', scope: 10, started: 0, completed: 3 },
+      ]);
+
+      const dto = (await getCycle(db, 'c1', at('2026-01-20')))!;
+      expect(dto.successRate).toBe(80);
+   });
+
+   it('sem snapshot do fechamento, cai no agregado atual', async () => {
+      const db = await setup('completed', '2026-01-10');
+      await addIssue(db, 1, 'done', 4);
+      await addIssue(db, 2, 'to-do', 4);
+      await db
+         .insert(cycleSnapshot)
+         .values({ cycleId: 'c1', date: '2026-01-12', scope: 10, started: 0, completed: 3 });
+
+      const dto = (await getCycle(db, 'c1', at('2026-01-20')))!;
+      expect(dto.successRate).toBe(50);
+   });
+});
