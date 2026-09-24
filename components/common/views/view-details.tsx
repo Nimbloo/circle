@@ -40,7 +40,7 @@ function IssueViewBody({ view }: { view: View }) {
    // (`/api/v1/search`, o mesmo motor da tela de busca) e a lista é a interseção com o
    // que os demais filtros da view já deixaram passar, na ordem de relevância. O
    // resultado vive no `saved-search-store`: o header conta a MESMA lista.
-   const { q, issues, searching, searchError } = useViewIssues(view);
+   const { q, issues, searching, searchError, truncated } = useViewIssues(view);
    const searchKey = savedSearchKey(view);
    const setEntry = useSavedSearchStore((s) => s.setEntry);
    const [attempt, setAttempt] = useState(0);
@@ -87,6 +87,11 @@ function IssueViewBody({ view }: { view: View }) {
    return (
       <div className="w-full h-full flex flex-col overflow-hidden">
          <ViewFilterChips view={view} />
+         {truncated && (
+            <p className="border-b px-6 py-1.5 text-xs text-muted-foreground">
+               Showing the first {SAVED_SEARCH_LIMIT} matches — refine the search to see the rest.
+            </p>
+         )}
          <div className="flex-1 min-h-0 w-full flex overflow-hidden">
             <div className="flex-1 min-w-0 h-full overflow-hidden">
                <GroupedIssuesView
@@ -96,6 +101,7 @@ function IssueViewBody({ view }: { view: View }) {
                   isViewTypeGrid={viewType === 'grid'}
                   loading={loading || searching}
                   error={error || searchError}
+                  keepInputOrder={!!q}
                   onRetry={() => {
                      if (error) void hydrate();
                      if (searchError) {

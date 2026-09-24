@@ -29,4 +29,25 @@ describe('resolveView sinaliza truncamento (Ad#30)', () => {
       expect(full?.issues).toHaveLength(3);
       expect(full?.truncated).toBe(false);
    });
+
+   it('saved search que bate no teto de 100 da busca também marca truncated', async () => {
+      const db = await makeTestDb();
+      await seedTeam(db, 'CORE');
+      await seedUser(db, { name: 'Dev', email: ME, teamIds: ['CORE'] });
+      for (let n = 0; n < 101; n++) {
+         await createIssue(
+            db,
+            { teamId: 'CORE', title: `login ${n}`, statusId: 'to-do', priorityId: 'low' },
+            ME
+         );
+      }
+      const view = await createView(
+         db,
+         { slug: 'login', name: 'Login', type: 'issue', filter: { q: 'login' } },
+         ME
+      );
+      const res = await resolveView(db, view.id);
+      expect(res?.issues).toHaveLength(100);
+      expect(res?.truncated).toBe(true);
+   }, 60_000);
 });

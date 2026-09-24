@@ -139,4 +139,35 @@ describe('Is#19/Ad#15 saved search', () => {
       expect(await screen.findByText('Bug 2')).toBeTruthy();
       expect(screen.getByText('1 issues')).toBeTruthy();
    });
+
+   it('na ordenação padrão mantém a ordem de relevância da busca', async () => {
+      const urgent = priorities.find((p) => p.id === 'urgent')!;
+      const low = priorities.find((p) => p.id === 'low')!;
+      useIssuesStore.setState({
+         issues: [
+            { ...make(1), priority: urgent },
+            { ...make(2), priority: low },
+         ],
+      });
+      searchMock.mockResolvedValue(result(['i2', 'i1']));
+      render(<ViewDetails viewId="v1" />);
+      await screen.findByText('Bug 2');
+      const titles = screen.getAllByText(/^Bug \d$/).map((el) => el.textContent);
+      expect(titles).toEqual(['Bug 2', 'Bug 1']);
+   });
+
+   it('busca que bate no teto de 100 avisa que mostra só os primeiros', async () => {
+      const many = Array.from({ length: 100 }, (_, i) => make(i + 1));
+      useIssuesStore.setState({ issues: many });
+      searchMock.mockResolvedValue(result(many.map((i) => i.id)));
+      render(<ViewDetails viewId="v1" />);
+      expect(await screen.findByText(/Showing the first 100 matches/)).toBeTruthy();
+   });
+
+   it('abaixo do teto não mostra o aviso', async () => {
+      searchMock.mockResolvedValue(result(['i1']));
+      render(<ViewDetails viewId="v1" />);
+      await screen.findByText('Bug 1');
+      expect(screen.queryByText(/Showing the first 100 matches/)).toBeNull();
+   });
 });
