@@ -30,6 +30,7 @@ import {
 } from '@/lib/api/attachments';
 import { MAX_ATTACHMENT_BYTES, resolveAttachmentType } from '@/lib/attachment-types';
 import { __setTestDb } from '@/db';
+import { subscribe, type CircleEvent } from '@/lib/api/events';
 import { POST as postAttachment } from '@/app/api/v1/attachments/route';
 
 const ANA = 'ana@nimbloo.ai';
@@ -96,6 +97,24 @@ describe('allow-list de anexos (MIME + extensão)', () => {
 });
 
 describe('createAttachment', () => {
+   it('anexo de comentário publica o issueId (só o detalhe daquela issue recarrega)', async () => {
+      const { db, issueId } = await setup();
+      const c = await addComment(db, issueId, 'com anexo', ANA);
+      const seen: CircleEvent[] = [];
+      const off = subscribe((e) => seen.push(e));
+      try {
+         await createAttachment(
+            db,
+            { issueId, commentId: c.id, file: file('foto.png', 'image/png', PNG) },
+            ANA
+         );
+      } finally {
+         off();
+      }
+      const ev = seen.find((e) => e.entity === 'comment' && e.id === c.id);
+      expect(ev?.issueId).toBe(issueId);
+   });
+
    it('sobe em uploads/<uuid>.<ext>, grava e devolve o DTO (imagem sem Content-Disposition)', async () => {
       const { db, issueId } = await setup();
       const dto = await createAttachment(

@@ -236,8 +236,20 @@ async function removeFromStorage(urls: string[]): Promise<void> {
    }
 }
 
-/** Anexo de comentário → evento `comment` (id do comentário); da issue → `issue`. */
+/**
+ * Anexo de comentário → evento `comment` (id do comentário) com o `issueId`, senão o
+ * cliente não sabe qual detalhe recarregar e todo detalhe aberto do time recarregava;
+ * da issue → `issue`.
+ */
 function publishFor(row: Row, action: 'updated', actorEmail: string, teamId?: string): void {
-   if (row.commentId) publish({ entity: 'comment', action, id: row.commentId, actorEmail, teamId });
+   if (row.commentId)
+      publish({
+         entity: 'comment',
+         action,
+         id: row.commentId,
+         actorEmail,
+         issueId: row.issueId,
+         teamId,
+      });
    else publish({ entity: 'issue', action, id: row.issueId, actorEmail, teamId });
 }
