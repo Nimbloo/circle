@@ -32,14 +32,29 @@ const body = (text: string): EditorDoc => ({
    type: 'doc',
    content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
 });
-vi.mock('@/components/common/editor/block-editor', () => ({
-   BlockEditor: ({ doc, onSave }: { doc: EditorDoc | null; onSave?: (d: EditorDoc) => void }) => (
-      <div>
-         <p data-testid="editor-doc">{JSON.stringify(doc)}</p>
-         <button onClick={() => onSave?.(body('novo'))}>fake-save</button>
-      </div>
-   ),
-}));
+// `unmountFlush.doc`: como o editor real, o dublê faz FLUSH do pendente ao desmontar.
+const unmountFlush = vi.hoisted(() => ({ doc: null as EditorDoc | null }));
+vi.mock('@/components/common/editor/block-editor', async () => {
+   const R = await import('react');
+   return {
+      BlockEditor: ({ doc, onSave }: { doc: EditorDoc | null; onSave?: (d: EditorDoc) => void }) => {
+         const saveRef = R.useRef(onSave);
+         saveRef.current = onSave;
+         R.useEffect(
+            () => () => {
+               if (unmountFlush.doc) saveRef.current?.(unmountFlush.doc);
+            },
+            []
+         );
+         return (
+            <div>
+               <p data-testid="editor-doc">{JSON.stringify(doc)}</p>
+               <button onClick={() => onSave?.(body('novo'))}>fake-save</button>
+            </div>
+         );
+      },
+   };
+});
 
 const { default: TeamDocumentView } = await import('@/components/common/teams/team-document');
 const { SidebarProvider } = await import('@/components/ui/sidebar');
@@ -69,6 +84,9 @@ const renderView = () =>
 
 beforeEach(() => {
    vi.clearAllMocks();
+   unmountFlush.doc = null;
+   apiMocks.get.mockReset();
+   apiMocks.update.mockReset();
    useWorkspaceStore.setState({
       me: { id: 'me', admin: false } as never,
       loaded: true,
@@ -121,6 +139,58 @@ describe('página do documento (corpo com editor de blocos)', () => {
       });
       await waitFor(() => expect(toastMocks.warning).toHaveBeenCalled());
       await waitFor(() => expect(screen.getByTestId('editor-doc').textContent).toContain('da Ana'));
+   });
+
+   it('409: o flush do editor antigo (remount) não sobrescreve a versão nova', async () => {
+      apiMocks.get.mockResolvedValueOnce(dto());
+      apiMocks.update.mockRejectedValueOnce(new ApiError(409, 'alterado'));
+      apiMocks.get.mockResolvedValueOnce(
+         dto({ descriptionDoc: body('da Ana'), descriptionVersion: 'v9' })
+      );
+      renderView();
+      await screen.findByDisplayValue('RFC 1');
+      unmountFlush.doc = body('local velho');
+      await act(async () => {
+         fireEvent.click(screen.getByText('fake-save'));
+      });
+      await waitFor(() => expect(screen.getByTestId('editor-doc').textContent).toContain('da Ana'));
+      unmountFlush.doc = null;
+      await act(async () => {
+         await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(apiMocks.update).toHaveBeenCalledTimes(1);
+
+      apiMocks.update.mockResolvedValueOnce(dto({ descriptionVersion: 'v10' }));
+      fireEvent.click(screen.getByText('fake-save'));
+      await waitFor(() =>
+         expect(apiMocks.update).toHaveBeenLastCalledWith('d1', {
+            descriptionDoc: body('novo'),
+            expectedDescriptionVersion: 'v9',
+         })
+      );
+   });
+
+   it('409 com recarga falhando: o editor fica e o próximo save vai com a versão vista', async () => {
+      apiMocks.get.mockResolvedValueOnce(dto());
+      apiMocks.update.mockRejectedValue(new ApiError(409, 'alterado'));
+      apiMocks.get.mockRejectedValueOnce(new Error('rede'));
+      renderView();
+      await screen.findByDisplayValue('RFC 1');
+      await act(async () => {
+         fireEvent.click(screen.getByText('fake-save'));
+      });
+      await waitFor(() => expect(apiMocks.get).toHaveBeenCalledTimes(2));
+      await act(async () => {
+         await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(screen.getByTestId('editor-doc')).toBeTruthy();
+      apiMocks.get.mockReturnValueOnce(new Promise(() => {}));
+      await act(async () => {
+         fireEvent.click(screen.getByText('fake-save'));
+      });
+      await waitFor(() => expect(apiMocks.update).toHaveBeenCalledTimes(2));
+      for (const [, patch] of apiMocks.update.mock.calls)
+         expect(patch.expectedDescriptionVersion).toBe('v1');
    });
 
    it('404 no autosave (apagado por outra aba antes do SSE) mostra "não encontrado"', async () => {

@@ -68,6 +68,7 @@ export default function TeamDocumentView({
    const [deleteBusy, setDeleteBusy] = useState(false);
    const versionRef = useRef<string | null>(null);
    const saveQueue = useRef<Promise<void>>(Promise.resolve());
+   const conflict = useRef(false);
    const editorBoxRef = useRef<HTMLDivElement>(null);
 
    const listHref = `/${orgId}/team/${teamId}/documents`;
@@ -115,8 +116,12 @@ export default function TeamDocumentView({
       { ignoreOwn: true }
    );
 
+   // 409: entre o conflito e o remount, `conflict` descarta a fila e o flush do editor
+   // antigo (unmount) — senão o corpo velho iria com a versão nova e apagaria o do outro.
    const saveBody = (next: EditorDoc) => {
+      if (conflict.current) return;
       saveQueue.current = saveQueue.current.then(async () => {
+         if (conflict.current) return;
          try {
             const dto = await api.documents.update(documentId, {
                descriptionDoc: next,
@@ -134,16 +139,27 @@ export default function TeamDocumentView({
                toast.error(errorReason(e, 'Could not save the document'));
                return;
             }
-            toast.warning('The document was changed by someone else. Loaded the latest version.');
+            conflict.current = true;
             try {
                adopt(await api.documents.get(documentId), true);
+               toast.warning(
+                  'The document was changed by someone else. Loaded the latest version.'
+               );
                setEditorEpoch((n) => n + 1);
             } catch {
-               setStatus('error');
+               // Sem a versão nova: o editor (e o que foi digitado) fica, com a versão VISTA
+               // antiga — o próximo save volta a dar 409 e tenta recarregar de novo.
+               conflict.current = false;
+               toast.error('The document was changed by someone else. Could not load it.');
             }
          }
       });
    };
+   // Depois do remount pós-conflito o editor novo volta a salvar (o flush do antigo, no
+   // unmount, já foi descartado — o cleanup do filho roda antes deste efeito).
+   useEffect(() => {
+      conflict.current = false;
+   }, [editorEpoch]);
 
    const saveName = async () => {
       if (nameDraft === null || !doc) return;

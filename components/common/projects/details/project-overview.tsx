@@ -6,6 +6,7 @@ import { DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 import { BlockEditor } from '@/components/common/editor/block-editor';
 import { Button } from '@/components/ui/button';
 import { ErrorState } from '@/components/common/error-state';
+import { adaptProjectDetail } from '@/lib/adapters-project-detail';
 import { api, ApiError } from '@/lib/client';
 import { blocksToDoc, docHeadings, type EditorDoc } from '@/lib/editor-doc';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -44,6 +45,7 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    // Concorrência otimista da descrição (#18): versão vista + fila de saves + conflito.
    const versionRef = useRef<string | null>(null);
    const saveQueue = useRef<Promise<void>>(Promise.resolve());
+   const conflict = useRef(false);
    const [editorEpoch, setEditorEpoch] = useState(0);
 
    const handleSaveSummary = async () => {
@@ -89,30 +91,50 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    useEffect(markHeadings, [markHeadings, outlineItems]);
 
    // Saves em fila (um por vez) mandando a versão vista; 409 = outra pessoa gravou no
-   // meio: recarrega a versão dela e remonta o editor em vez de sobrescrever.
+   // meio: recarrega a versão dela e remonta o editor em vez de sobrescrever. Entre o 409
+   // e o remount, `conflict` descarta a fila e o flush do editor antigo (unmount) — senão
+   // o doc velho iria com a versão nova e apagaria a edição da outra pessoa.
    const saveDescription = (next: EditorDoc) => {
+      if (conflict.current) return;
       saveQueue.current = saveQueue.current.then(async () => {
+         if (conflict.current) return;
          try {
             const dto = await api.projects.updateDetail(projectId, {
                descriptionDoc: next,
                expectedDescriptionVersion: versionRef.current,
             });
-            versionRef.current = dto.descriptionVersion ?? null;
+            versionRef.current = dto.descriptionVersion ?? versionRef.current;
             setDescriptionVersion(versionRef.current);
          } catch (e) {
             if (!(e instanceof ApiError && e.status === 409)) {
                toast.error('Could not save the description');
                return;
             }
-            toast.warning(
-               'The description was changed by someone else. Loaded the latest version.'
-            );
-            versionRef.current = null;
-            await reload();
-            setEditorEpoch((n) => n + 1);
+            conflict.current = true;
+            try {
+               const fresh = await api.projects.detail(projectId);
+               versionRef.current = fresh.descriptionVersion;
+               setDetail(() => adaptProjectDetail(fresh));
+               setDescriptionVersion(fresh.descriptionVersion);
+               toast.warning(
+                  'The description was changed by someone else. Loaded the latest version.'
+               );
+               setEditorEpoch((n) => n + 1);
+            } catch {
+               // Sem a versão nova: o editor fica como está e a versão VISTA continua a
+               // antiga — o próximo save volta a dar 409 e tenta recarregar de novo (nunca
+               // vira save incondicional).
+               conflict.current = false;
+               toast.error('The description was changed by someone else. Could not load it.');
+            }
          }
       });
    };
+   // Depois do remount pós-conflito o editor novo volta a salvar (o flush do antigo, no
+   // unmount, já foi descartado — o cleanup do filho roda antes deste efeito).
+   useEffect(() => {
+      conflict.current = false;
+   }, [editorEpoch]);
    // Versão vinda de recarga (1ª carga, evento remoto, conflito): só é adotada com o
    // editor SEM foco — é quando o editor também aceita o doc externo. Digitando, fica a
    // versão antiga e o próximo save detecta o conflito (409) em vez de sobrescrever.
