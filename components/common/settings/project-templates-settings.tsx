@@ -228,16 +228,22 @@ export default function ProjectTemplatesSettings() {
    // Template criado/editado por OUTRO admin chega por evento `catalog` (#53).
    useLiveReload(CATALOG_CHANGED_EVENT, { teamId, kind: 'project_template' }, load);
 
+   // Duplo clique mandava outro DELETE (404 → "Não foi possível excluir" após o sucesso).
+   const [deleting, setDeleting] = useState(false);
    const confirmDelete = async () => {
-      if (!toDelete) return;
+      if (!toDelete || deleting) return;
+      setDeleting(true);
       try {
          await api.teams.deleteProjectTemplate(teamId, toDelete.id);
          setDeleteOpen(false);
-         await load();
-         toast.success('Template excluído');
       } catch (err) {
          toast.error(errorReason(err, 'Não foi possível excluir o template'));
+         return;
+      } finally {
+         setDeleting(false);
       }
+      toast.success('Template excluído');
+      await load();
    };
 
    return (
@@ -356,7 +362,7 @@ export default function ProjectTemplatesSettings() {
             />
          )}
 
-         <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+         <AlertDialog open={deleteOpen} onOpenChange={(o) => !deleting && setDeleteOpen(o)}>
             <AlertDialogContent>
                <AlertDialogHeader>
                   <AlertDialogTitle>Excluir “{toDeleteLatched?.name}”?</AlertDialogTitle>
@@ -365,8 +371,9 @@ export default function ProjectTemplatesSettings() {
                   </AlertDialogDescription>
                </AlertDialogHeader>
                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
                   <AlertDialogAction
+                     disabled={deleting}
                      onClick={(e) => {
                         e.preventDefault();
                         void confirmDelete();
