@@ -9,6 +9,7 @@ import type { EditorDoc } from '@/lib/editor-doc';
 import { ProjectDetailProvider } from '@/components/common/projects/details/use-project-detail';
 import ProjectOverview from '@/components/common/projects/details/project-overview';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { PROJECT_CHANGED_EVENT } from '@/lib/use-live-sync';
 import { makeProject } from './helpers/project-fixture';
 
 /**
@@ -158,5 +159,59 @@ describe('descrição do projeto: conflito (409)', () => {
 
       for (const [, body] of mocks.updateDetail.mock.calls)
          expect(body.expectedDescriptionVersion).toBe('v1');
+   });
+});
+
+describe('descrição do projeto: eco e refetch fora de ordem', () => {
+   it('eco do próprio autosave (own + scope content) não refaz o GET', async () => {
+      mocks.detail.mockResolvedValue(dto('original', 'v1'));
+      renderOverview();
+      await waitFor(() => expect(screen.getByTestId('doc').textContent).toBe('original'));
+      act(() => {
+         window.dispatchEvent(
+            new CustomEvent(PROJECT_CHANGED_EVENT, {
+               detail: { id: 'p1', own: true, scope: 'content' },
+            })
+         );
+      });
+      await act(async () => {
+         await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(mocks.detail).toHaveBeenCalledTimes(1);
+   });
+
+   it('refetch que saiu antes de um save confirmado não reverte a descrição', async () => {
+      mocks.detail.mockResolvedValueOnce(dto('original', 'v1'));
+      renderOverview();
+      await waitFor(() => expect(screen.getByTestId('doc').textContent).toBe('original'));
+
+      let resolveStale!: (v: ProjectDetailDto) => void;
+      mocks.detail.mockReturnValueOnce(new Promise((r) => (resolveStale = r)));
+      act(() => {
+         window.dispatchEvent(new CustomEvent(PROJECT_CHANGED_EVENT, { detail: { id: 'p1' } }));
+      });
+      await waitFor(() => expect(mocks.detail).toHaveBeenCalledTimes(2));
+
+      mocks.updateDetail.mockResolvedValueOnce(dto('minha', 'v2'));
+      await act(async () => screen.getByText('salvar').click());
+      await waitFor(() => expect(mocks.updateDetail).toHaveBeenCalledTimes(1));
+      await act(async () => {
+         await new Promise((r) => setTimeout(r, 10));
+      });
+
+      await act(async () => resolveStale(dto('antes do save', 'v1')));
+      await act(async () => {
+         await new Promise((r) => setTimeout(r, 10));
+      });
+      expect(screen.getByTestId('doc').textContent).not.toBe('antes do save');
+
+      mocks.updateDetail.mockResolvedValueOnce(dto('minha', 'v3'));
+      await act(async () => screen.getByText('salvar').click());
+      await waitFor(() =>
+         expect(mocks.updateDetail).toHaveBeenLastCalledWith('p1', {
+            descriptionDoc: docOf('minha'),
+            expectedDescriptionVersion: 'v2',
+         })
+      );
    });
 });

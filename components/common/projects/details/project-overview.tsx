@@ -42,8 +42,15 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    // Detalhe compartilhado pelas abas (layout da rota, #45): loading/ready/error, live
    // reload e refetch que preserva a tela. O editor só monta com `ready` — montar vazio
    // (1ª carga falha ou em curso) e o autosave apagaria a descrição real (#34).
-   const { status, detail, reload, setDetail, descriptionVersion, setDescriptionVersion } =
-      useSharedProjectDetail(projectId);
+   const {
+      status,
+      detail,
+      reload,
+      setDetail,
+      descriptionVersion,
+      setDescriptionVersion,
+      trackDescriptionSave,
+   } = useSharedProjectDetail(projectId);
    const detailReady = status === 'ready';
    const [summaryDraft, setSummaryDraft] = useState<string | null>(null);
    // Concorrência otimista da descrição (#18): versão vista + fila de saves + conflito.
@@ -107,10 +114,12 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
       saveQueue.current = saveQueue.current.then(async () => {
          if (conflict.current) return;
          try {
-            const dto = await api.projects.updateDetail(projectId, {
-               descriptionDoc: next,
-               expectedDescriptionVersion: versionRef.current,
-            });
+            const dto = await trackDescriptionSave(
+               api.projects.updateDetail(projectId, {
+                  descriptionDoc: next,
+                  expectedDescriptionVersion: versionRef.current,
+               })
+            );
             versionRef.current = dto.descriptionVersion ?? versionRef.current;
             setDescriptionVersion(versionRef.current);
          } catch (e) {

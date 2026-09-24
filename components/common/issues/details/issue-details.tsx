@@ -141,6 +141,9 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
    const descriptionVersion = useRef<string | null>(null);
    const saveQueue = useRef<Promise<void>>(Promise.resolve());
    const conflict = useRef(false);
+   // Saves da descrição em voo e confirmados: um refetch que saiu antes de um save (ou
+   // durante) traz o conteúdo de ANTES dele — não pode reverter o editor nem a versão.
+   const descriptionWrites = useRef({ inFlight: 0, seq: 0 });
    const [editorEpoch, setEditorEpoch] = useState(0);
    const descriptionBox = useRef<HTMLDivElement>(null);
 
@@ -152,6 +155,7 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
    useEffect(() => {
       if (!detailIssueId) return;
       let active = true;
+      const writesAtStart = descriptionWrites.current.seq;
       // Refetch silencioso (stale-while-revalidate): o conteúdo atual permanece na tela
       // enquanto o novo detail chega — loading só na primeira carga (detail === null).
       Promise.all([api.issues.detail(detailIssueId), api.issues.activity(detailIssueId)])
@@ -160,6 +164,8 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
                const adapted = adaptIssueDetail(detailDto, activity);
                setDetail(adapted);
                onDetailLoaded?.(adapted);
+               const writes = descriptionWrites.current;
+               if (writes.inFlight > 0 || writes.seq !== writesAtStart) return;
                // O editor com foco NÃO adota o doc recarregado (preserva a digitação): aí a
                // versão também não avança, e o próximo save acusa o conflito (409).
                const typing = descriptionBox.current?.contains(document.activeElement) ?? false;
@@ -236,8 +242,12 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
    useEffect(() => {
       const onChanged = (e: Event) => {
          const d =
-            (e as CustomEvent<{ id?: string; own?: boolean; scope?: 'activity' }>).detail ?? {};
+            (e as CustomEvent<{ id?: string; own?: boolean; scope?: 'activity' | 'content' }>)
+               .detail ?? {};
          if (d.id && d.id !== detailIssueId) return;
+         // Eco do próprio autosave da descrição: o editor já tem o conteúdo e a resposta do
+         // save já trouxe a versão — refazer detail + activity a cada save é desperdício.
+         if (d.own && d.scope === 'content') return;
          const remaining = ownActionUntil.current - Date.now();
          if (remaining > 0) {
             if (d.own) return;
@@ -339,12 +349,20 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
       if (conflict.current) return;
       saveQueue.current = saveQueue.current.then(async () => {
          if (conflict.current) return;
+         const writes = descriptionWrites.current;
+         writes.inFlight += 1;
+         writes.seq += 1;
          try {
-            const dto = await api.issues.updateDetail(issue.id, {
-               descriptionDoc: doc,
-               expectedDescriptionVersion: descriptionVersion.current,
-            });
+            const dto = await api.issues
+               .updateDetail(issue.id, {
+                  descriptionDoc: doc,
+                  expectedDescriptionVersion: descriptionVersion.current,
+               })
+               .finally(() => {
+                  writes.inFlight -= 1;
+               });
             descriptionVersion.current = dto.descriptionVersion ?? null;
+            writes.seq += 1;
          } catch (e) {
             if (!(e instanceof ApiError && e.status === 409)) {
                toast.error('Falha ao salvar a descrição');

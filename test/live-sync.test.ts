@@ -380,7 +380,21 @@ describe('useLiveSync — fetch direcionado coalescido e sequenciado (#11)', () 
       await flush();
       window.removeEventListener(ISSUE_CHANGED_EVENT, on);
       expect(api.issues.get).not.toHaveBeenCalled();
-      expect(seen).toEqual([{ id: 'i1' }]);
+      // `scope` chega à tela: o eco do próprio autosave (own + content) não refaz o GET.
+      expect(seen).toEqual([{ id: 'i1', scope: 'content' }]);
+   });
+
+   it('projeto com scope content repassa o scope no evento de janela', async () => {
+      useWorkspaceStore.setState({ applyProject: vi.fn() });
+      api.projects.get.mockResolvedValue({ id: 'p1' });
+      const seen: unknown[] = [];
+      const on = (e: Event) => seen.push((e as CustomEvent).detail);
+      window.addEventListener(PROJECT_CHANGED_EVENT, on);
+      const es = setup();
+      es.emit({ entity: 'project', action: 'updated', id: 'p1', teamId: 'CORE', scope: 'content' });
+      await flush();
+      window.removeEventListener(PROJECT_CHANGED_EVENT, on);
+      expect(seen).toEqual([{ id: 'p1', teamId: 'CORE', scope: 'content' }]);
    });
 
    it('projeto buscado 1 vez mesmo com N eventos (rollups de bulk)', async () => {

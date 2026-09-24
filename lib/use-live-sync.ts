@@ -113,8 +113,11 @@ export interface LiveEventDetail {
    own?: boolean;
    /** Subtipo do `catalog` (#53): template, project_template, sla, emoji. */
    kind?: string;
-   /** `activity`: só o feed da issue mudou (comentário/reação, #27), não o detalhe. */
-   scope?: 'activity';
+   /**
+    * `activity`: só o feed da issue mudou (comentário/reação, #27), não o detalhe.
+    * `content`: só o conteúdo (descrição) mudou — com `own`, é o eco do próprio autosave.
+    */
+   scope?: 'activity' | 'content';
 }
 
 /** Todos os eventos de janela: um resync avisa todas as telas com cache local. */
@@ -171,7 +174,8 @@ function dispatch(name: string, detail: LiveEventDetail): void {
 export function useLiveReload(
    event: string,
    filter: LiveEventDetail,
-   reload: () => unknown,
+   /** Recebe o `detail` do evento (ex.: `own` + `scope` para reconhecer um eco específico). */
+   reload: (detail: LiveEventDetail) => unknown,
    options: { ignoreOwn?: boolean } = {}
 ): void {
    const reloadRef = useRef(reload);
@@ -187,7 +191,7 @@ export function useLiveReload(
          if (teamId && detail.teamId && detail.teamId !== teamId) return;
          if (ignoreOwn && detail.own) return;
          if (kind && detail.kind && detail.kind !== kind) return;
-         void reloadRef.current();
+         void reloadRef.current(detail);
       };
       window.addEventListener(event, on);
       return () => window.removeEventListener(event, on);
@@ -352,7 +356,11 @@ export function useLiveSync(): void {
                      },
                   });
                // Para 'issue', o id É o da issue: recarrega só o detalhe dela.
-               dispatch(ISSUE_CHANGED_EVENT, own ? { id, own } : { id });
+               dispatch(ISSUE_CHANGED_EVENT, {
+                  id,
+                  ...(own ? { own } : {}),
+                  ...(parsed.scope === 'content' ? { scope: 'content' as const } : {}),
+               });
                return;
             }
             case 'comment':
@@ -397,10 +405,12 @@ export function useLiveSync(): void {
                      (dto) => useWorkspaceStore.getState().applyInitiative(dto)
                   );
                }
-               dispatch(
-                  event,
-                  own ? { id, teamId: parsed.teamId, own } : { id, teamId: parsed.teamId }
-               );
+               dispatch(event, {
+                  id,
+                  teamId: parsed.teamId,
+                  ...(own ? { own } : {}),
+                  ...(parsed.scope === 'content' ? { scope: 'content' as const } : {}),
+               });
                return;
             }
             case 'cycle':
