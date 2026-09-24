@@ -103,6 +103,8 @@ interface CircleEventLike {
    scope?: 'content';
    /** Subtipo do `catalog` (#53; aditivo). Ausente = dado do bootstrap (status). */
    kind?: string;
+   /** Em `project`: milestone apagada (aditivo) — o detalhe de issue limpa o campo. */
+   removedMilestoneId?: string;
 }
 
 /** `detail` dos eventos de janela: id do recurso e, se vier, o time. */
@@ -164,6 +166,11 @@ export const CATALOG_CHANGED_EVENT = 'circle:catalog-changed';
 export const TEAM_CHANGED_EVENT = 'circle:team-changed';
 /** Job de import do usuário mudou de estado (`detail.id` = job): a tela relê o job. */
 export const IMPORT_JOB_EVENT = 'circle:import-job';
+/**
+ * Milestone apagada (`detail.id` = milestone): o detalhe de issue aberto nela limpa o
+ * campo localmente — as issues só perderam o vínculo, sem GET por issue afetada.
+ */
+export const MILESTONE_REMOVED_EVENT = 'circle:milestone-removed';
 
 function dispatch(name: string, detail: LiveEventDetail): void {
    window.dispatchEvent(new CustomEvent(name, { detail }));
@@ -400,6 +407,9 @@ export function useLiveSync(): void {
             case 'initiative': {
                const event =
                   entity === 'project' ? PROJECT_CHANGED_EVENT : INITIATIVE_CHANGED_EVENT;
+               // Vale também para o eco: o detalhe de issue aberto na própria aba não sabe.
+               if (entity === 'project' && parsed.removedMilestoneId)
+                  dispatch(MILESTONE_REMOVED_EVENT, { id: parsed.removedMilestoneId });
                if (!id) {
                   scheduleHydrate('workspace');
                   dispatch(event, {});

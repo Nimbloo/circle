@@ -181,4 +181,48 @@ describe('auditoria de 24/09: lacunas que sobraram', () => {
       expect(atualizadas).toContain(filha.id);
       expect(atualizadas).toContain(avo.id);
    });
+
+   it('projeto (des)vinculado de initiative publica com o time dele (convidado aplica só o projeto)', async () => {
+      const { createProject } = await import('@/lib/api/projects');
+      const { createInitiative, updateInitiative } = await import('@/lib/api/initiatives');
+      const proj = { priorityId: 'high', healthId: 'on-track', teamId: 'CORE' as const };
+      const p1 = await createProject(db, { ...proj, name: 'P1', statusId: 'proj-in-progress' });
+      const p2 = await createProject(db, { ...proj, name: 'P2', statusId: 'proj-in-progress' });
+      const BASE = { priorityId: 'high', healthId: 'on-track' };
+
+      eventos.length = 0;
+      const init = await createInitiative(db, {
+         ...BASE,
+         slug: 'x',
+         name: 'X',
+         projectIds: [p1.id],
+      });
+      await updateInitiative(db, init.id, { projectIds: [p2.id] });
+
+      const doProjeto = eventos
+         .filter((e) => e.entity === 'project')
+         .map((e) => `${e.id}@${e.teamId}`);
+      expect(doProjeto).toEqual([`${p1.id}@CORE`, `${p1.id}@CORE`, `${p2.id}@CORE`]);
+   });
+
+   it('apagar milestone leva o id dela no evento (detalhe limpa sem GET por issue)', async () => {
+      const { createProject } = await import('@/lib/api/projects');
+      const { addMilestone, deleteMilestone } = await import('@/lib/api/project-detail');
+      const p = await createProject(db, {
+         priorityId: 'high',
+         healthId: 'on-track',
+         teamId: 'CORE',
+         name: 'P',
+         statusId: 'proj-in-progress',
+      });
+      const m = await addMilestone(db, p.id, { name: 'Beta' });
+
+      eventos.length = 0;
+      await deleteMilestone(db, m.id);
+
+      const ev = eventos.filter((e) => e.entity === 'project');
+      expect(ev).toHaveLength(1);
+      expect(ev[0]).toMatchObject({ id: p.id, teamId: 'CORE', removedMilestoneId: m.id });
+      expect(eventos.filter((e) => e.entity === 'issue')).toEqual([]);
+   });
 });

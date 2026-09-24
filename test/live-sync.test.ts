@@ -500,4 +500,31 @@ describe('useLiveSync — lacunas da auditoria de 24/09', () => {
       expect(ws().projects[0].labels).toEqual([]);
       expect(ws().initiatives[0].labels).toEqual([]);
    });
+
+   it('milestone apagada vira evento de janela (também no eco), sem GET de issue', async () => {
+      const { MILESTONE_REMOVED_EVENT } = await import('@/lib/use-live-sync');
+      const { getClientId } = await import('@/lib/client-id');
+      const seen: unknown[] = [];
+      const on = (e: Event) => seen.push((e as CustomEvent).detail);
+      window.addEventListener(MILESTONE_REMOVED_EVENT, on);
+      const es = setup();
+      es.emit({
+         entity: 'project',
+         action: 'updated',
+         id: 'p1',
+         removedMilestoneId: 'm1',
+         clientId: getClientId(),
+      });
+      await flush();
+      window.removeEventListener(MILESTONE_REMOVED_EVENT, on);
+      expect(seen).toEqual([{ id: 'm1' }]);
+      expect(api.issues.get).not.toHaveBeenCalled();
+   });
+
+   it('clearRemovedMilestone limpa só o detalhe daquela milestone', async () => {
+      const { clearRemovedMilestone } = await import('@/lib/adapters-issue-detail');
+      const d = { milestoneId: 'm1', milestoneName: 'Beta' };
+      expect(clearRemovedMilestone(d, 'm1')).toEqual({ milestoneId: null, milestoneName: null });
+      expect(clearRemovedMilestone(d, 'm2')).toBe(d);
+   });
 });
