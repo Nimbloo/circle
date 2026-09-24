@@ -16,6 +16,7 @@ const InsightsPanel = dynamic(
 );
 import { IssueLine } from '@/components/common/issues/issue-line';
 import { EmptyState } from '@/components/common/empty-state';
+import { LoadingArea } from '@/components/common/loading-area';
 import { BreakdownPanel } from './breakdown-panel';
 import { api } from '@/lib/client';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
@@ -126,7 +127,24 @@ export default function MyIssues() {
       return (
          <div className="w-full h-full">
             <div className="px-6 mb-6">
-               {searchedIssues.length > 0 ? (
+               {/* Aba Activity: sem a resposta do /me/activity o escopo ainda não existe —
+                   "No results" mentiria enquanto carrega e a falha precisa de retry. */}
+               {activity.error ? (
+                  <div className="mt-4 flex flex-col items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+                     <span>Não foi possível carregar as issues.</span>
+                     <button
+                        type="button"
+                        onClick={activity.retry}
+                        className="px-2.5 py-1 rounded-md border text-xs font-medium hover:bg-accent/50 transition-colors"
+                     >
+                        Tentar de novo
+                     </button>
+                  </div>
+               ) : activity.loading ? (
+                  <div data-testid="issues-loading" className="w-full pt-1">
+                     <LoadingArea rows={8} />
+                  </div>
+               ) : searchedIssues.length > 0 ? (
                   <div className="border rounded-md mt-4">
                      <div className="py-2 px-4 border-b bg-muted/50">
                         <h3 className="text-sm font-medium">Results ({searchedIssues.length})</h3>

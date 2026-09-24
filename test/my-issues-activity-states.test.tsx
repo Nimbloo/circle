@@ -2,9 +2,10 @@
 
 import './setup-dom';
 import React from 'react';
-import { act, render, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useIssuesStore } from '@/store/issues-store';
+import { useSearchStore } from '@/store/search-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 
 /**
@@ -81,5 +82,33 @@ describe('My issues > Activity — carregando e erro', () => {
       await act(async () => viewProps.last?.onRetry?.());
       await waitFor(() => expect(apiMocks.me.activity).toHaveBeenCalledTimes(2));
       await waitFor(() => expect(viewProps.last?.error).toBe(false));
+   });
+});
+
+describe('My issues > Activity com a busca aberta', () => {
+   beforeEach(() => {
+      useSearchStore.setState({ isSearchOpen: true, searchQuery: 'login' });
+   });
+   afterEach(() => {
+      useSearchStore.setState({ isSearchOpen: false, searchQuery: '' });
+   });
+
+   it('carregando não mostra "No results"', () => {
+      apiMocks.me.activity.mockReturnValue(new Promise(() => {}));
+      render(<MyIssues />);
+      expect(screen.queryByText('No results')).toBeNull();
+      expect(screen.getByTestId('issues-loading')).toBeTruthy();
+   });
+
+   it('falha mostra erro com retry', async () => {
+      apiMocks.me.activity.mockRejectedValueOnce(new Error('Failed to fetch'));
+      render(<MyIssues />);
+      const retry = await screen.findByRole('button', { name: 'Tentar de novo' });
+      expect(screen.queryByText('No results')).toBeNull();
+
+      apiMocks.me.activity.mockResolvedValueOnce([]);
+      await act(async () => fireEvent.click(retry));
+      await waitFor(() => expect(apiMocks.me.activity).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(screen.getByText('No results')).toBeTruthy());
    });
 });
