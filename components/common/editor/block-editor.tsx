@@ -4,6 +4,11 @@ import { api } from '@/lib/client';
 import { cn } from '@/lib/utils';
 import { EMPTY_DOC, type EditorDoc } from '@/lib/editor-doc';
 import { editorExtensions } from '@/lib/editor-extensions';
+import {
+   docHasPendingUploads,
+   resolveUploadPlaceholders,
+   settleUploads,
+} from '@/lib/editor-image';
 import { IssueRef } from '@/lib/editor-issue-ref';
 import { Emoticons } from '@/lib/editor-emoticons';
 import { TaskItemExt, linkedIssueIdentifier } from '@/lib/editor-tasks';
@@ -215,14 +220,17 @@ export function BlockEditor({
    const editorRef = useRef<Editor | null>(null);
 
    // Debounce do save + flush (blur/unmount) para não perder a última edição.
+   // Imagem subindo (placeholder `blob:`) NÃO é salva: o save fica adiado até o upload
+   // terminar — a troca pela URL final é uma nova mudança, que reagenda o save.
    const pendingRef = useRef<EditorDoc | null>(null);
    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
    const flush = useCallback(() => {
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = null;
       const pending = pendingRef.current;
+      if (!pending || docHasPendingUploads(pending)) return;
       pendingRef.current = null;
-      if (pending) onSaveRef.current?.(pending);
+      onSaveRef.current?.(pending);
    }, []);
    const schedule = useCallback(
       (next: EditorDoc) => {
@@ -232,7 +240,24 @@ export function BlockEditor({
       },
       [flush, saveDelayMs]
    );
-   useEffect(() => flush, [flush]);
+   // Unmount: com upload em curso, espera os uploads e salva o doc com as URLs finais
+   // (o editor já foi destruído — a troca do placeholder é feita no JSON).
+   useEffect(
+      () => () => {
+         const pending = pendingRef.current;
+         if (!pending || !docHasPendingUploads(pending)) {
+            flush();
+            return;
+         }
+         if (timerRef.current) clearTimeout(timerRef.current);
+         pendingRef.current = null;
+         const save = onSaveRef.current;
+         void settleUploads(editorRef.current?.storage.imageUpload).then((results) =>
+            save?.(resolveUploadPlaceholders(pending, results))
+         );
+      },
+      [flush]
+   );
 
    // Task item → sub-issue: cria a issue filha com o texto do item e troca o conteúdo
    // do item pelo chip `issueRef` (o check passa a seguir o status dela). O save
