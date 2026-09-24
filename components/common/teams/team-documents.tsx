@@ -51,7 +51,7 @@ import { ErrorState } from '@/components/common/error-state';
 import { errorReason } from '@/lib/error-reason';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { CreateDocumentButton } from './create-document-dialog';
 
@@ -98,17 +98,32 @@ export default function TeamDocuments() {
    } | null>(null);
    const folderToDeleteLatched = useLatchedTarget(folderToDelete);
 
+   // Recargas concorrentes (carga, pós-mutação, live): só a resposta da MAIS NOVA entra —
+   // uma mais antiga que chega depois traria de volta um documento já excluído.
+   // `null` = resposta (ou erro) de uma recarga superada: ignorada.
+   const latestFetch = useRef(0);
+   const fetchFolders = useCallback(async (): Promise<DocumentFolder[] | null> => {
+      const seq = ++latestFetch.current;
+      try {
+         const dtos = await api.teams.documents(teamId);
+         return seq === latestFetch.current ? adaptFolders(dtos) : null;
+      } catch (err) {
+         if (seq !== latestFetch.current) return null;
+         throw err;
+      }
+   }, [teamId]);
+
    const reload = useCallback(() => {
       if (!teamId) return;
-      return api.teams
-         .documents(teamId)
-         .then((dtos) => {
-            setFolders(adaptFolders(dtos));
+      return fetchFolders()
+         .then((next) => {
+            if (!next) return;
+            setFolders(next);
             setError(false);
          })
          .catch(() => setError(true))
          .finally(() => setLoading(false));
-   }, [teamId]);
+   }, [teamId, fetchFolders]);
 
    useEffect(() => {
       setLoading(true);
@@ -118,19 +133,17 @@ export default function TeamDocuments() {
    // lista atual fica (sem trocar pelo estado de erro) e o aviso é da recarga.
    const refreshAfterMutation = useCallback(() => {
       if (!teamId) return;
-      return api.teams
-         .documents(teamId)
-         .then((dtos) => setFolders(adaptFolders(dtos)))
+      return fetchFolders()
+         .then((next) => next && setFolders(next))
          .catch(() => {
             toast.warning('Não foi possível recarregar os documentos');
          });
-   }, [teamId]);
+   }, [teamId, fetchFolders]);
    // Documento criado/editado/apagado por OUTRO usuário: recarrega a lista em silêncio.
    useLiveReload(DOCUMENT_CHANGED_EVENT, { teamId }, () =>
       teamId
-         ? api.teams
-              .documents(teamId)
-              .then((dtos) => setFolders(adaptFolders(dtos)))
+         ? fetchFolders()
+              .then((next) => next && setFolders(next))
               .catch(() => {})
          : undefined
    );

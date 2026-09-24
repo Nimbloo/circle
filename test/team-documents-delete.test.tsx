@@ -91,4 +91,43 @@ describe('auditoria de diálogos — exclusão e recarga', () => {
       expect(screen.queryByText('Não foi possível carregar os documentos')).toBeNull();
       expect(screen.getByText('RFC')).toBeTruthy();
    });
+
+   it('recarga mais antiga que responde depois não reverte a mais nova (CodeRabbit #190)', async () => {
+      const doc = (id: string, name: string) => ({
+         id,
+         folderId: 'f1',
+         name,
+         icon: null,
+         pinned: false,
+         creator: { id: 'u', slug: 'u', name: 'Ana', email: 'a@x', avatarUrl: null },
+         createdAt: '2026-09-01T00:00:00Z',
+         updatedAt: '2026-09-01T00:00:00Z',
+      });
+      const folder = (docs: ReturnType<typeof doc>[]) => [
+         { id: 'f1', teamId: 'CORE', name: 'Specs', icon: null, documents: docs },
+      ];
+      apiMocks.documents.mockResolvedValueOnce(folder([doc('d1', 'RFC'), doc('d2', 'ADR')]));
+      const user = userEvent.setup();
+      render(<TeamDocuments />);
+
+      // 1ª exclusão: a recarga dela fica pendurada (servidor ainda com a d2).
+      let resolveOld!: (v: unknown) => void;
+      apiMocks.documents.mockImplementationOnce(() => new Promise((r) => (resolveOld = r)));
+      await user.click(await screen.findByRole('button', { name: 'Document actions for RFC' }));
+      await user.click(await screen.findByRole('menuitem', { name: /Delete/ }));
+      await user.click(await screen.findByRole('button', { name: 'Excluir' }));
+      await waitFor(() => expect(apiMocks.documents).toHaveBeenCalledTimes(2));
+
+      // 2ª exclusão: a recarga dela responde primeiro (lista vazia).
+      apiMocks.documents.mockResolvedValueOnce(folder([]));
+      await user.click(await screen.findByRole('button', { name: 'Document actions for ADR' }));
+      await user.click(await screen.findByRole('menuitem', { name: /Delete/ }));
+      await user.click(await screen.findByRole('button', { name: 'Excluir' }));
+      await waitFor(() => expect(apiMocks.documents).toHaveBeenCalledTimes(3));
+      await waitFor(() => expect(screen.queryByText('ADR')).toBeNull());
+
+      // A recarga antiga chega por último com a d2: não pode trazê-la de volta.
+      await act(async () => resolveOld(folder([doc('d2', 'ADR')])));
+      expect(screen.queryByText('ADR')).toBeNull();
+   });
 });
