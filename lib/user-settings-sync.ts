@@ -179,11 +179,6 @@ function notificationsSlice(): Partial<NotificationPrefs> {
    return {
       emailNotifications: n.emailNotifications,
       slackNotifications: n.slackNotifications,
-      showUpdatesInSidebar: n.showUpdatesInSidebar,
-      changelogNewsletter: n.changelogNewsletter,
-      marketing: n.marketing,
-      inviteAccepted: n.inviteAccepted,
-      privacyLegal: n.privacyLegal,
    };
 }
 

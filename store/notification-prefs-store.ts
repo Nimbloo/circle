@@ -1,25 +1,18 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export type NotificationPrefKey =
-   | 'emailNotifications'
-   | 'slackNotifications'
-   | 'showUpdatesInSidebar'
-   | 'changelogNewsletter'
-   | 'marketing'
-   | 'inviteAccepted'
-   | 'privacyLegal';
+/**
+ * Só os canais que o servidor honra (`notify.ts`). Os toggles de "Updates from Nimbloo"
+ * (changelog, marketing, invite accepted, privacy) não tinham efeito nenhum e saíram;
+ * o schema do servidor ainda aceita essas chaves legadas nos blobs gravados.
+ */
+export type NotificationPrefKey = 'emailNotifications' | 'slackNotifications';
 
 export type NotificationPrefs = Record<NotificationPrefKey, boolean>;
 
-const DEFAULT_PREFS: NotificationPrefs = {
+export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
    emailNotifications: true,
    slackNotifications: true,
-   showUpdatesInSidebar: true,
-   changelogNewsletter: false,
-   marketing: false,
-   inviteAccepted: true,
-   privacyLegal: true,
 };
 
 interface NotificationPrefsState extends NotificationPrefs {
@@ -35,11 +28,11 @@ interface NotificationPrefsState extends NotificationPrefs {
 export const useNotificationPrefsStore = create<NotificationPrefsState>()(
    persist(
       (set) => ({
-         ...DEFAULT_PREFS,
+         ...DEFAULT_NOTIFICATION_PREFS,
          setPref: (key, value) => set({ [key]: value } as Partial<NotificationPrefs>),
          hydratePrefs: (patch) => {
             const clean: Partial<NotificationPrefs> = {};
-            (Object.keys(DEFAULT_PREFS) as NotificationPrefKey[]).forEach((k) => {
+            (Object.keys(DEFAULT_NOTIFICATION_PREFS) as NotificationPrefKey[]).forEach((k) => {
                if (typeof patch[k] === 'boolean') clean[k] = patch[k];
             });
             set(clean);
