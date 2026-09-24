@@ -68,6 +68,8 @@ function AvatarImage({ className, src, alt = '', ...props }: React.ComponentProp
    React.useLayoutEffect(() => {
       setLoaded(shown !== null);
    }, [shown, setLoaded]);
+   // Imagem renderizada condicionalmente que sai com o Avatar montado: volta a inicial.
+   React.useLayoutEffect(() => () => setLoaded(false), [setLoaded]);
 
    if (!shown) return null;
    return (

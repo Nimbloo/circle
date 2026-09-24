@@ -82,4 +82,18 @@ describe('Avatar sem piscada', () => {
       expect(screen.getByText('A')).toBeTruthy();
       expect(screen.queryByRole('img')).toBeNull();
    });
+
+   it('AvatarImage condicional que sai com o Avatar montado volta para a inicial', () => {
+      const cond = (show: boolean) => (
+         <Avatar>
+            {show && <AvatarImage src="/d1.png" alt="Ana" />}
+            <AvatarFallback>A</AvatarFallback>
+         </Avatar>
+      );
+      const { rerender } = render(cond(true));
+      load('/d1.png');
+      expect(screen.queryByText('A')).toBeNull();
+      rerender(cond(false));
+      expect(screen.getByText('A')).toBeTruthy();
+   });
 });
