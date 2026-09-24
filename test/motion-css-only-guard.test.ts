@@ -47,4 +47,13 @@ describe('motion só por CSS', () => {
          expect(readFileSync(file, 'utf8')).toContain('useListMotion(');
       }
    });
+
+   it('a coluna do board passa a posição pelo MoveGate e a lista virtual desenha a saída', () => {
+      expect(readFileSync('components/common/issues/group-issues.tsx', 'utf8')).toContain(
+         'moveGate.allow('
+      );
+      expect(readFileSync('components/common/issues/virtual-issue-list.tsx', 'utf8')).toContain(
+         'list-exit list-exit-virtual'
+      );
+   });
 });

@@ -6,7 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
    diffListKeys,
    isAnimatableChange,
+   LeavingGhosts,
    LIST_MOTION_MAX_CHANGES,
+   MoveGate,
    useListMotion,
 } from '@/lib/list-motion';
 
@@ -14,12 +16,12 @@ describe('diffListKeys', () => {
    it('conta chegadas, saídas e o mínimo de itens que trocaram de lugar', () => {
       expect(diffListKeys(['a', 'b', 'c'], ['x', 'a', 'b', 'c'])).toEqual({
          added: ['x'],
-         removed: 0,
+         removed: [],
          moved: 0,
       });
       expect(diffListKeys(['a', 'b', 'c'], ['a', 'c'])).toEqual({
          added: [],
-         removed: 1,
+         removed: ['b'],
          moved: 0,
       });
       // Uma issue sobe para o topo: 1 movimento, não "todas mudaram de índice".
@@ -106,5 +108,86 @@ describe('useListMotion', () => {
       rerender({ keys: ['b', 'a'], resetKey: 'v' });
       expect(result.current.moving).toBe(true);
       expect([...result.current.entering]).toEqual(['b']);
+   });
+});
+
+describe('MoveGate (re-medição não desliza)', () => {
+   const manual = () => {
+      let pending: (() => void) | null = null;
+      const gate = new MoveGate((done) => {
+         pending = done;
+      });
+      return { gate, frame: () => pending?.() };
+   };
+
+   it('ajuste antes do próximo quadro (medição síncrona do card novo) segue o mesmo slide', () => {
+      const { gate } = manual();
+      gate.sync(1);
+      expect(gate.allow('a', 132, true)).toBe(true);
+      expect(gate.allow('a', 110, true)).toBe(true);
+   });
+
+   it('depois do quadro, posição que muda sem mudança de dados vai direto (sem transição)', () => {
+      const { gate, frame } = manual();
+      gate.sync(1);
+      expect(gate.allow('a', 110, true)).toBe(true);
+      frame();
+      gate.sync(1);
+      expect(gate.allow('a', 110, true)).toBe(true);
+      expect(gate.allow('a', 150, true)).toBe(false);
+      // Já no lugar novo: nada a deslizar, a classe pode voltar sem efeito.
+      expect(gate.allow('a', 150, true)).toBe(true);
+   });
+
+   it('nova mudança de dados reabre o movimento; fora da janela nunca anima', () => {
+      const { gate, frame } = manual();
+      gate.sync(1);
+      gate.allow('a', 0, true);
+      frame();
+      gate.sync(2);
+      expect(gate.allow('a', 44, true)).toBe(true);
+      expect(gate.allow('a', 44, false)).toBe(false);
+   });
+});
+
+describe('LeavingGhosts', () => {
+   const motion = (version: number, leaving: string[], moving = true) => ({
+      moving,
+      version,
+      entering: new Set<string>(),
+      leaving: new Set(leaving),
+   });
+
+   it('devolve o último desenho de quem saiu, e só de quem estava na tela', () => {
+      const ghosts = new LeavingGhosts<number>();
+      expect(ghosts.begin(motion(0, []))).toEqual([]);
+      ghosts.remember('a', 0);
+      ghosts.remember('b', 44);
+      expect(ghosts.begin(motion(1, ['b', 'fora-da-tela']))).toEqual([{ key: 'b', value: 44 }]);
+   });
+
+   it('render duplo na mesma versão não perde o fantasma; fim da janela limpa', () => {
+      const ghosts = new LeavingGhosts<number>();
+      ghosts.begin(motion(0, []));
+      ghosts.remember('a', 0);
+      ghosts.remember('b', 44);
+      expect(ghosts.begin(motion(1, ['b']))).toHaveLength(1);
+      ghosts.remember('a', 0);
+      expect(ghosts.begin(motion(1, ['b']))).toHaveLength(1);
+      expect(ghosts.begin(motion(1, ['b'], false))).toEqual([]);
+   });
+});
+
+describe('useListMotion: saídas', () => {
+   it('lote pequeno expõe quem saiu e avança a versão', () => {
+      vi.spyOn(performance, 'now').mockReturnValue(1000);
+      const { result, rerender } = renderHook(({ keys }) => useListMotion(keys, 'v'), {
+         initialProps: { keys: ['a', 'b', 'c'] },
+      });
+      const v0 = result.current.version;
+      rerender({ keys: ['a', 'c'] });
+      expect([...result.current.leaving]).toEqual(['b']);
+      expect(result.current.version).toBe(v0 + 1);
+      vi.restoreAllMocks();
    });
 });

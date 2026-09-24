@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { Plus } from 'lucide-react';
 import { FC, ReactNode, useCallback, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useListMotion } from '@/lib/list-motion';
+import { useListMotion, useMoveGate } from '@/lib/list-motion';
 import { useViewKey } from '@/lib/view-key';
 import { Button } from '../../ui/button';
 import { IssueGrid } from './issue-grid';
@@ -80,6 +80,9 @@ const IssueGridList: FC<{ issues: Issue[]; group: IssueGroupDescriptor }> = ({ i
    const viewKey = useViewKey();
    const issueIds = useMemo(() => issues.map((issue) => issue.id), [issues]);
    const listMotion = useListMotion(issueIds, `${viewKey}|${group.id}`);
+   // Re-medição de altura (imagem que carregou, label nova) não desliza de novo: só a
+   // posição que veio da mudança de dados anima.
+   const moveGate = useMoveGate(listMotion.version);
 
    return (
       <div
@@ -110,7 +113,7 @@ const IssueGridList: FC<{ issues: Issue[]; group: IssueGroupDescriptor }> = ({ i
                      data-index={vi.index}
                      ref={virtualizer.measureElement}
                      className={cn(
-                        listMotion.moving && 'list-move',
+                        moveGate.allow(issue.id, vi.start, listMotion.moving) && 'list-move',
                         listMotion.entering.has(issue.id) && 'list-enter'
                      )}
                      style={{

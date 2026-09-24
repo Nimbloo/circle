@@ -18,7 +18,7 @@ const NONE: ReadonlySet<string> = new Set();
 
 export interface ListChanges {
    added: string[];
-   removed: number;
+   removed: string[];
    /** Mínimo de itens que trocaram de posição relativa (n − maior subsequência crescente). */
    moved: number;
 }
@@ -50,16 +50,17 @@ export function diffListKeys(prev: readonly string[], next: readonly string[]): 
       if (at === undefined) added.push(key);
       else kept.push(at);
    }
+   const nextKeys = new Set(next);
    return {
       added,
-      removed: prev.length - kept.length,
+      removed: prev.filter((key) => !nextKeys.has(key)),
       moved: kept.length - lisLength(kept),
    };
 }
 
 /** Mudança pequena o bastante para animar (e maior que zero). */
 export function isAnimatableChange({ added, removed, moved }: ListChanges): boolean {
-   const total = added.length + removed + moved;
+   const total = added.length + removed.length + moved;
    return total > 0 && total <= LIST_MOTION_MAX_CHANGES;
 }
 
@@ -68,6 +69,19 @@ interface MotionState {
    resetKey: string;
    until: number;
    entering: ReadonlySet<string>;
+   leaving: ReadonlySet<string>;
+   version: number;
+}
+
+export interface ListMotion {
+   /** Janela de transição aberta: as linhas levam `.list-move`. */
+   moving: boolean;
+   /** Chaves que acabaram de chegar. */
+   entering: ReadonlySet<string>;
+   /** Chaves que acabaram de sair (a lista virtual desenha um fantasma com `.list-exit`). */
+   leaving: ReadonlySet<string>;
+   /** Muda a cada mudança animável — é o "começo" de uma janela. */
+   version: number;
 }
 
 /**
@@ -80,31 +94,124 @@ interface MotionState {
  * troca de contexto (`resetKey`: outra view, grupo recolhido) e lotes grandes. `keys` deve
  * ser memoizado — é por identidade que se sabe que a lista mudou.
  */
-export function useListMotion(
-   keys: readonly string[],
-   resetKey = ''
-): { moving: boolean; entering: ReadonlySet<string> } {
+export function useListMotion(keys: readonly string[], resetKey = ''): ListMotion {
    const state = useRef<MotionState | null>(null);
    const prev = state.current;
    const now = performance.now();
    if (!prev || prev.keys !== keys || prev.resetKey !== resetKey) {
       let until = 0;
       let entering = NONE;
+      let leaving = NONE;
+      let version = prev?.version ?? 0;
       if (prev && prev.resetKey === resetKey && prev.keys.length > 0) {
          const changes = diffListKeys(prev.keys, keys);
-         const total = changes.added.length + changes.removed + changes.moved;
+         const total = changes.added.length + changes.removed.length + changes.moved;
          if (isAnimatableChange(changes)) {
             until = now + WINDOW_MS;
             entering = changes.added.length > 0 ? new Set(changes.added) : NONE;
+            leaving = changes.removed.length > 0 ? new Set(changes.removed) : NONE;
+            version += 1;
          } else if (total === 0) {
             // Mesmo conteúdo em outro array: mantém a janela que estiver correndo.
             until = prev.until;
             entering = prev.entering;
+            leaving = prev.leaving;
          }
       }
-      state.current = { keys, resetKey, until, entering };
+      state.current = { keys, resetKey, until, entering, leaving, version };
    }
    const current = state.current!;
    const moving = now < current.until;
-   return { moving, entering: moving ? current.entering : NONE };
+   return {
+      moving,
+      entering: moving ? current.entering : NONE,
+      leaving: moving ? current.leaving : NONE,
+      version: current.version,
+   };
+}
+
+/**
+ * Separa o deslocamento que conta uma história (reordenação, chegada, saída) do que é só
+ * RE-MEDIÇÃO (card do board que mudou de altura: imagem, fonte, label nova). Na coluna do
+ * board a posição vem da altura medida dos cards de cima; se ela muda depois da mudança de
+ * dados, a linha não deve deslizar de novo — vai direto para o lugar.
+ *
+ * Regra: numa janela (`version`), a primeira posição vista de cada chave é o alvo. Até o
+ * próximo quadro (`settle`), ajustes ainda contam como o mesmo movimento — é a medição
+ * síncrona do card que acabou de montar, feita antes da pintura, e a transição só é
+ * redirecionada. Depois disso, posição diferente do alvo = re-medição: sem transição.
+ */
+export class MoveGate {
+   private targets = new Map<string, number>();
+   private version = -1;
+   private settling = false;
+
+   constructor(
+      // No servidor (SSR) não há quadro: nada a assentar.
+      private readonly settle: (done: () => void) => void = (done) =>
+         typeof requestAnimationFrame === 'function' ? void requestAnimationFrame(done) : done()
+   ) {}
+
+   /** Chamar a cada render com a `version` do `useListMotion`. */
+   sync(version: number) {
+      if (version === this.version) return;
+      this.version = version;
+      this.targets = new Map();
+      this.settling = true;
+      this.settle(() => {
+         if (this.version === version) this.settling = false;
+      });
+   }
+
+   /** Esta linha, nesta posição, pode deslizar? (fora da janela: nunca). */
+   allow(key: string, start: number, moving: boolean): boolean {
+      if (!moving) return false;
+      const target = this.targets.get(key);
+      this.targets.set(key, start);
+      return target === undefined || target === start || this.settling;
+   }
+}
+
+/**
+ * Fantasmas de saída da lista virtual: a linha removida já não está no virtualizer, então
+ * a lista guarda o que desenhou no render anterior (`remember`) e, quando uma mudança
+ * animável tira chaves que estavam na tela, devolve o último desenho delas para um
+ * `.list-exit` por cima do lugar antigo. Calculado uma vez por `version` (o render duplo
+ * do StrictMode não perde o anterior).
+ */
+export class LeavingGhosts<T> {
+   private seen = new Map<string, T>();
+   private next = new Map<string, T>();
+   private cache: { version: number; items: { key: string; value: T }[] } = {
+      version: 0,
+      items: [],
+   };
+
+   /** Começo do render: fecha o que foi desenhado no anterior e devolve os fantasmas. */
+   begin(motion: ListMotion): { key: string; value: T }[] {
+      if (this.next.size > 0) this.seen = this.next;
+      this.next = new Map();
+      if (motion.version !== this.cache.version) {
+         const items: { key: string; value: T }[] = [];
+         for (const key of motion.leaving) {
+            const value = this.seen.get(key);
+            if (value !== undefined) items.push({ key, value });
+         }
+         this.cache = { version: motion.version, items };
+      }
+      return motion.moving ? this.cache.items : [];
+   }
+
+   /** Linha desenhada neste render. */
+   remember(key: string, value: T) {
+      this.next.set(key, value);
+   }
+}
+
+/** `MoveGate` preso ao componente. */
+export function useMoveGate(version: number): MoveGate {
+   const gate = useRef<MoveGate | null>(null);
+   gate.current ??= new MoveGate();
+   gate.current.sync(version);
+   return gate.current;
 }
