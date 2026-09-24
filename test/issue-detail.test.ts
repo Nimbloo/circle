@@ -3,6 +3,7 @@ import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
 import { listInbox } from '@/lib/api/notifications';
 import { createIssue } from '@/lib/api/issues';
+import { issueRelation } from '@/db/schema';
 import {
    getIssueDetail,
    addComment,
@@ -112,6 +113,29 @@ describe('issue detail / comments / activity', () => {
 
       const afterRemove = await removeRelation(db, issue.id, other.id, 'blocked_by');
       expect(afterRemove?.blockedByIds).toEqual([]);
+   });
+
+   it('dois adds simultâneos da mesma relação gravam UM vínculo (índice único)', async () => {
+      const { db, issue } = await anIssue();
+      const other = await createIssue(
+         db,
+         { teamId: 'CORE', title: 'Bloqueadora', statusId: 'to-do', priorityId: 'low' },
+         ME
+      );
+      await Promise.all([
+         addRelation(db, issue.id, other.id, 'blocked_by', ME),
+         addRelation(db, issue.id, other.id, 'blocked_by', ME),
+      ]);
+      expect((await getIssueDetail(db, issue.id))?.blockedByIds).toEqual([other.id]);
+      // Mesmo contornando a checagem da aplicação, o banco recusa a linha repetida.
+      await expect(
+         db.insert(issueRelation).values({
+            id: 'dup-row',
+            issueId: issue.id,
+            relatedId: other.id,
+            kind: 'blocked_by',
+         })
+      ).rejects.toThrow();
    });
 
    it('rejects self-relation and unknown related issue', async () => {

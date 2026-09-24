@@ -511,9 +511,14 @@ export async function addRelation(
       .where(and(relationPair(issueId, relatedId, kind), eq(issueRelation.kind, kind)))
       .limit(1);
    if (existing.length === 0) {
-      await db.insert(issueRelation).values({ id: randomUUID(), issueId, relatedId, kind });
+      // Add concorrente do mesmo par: o índice único segura, e só quem inseriu grava o evento.
+      const inserted = await db
+         .insert(issueRelation)
+         .values({ id: randomUUID(), issueId, relatedId, kind })
+         .onConflictDoNothing()
+         .returning({ id: issueRelation.id });
       // trilha no feed só quando o vínculo é novo (re-add idempotente não gera evento)
-      await recordRelationEvent(db, issueId, kind, true, actorEmail);
+      if (inserted.length > 0) await recordRelationEvent(db, issueId, kind, true, actorEmail);
    }
    publish({
       entity: 'issue',
