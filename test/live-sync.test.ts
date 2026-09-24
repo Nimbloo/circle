@@ -459,3 +459,45 @@ describe('useLiveSync — resync avisa as telas e espalha a carga', () => {
       expect(reload).toHaveBeenCalledTimes(1);
    });
 });
+
+describe('useLiveSync — lacunas da auditoria de 24/09', () => {
+   it('reconexão também avisa templates, fila de entrada, import e relê favoritos', async () => {
+      const { CATALOG_CHANGED_EVENT, TEAM_CHANGED_EVENT, IMPORT_JOB_EVENT } = await import(
+         '@/lib/use-live-sync'
+      );
+      const { useFavoritesStore } = await import('@/store/favorites-store');
+      const refresh = vi.fn(async () => {});
+      useFavoritesStore.setState({ refresh });
+      const seen: string[] = [];
+      const names = [CATALOG_CHANGED_EVENT, TEAM_CHANGED_EVENT, IMPORT_JOB_EVENT];
+      const on = (e: Event) => seen.push(e.type);
+      for (const n of names) window.addEventListener(n, on);
+      const es = setup();
+      es.drop();
+      es.open();
+      await vi.advanceTimersByTimeAsync(3000);
+      for (const n of names) window.removeEventListener(n, on);
+      expect(seen.sort()).toEqual([...names].sort());
+      expect(refresh).toHaveBeenCalledTimes(1);
+   });
+
+   it('label renomeada/apagada reflete também em projetos e initiatives', async () => {
+      const label = { id: 'bug', name: 'Bug', color: '#000' };
+      useWorkspaceStore.setState({
+         projects: [{ id: 'p1', labels: [label] }] as never,
+         initiatives: [{ id: 'n1', labels: [label] }] as never,
+      });
+      api.labels.list.mockResolvedValue([{ id: 'bug', name: 'Defeito', color: '#f00' }]);
+      const es = setup();
+      es.emit({ entity: 'label', action: 'updated', id: 'bug' });
+      await flush();
+      const ws = () => useWorkspaceStore.getState();
+      expect(ws().projects[0].labels[0]).toMatchObject({ name: 'Defeito', color: '#f00' });
+      expect(ws().initiatives[0].labels[0].name).toBe('Defeito');
+
+      es.emit({ entity: 'label', action: 'deleted', id: 'bug' });
+      await flush();
+      expect(ws().projects[0].labels).toEqual([]);
+      expect(ws().initiatives[0].labels).toEqual([]);
+   });
+});

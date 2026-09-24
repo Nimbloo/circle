@@ -318,5 +318,8 @@ export async function startUserSettingsSync(): Promise<void> {
  */
 export async function reloadUserSettings(): Promise<void> {
    if (!started) return;
+   // Gravação local pendente (debounce ou retry após falha de rede): aplicar o GET agora
+   // sobrescreveria a edição não salva. Ela sai no próximo flush e vence de qualquer jeito.
+   if (dirty.size > 0) return;
    await load();
 }
