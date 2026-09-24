@@ -113,17 +113,17 @@ export const Video = Node.create({
       return [
          {
             tag: 'div[data-type="video"]',
-            getAttrs: (el) => {
-               const src = el.getAttribute('data-src');
-               if (!src) return false;
-               return { src, provider: el.getAttribute('data-provider') ?? 'file' };
-            },
+            // HTML colado não é confiável: só entra se o src for um vídeo reconhecido, e o
+            // provider sai da URL (nunca do `data-provider` recebido).
+            getAttrs: (el) => parseVideoUrl(el.getAttribute('data-src') ?? '') ?? false,
          },
       ];
    },
 
    renderHTML({ node, HTMLAttributes }) {
-      const attrs = node.attrs as VideoAttrs;
+      // Revalida no render: um doc antigo (ou forjado) com src fora de http(s) não vira link.
+      const attrs = parseVideoUrl(String((node.attrs as VideoAttrs).src ?? ''));
+      if (!attrs) return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'video' })];
       const wrapper = mergeAttributes(HTMLAttributes, {
          'data-type': 'video',
          'data-src': attrs.src,
