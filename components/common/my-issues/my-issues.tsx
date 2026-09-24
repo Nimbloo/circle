@@ -97,7 +97,8 @@ export default function MyIssues() {
 
    // Aba "Activity" (padrão Linear = board de issues em que estive ativo): ids das
    // issues com atividade minha, usados como escopo do board.
-   const activeIds = useMyIssuesActiveIds(tab);
+   const activity = useMyIssuesActiveIds(tab);
+   const activeIds = activity.activeIds;
 
    // Aba "Assigned" (#29): derivada do store — os DTOs já trazem todos os responsáveis
    // (principal + colaboradores). Sem busca `assignee=me` a cada mudança de responsável.
@@ -158,9 +159,12 @@ export default function MyIssues() {
                   totalIssues={scopedIssues}
                   statuses={displayOrderedStatus}
                   isViewTypeGrid={isViewTypeGrid}
-                  loading={loading}
-                  error={error}
-                  onRetry={() => hydrate()}
+                  loading={loading || activity.loading}
+                  error={error || activity.error}
+                  onRetry={() => {
+                     if (error) void hydrate();
+                     if (activity.error) activity.retry();
+                  }}
                />
             </div>
 
