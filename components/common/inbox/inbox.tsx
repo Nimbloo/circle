@@ -178,21 +178,75 @@ export default function Inbox() {
       [setSelectedNotification, markAsRead]
    );
 
-   // Voltar do navegador (mobile): sem o parametro na URL, fecha o preview.
+   /** Tira o `?n=` da URL sem criar entrada no histórico. */
+   const dropSelectedParam = useCallback(() => {
+      const url = new URL(window.location.href);
+      if (!url.searchParams.has(SELECTED_PARAM)) return;
+      url.searchParams.delete(SELECTED_PARAM);
+      window.history.replaceState(window.history.state, '', url);
+   }, []);
+
+   /**
+    * Mobile: a notificação do `?n=` vira a selecionada (recarregar, avançar/voltar para
+    * uma entrada com o parâmetro). Id que não está na lista sai da URL.
+    */
+   const selectFromUrl = useCallback(() => {
+      const id = new URLSearchParams(window.location.search).get(SELECTED_PARAM);
+      if (!id) return;
+      const state = useNotificationsStore.getState();
+      if (state.selectedNotification?.id === id) return;
+      const found = state.notifications.find((n) => n.id === id);
+      if (!found) {
+         dropSelectedParam();
+         return;
+      }
+      setSelectedNotification(found);
+      if (!found.read) markAsRead(found.id);
+   }, [dropSelectedParam, setSelectedNotification, markAsRead]);
+
+   // Voltar/avançar do navegador (mobile): a URL decide — sem o parâmetro fecha o
+   // preview; com ele, abre a notificação dela.
    useEffect(() => {
       const onPop = () => {
-         if (new URLSearchParams(window.location.search).has(SELECTED_PARAM)) return;
+         if (new URLSearchParams(window.location.search).has(SELECTED_PARAM)) {
+            if (mobileRef.current) selectFromUrl();
+            return;
+         }
          pushedRef.current = false;
          setSelectedNotification(undefined);
       };
       window.addEventListener('popstate', onPop);
       return () => window.removeEventListener('popstate', onPop);
-   }, [setSelectedNotification]);
+   }, [setSelectedNotification, selectFromUrl]);
+
+   // Chegada no inbox (mobile), uma vez com a lista carregada: `?n=` restaura a seleção;
+   // preview já aberto sem o parâmetro (voltou ao inbox com a seleção no store) ganha a
+   // entrada no histórico, para o voltar do navegador fechar o preview e não sair do inbox.
+   const syncedRef = useRef(false);
+   useEffect(() => {
+      if (!isMobile || !loaded || syncedRef.current) return;
+      syncedRef.current = true;
+      if (new URLSearchParams(window.location.search).has(SELECTED_PARAM)) {
+         selectFromUrl();
+         return;
+      }
+      const current = useNotificationsStore.getState().selectedNotification;
+      if (!current) return;
+      const url = new URL(window.location.href);
+      url.searchParams.set(SELECTED_PARAM, current.id);
+      window.history.pushState(window.history.state, '', url);
+      pushedRef.current = true;
+   }, [isMobile, loaded, selectFromUrl]);
 
    const closePreview = useCallback(() => {
       if (pushedRef.current) window.history.back();
-      else setSelectedNotification(undefined);
-   }, [setSelectedNotification]);
+      else {
+         // Sem entrada própria no histórico (ex.: aberta pelo `?n=` ao recarregar): fecha
+         // e tira o parâmetro, senão a URL seguiria apontando para o preview fechado.
+         setSelectedNotification(undefined);
+         dropSelectedParam();
+      }
+   }, [setSelectedNotification, dropSelectedParam]);
 
    const loadError = useNotificationsStore((s) => s.loadError);
    const desktopContainerRef = useRef<HTMLDivElement>(null);
