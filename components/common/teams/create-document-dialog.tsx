@@ -201,7 +201,11 @@ export function CreateDocumentButton({
                <div className="flex items-start gap-3">
                   <Popover>
                      <PopoverTrigger asChild>
-                        <button className="inline-flex size-9 items-center justify-center rounded-md bg-muted/50 shrink-0 mt-0.5 text-lg hover:bg-muted">
+                        <button
+                           type="button"
+                           aria-label="Choose document icon"
+                           className="inline-flex size-9 items-center justify-center rounded-md bg-muted/50 shrink-0 mt-0.5 text-lg hover:bg-muted"
+                        >
                            {icon || '📄'}
                         </button>
                      </PopoverTrigger>
