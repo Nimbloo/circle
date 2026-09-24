@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import { CircleAlert } from 'lucide-react';
+import { useId } from 'react';
 
 export function ErrorState({
    title,
@@ -14,10 +15,12 @@ export function ErrorState({
    className?: string;
    role?: 'alert' | 'status';
 }) {
+   // Id único por instância: dois ErrorState na mesma página não podem dividir o rótulo.
+   const titleId = useId();
    return (
       <div
          role={role}
-         aria-labelledby="error-state-title"
+         aria-labelledby={titleId}
          className={cn(
             'content-enter flex min-h-svh w-full flex-col items-center justify-center bg-background px-6 py-12 text-center',
             className
@@ -27,7 +30,7 @@ export function ErrorState({
             <div className="mb-5 flex size-10 items-center justify-center rounded-[10px] border bg-card text-muted-foreground shadow-[var(--card-shadow)]">
                <CircleAlert className="size-[18px]" aria-hidden="true" />
             </div>
-            <h1 id="error-state-title" className="text-lg font-medium text-foreground">
+            <h1 id={titleId} className="text-lg font-medium text-foreground">
                {title}
             </h1>
             <p className="mt-1.5 text-[13px] leading-5 text-muted-foreground">{description}</p>

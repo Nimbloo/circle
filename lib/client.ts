@@ -140,7 +140,10 @@ export class ApiError extends Error {
 async function parseResponse(res: Response): Promise<{ data: unknown; meta?: unknown }> {
    const json = await res.json().catch(() => null);
    if (!res.ok) {
-      const detail = String((json && (json.detail || json.title)) || res.statusText);
+      // 502/504 do gateway vêm sem JSON e, em HTTP/2, sem statusText: nunca mensagem vazia.
+      const detail =
+         String((json && (json.detail || json.title)) || res.statusText || '').trim() ||
+         `Falha na requisição (HTTP ${res.status})`;
       if (typeof window !== 'undefined') {
          if (res.status === 401)
             endSession(loginRedirectUrl(window.location.pathname, window.location.search));

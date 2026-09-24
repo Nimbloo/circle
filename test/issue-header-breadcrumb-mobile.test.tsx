@@ -37,6 +37,7 @@ vi.mock('@/lib/client', () => ({ api: { issues: { update: vi.fn() } } }));
 vi.mock('next/navigation', () => ({
    useParams: () => ({ orgId: 'nimbloo', issueId: 'CORE-2' }),
    usePathname: () => '/nimbloo/issue/CORE-2',
+   useRouter: () => ({ push: vi.fn() }),
 }));
 
 const team: Team = {

@@ -29,7 +29,7 @@ import {
    AlertDialogHeader,
    AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { api, ApiError } from '@/lib/client';
+import { api } from '@/lib/client';
 import { View } from '@/data/views';
 import type { ViewFilter } from '@/lib/api/views';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -38,10 +38,8 @@ import { Link2, MoreHorizontal, Pencil, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
 import { useSeedOnOpen } from '@/hooks/use-seed-on-open';
 import { toast } from 'sonner';
+import { errorReason } from '@/lib/error-reason';
 import { ViewFilterEditor } from './view-filter-editor';
-
-const errMsg = (e: unknown, fallback: string) =>
-   e instanceof ApiError && e.message ? e.message : fallback;
 
 function RenameViewDialog({
    view,
@@ -78,7 +76,7 @@ function RenameViewDialog({
          onOpenChange(false);
          toast.success('View updated');
       } catch (e) {
-         toast.error(errMsg(e, 'Could not update the view'));
+         toast.error(errorReason(e, 'Could not update the view'));
       } finally {
          setBusy(false);
       }
@@ -138,7 +136,7 @@ export function ViewActions({ view }: { view: View }) {
          applyView(await api.views.update(view.id, { teamId }));
          toast.success(msg);
       } catch (e) {
-         toast.error(errMsg(e, 'Não foi possível alterar o compartilhamento'));
+         toast.error(errorReason(e, 'Não foi possível alterar o compartilhamento'));
       }
    };
 
@@ -159,7 +157,7 @@ export function ViewActions({ view }: { view: View }) {
          toast.success('View deleted');
          setConfirmOpen(false);
       } catch (e) {
-         toast.error(errMsg(e, 'Could not delete the view'));
+         toast.error(errorReason(e, 'Could not delete the view'));
       } finally {
          setBusy(false);
       }

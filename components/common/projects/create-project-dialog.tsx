@@ -42,6 +42,7 @@ import { persistNewProject, type CreateProgress } from './create-project-persist
 import { toast } from 'sonner';
 import dynamic from 'next/dynamic';
 import { LoadingArea } from '@/components/common/loading-area';
+import { errorReason } from '@/lib/error-reason';
 import { labelColor } from '@/components/common/palette';
 import { InitiativeGlyph } from '@/components/common/initiatives/initiative-glyph';
 
@@ -239,8 +240,8 @@ export function CreateProjectButton() {
          setOpen(false);
          toast.success('Project created');
          reset();
-      } catch {
-         toast.error('Could not create the project');
+      } catch (e) {
+         toast.error(errorReason(e, 'Could not create the project'));
       } finally {
          setBusy(false);
       }

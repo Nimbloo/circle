@@ -157,7 +157,9 @@ function Deliveries({ webhookId }: { webhookId: string }) {
       try {
          const updated = await api.webhooks.redeliver(delivery.id);
          setItems((list) => list?.map((d) => (d.id === updated.id ? updated : d)) ?? null);
-         toast.success(updated.status === 'success' ? 'Reenviado' : 'Reenvio falhou de novo');
+         // A chamada deu certo, mas a entrega pode ter falhado de novo: isso é erro, não sucesso.
+         if (updated.status === 'success') toast.success('Reenviado');
+         else toast.error('Reenvio falhou de novo');
       } catch (err) {
          toast.error(errorReason(err, 'Não foi possível reenviar'));
       } finally {
