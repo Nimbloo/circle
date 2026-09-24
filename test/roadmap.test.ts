@@ -212,7 +212,7 @@ describe('dependências entre projetos (#102)', () => {
    it('marca atraso por sobreposição e por target vencido', async () => {
       const db = await setup();
       // `late` só quando a dependência termina depois do início de quem depende dela.
-      await addProject(db, 'early', { targetDate: '2026-02-01' });
+      await addProject(db, 'early', { startDate: '2026-01-01', targetDate: '2026-02-01' });
       await addProject(db, 'overlapping', { targetDate: '2026-05-01' });
       await addProject(db, 'dependent', { startDate: '2026-03-01', targetDate: '2026-08-01' });
 
