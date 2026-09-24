@@ -8,11 +8,22 @@ import { attachmentRejection, filesOf, uploadAttachmentFiles } from '@/lib/attac
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Paperclip } from 'lucide-react';
-import { useMemo, useRef, useState, type DragEvent } from 'react';
+import {
+   useEffect,
+   useId,
+   useImperativeHandle,
+   useMemo,
+   useRef,
+   useState,
+   type DragEvent,
+   type Ref,
+} from 'react';
 import { toast } from 'sonner';
 import { AttachmentChip } from './attachment-chip';
 import { isCommentSubmitKey } from '@/lib/comment-submit-key';
 import { textWithEmoticons } from '@/lib/comment-emoticons';
+import { trimMentionSlug } from '@/lib/mentions';
+import { COMMENT_COUNTER_FROM, COMMENT_MAX_LENGTH } from '@/lib/comment-limits';
 
 /** Slug do usuário: o real (do backend) quando disponível, senão o prefixo do e-mail. */
 function slugOf(user: { email: string; slug?: string }): string {
@@ -32,11 +43,54 @@ interface PendingFile {
    file: File;
 }
 
+/** Arquivo de um comentário JÁ criado: subindo, ou falhou e espera "Retry upload". */
+interface CommentUpload extends PendingFile {
+   commentId: string;
+   status: 'uploading' | 'failed';
+}
+
+/** Altura máxima da autoexpansão (o resto rola dentro do textarea), como no Linear. */
+const MAX_HEIGHT_PX = 320;
+
+/** Rascunho por issue (e por thread, no reply): sobrevive à troca de issue na aba. */
+const draftKey = (issueId: string, parentId: string | null) =>
+   `circle:comment-draft:${issueId}:${parentId ?? 'root'}`;
+
+function readDraft(key: string): string {
+   try {
+      return window.sessionStorage.getItem(key) ?? '';
+   } catch {
+      return '';
+   }
+}
+
+function writeDraft(key: string, value: string): void {
+   try {
+      if (value) window.sessionStorage.setItem(key, value);
+      else window.sessionStorage.removeItem(key);
+   } catch {
+      /* storage indisponível (aba privada, bloqueado): o rascunho só não persiste */
+   }
+}
+
+/**
+ * Autoexpansão: `field-sizing: content` (CSS) resolve sem medir nada; sem suporte,
+ * ajusta a altura pelo `scrollHeight` — só no input, nunca por render.
+ */
+function fitHeight(el: HTMLTextAreaElement | null): void {
+   if (!el) return;
+   if (typeof CSS !== 'undefined' && CSS.supports?.('field-sizing', 'content')) return;
+   el.style.height = 'auto';
+   if (el.scrollHeight) el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT_PX)}px`;
+}
+
 /**
  * Composer de comentário com autocomplete de @menção (ao digitar "@" sugere membros do
  * workspace; selecionar insere "@slug") e anexos: clipe, Ctrl/Cmd+Shift+A, arrastar e
  * colar arquivo — os chips ficam no composer até enviar. Posta via api.issues.addComment,
  * sobe os anexos ligados ao comentário criado e chama onPosted (o pai refetch o feed).
+ * Anexo que falha fica no composer com "Retry upload" (no mesmo comentário). O rascunho
+ * é guardado por issue/thread na sessão e limpo ao enviar.
  */
 export function CommentComposer({
    issueId,
@@ -45,39 +99,69 @@ export function CommentComposer({
    placeholder = 'Leave a comment... (@ to mention)',
    autoFocus = false,
    onCancel,
+   onSubmitStart,
+   inputRef,
 }: {
    issueId: string;
-   onPosted: () => void;
+   /**
+    * Comentário publicado (e, se havia arquivos, depois dos uploads — de novo a cada
+    * "Retry upload" que suba algo). `failed` = arquivos que continuam no composer.
+    */
+   onPosted: (result?: { failed: number }) => void;
    /** Se definido, o comentário vira resposta a este comentário (threading). */
    parentId?: string | null;
    placeholder?: string;
    autoFocus?: boolean;
    onCancel?: () => void;
+   /** Chamado ANTES do POST: o eco do SSE pode chegar antes da resposta. */
+   onSubmitStart?: () => void;
+   /** Expõe o textarea (o feed devolve o foco a ele depois de excluir um comentário). */
+   inputRef?: Ref<HTMLTextAreaElement>;
 }) {
    const users = useWorkspaceStore((s) => s.users);
+   const key = draftKey(issueId, parentId);
    const [draft, setDraft] = useState('');
    const [submitting, setSubmitting] = useState(false);
    const [mention, setMention] = useState<{ query: string; start: number } | null>(null);
    const [active, setActive] = useState(0);
    const [files, setFiles] = useState<PendingFile[]>([]);
+   const [uploads, setUploads] = useState<CommentUpload[]>([]);
    const [dragging, setDragging] = useState(false);
    const ref = useRef<HTMLTextAreaElement>(null);
    const fileInputRef = useRef<HTMLInputElement>(null);
    const seq = useRef(0);
+   const listId = useId();
+   useImperativeHandle(inputRef, () => ref.current as HTMLTextAreaElement, []);
+
+   // Restaura o rascunho desta issue/thread (efeito, não estado inicial: o SSR não tem
+   // sessionStorage). A escrita acontece no input, não num efeito — senão o render vazio
+   // de antes da restauração apagava o rascunho guardado.
+   useEffect(() => {
+      const saved = readDraft(key);
+      if (!saved) return;
+      setDraft(saved);
+      requestAnimationFrame(() => fitHeight(ref.current));
+   }, [key]);
 
    const suggestions = useMemo(() => {
       if (!mention) return [];
       const q = mention.query;
       // Membros desativados (#100) não aparecem no `@`.
-      return users
-         .filter(
-            (u) => !u.deactivatedAt && (u.name.toLowerCase().includes(q) || slugOf(u).includes(q))
-         )
+      const candidates = users.filter((u) => !u.deactivatedAt);
+      // `@danilo.` com um `danilo` existente é a menção seguida de pontuação: a lista fecha
+      // (senão Enter trocava por `danilo.simei`). Continuar digitando o slug reabre.
+      const trimmed = trimMentionSlug(q);
+      if (trimmed !== q && candidates.some((u) => slugOf(u) === trimmed)) return [];
+      return candidates
+         .filter((u) => u.name.toLowerCase().includes(q) || slugOf(u).includes(q))
          .slice(0, 6);
    }, [mention, users]);
+   const open = !!mention && suggestions.length > 0;
+   const optionId = (index: number) => `${listId}-opt-${index}`;
 
    const sync = (value: string) => {
       setDraft(value);
+      writeDraft(key, value);
       const caret = ref.current?.selectionStart ?? value.length;
       setMention(mentionTokenAt(value, caret));
       setActive(0);
@@ -92,6 +176,7 @@ export function CommentComposer({
       const inserted = `@${slug} `;
       const next = before + inserted + after;
       setDraft(next);
+      writeDraft(key, next);
       setMention(null);
       requestAnimationFrame(() => {
          if (el) {
@@ -120,30 +205,75 @@ export function CommentComposer({
       if (dropped.length) addFiles(dropped);
    };
 
+   /**
+    * Sobe arquivos para um comentário já criado. Os que sobem saem do composer; os que
+    * falham ficam (com "Retry upload"). Devolve quantos falharam.
+    */
+   const uploadTo = async (commentId: string, list: PendingFile[]): Promise<number> => {
+      const ids = new Set(list.map((f) => f.id));
+      setUploads((cur) => [
+         ...cur.filter((u) => !ids.has(u.id)),
+         ...list.map((f) => ({ ...f, commentId, status: 'uploading' as const })),
+      ]);
+      const idOf = new Map(list.map((f) => [f.file, f.id]));
+      const { failed } = await uploadAttachmentFiles(
+         issueId,
+         list.map((f) => f.file),
+         commentId,
+         (file, ok) => {
+            const id = idOf.get(file);
+            setUploads((cur) =>
+               ok
+                  ? cur.filter((u) => u.id !== id)
+                  : cur.map((u) => (u.id === id ? { ...u, status: 'failed' } : u))
+            );
+         }
+      );
+      for (const f of failed) toast.error(`${f.file.name}: ${f.error}`);
+      return failed.length;
+   };
+
    const submit = async () => {
       const text = draft.trim();
       if (!text || submitting) return;
       setSubmitting(true);
+      onSubmitStart?.();
+      let created: { id: string };
       try {
-         const created = await api.issues.addComment(issueId, text, parentId);
-         if (files.length) {
-            const { failed } = await uploadAttachmentFiles(
-               issueId,
-               files.map((f) => f.file),
-               created.id
-            );
-            for (const f of failed) toast.error(`${f.file.name}: ${f.error}`);
-         }
-         setDraft('');
-         setFiles([]);
-         setMention(null);
-         onPosted();
+         created = await api.issues.addComment(issueId, text, parentId);
       } catch {
          toast.error('Could not post the comment');
-      } finally {
          setSubmitting(false);
+         return;
       }
+      // Comentário criado: o composer já fica livre (rascunho limpo) enquanto os anexos
+      // sobem — upload longo não o prende em "Posting…".
+      const pending = files;
+      setDraft('');
+      writeDraft(key, '');
+      setFiles([]);
+      setMention(null);
+      setSubmitting(false);
+      if (ref.current) ref.current.style.height = '';
+      const failed = pending.length ? await uploadTo(created.id, pending) : 0;
+      onPosted({ failed });
    };
+
+   /** Tenta de novo os anexos que falharam, no MESMO comentário (sem recriá-lo). */
+   const retryUploads = async () => {
+      const failed = uploads.filter((u) => u.status === 'failed');
+      if (failed.length === 0) return;
+      const byComment = new Map<string, PendingFile[]>();
+      for (const u of failed)
+         byComment.set(u.commentId, [
+            ...(byComment.get(u.commentId) ?? []),
+            { id: u.id, file: u.file },
+         ]);
+      let stillFailed = 0;
+      for (const [commentId, list] of byComment) stillFailed += await uploadTo(commentId, list);
+      if (stillFailed < failed.length) onPosted({ failed: stillFailed });
+   };
+   const hasFailedUploads = uploads.some((u) => u.status === 'failed');
 
    return (
       <div
@@ -160,18 +290,25 @@ export function CommentComposer({
             dragging && 'border-primary/50 bg-accent/40'
          )}
       >
-         {mention && suggestions.length > 0 && (
-            <div className="absolute bottom-full left-3 mb-1 w-64 max-h-56 overflow-y-auto rounded-lg border bg-popover shadow-lg z-20 py-1">
+         {open && (
+            <div
+               id={listId}
+               role="listbox"
+               aria-label="Mention suggestions"
+               className="absolute bottom-full left-3 mb-1 w-64 max-h-56 overflow-y-auto rounded-lg border bg-popover shadow-lg z-20 py-1"
+            >
                {suggestions.map((user, index) => (
-                  <button
+                  <div
                      key={user.id}
-                     type="button"
+                     id={optionId(index)}
+                     role="option"
+                     aria-selected={index === active}
                      onMouseDown={(event) => {
                         event.preventDefault();
                         insertMention(slugOf(user));
                      }}
                      className={cn(
-                        'w-full flex items-center gap-2 px-2.5 py-1.5 text-sm text-left',
+                        'w-full flex cursor-pointer items-center gap-2 px-2.5 py-1.5 text-sm text-left',
                         index === active ? 'bg-accent' : 'hover:bg-accent/60'
                      )}
                   >
@@ -183,15 +320,27 @@ export function CommentComposer({
                      <span className="ml-auto text-xs text-muted-foreground shrink-0">
                         @{slugOf(user)}
                      </span>
-                  </button>
+                  </div>
                ))}
             </div>
          )}
+         {/* aria-expanded no textbox: estado da lista de menções junto do campo (o textarea
+             não pode virar `combobox` sem perder o multilinha). */}
+         {/* eslint-disable-next-line jsx-a11y/role-supports-aria-props */}
          <textarea
             ref={ref}
             autoFocus={autoFocus}
             value={draft}
-            onChange={(event) => sync(textWithEmoticons(event))}
+            aria-label={parentId ? 'Reply' : 'Comment'}
+            aria-autocomplete="list"
+            aria-expanded={open}
+            aria-controls={open ? listId : undefined}
+            aria-activedescendant={open ? optionId(active) : undefined}
+            maxLength={COMMENT_MAX_LENGTH}
+            onChange={(event) => {
+               sync(textWithEmoticons(event));
+               fitHeight(event.currentTarget);
+            }}
             onPaste={(event) => {
                const pasted = filesOf(event.clipboardData?.files);
                if (pasted.length) {
@@ -200,7 +349,10 @@ export function CommentComposer({
                }
             }}
             onKeyDown={(event) => {
-               if (mention && suggestions.length > 0) {
+               // Composição de IME (japonês, chinês, acentos no Safari): Enter/Tab confirmam
+               // a composição — não escolhem a sugestão nem enviam.
+               if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+               if (open) {
                   if (event.key === 'ArrowDown') {
                      event.preventDefault();
                      setActive((a) => (a + 1) % suggestions.length);
@@ -243,8 +395,50 @@ export function CommentComposer({
             // textarea e ele ia parar no body; assim o próximo comentário já sai digitando.
             readOnly={submitting}
             aria-busy={submitting}
-            className="w-full resize-none bg-transparent outline-none text-sm placeholder:text-muted-foreground read-only:opacity-60"
+            // Cresce com o texto até ~320px (como no Linear); depois rola por dentro.
+            className="field-sizing-content min-h-10 max-h-80 w-full resize-none overflow-y-auto bg-transparent outline-none text-sm placeholder:text-muted-foreground read-only:opacity-60"
          />
+         {draft.length >= COMMENT_COUNTER_FROM && (
+            <span
+               aria-live="polite"
+               className={cn(
+                  'self-end text-xs tabular-nums',
+                  draft.length >= COMMENT_MAX_LENGTH ? 'text-destructive' : 'text-muted-foreground'
+               )}
+            >
+               {draft.length}/{COMMENT_MAX_LENGTH}
+            </span>
+         )}
+         {uploads.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+               {uploads.map((u) => (
+                  <AttachmentChip
+                     key={u.id}
+                     item={{
+                        id: u.id,
+                        fileName: u.file.name,
+                        contentType: u.file.type,
+                        size: u.file.size,
+                        uploading: u.status === 'uploading',
+                     }}
+                     confirmRemove={false}
+                     onRemove={
+                        u.status === 'failed'
+                           ? () => setUploads((cur) => cur.filter((x) => x.id !== u.id))
+                           : undefined
+                     }
+                  />
+               ))}
+               {hasFailedUploads && (
+                  <span className="flex items-center gap-1 text-xs text-destructive">
+                     Upload failed
+                     <Button size="xs" variant="ghost" onClick={() => void retryUploads()}>
+                        Retry upload
+                     </Button>
+                  </span>
+               )}
+            </div>
+         )}
          {files.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
                {files.map((f) => (
