@@ -22,7 +22,7 @@ class FakeApiError extends Error {
 const apiMocks = vi.hoisted(() => ({
    issues: {
       detail: vi.fn(),
-      activity: vi.fn(async () => ({ items: [], nextCursor: null })),
+      activity: vi.fn(async () => []),
       updateDetail: vi.fn(),
       update: vi.fn(),
    },

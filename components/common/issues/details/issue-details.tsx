@@ -2,8 +2,16 @@
 
 import type { Issue } from '@/data/issues';
 import { cn } from '@/lib/utils';
-import type { IssueDetail } from '@/data/issue-details';
-import { adaptActivity, adaptIssueDetail, textToBlocks } from '@/lib/adapters-issue-detail';
+import type { ActivityItem, IssueDetail } from '@/data/issue-details';
+import type { ActivityItem as ActivityDto } from '@/lib/api/issue-detail';
+import {
+   activityCursor,
+   adaptActivity,
+   adaptIssueDetail,
+   keepOlderActivity,
+   mergeOlderActivity,
+   textToBlocks,
+} from '@/lib/adapters-issue-detail';
 import { adaptIssues } from '@/lib/adapters';
 import { api, ApiError } from '@/lib/client';
 import { blocksToDoc, type EditorDoc } from '@/lib/editor-doc';
@@ -13,7 +21,7 @@ import { useCurrentIssueStore } from '@/store/current-issue-store';
 import { useStatuses } from '@/store/catalog-store';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Plus } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -102,6 +110,14 @@ export function IssueDetailView(props: IssueDetailViewProps) {
 const OWN_ECHO_MS = 2000;
 /** Janela que junta uma rajada de comentários remotos numa única recarga do feed. */
 const ACTIVITY_COALESCE_MS = 150;
+/** Página do feed no servidor (`DEFAULT_ISSUE_FEED_LIMIT`): cheia = pode haver mais antigos. */
+const FEED_PAGE_SIZE = 200;
+/** Por quanto tempo um patch otimista é lembrado para ser reaplicado sobre um reload. */
+const PATCH_MEMORY_MS = 30_000;
+
+function applyCommentPatch(list: ActivityItem[], id: string, patch: CommentPatch): ActivityItem[] {
+   return list.map((it) => (it.kind === 'comment' && it.id === id ? { ...it, ...patch } : it));
+}
 
 function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps) {
    const { orgId } = useParams<{ orgId: string }>();
@@ -149,15 +165,46 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
    // (key no `IssueDetailView`), então o estado já nasce limpo.
    const detailIssueId = issue.id;
 
+   // ── Feed (activity) ──
+   // Patches otimistas (reação/edição/resolve) ficam num log: um reload que começou ANTES
+   // de um patch volta com o snapshot anterior, e os patches feitos depois do início dele
+   // são reaplicados por cima (senão a reação/edição "voltava" na tela).
+   const patchSeq = useRef(0);
+   const patchLog = useRef<{ seq: number; at: number; id: string; patch: CommentPatch }[]>([]);
+   // Páginas antigas abertas por "Show older activity" sobrevivem aos reloads do feed.
+   const olderLoaded = useRef(false);
+   const [hasOlder, setHasOlder] = useState(false);
+   const [loadingOlder, setLoadingOlder] = useState(false);
+   const activityNow = useRef<ActivityItem[]>([]);
+   activityNow.current = detail?.activity ?? [];
+
+   /** Feed recém-chegado → estado: reaproveita itens iguais, mantém páginas antigas e
+    * reaplica os patches feitos depois que o GET (iniciado em `startedAt`) começou. */
+   const freshActivity = useCallback((list: ActivityDto[], startedAt: number) => {
+      const prev = activityNow.current;
+      let next = adaptActivity(list, prev);
+      if (olderLoaded.current) next = keepOlderActivity(next, prev);
+      else setHasOlder(list.filter((it) => !it.context).length >= FEED_PAGE_SIZE);
+      const now = Date.now();
+      patchLog.current = patchLog.current.filter((p) => now - p.at < PATCH_MEMORY_MS);
+      for (const p of patchLog.current)
+         if (p.seq > startedAt) next = applyCommentPatch(next, p.id, p.patch);
+      return next;
+   }, []);
+
    useEffect(() => {
       if (!detailIssueId) return;
       let active = true;
+      const startedAt = patchSeq.current;
       // Refetch silencioso (stale-while-revalidate): o conteúdo atual permanece na tela
       // enquanto o novo detail chega — loading só na primeira carga (detail === null).
       Promise.all([api.issues.detail(detailIssueId), api.issues.activity(detailIssueId)])
          .then(([detailDto, activity]) => {
             if (active) {
-               const adapted = adaptIssueDetail(detailDto, activity);
+               const adapted = {
+                  ...adaptIssueDetail(detailDto, []),
+                  activity: freshActivity(activity, startedAt),
+               };
                setDetail(adapted);
                onDetailLoaded?.(adapted);
                // O editor com foco NÃO adota o doc recarregado (preserva a digitação): aí a
@@ -186,33 +233,59 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
    const activitySeq = useRef(0);
    const reloadActivity = useCallback(() => {
       const seq = ++activitySeq.current;
+      const startedAt = patchSeq.current;
       api.issues
          .activity(detailIssueId)
          .then((list) => {
             if (seq !== activitySeq.current) return;
-            const activity = adaptActivity(list);
+            const activity = freshActivity(list, startedAt);
             setDetail((d) => (d ? { ...d, activity } : d));
          })
          .catch(() => {
             // mantém o feed atual; o próximo evento/reload reconcilia
          });
-   }, [detailIssueId]);
+   }, [detailIssueId, freshActivity]);
    const reloadActivityRef = useRef(reloadActivity);
    reloadActivityRef.current = reloadActivity;
 
    // Patch otimista de comentário (reação/edição/resolve) aplicado no feed local.
    const patchComment = useCallback((id: string, patch: CommentPatch) => {
+      patchLog.current.push({ seq: ++patchSeq.current, at: Date.now(), id, patch });
+      setDetail((d) => (d ? { ...d, activity: applyCommentPatch(d.activity, id, patch) } : d));
+   }, []);
+
+   // Comentário excluído sai do feed na hora (com as respostas), inclusive das páginas
+   // antigas — o reload só traz a página mais recente.
+   const removeComment = useCallback((id: string) => {
       setDetail((d) =>
          d
             ? {
                  ...d,
-                 activity: d.activity.map((it) =>
-                    it.kind === 'comment' && it.id === id ? { ...it, ...patch } : it
+                 activity: d.activity.filter(
+                    (it) => it.id !== id && !(it.kind === 'comment' && it.parentId === id)
                  ),
               }
             : d
       );
    }, []);
+
+   // "Show older activity": página anterior ao item mais antigo carregado.
+   const loadOlder = useCallback(async () => {
+      const before = activityCursor(activityNow.current);
+      if (!before) return;
+      setLoadingOlder(true);
+      try {
+         const page = await api.issues.activityPage(detailIssueId, { before });
+         olderLoaded.current = true;
+         const older = adaptActivity(page.items);
+         setDetail((d) => (d ? { ...d, activity: mergeOlderActivity(d.activity, older) } : d));
+         setHasOlder(page.hasMore);
+      } catch {
+         toast.error('Could not load older activity');
+      } finally {
+         setLoadingOlder(false);
+      }
+   }, [detailIssueId]);
 
    // Eco da própria ação: o SSE avisa esta aba também. Com `own` no evento (clientId da
    // aba, If#16), o eco é reconhecido; sem ele, dentro da janela da ação, recarrega só o feed no fim dela
@@ -238,6 +311,9 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
          const d =
             (e as CustomEvent<{ id?: string; own?: boolean; scope?: 'activity' }>).detail ?? {};
          if (d.id && d.id !== detailIssueId) return;
+         // Eco do próprio comentário/reação (clientId desta aba): quem agiu já aplicou o
+         // patch ou recarregou o feed — outro GET seria só duplicado.
+         if (d.own && d.scope === 'activity') return;
          const remaining = ownActionUntil.current - Date.now();
          if (remaining > 0) {
             if (d.own) return;
@@ -278,6 +354,15 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
    );
    const nonImageFiles = (list: FileList | null | undefined) =>
       filesOf(list).filter((f) => !isImageFile(f));
+
+   // Contexto do feed estável: literal novo a cada render re-renderizava todos os cards.
+   const issueTeamId = issue.teamId;
+   const issueProjectId = issue.project?.id ?? null;
+   const issueAssigneeId = issue.assignee?.id ?? null;
+   const issueContext = useMemo(
+      () => ({ teamId: issueTeamId, projectId: issueProjectId, assigneeId: issueAssigneeId }),
+      [issueTeamId, issueProjectId, issueAssigneeId]
+   );
 
    if (loading || !detail) {
       // Loading → CircleLoading; erro real (não-loading, sem detail) → mensagem com retry.
@@ -511,15 +596,15 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
                <ActivityFeed
                   activity={detail.activity}
                   issueId={issue.id}
-                  issueContext={{
-                     teamId: issue.teamId,
-                     projectId: issue.project?.id ?? null,
-                     assigneeId: issue.assignee?.id ?? null,
-                  }}
+                  issueContext={issueContext}
                   onCommentAdded={reloadActivity}
                   onCommentPatch={patchComment}
+                  onCommentRemoved={removeComment}
                   onOwnAction={markOwnAction}
                   onIssueChanged={reload}
+                  hasOlder={hasOlder}
+                  loadingOlder={loadingOlder}
+                  onLoadOlder={loadOlder}
                />
             </div>
          </article>
