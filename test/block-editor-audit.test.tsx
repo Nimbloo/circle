@@ -114,6 +114,83 @@ describe('BlockEditor — upload de imagem e autosave', () => {
    });
 });
 
+describe('BlockEditor — placeholder órfão (CodeRabbit #190)', () => {
+   const png = () => new File(['x'], 'tela.png', { type: 'image/png' });
+
+   it('undo depois do upload volta o placeholder blob:, mas não trava o autosave', async () => {
+      Object.assign(URL, { createObjectURL: () => 'blob:orfao', revokeObjectURL: () => {} });
+      let resolve!: (url: string) => void;
+      const onUpload = vi.fn(() => new Promise<string>((r) => (resolve = r)));
+      const onSave = vi.fn();
+      const { editor, container } = await mount({ onUpload, onSave });
+      act(() => {
+         editor.commands.uploadImages([png()]);
+      });
+      await waitFor(() => expect(onUpload).toHaveBeenCalled());
+      // Upload mais longo que a janela de agrupamento do histórico: a troca pela URL
+      // final vira um passo de undo próprio.
+      await act(async () => {
+         await new Promise((r) => setTimeout(r, 600));
+      });
+      await act(async () => resolve('https://cdn.test/uploads/tela.png'));
+      await waitFor(() =>
+         expect(JSON.stringify(editor.getJSON())).toContain('https://cdn.test/uploads/tela.png')
+      );
+      act(() => {
+         editor.commands.undo();
+      });
+      // Premissa: o undo devolveu o placeholder, que não está mais em upload.
+      expect(JSON.stringify(editor.getJSON())).toContain('blob:orfao');
+      onSave.mockClear();
+
+      act(() => {
+         editor.chain().focus('end').insertContent(' novo').run();
+         fireEvent.blur(container.querySelector('.ProseMirror')!);
+      });
+      await waitFor(() => expect(onSave).toHaveBeenCalled());
+      const saved = JSON.stringify(onSave.mock.calls.at(-1)![0]);
+      expect(saved).toContain('novo');
+      expect(saved).not.toContain('blob:');
+      // A imagem que já tinha subido não se perde: o órfão volta à URL final.
+      expect(saved).toContain('https://cdn.test/uploads/tela.png');
+   });
+
+   it('sair com placeholder órfão no doc também salva (sem esperar upload inexistente)', async () => {
+      Object.assign(URL, { createObjectURL: () => 'blob:orfao2', revokeObjectURL: () => {} });
+      let resolve!: (url: string) => void;
+      const onUpload = vi.fn(() => new Promise<string>((r) => (resolve = r)));
+      const onSave = vi.fn();
+      const { editor, unmount } = await mount({ onUpload, onSave, saveDelayMs: 800 });
+      act(() => {
+         editor.commands.uploadImages([png()]);
+      });
+      await waitFor(() => expect(onUpload).toHaveBeenCalled());
+      // Upload mais longo que a janela de agrupamento do histórico: a troca pela URL
+      // final vira um passo de undo próprio.
+      await act(async () => {
+         await new Promise((r) => setTimeout(r, 600));
+      });
+      await act(async () => resolve('https://cdn.test/uploads/b.png'));
+      await waitFor(() =>
+         expect(JSON.stringify(editor.getJSON())).toContain('https://cdn.test/uploads/b.png')
+      );
+      act(() => {
+         editor.commands.undo();
+      });
+      expect(JSON.stringify(editor.getJSON())).toContain('blob:orfao2');
+      act(() => {
+         editor.chain().focus('end').insertContent(' fim').run();
+      });
+      onSave.mockClear();
+      unmount();
+      await waitFor(() => expect(onSave).toHaveBeenCalled());
+      const saved = JSON.stringify(onSave.mock.calls.at(-1)![0]);
+      expect(saved).toContain('fim');
+      expect(saved).not.toContain('blob:');
+      expect(saved).toContain('https://cdn.test/uploads/b.png');
+   });
+});
+
 describe('BlockEditor — pré-validação do upload de imagem', () => {
    it('tipo que o servidor recusa (svg/heic) não sobe nem vira placeholder; avisa', async () => {
       const onUpload = vi.fn(async () => 'https://cdn.test/x.png');

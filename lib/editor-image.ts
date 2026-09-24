@@ -145,6 +145,11 @@ interface PendingUpload {
 /** Uploads em curso do editor: placeholder `blob:` → URL final (ou null se falhou). */
 export interface ImageUploadStorage {
    inflight: Map<string, Promise<string | null>>;
+   /**
+    * Uploads já concluídos: placeholder → URL final (null = falhou). Um undo depois do
+    * upload devolve o placeholder ao doc; com isto ele é resolvido em vez de travar o save.
+    */
+   settled: Map<string, string | null>;
 }
 
 interface JsonNode {
@@ -153,11 +158,18 @@ interface JsonNode {
    content?: JsonNode[];
 }
 
-/** O doc tem imagem ainda subindo (placeholder `blob:`)? Não deve ser salvo assim. */
-export function docHasPendingUploads(doc: JsonNode): boolean {
+/**
+ * O doc tem imagem ainda subindo (placeholder `blob:`)? Não deve ser salvo assim.
+ * Com `inflight`, só conta o placeholder cujo upload está de fato em curso: um órfão
+ * (upload já encerrado, placeholder de volta por undo/colagem) não adia o save.
+ */
+export function docHasPendingUploads(
+   doc: JsonNode,
+   inflight?: Map<string, Promise<string | null>>
+): boolean {
    if (doc.type === 'image' && (doc.attrs?.uploading || String(doc.attrs?.src).startsWith('blob:')))
-      return true;
-   return (doc.content ?? []).some(docHasPendingUploads);
+      return !inflight || inflight.has(String(doc.attrs?.src));
+   return (doc.content ?? []).some((node) => docHasPendingUploads(node, inflight));
 }
 
 /**
@@ -248,7 +260,7 @@ export const ImageUpload = Extension.create<ImageUploadOptions, ImageUploadStora
    },
 
    addStorage() {
-      return { inflight: new Map() };
+      return { inflight: new Map(), settled: new Map() };
    },
 
    addCommands() {
@@ -283,11 +295,16 @@ export const ImageUpload = Extension.create<ImageUploadOptions, ImageUploadStora
                      : commands.insertContentAt(pos, nodes);
                if (!inserted) return false;
                const options = this.options;
-               const { inflight } = this.storage;
+               const { inflight, settled } = this.storage;
                // Registrado JÁ (o upload começa no microtask seguinte): um unmount logo
                // depois ainda enxerga o upload e espera por ele antes de salvar.
                pending.forEach((p) => {
-                  const done = Promise.resolve().then(() => finishUpload(editor, p, options));
+                  const done = Promise.resolve()
+                     .then(() => finishUpload(editor, p, options))
+                     .then((url) => {
+                        settled.set(p.placeholder, url);
+                        return url;
+                     });
                   inflight.set(p.placeholder, done);
                   void done.finally(() => inflight.delete(p.placeholder));
                });
