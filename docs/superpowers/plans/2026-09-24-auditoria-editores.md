@@ -11,7 +11,7 @@
   lint e build limpos; first load `/inbox` 452→240 kB, `/projects` 470→325 kB.
 - **Em andamento:** transação vazia do editor quebrava Tab-aninhar e task→sub-issue em teste
   (subagente investigando a causa raiz).
-- **Próximo passo:** PR → develop; revisão do CodeRabbit no PR de release; release.
+- **Próximo passo:** concluído — v0.44.0 em prd (24/09). Sequência: auditoria de fluxos na v0.45.0.
 - **Bloqueios:** reprodução de "Back to app" / laço após excluir time e botões "apagados" dependem
   de navegador (bypass local de E2E negado pelo modo automático; extensão do Chrome desconectada).
 
@@ -42,4 +42,4 @@
       de erro; toasts de autosave/label com `id`; rollback por item nos workflows; erro de
       recarga não vira erro de mutação; impacto da exclusão de time com retry; aba Subscribed
       avisa falha; `ErrorState` com id único; rótulo do botão de emoji.
-- [ ] Verificação completa, PR, revisão do CodeRabbit no PR de release, release, prd.
+- [x] Verificação completa, PR, revisão do CodeRabbit no PR de release, release, prd (v0.44.0).

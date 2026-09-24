@@ -225,7 +225,7 @@ export default function TeamMembers() {
                         void removeMember();
                      }}
                      disabled={busy}
-                     className="bg-destructive text-white hover:bg-destructive/90"
+                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
                      Remove
                   </AlertDialogAction>

@@ -47,7 +47,7 @@ describe('user-settings-sync por seção (#15)', () => {
       expect(getSettingsSyncError()).toBeNull();
       expect(usePreferencesStore.getState().fontSize).toBe('Small');
 
-      useNotificationPrefsStore.getState().hydratePrefs({ marketing: true });
+      useNotificationPrefsStore.getState().hydratePrefs({ emailNotifications: false });
       await vi.advanceTimersByTimeAsync(1000);
       expect(patch).toHaveBeenCalledTimes(1);
       expect(Object.keys(patch.mock.calls[0][0])).toEqual(['notifications']);

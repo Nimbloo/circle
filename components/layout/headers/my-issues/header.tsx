@@ -104,7 +104,7 @@ function HeaderOptions() {
    const subscribedIssueIds = useWorkspaceStore((s) => s.me?.subscribedIssueIds);
 
    const subscribedIds = useMemo(() => new Set(subscribedIssueIds ?? []), [subscribedIssueIds]);
-   const activeIds = useMyIssuesActiveIds(tab);
+   const { activeIds } = useMyIssuesActiveIds(tab);
    const count = scopeMyIssues(issues, tab, meId, subscribedIds, activeIds).length;
 
    return (

@@ -17,6 +17,8 @@ export function NavTeamsSettings() {
    const { orgId } = useParams<{ orgId: string }>();
    const teams = useWorkspaceStore((s) => s.teams);
    const joinedTeams = teams.filter((t) => t.joined);
+   // Convidado não cria time nem pede entrada (quem o põe num time é um admin).
+   const isGuest = useWorkspaceStore((s) => s.me?.role === 'Guest');
    return (
       <SidebarGroup>
          <SidebarGroupLabel>Your teams</SidebarGroupLabel>
@@ -33,14 +35,16 @@ export function NavTeamsSettings() {
                   </SidebarMenuButton>
                </SidebarMenuItem>
             ))}
-            <SidebarMenuItem>
-               <SidebarMenuButton asChild>
-                  <Link href={`/${orgId}/settings/teams/new`}>
-                     <PlusIcon className="size-3.5" />
-                     <span>Join or create a team</span>
-                  </Link>
-               </SidebarMenuButton>
-            </SidebarMenuItem>
+            {!isGuest && (
+               <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                     <Link href={`/${orgId}/settings/teams/new`}>
+                        <PlusIcon className="size-3.5" />
+                        <span>Join or create a team</span>
+                     </Link>
+                  </SidebarMenuButton>
+               </SidebarMenuItem>
+            )}
          </SidebarMenu>
       </SidebarGroup>
    );

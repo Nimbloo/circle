@@ -128,4 +128,23 @@ describe('painel de propriedades da issue', () => {
       });
       expect(event.defaultPrevented).toBe(false);
    });
+
+   it('"Duplicated by" lista as issues marcadas como duplicata desta (paridade Linear)', () => {
+      const dup: Issue = { ...issue, id: 'i2', identifier: 'ENG-2', title: 'Cópia do bug' };
+      useIssuesStore.setState({ issues: [issue, dup] });
+      render(
+         <IssuePropertiesPanel
+            issue={issue}
+            detail={{ ...detail, duplicatedByIds: ['i2'] } as IssueDetail}
+         />
+      );
+      expect(screen.getByText('Duplicated by')).toBeTruthy();
+      const link = screen.getByText('Cópia do bug').closest('a');
+      expect(link?.getAttribute('href')).toBe('/nimbloo/issue/ENG-2');
+   });
+
+   it('sem duplicatas a seção "Duplicated by" não aparece', () => {
+      panel();
+      expect(screen.queryByText('Duplicated by')).toBeNull();
+   });
 });

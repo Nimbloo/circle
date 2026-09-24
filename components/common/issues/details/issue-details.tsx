@@ -8,6 +8,7 @@ import {
    activityCursor,
    adaptActivity,
    adaptIssueDetail,
+   clearRemovedMilestone,
    keepOlderActivity,
    mergeOlderActivity,
    textToBlocks,
@@ -15,7 +16,7 @@ import {
 import { adaptIssues } from '@/lib/adapters';
 import { api, ApiError } from '@/lib/client';
 import { blocksToDoc, type EditorDoc } from '@/lib/editor-doc';
-import { ISSUE_CHANGED_EVENT } from '@/lib/use-live-sync';
+import { ISSUE_CHANGED_EVENT, MILESTONE_REMOVED_EVENT } from '@/lib/use-live-sync';
 import { useIssuesStore } from '@/store/issues-store';
 import { useCurrentIssueStore } from '@/store/current-issue-store';
 import { useStatuses } from '@/store/catalog-store';
@@ -351,6 +352,16 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
       window.addEventListener(ISSUE_CHANGED_EVENT, onChanged);
       return () => window.removeEventListener(ISSUE_CHANGED_EVENT, onChanged);
    }, [detailIssueId]);
+
+   // Milestone apagada por alguém: a issue só perdeu o vínculo — limpa aqui, sem GET.
+   useEffect(() => {
+      const onRemoved = (e: Event) => {
+         const id = (e as CustomEvent<{ id?: string }>).detail?.id;
+         if (id) setDetail((d) => (d ? clearRemovedMilestone(d, id) : d));
+      };
+      window.addEventListener(MILESTONE_REMOVED_EVENT, onRemoved);
+      return () => window.removeEventListener(MILESTONE_REMOVED_EVENT, onRemoved);
+   }, []);
 
    // Depois do remount pós-conflito, o editor novo volta a salvar (o flush do editor
    // antigo, no unmount, já foi descartado).

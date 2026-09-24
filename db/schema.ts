@@ -479,6 +479,8 @@ export const issueRelation = pgTable(
    (t) => [
       index('idx_issue_relation_issue').on(t.issueId),
       index('idx_issue_relation_related').on(t.relatedId),
+      // Um vínculo por (issue, relacionada, tipo): adds concorrentes não duplicam.
+      uniqueIndex('issue_relation_pair_unique').on(t.issueId, t.relatedId, t.kind),
    ]
 );
 

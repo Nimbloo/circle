@@ -5,6 +5,7 @@ import { User } from '@/data/users';
 import { Cycle } from '@/data/cycles';
 import { Initiative } from '@/data/initiatives';
 import { View } from '@/data/views';
+import type { LabelInterface } from '@/data/labels';
 import {
    adaptProject,
    adaptTeam,
@@ -58,6 +59,9 @@ interface WorkspaceState {
    applyInitiative: (dto: InitiativeDto) => void;
    removeProjectLocal: (id: string) => void;
    removeInitiativeLocal: (id: string) => void;
+   /** Label editada/apagada em outro cliente: projetos e initiatives carregam cópia dela. */
+   patchLabel: (label: { id: string; name: string; color: string }) => void;
+   dropLabel: (labelId: string) => void;
    applyTeam: (dto: TeamLike) => void;
    removeTeamLocal: (id: string) => void;
    /** Lista de membros de um time (retorno de addMember/removeMember/leave). */
@@ -363,6 +367,35 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       }));
    },
 
+   patchLabel: (label) =>
+      set((s) => {
+         const patch = <T extends { labels: LabelInterface[] }>(x: T): T =>
+            x.labels.some((l) => l.id === label.id)
+               ? {
+                    ...x,
+                    labels: x.labels.map((l) =>
+                       l.id === label.id ? { ...l, name: label.name, color: label.color } : l
+                    ),
+                 }
+               : x;
+         return {
+            projects: mapIfChanged(s.projects, patch),
+            initiatives: mapIfChanged(s.initiatives, patch),
+         };
+      }),
+
+   dropLabel: (labelId) =>
+      set((s) => {
+         const drop = <T extends { labels: LabelInterface[] }>(x: T): T =>
+            x.labels.some((l) => l.id === labelId)
+               ? { ...x, labels: x.labels.filter((l) => l.id !== labelId) }
+               : x;
+         return {
+            projects: mapIfChanged(s.projects, drop),
+            initiatives: mapIfChanged(s.initiatives, drop),
+         };
+      }),
+
    applyTeam: (dto) => {
       touch('team', dto.id);
       set((s) => {
@@ -393,8 +426,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       for (const v of s0.views) if (v.teamId === id) touch('view', v.id);
       useIssuesStore.getState().dropTeam(id, projectIds, cycleIds);
       const goneProjects = new Set(projectIds);
+      // Sub-times vão para o avô, como no servidor (`deleteTeam`), que não emite evento
+      // por filho: sem isto ficavam com o pai morto (raiz na sidebar) até recarregar.
+      const grandparent = s0.teams.find((t) => t.id === id)?.parentId ?? null;
+      for (const t of s0.teams) if (t.parentId === id) touch('team', t.id);
       set((s) => ({
-         teams: s.teams.filter((t) => t.id !== id),
+         teams: s.teams
+            .filter((t) => t.id !== id)
+            .map((t) => (t.parentId === id ? { ...t, parentId: grandparent } : t)),
          projects: projectIds.length ? s.projects.filter((p) => p.teamId !== id) : s.projects,
          cycles: cycleIds.length ? s.cycles.filter((c) => c.teamId !== id) : s.cycles,
          views: s.views.some((v) => v.teamId === id)

@@ -12,6 +12,7 @@ import { status } from './helpers/catalog-fixture';
 import { useIssuesStore } from '@/store/issues-store';
 import { useSearchStore } from '@/store/search-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { useBulkSelectionStore } from '@/store/bulk-selection-store';
 
 const apiMocks = vi.hoisted(() => ({
    search: vi.fn(),
@@ -256,5 +257,25 @@ describe('SearchIssues — resultados agrupados da busca full-text', () => {
       apiMocks.search.mockResolvedValue(result([]));
       render(<SearchIssues />);
       await waitFor(() => expect(screen.getByText('No results found for "login"')).toBeTruthy());
+   });
+
+   it('trocar o termo tira da seleção em lote o que saiu dos resultados; sair limpa', async () => {
+      const a = makeIssue({ id: 'a', title: 'Login quebrado' });
+      const b = makeIssue({ id: 'b', title: 'Logout lento' });
+      useIssuesStore.setState({ issues: [a, b] });
+      apiMocks.search.mockResolvedValue(result([{ type: 'issue', items: [itemOf(a)] }]));
+      const { unmount } = render(<SearchIssues />);
+      await screen.findByText('Login quebrado');
+      act(() => useBulkSelectionStore.getState().set(['a']));
+
+      apiMocks.search.mockResolvedValue(result([{ type: 'issue', items: [itemOf(b)] }]));
+      act(() => useSearchStore.setState({ searchQuery: 'logout' }));
+      await screen.findByText('Logout lento');
+      // A issue 'a' não está mais na tela: a barra não pode agir sobre ela.
+      expect([...useBulkSelectionStore.getState().selected]).toEqual([]);
+
+      act(() => useBulkSelectionStore.getState().set(['b']));
+      unmount();
+      expect(useBulkSelectionStore.getState().selected.size).toBe(0);
    });
 });

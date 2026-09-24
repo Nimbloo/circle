@@ -123,7 +123,13 @@ function applyPlan(plan: IssueDropPlan, item: Issue, viewKey: string) {
                case 'priority':
                   return quiet(store.updateIssuePriority(item.id, value.priority));
                case 'assignee':
-                  return quiet(store.updateIssueAssignee(item.id, value.assignee));
+                  // "No assignee" esvazia o conjunto: trocar só o principal promoveria o
+                  // colaborador, e a issue cairia no grupo dele em vez de "No assignee".
+                  return quiet(
+                     value.assignee
+                        ? store.updateIssueAssignee(item.id, value.assignee)
+                        : store.updateIssueAssignees(item.id, [])
+                  );
                case 'project':
                   return quiet(store.updateIssueProject(item.id, value.project));
                default: {

@@ -215,3 +215,53 @@ describe('inbox — mobile (co#10)', () => {
       expect(screen.queryByRole('button', { name: /^Inbox$/ })).toBeNull();
    });
 });
+
+describe('inbox — mobile: a URL (?n=) manda na seleção', () => {
+   beforeEach(() => {
+      width = 390;
+      window.history.replaceState(null, '', '/nimbloo/inbox');
+   });
+
+   it('recarregar com ?n= reabre a notificação e a marca como lida', async () => {
+      window.history.replaceState(null, '', '/nimbloo/inbox?n=n2');
+      renderInbox();
+      await waitFor(() => expect(selected()).toBe('n2'));
+      expect(useNotificationsStore.getState().notifications.find((n) => n.id === 'n2')?.read).toBe(
+         true
+      );
+   });
+
+   it('?n= de notificação que não existe sai da URL', async () => {
+      window.history.replaceState(null, '', '/nimbloo/inbox?n=sumiu');
+      renderInbox();
+      await waitFor(() => expect(window.location.search).toBe(''));
+      expect(selected()).toBeUndefined();
+   });
+
+   it('fechar a restaurada pelo voltar do header tira o ?n= da URL', async () => {
+      window.history.replaceState(null, '', '/nimbloo/inbox?n=n2');
+      renderInbox();
+      fireEvent.click(await screen.findByRole('button', { name: 'Back to inbox' }));
+      expect(selected()).toBeUndefined();
+      expect(window.location.search).toBe('');
+   });
+
+   it('avançar/voltar para uma entrada com ?n= abre a notificação dela', async () => {
+      renderInbox();
+      await screen.findByText('Issue 1');
+      act(() => {
+         window.history.replaceState(null, '', '/nimbloo/inbox?n=n1');
+         window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+      expect(selected()).toBe('n1');
+   });
+
+   it('preview aberto sem ?n= ganha a entrada no histórico: o voltar fecha o preview', async () => {
+      useNotificationsStore.setState({ selectedNotification: notif(2) });
+      const push = vi.spyOn(window.history, 'pushState');
+      renderInbox();
+      await waitFor(() => expect(push).toHaveBeenCalled());
+      expect(window.location.search).toBe('?n=n2');
+      push.mockRestore();
+   });
+});

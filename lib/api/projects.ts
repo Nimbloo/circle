@@ -252,12 +252,22 @@ export interface CreateProjectInput {
    labelIds?: string[];
 }
 
+/** Início depois do alvo não é um intervalo: 400 (vale para o estado RESULTANTE). */
+function assertDateOrder(
+   startDate: string | null | undefined,
+   targetDate: string | null | undefined
+) {
+   if (startDate && targetDate && startDate > targetDate)
+      throw new ApiError(400, 'startDate deve ser anterior ou igual a targetDate');
+}
+
 export async function createProject(
    db: Db,
    input: CreateProjectInput,
    actorEmail?: string
 ): Promise<ProjectDto> {
    if (!input.name?.trim()) throw new ApiError(400, 'name é obrigatório');
+   assertDateOrder(input.startDate, input.targetDate);
    if (actorEmail) await assertCanWriteTeam(db, actorEmail, input.teamId);
    const maps = await loadMaps(db);
    if (!maps.statuses.has(input.statusId))
@@ -349,6 +359,8 @@ export async function updateProject(
          healthId: projectT.healthId,
          teamId: projectT.teamId,
          initiativeId: projectT.initiativeId,
+         startDate: projectT.startDate,
+         targetDate: projectT.targetDate,
       })
       .from(projectT)
       .where(eq(projectT.id, id))
@@ -379,6 +391,12 @@ export async function updateProject(
             );
       }
    }
+
+   // Patch parcial: a data que não veio é a gravada.
+   assertDateOrder(
+      patch.startDate !== undefined ? patch.startDate : existing[0].startDate,
+      patch.targetDate !== undefined ? patch.targetDate : existing[0].targetDate
+   );
 
    const labelIds = patch.labelIds ? [...new Set(patch.labelIds)] : undefined;
    if (labelIds?.length) {

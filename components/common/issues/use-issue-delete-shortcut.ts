@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { Issue } from '@/data/issues';
+import { hasOpenOverlay, isTypingTarget } from '@/lib/keyboard-guard';
 import { useBulkSelectionStore } from '@/store/bulk-selection-store';
 import { deleteIssuesWithUndo } from './delete-with-undo';
 
@@ -28,8 +29,8 @@ export function useIssueDeleteShortcut(
       const onKey = (e: KeyboardEvent) => {
          if (e.key !== 'Backspace' && e.key !== 'Delete') return;
          if (!e.metaKey && !e.ctrlKey) return;
-         const el = e.target as HTMLElement | null;
-         if (el?.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el?.tagName ?? '')) return;
+         // Digitando, ou com dialog/menu aberto: o atalho não age sobre o que está por baixo.
+         if (isTypingTarget(e.target) || hasOpenOverlay()) return;
          const selected = [...useBulkSelectionStore.getState().selected];
          const ids = selected.length > 0 ? selected : contextIssueId ? [contextIssueId] : [];
          if (ids.length === 0) return;

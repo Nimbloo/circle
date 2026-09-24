@@ -103,6 +103,8 @@ interface CircleEventLike {
    scope?: 'content';
    /** Subtipo do `catalog` (#53; aditivo). Ausente = dado do bootstrap (status). */
    kind?: string;
+   /** Em `project`: milestone apagada (aditivo) — o detalhe de issue limpa o campo. */
+   removedMilestoneId?: string;
 }
 
 /** `detail` dos eventos de janela: id do recurso e, se vier, o time. */
@@ -128,6 +130,11 @@ const WINDOW_EVENTS = [
    'circle:initiative-changed',
    'circle:document-changed',
    'circle:automation-changed',
+   // Templates (#53), fila de entrada do time (#58) e job de import: também são telas
+   // com cache local — sem isto, o que mudou durante a queda só aparecia com F5.
+   'circle:catalog-changed',
+   'circle:team-changed',
+   'circle:import-job',
 ] as const;
 
 /**
@@ -159,6 +166,11 @@ export const CATALOG_CHANGED_EVENT = 'circle:catalog-changed';
 export const TEAM_CHANGED_EVENT = 'circle:team-changed';
 /** Job de import do usuário mudou de estado (`detail.id` = job): a tela relê o job. */
 export const IMPORT_JOB_EVENT = 'circle:import-job';
+/**
+ * Milestone apagada (`detail.id` = milestone): o detalhe de issue aberto nela limpa o
+ * campo localmente — as issues só perderam o vínculo, sem GET por issue afetada.
+ */
+export const MILESTONE_REMOVED_EVENT = 'circle:milestone-removed';
 
 function dispatch(name: string, detail: LiveEventDetail): void {
    window.dispatchEvent(new CustomEvent(name, { detail }));
@@ -198,10 +210,17 @@ export function useLiveReload(
    }, [event, id, teamId, kind, ignoreOwn]);
 }
 
-/** Label criada/editada: aplica a lista (catálogo) e reflete nas issues em memória. */
+/**
+ * Label criada/editada: aplica a lista (catálogo) e reflete nas cópias em memória —
+ * issues, projetos e initiatives (os dois últimos vivem no workspace-store).
+ */
 function applyLabels(dtos: { id: string; name: string; color: string }[], changed: Set<string>) {
    useCatalogStore.getState().setLabels(dtos);
-   for (const d of dtos) if (changed.has(d.id)) useIssuesStore.getState().patchLabel(d);
+   for (const d of dtos) {
+      if (!changed.has(d.id)) continue;
+      useIssuesStore.getState().patchLabel(d);
+      useWorkspaceStore.getState().patchLabel(d);
+   }
 }
 
 /** GET de uma issue com UMA nova tentativa em erro transitório (404 não repete). */
@@ -244,7 +263,12 @@ export function useLiveSync(): void {
             )
          );
       };
-      /** Telas com cache local (detalhes, documentos, automações) recarregam no resync. */
+      /**
+       * Telas com cache local (detalhes, documentos, automações) recarregam no resync — e
+       * também o que vive fora dos três stores hidratados: favoritos, preferências (outra
+       * aba/dispositivo) e emojis custom. Tudo isso só chega por evento; perdido na queda,
+       * ficava velho até o F5.
+       */
       let windowTimer: ReturnType<typeof setTimeout> | null = null;
       const resyncAll = (jitter = JITTER_MS) => {
          for (const alvo of ['issues', 'workspace', 'notifications'] as SyncTarget[])
@@ -254,6 +278,9 @@ export function useLiveSync(): void {
             () => {
                windowTimer = null;
                for (const name of WINDOW_EVENTS) dispatch(name, {});
+               void useFavoritesStore.getState().refresh();
+               void reloadUserSettings();
+               invalidateCustomEmojis();
             },
             DEBOUNCE_MS + Math.random() * jitter
          );
@@ -380,6 +407,9 @@ export function useLiveSync(): void {
             case 'initiative': {
                const event =
                   entity === 'project' ? PROJECT_CHANGED_EVENT : INITIATIVE_CHANGED_EVENT;
+               // Vale também para o eco: o detalhe de issue aberto na própria aba não sabe.
+               if (entity === 'project' && parsed.removedMilestoneId)
+                  dispatch(MILESTONE_REMOVED_EVENT, { id: parsed.removedMilestoneId });
                if (!id) {
                   scheduleHydrate('workspace');
                   dispatch(event, {});
@@ -474,6 +504,7 @@ export function useLiveSync(): void {
                if (id && deleted) {
                   useCatalogStore.getState().removeLabel(id);
                   useIssuesStore.getState().dropLabel(id);
+                  ws.dropLabel(id);
                } else {
                   if (id) changedLabels.add(id);
                   // A lista de labels é um GET só: rajada de eventos vira uma leitura.

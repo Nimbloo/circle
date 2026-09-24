@@ -6,6 +6,19 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ViewDetails from '@/components/common/views/view-details';
+import ViewHeader from '@/components/layout/headers/view/header';
+import { SidebarProvider } from '@/components/ui/sidebar';
+
+// SidebarProvider (useIsMobile) consulta matchMedia, ausente no jsdom.
+Object.defineProperty(window, 'matchMedia', {
+   configurable: true,
+   value: (query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+   }),
+});
 import type { Issue } from '@/data/issues';
 import type { View } from '@/data/views';
 import { priorities } from '@/data/priorities';
@@ -13,11 +26,12 @@ import { seedCatalog, status } from './helpers/catalog-fixture';
 import { useDisplaySettingsStore } from '@/store/display-settings-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { useSavedSearchStore } from '@/store/saved-search-store';
 
 const searchMock = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/client', () => ({ api: { search: { query: searchMock }, issues: {} } }));
 vi.mock('next/navigation', () => ({
-   useParams: () => ({ orgId: 'nimbloo' }),
+   useParams: () => ({ orgId: 'nimbloo', viewId: 'v1' }),
    usePathname: () => '/nimbloo/views/v1',
 }));
 vi.mock('@/store/filter-store', () => ({
@@ -76,6 +90,7 @@ beforeEach(() => {
    seedCatalog();
    vi.clearAllMocks();
    useDisplaySettingsStore.setState({ byView: {} });
+   useSavedSearchStore.setState({ byKey: {} });
    useWorkspaceStore.setState({ views: [view], loaded: true, users: [], projects: [], teams: [] });
    useIssuesStore.setState({
       issues: [make(1), make(2)],
@@ -111,5 +126,48 @@ describe('Is#19/Ad#15 saved search', () => {
       expect(screen.getByText('Bug 1')).toBeTruthy(); // mantém o resultado anterior
       await waitFor(() => expect(screen.getByText('Bug 3')).toBeTruthy(), { timeout: 2000 });
       expect(searchMock).toHaveBeenCalledTimes(2);
+   });
+
+   it('o contador do header é o mesmo número de issues do corpo (aplica o termo)', async () => {
+      searchMock.mockResolvedValue(result(['i2']));
+      render(
+         <SidebarProvider>
+            <ViewHeader />
+            <ViewDetails viewId="v1" />
+         </SidebarProvider>
+      );
+      expect(await screen.findByText('Bug 2')).toBeTruthy();
+      expect(screen.getByText('1 issues')).toBeTruthy();
+   });
+
+   it('na ordenação padrão mantém a ordem de relevância da busca', async () => {
+      const urgent = priorities.find((p) => p.id === 'urgent')!;
+      const low = priorities.find((p) => p.id === 'low')!;
+      useIssuesStore.setState({
+         issues: [
+            { ...make(1), priority: urgent },
+            { ...make(2), priority: low },
+         ],
+      });
+      searchMock.mockResolvedValue(result(['i2', 'i1']));
+      render(<ViewDetails viewId="v1" />);
+      await screen.findByText('Bug 2');
+      const titles = screen.getAllByText(/^Bug \d$/).map((el) => el.textContent);
+      expect(titles).toEqual(['Bug 2', 'Bug 1']);
+   });
+
+   it('busca que bate no teto de 100 avisa que mostra só os primeiros', async () => {
+      const many = Array.from({ length: 100 }, (_, i) => make(i + 1));
+      useIssuesStore.setState({ issues: many });
+      searchMock.mockResolvedValue(result(many.map((i) => i.id)));
+      render(<ViewDetails viewId="v1" />);
+      expect(await screen.findByText(/Showing the first 100 matches/)).toBeTruthy();
+   });
+
+   it('abaixo do teto não mostra o aviso', async () => {
+      searchMock.mockResolvedValue(result(['i1']));
+      render(<ViewDetails viewId="v1" />);
+      await screen.findByText('Bug 1');
+      expect(screen.queryByText(/Showing the first 100 matches/)).toBeNull();
    });
 });

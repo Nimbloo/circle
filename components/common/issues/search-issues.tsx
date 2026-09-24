@@ -3,6 +3,7 @@
 import { api, type SearchGroup, type SearchItem, type SearchEntityType } from '@/lib/client';
 import { useIssuesStore } from '@/store/issues-store';
 import { useSearchStore } from '@/store/search-store';
+import { useBulkSelectionStore } from '@/store/bulk-selection-store';
 import { EMPTY_SEARCH_FILTERS, SearchChips, type SearchFilters } from '../search/search-chips';
 import { SaveSearchButton } from '../search/save-search-button';
 import { SearchSnippet } from '../search/search-snippet';
@@ -140,6 +141,15 @@ export function SearchIssues() {
          );
    }, [issueItems, issues]);
 
+   // Seleção em lote segue os resultados na tela (mesma regra do GroupedIssuesView): trocar
+   // o termo não pode deixar a barra agindo sobre issues que sumiram; sair da busca limpa.
+   const retainSelection = useBulkSelectionStore((s) => s.retain);
+   const clearSelection = useBulkSelectionStore((s) => s.clear);
+   useEffect(() => {
+      retainSelection(new Set(issueResults.map((r) => r.issue.id)));
+   }, [issueResults, retainSelection]);
+   useEffect(() => () => clearSelection(), [clearSelection]);
+
    const otherGroups = groups.filter((g) => g.type !== 'issue' && g.items.length > 0);
    const total = issueResults.length + otherGroups.reduce((n, g) => n + g.items.length, 0);
 
@@ -160,7 +170,7 @@ export function SearchIssues() {
                         <GroupShell title={GROUP_LABEL.issue} count={issueResults.length}>
                            {issueResults.map(({ item, issue }) => (
                               <div key={issue.id}>
-                                 <IssueLine issue={issue} layoutId={false} />
+                                 <IssueLine issue={issue} />
                                  <SearchSnippet html={item.snippet} className="px-6 pb-2" />
                               </div>
                            ))}
