@@ -271,4 +271,22 @@ describe('descrição: conflito de edição (#36)', () => {
       // O editor fica com o texto restaurado (o que o servidor gravou), não com o do reload.
       expect(screen.getByTestId('doc').textContent).toBe('rascunho local');
    });
+
+   it('409 com a recarga falhando: avisa e os saves seguintes ainda chegam à API', async () => {
+      const { toast } = await import('sonner');
+      const { IssueDetailView } = await import('@/components/common/issues/details/issue-details');
+      apiMocks.issues.detail.mockResolvedValueOnce(detailDto('minha', 'v1'));
+      render(<IssueDetailView issue={issue} />);
+      await screen.findByText('minha');
+
+      apiMocks.issues.updateDetail.mockRejectedValueOnce(new FakeApiError(409));
+      apiMocks.issues.detail.mockRejectedValueOnce(new Error('offline'));
+      await act(async () => screen.getByText('salvar').click());
+      await waitFor(() => expect(toast.error).toHaveBeenCalled());
+
+      // A fila não pode ficar rejeitada: o próximo save sai.
+      apiMocks.issues.updateDetail.mockResolvedValueOnce(detailDto('rascunho local', 'v2'));
+      await act(async () => screen.getByText('salvar').click());
+      await waitFor(() => expect(apiMocks.issues.updateDetail).toHaveBeenCalledTimes(2));
+   });
 });

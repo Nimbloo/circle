@@ -484,6 +484,12 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
                setDescriptionDoc(
                   fresh.descriptionDoc ?? blocksToDoc(textToBlocks(fresh.description))
                );
+            } catch {
+               // Não relança: fila rejeitada engoliria calada todo save seguinte. A versão
+               // velha fica; o próximo save volta a dar 409 e tenta recarregar de novo.
+               toast.error('Não foi possível carregar a versão mais recente da descrição', {
+                  id: `description-save:${issue.id}`,
+               });
             } finally {
                setEditorEpoch((n) => n + 1);
             }
