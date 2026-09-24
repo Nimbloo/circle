@@ -83,6 +83,13 @@ export default function MyIssues() {
          alive = false;
       };
    }, [tab, subscribedIssueIds, subscriptionsAttempt]);
+   // O Retry do toast só busca nesta aba: sair dela (ou da tela) dispensa o aviso.
+   useEffect(() => {
+      if (tab !== 'subscribed') return;
+      return () => {
+         toast.dismiss(SUBSCRIPTIONS_ERROR_TOAST);
+      };
+   }, [tab]);
    const subscribedIds = useMemo(() => {
       const live = new Set(subscribedIssueIds ?? []);
       return new Set([...(tab === 'subscribed' ? allSubscribed : []), ...live]);

@@ -243,9 +243,11 @@ export function BlockEditor({
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = null;
       const pending = pendingRef.current;
-      if (!pending || docHasPendingUploads(pending)) return;
+      const uploads = editorRef.current?.storage.imageUpload;
+      if (!pending || docHasPendingUploads(pending, uploads?.inflight ?? new Map())) return;
       pendingRef.current = null;
-      onSaveRef.current?.(pending);
+      // Placeholder órfão (upload já encerrado) sai com a URL final — ou sai do doc.
+      onSaveRef.current?.(resolveUploadPlaceholders(pending, uploads?.settled ?? new Map()));
    }, []);
    const schedule = useCallback(
       (next: EditorDoc) => {
@@ -260,15 +262,21 @@ export function BlockEditor({
    useEffect(
       () => () => {
          const pending = pendingRef.current;
-         if (!pending || !docHasPendingUploads(pending)) {
+         const uploads = editorRef.current?.storage.imageUpload;
+         if (!pending || !docHasPendingUploads(pending, uploads?.inflight ?? new Map())) {
             flush();
             return;
          }
          if (timerRef.current) clearTimeout(timerRef.current);
          pendingRef.current = null;
          const save = onSaveRef.current;
-         void settleUploads(editorRef.current?.storage.imageUpload).then((results) =>
-            save?.(resolveUploadPlaceholders(pending, results))
+         void settleUploads(uploads).then((results) =>
+            save?.(
+               resolveUploadPlaceholders(
+                  pending,
+                  new Map([...(uploads?.settled ?? []), ...results])
+               )
+            )
          );
       },
       [flush]

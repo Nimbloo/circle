@@ -95,6 +95,7 @@ function fitHeight(el: HTMLTextAreaElement | null): void {
 export function CommentComposer({
    issueId,
    onPosted,
+   onCreated,
    parentId = null,
    placeholder = 'Leave a comment... (@ to mention)',
    autoFocus = false,
@@ -108,6 +109,11 @@ export function CommentComposer({
     * "Retry upload" que suba algo). `failed` = arquivos que continuam no composer.
     */
    onPosted: (result?: { failed: number }) => void;
+   /**
+    * Comentário criado, com anexos AINDA subindo: o feed já pode mostrá-lo (o `onPosted`
+    * só vem depois dos uploads). Sem anexos não é chamado — o `onPosted` vem em seguida.
+    */
+   onCreated?: () => void;
    /** Se definido, o comentário vira resposta a este comentário (threading). */
    parentId?: string | null;
    placeholder?: string;
@@ -255,6 +261,7 @@ export function CommentComposer({
       setMention(null);
       setSubmitting(false);
       if (ref.current) ref.current.style.height = '';
+      if (pending.length) onCreated?.();
       const failed = pending.length ? await uploadTo(created.id, pending) : 0;
       onPosted({ failed });
    };

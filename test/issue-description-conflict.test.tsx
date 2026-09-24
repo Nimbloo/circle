@@ -237,4 +237,56 @@ describe('descrição: conflito de edição (#36)', () => {
       });
       expect(apiMocks.issues.updateDetail).toHaveBeenCalledTimes(2);
    });
+
+   it('409: "Restaurar" clicado com o reload do conflito ainda em voo não perde o rascunho (CodeRabbit #190)', async () => {
+      const { toast } = await import('sonner');
+      const { IssueDetailView } = await import('@/components/common/issues/details/issue-details');
+      apiMocks.issues.detail.mockResolvedValueOnce(detailDto('minha', 'v1'));
+      render(<IssueDetailView issue={issue} />);
+      await screen.findByText('minha');
+
+      apiMocks.issues.updateDetail.mockRejectedValueOnce(new FakeApiError(409));
+      let resolveReload!: (v: unknown) => void;
+      apiMocks.issues.detail.mockReturnValueOnce(new Promise((r) => (resolveReload = r)));
+      await act(async () => screen.getByText('salvar').click());
+      await waitFor(() => expect(toast.warning).toHaveBeenCalled());
+      const opts = vi.mocked(toast.warning).mock.calls.at(-1)?.[1] as
+         | { action?: { onClick: () => void } }
+         | undefined;
+
+      // Clique no "Restaurar" ANTES do GET da versão nova responder.
+      apiMocks.issues.updateDetail.mockResolvedValueOnce(detailDto('rascunho local', 'v3'));
+      await act(async () => opts!.action!.onClick());
+      await act(async () => resolveReload(detailDto('da outra pessoa', 'v2')));
+
+      await waitFor(() =>
+         expect(apiMocks.issues.updateDetail).toHaveBeenLastCalledWith('i1', {
+            descriptionDoc: docOf('rascunho local'),
+            expectedDescriptionVersion: 'v2',
+         })
+      );
+      await act(async () => {
+         await new Promise((r) => setTimeout(r, 20));
+      });
+      // O editor fica com o texto restaurado (o que o servidor gravou), não com o do reload.
+      expect(screen.getByTestId('doc').textContent).toBe('rascunho local');
+   });
+
+   it('409 com a recarga falhando: avisa e os saves seguintes ainda chegam à API', async () => {
+      const { toast } = await import('sonner');
+      const { IssueDetailView } = await import('@/components/common/issues/details/issue-details');
+      apiMocks.issues.detail.mockResolvedValueOnce(detailDto('minha', 'v1'));
+      render(<IssueDetailView issue={issue} />);
+      await screen.findByText('minha');
+
+      apiMocks.issues.updateDetail.mockRejectedValueOnce(new FakeApiError(409));
+      apiMocks.issues.detail.mockRejectedValueOnce(new Error('offline'));
+      await act(async () => screen.getByText('salvar').click());
+      await waitFor(() => expect(toast.error).toHaveBeenCalled());
+
+      // A fila não pode ficar rejeitada: o próximo save sai.
+      apiMocks.issues.updateDetail.mockResolvedValueOnce(detailDto('rascunho local', 'v2'));
+      await act(async () => screen.getByText('salvar').click());
+      await waitFor(() => expect(apiMocks.issues.updateDetail).toHaveBeenCalledTimes(2));
+   });
 });

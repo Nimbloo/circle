@@ -58,6 +58,17 @@ export function deleteIssuesWithUndo(
    useIssuesStore.setState((state) => ({
       issues: state.issues.filter((i) => !inStoreIds.has(i.id)),
    }));
+   // Até o Undo ou o fim do DELETE, hidratações não trazem estas issues de volta.
+   const { setPendingDelete } = useIssuesStore.getState();
+   setPendingDelete(
+      removed.map((i) => i.id),
+      true
+   );
+   const release = (issues: readonly Issue[]) =>
+      setPendingDelete(
+         issues.map((i) => i.id),
+         false
+      );
    // Só volta para a lista quem estava nela: a issue fria não entra no store pelo Undo.
    const restoreListed = (issues: Issue[]) => restore(issues.filter((i) => inStoreIds.has(i.id)));
 
@@ -80,15 +91,21 @@ export function deleteIssuesWithUndo(
       if (settled) return;
       settle();
       committed = true;
-      for (const issue of restorable()) {
+      const toDelete = restorable();
+      release(removed.filter((i) => !toDelete.includes(i)));
+      for (const issue of toDelete) {
          void useIssuesStore
             .getState()
             .deleteIssue(issue.id)
-            .catch(() => {
-               // Rechecado na hora do rollback: a marca pode ter chegado com o DELETE em voo.
-               if (!useIssuesStore.getState().remoteDeletedIds.has(issue.id))
-                  restoreListed([issue]);
-            });
+            .then(
+               () => release([issue]),
+               () => {
+                  release([issue]);
+                  // Rechecado na hora do rollback: a marca pode ter chegado com o DELETE em voo.
+                  if (!useIssuesStore.getState().remoteDeletedIds.has(issue.id))
+                     restoreListed([issue]);
+               }
+            );
       }
    }
    pending.timer = setTimeout(commit, DELETE_UNDO_CEILING_MS);
@@ -115,6 +132,7 @@ export function deleteIssuesWithUndo(
                }
                if (settled) return;
                settle();
+               release(removed);
                const stillGone = restorable();
                if (stillGone.length === 0) {
                   // O servidor já apagou (outra aba) antes do clique: nada a desfazer.

@@ -20,9 +20,10 @@ const apiMocks = vi.hoisted(() => ({
 vi.mock('@/lib/client', () => ({ api: apiMocks }));
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), dismiss: vi.fn() }));
 vi.mock('sonner', () => ({ toast: toastMock }));
+const tabState = vi.hoisted(() => ({ tab: 'subscribed' }));
 vi.mock('nuqs', () => ({
    parseAsStringLiteral: () => ({ withDefault: () => ({}) }),
-   useQueryState: () => ['subscribed', () => {}],
+   useQueryState: () => [tabState.tab, () => {}],
 }));
 vi.mock('next/navigation', () => ({
    useParams: () => ({ orgId: 'nimbloo' }),
@@ -40,6 +41,7 @@ const { default: MyIssues } = await import('@/components/common/my-issues/my-iss
 
 beforeEach(() => {
    vi.clearAllMocks();
+   tabState.tab = 'subscribed';
    useWorkspaceStore.setState({
       me: {
          id: 'u-me',
@@ -80,5 +82,25 @@ describe('My issues > Subscribed — falha na lista completa', () => {
       render(<MyIssues />);
       await waitFor(() => expect(apiMocks.me.subscriptions).toHaveBeenCalled());
       expect(toastMock.error).not.toHaveBeenCalled();
+   });
+
+   it('sair da aba ou desmontar dispensa o toast (o Retry só roda na aba) — CodeRabbit #190', async () => {
+      apiMocks.me.subscriptions.mockRejectedValueOnce(new Error('Failed to fetch'));
+      const { rerender, unmount } = render(<MyIssues />);
+      await waitFor(() => expect(toastMock.error).toHaveBeenCalled());
+      const id = (toastMock.error.mock.calls[0][1] as { id: string }).id;
+      expect(toastMock.dismiss).not.toHaveBeenCalledWith(id);
+
+      tabState.tab = 'assigned';
+      rerender(<MyIssues />);
+      expect(toastMock.dismiss).toHaveBeenCalledWith(id);
+
+      toastMock.dismiss.mockClear();
+      apiMocks.me.subscriptions.mockRejectedValueOnce(new Error('Failed to fetch'));
+      tabState.tab = 'subscribed';
+      rerender(<MyIssues />);
+      await waitFor(() => expect(toastMock.error).toHaveBeenCalledTimes(2));
+      unmount();
+      expect(toastMock.dismiss).toHaveBeenCalledWith(id);
    });
 });
