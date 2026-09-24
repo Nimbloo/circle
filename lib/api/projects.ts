@@ -392,11 +392,13 @@ export async function updateProject(
       }
    }
 
-   // Patch parcial: a data que não veio é a gravada.
-   assertDateOrder(
-      patch.startDate !== undefined ? patch.startDate : existing[0].startDate,
-      patch.targetDate !== undefined ? patch.targetDate : existing[0].targetDate
-   );
+   // Patch parcial: a data que não veio é a gravada. Só quando o patch mexe em data —
+   // projeto legado com intervalo invertido continua editável no resto (igual ao trigger).
+   if (patch.startDate !== undefined || patch.targetDate !== undefined)
+      assertDateOrder(
+         patch.startDate !== undefined ? patch.startDate : existing[0].startDate,
+         patch.targetDate !== undefined ? patch.targetDate : existing[0].targetDate
+      );
 
    const labelIds = patch.labelIds ? [...new Set(patch.labelIds)] : undefined;
    if (labelIds?.length) {

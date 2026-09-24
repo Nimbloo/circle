@@ -11,7 +11,6 @@ import {
    index,
    uniqueIndex,
    unique,
-   check,
    type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
@@ -278,12 +277,9 @@ export const project = pgTable(
    (t) => [
       index('idx_project_team').on(t.teamId),
       index('idx_project_initiative').on(t.initiativeId),
-      // Ordem das datas garantida no banco: dois patches parciais concorrentes (um no
-      // início, outro no alvo) passam cada um na checagem da app e inverteriam o intervalo.
-      check(
-         'project_date_order',
-         sql`${t.startDate} IS NULL OR ${t.targetDate} IS NULL OR ${t.startDate} <= ${t.targetDate}`
-      ),
+      // Ordem das datas: trigger `project_date_order` (migration 0054) recusa com 23514 só
+      // quando início/alvo mudam — dois patches parciais concorrentes não invertem o
+      // intervalo, e projeto legado com datas invertidas continua editável no resto.
    ]
 );
 
