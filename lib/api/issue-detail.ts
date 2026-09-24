@@ -127,6 +127,8 @@ export interface IssueDetailDto {
    /** Issues que ESTA bloqueia (lado inverso de blocked_by — paridade Linear "Blocks"). */
    blockingIds: string[];
    duplicateIds: string[];
+   /** Issues marcadas como duplicata DESTA (lado inverso — Linear "Duplicated by"). */
+   duplicatedByIds: string[];
    /** `reviewId`/`repo`/`number`/`url` vêm da review do PR (null em vínculo antigo). */
    prLinks: {
       id: string;
@@ -231,14 +233,14 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
          db.select().from(issueContent).where(eq(issueContent.issueId, issueId)).limit(1),
          db.select().from(issueRelation).where(eq(issueRelation.issueId, issueId)),
          // Lado inverso: outras issues que declaram ESTA como blocked_by → ESTA as bloqueia;
-         // `related` é simétrica (Linear): quem relacionou ESTA também aparece aqui.
+         // `related` é simétrica (Linear) e `duplicate` ganha o "Duplicated by" do alvo.
          db
             .select({ issueId: issueRelation.issueId, kind: issueRelation.kind })
             .from(issueRelation)
             .where(
                and(
                   eq(issueRelation.relatedId, issueId),
-                  inArray(issueRelation.kind, ['blocked_by', 'related'])
+                  inArray(issueRelation.kind, ['blocked_by', 'related', 'duplicate'])
                )
             ),
          // O id do vínculo é md5("issueId|repo#número") (reviews.ts `prLinkId`), e
@@ -319,6 +321,7 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
       blockedByIds: relations.filter((r) => r.kind === 'blocked_by').map((r) => r.relatedId),
       blockingIds: blocking.filter((b) => b.kind === 'blocked_by').map((b) => b.issueId),
       duplicateIds: relations.filter((r) => r.kind === 'duplicate').map((r) => r.relatedId),
+      duplicatedByIds: blocking.filter((b) => b.kind === 'duplicate').map((b) => b.issueId),
       prLinks: prs.map((p) => ({
          id: p.id,
          title: p.title,

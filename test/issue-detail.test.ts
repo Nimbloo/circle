@@ -194,6 +194,11 @@ describe('issue detail / comments / activity', () => {
       );
       const dto = await addRelation(db, issue.id, canonical.id, 'duplicate', ME);
       expect(dto?.duplicateIds).toEqual([canonical.id]);
+      expect(dto?.duplicatedByIds).toEqual([]);
+      // Lado inverso (Linear "Duplicated by"): a canônica lista quem a duplica.
+      const canonicalDetail = await getIssueDetail(db, canonical.id);
+      expect(canonicalDetail?.duplicatedByIds).toEqual([issue.id]);
+      expect(canonicalDetail?.duplicateIds).toEqual([]);
       expect(dto?.relatedIds).toEqual([]);
       const removed = await removeRelation(db, issue.id, canonical.id, 'duplicate', ME);
       expect(removed?.duplicateIds).toEqual([]);
