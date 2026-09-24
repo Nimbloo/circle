@@ -158,6 +158,56 @@ describe('rollover com ciclo planned', () => {
       const [i1] = await db.select().from(issue).where(eq(issue.id, 'i1'));
       expect(i1.cycleId).toBe(created.id);
    });
+
+   it('um ciclo posterior que não cruza o intervalo proposto não empurra o novo', async () => {
+      const db = await setup(0);
+      await db.insert(cycle).values({
+         id: 'c-late',
+         number: 2,
+         name: 'Tardio',
+         teamId: 'CORE',
+         status: 'completed',
+         startDate: '2026-02-10',
+         endDate: '2026-02-20',
+         capacity: 0,
+      });
+
+      await rolloverCyclesForTeam(db, 'CORE', at('2026-01-15'));
+
+      const created = (await cyclesOf(db)).find((c) => c.number === 3)!;
+      expect(created).toMatchObject({ startDate: '2026-01-15', endDate: '2026-01-28' });
+   });
+
+   it('pula ciclos encadeados até achar um intervalo livre', async () => {
+      const db = await setup(0);
+      await db.insert(cycle).values([
+         {
+            id: 'c-a',
+            number: 2,
+            name: 'A',
+            teamId: 'CORE',
+            status: 'completed',
+            startDate: '2026-01-20',
+            endDate: '2026-01-25',
+            capacity: 0,
+         },
+         {
+            id: 'c-b',
+            number: 3,
+            name: 'B',
+            teamId: 'CORE',
+            status: 'completed',
+            startDate: '2026-02-01',
+            endDate: '2026-02-05',
+            capacity: 0,
+         },
+      ]);
+
+      await rolloverCyclesForTeam(db, 'CORE', at('2026-01-15'));
+
+      const created = (await cyclesOf(db)).find((c) => c.number === 4)!;
+      expect(created).toMatchObject({ startDate: '2026-02-06', endDate: '2026-02-19' });
+   });
 });
 
 describe('cooldownUntil (UI)', () => {

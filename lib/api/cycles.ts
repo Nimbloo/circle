@@ -511,13 +511,19 @@ async function createNextCycle(tx: Tx, teamId: string, prev: CycleRow): Promise<
    const number = (max?.m ?? 0) + 1;
    const duration = diffDays(prev.startDate, prev.endDate);
    let startDate = addDays(prev.endDate, 1 + (team?.cooldown ?? 0));
-   // Sem sobrepor outro ciclo do time: se as datas naturais já estão ocupadas, começa
-   // depois do último ciclo que as ocupa.
-   const [latest] = await tx
-      .select({ end: sql<string | null>`max(${cycleT.endDate})` })
+   // Sem sobrepor outro ciclo do time: se algum ciclo cruza o intervalo proposto
+   // [início, fim], começa depois dele e testa de novo. Ciclo posterior que não cruza
+   // o intervalo não empurra nada.
+   const later = await tx
+      .select({ start: cycleT.startDate, end: cycleT.endDate })
       .from(cycleT)
-      .where(and(eq(cycleT.teamId, teamId), gte(cycleT.endDate, startDate)));
-   if (latest?.end) startDate = addDays(String(latest.end).slice(0, 10), 1);
+      .where(and(eq(cycleT.teamId, teamId), gte(cycleT.endDate, startDate)))
+      .orderBy(asc(cycleT.startDate));
+   for (const c of later) {
+      if (c.start <= addDays(startDate, duration) && c.end >= startDate) {
+         startDate = addDays(c.end, 1);
+      }
+   }
    const endDate = addDays(startDate, duration);
    const [row] = await tx
       .insert(cycleT)
