@@ -87,6 +87,39 @@ describe('projects', () => {
       ).toEqual(['Core']);
    });
 
+   it('recusa início depois do alvo, olhando o estado resultante (patch + banco)', async () => {
+      const { db } = await setup();
+      await expect(
+         createProject(db, {
+            name: 'Invertido',
+            statusId: 'proj-in-progress',
+            startDate: '2026-05-10',
+            targetDate: '2026-05-01',
+            ...base,
+         })
+      ).rejects.toMatchObject({ status: 400 });
+
+      const p = await createProject(db, {
+         name: 'Ok',
+         statusId: 'proj-in-progress',
+         startDate: '2026-05-01',
+         targetDate: '2026-05-31',
+         ...base,
+      });
+      // Só o início no patch: o alvo gravado (31/05) entra na conta.
+      await expect(updateProject(db, p.id, { startDate: '2026-06-10' })).rejects.toMatchObject({
+         status: 400,
+      });
+      // As duas datas juntas (o reschedule da timeline) movem o intervalo inteiro.
+      const moved = await updateProject(db, p.id, {
+         startDate: '2026-06-10',
+         targetDate: '2026-07-10',
+      });
+      expect(moved?.startDate).toBe('2026-06-10');
+      // Limpar uma das datas continua valendo.
+      expect((await updateProject(db, p.id, { targetDate: null }))?.targetDate).toBeNull();
+   });
+
    it('updating health stamps healthUpdatedAt', async () => {
       const { db } = await setup();
       const p = await createProject(db, { name: 'A', statusId: 'proj-in-progress', ...base });
