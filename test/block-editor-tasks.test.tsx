@@ -459,3 +459,32 @@ describe('BlockEditor — task item → sub-issue (com contexto de issue)', () =
       );
    });
 });
+
+describe('BlockEditor — doc externo igual ao já aplicado', () => {
+   it('mesmo doc por prop (objeto novo) não remonta o conteúdo, mesmo após a normalização', async () => {
+      const taskDoc = (): EditorDoc => ({
+         type: 'doc',
+         content: [
+            {
+               type: 'taskList',
+               content: [
+                  {
+                     type: 'taskItem',
+                     attrs: { checked: false },
+                     content: [{ type: 'paragraph', content: [{ type: 'text', text: 'a' }] }],
+                  },
+               ],
+            },
+         ],
+      });
+      const { editor, container, rerender } = await mount({ doc: taskDoc() });
+      // Qualquer transação faz o TrailingNode anexar um parágrafo: o JSON do editor passa a
+      // divergir do prop, mesmo sem edição.
+      act(() => dispatchNonEditing(editor));
+      const before = container.querySelector('ul[data-type="taskList"] > li');
+      expect(before).toBeTruthy();
+      rerender(<BlockEditor doc={taskDoc()} onReady={() => {}} saveDelayMs={0} />);
+      await act(async () => {});
+      expect(container.querySelector('ul[data-type="taskList"] > li')).toBe(before);
+   });
+});
