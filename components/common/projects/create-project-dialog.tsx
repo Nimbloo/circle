@@ -41,6 +41,7 @@ import type { ComponentType, CSSProperties } from 'react';
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 import { persistNewProject, type CreateProgress } from './create-project-persist';
 import { toast } from 'sonner';
+import { errorReason } from '@/lib/error-reason';
 import { labelColor } from '@/components/common/palette';
 import { InitiativeGlyph } from '@/components/common/initiatives/initiative-glyph';
 
@@ -231,8 +232,8 @@ export function CreateProjectButton() {
          setOpen(false);
          toast.success('Project created');
          reset();
-      } catch {
-         toast.error('Could not create the project');
+      } catch (e) {
+         toast.error(errorReason(e, 'Could not create the project'));
       } finally {
          setBusy(false);
       }

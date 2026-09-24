@@ -20,6 +20,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { errorReason } from '@/lib/error-reason';
 
 /**
  * Card "Suggested" da triagem (#94): mostra o que a IA propôs para a issue (time,
@@ -175,7 +176,7 @@ export function TriageSuggestionCard({
          setResolved(true);
       } catch (e) {
          setHidden(false); // rollback
-         toast.error(e instanceof Error ? e.message : 'Falha ao aplicar a sugestão');
+         toast.error(errorReason(e, 'Falha ao aplicar a sugestão'));
       } finally {
          setPending(false);
       }

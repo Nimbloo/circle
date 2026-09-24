@@ -29,6 +29,7 @@ import {
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { errorReason } from '@/lib/error-reason';
 
 const IMPACT_ROWS: {
    key: keyof TeamDeletionImpact;
@@ -100,7 +101,7 @@ export function DeleteTeamDialog({
             pathname?.startsWith(`${base}/settings/teams/${team.id}`);
          if (onTeamScreen) router.push(base);
       } catch (e) {
-         toast.error(e instanceof ApiError ? e.message : 'Não foi possível excluir o time');
+         toast.error(errorReason(e, 'Não foi possível excluir o time'));
       } finally {
          setBusy(false);
       }

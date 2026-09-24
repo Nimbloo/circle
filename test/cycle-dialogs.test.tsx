@@ -80,7 +80,9 @@ describe('diálogo de edição de ciclo (#38)', () => {
 
       await waitFor(() => expect(apiMocks.update).toHaveBeenCalled());
       await waitFor(() =>
-         expect(toast.error).toHaveBeenCalledWith('O time já tem um ciclo em andamento')
+         expect(toast.error).toHaveBeenCalledWith(
+            'Could not update the cycle: O time já tem um ciclo em andamento'
+         )
       );
    });
 });
