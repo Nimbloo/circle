@@ -408,16 +408,30 @@ export async function rolloverCyclesForTeam(
          .for('update');
 
       if (current && current.endDate < today) {
+         // Destino: o próximo ciclo já agendado — `upcoming` ou `planned` (este vira o
+         // próximo da fila). Só cria um ciclo novo quando nenhum existe.
          let [next] = await tx
             .select()
             .from(cycleT)
-            .where(and(eq(cycleT.teamId, teamId), eq(cycleT.status, 'upcoming')))
+            .where(
+               and(
+                  eq(cycleT.teamId, teamId),
+                  inArray(cycleT.status, ['upcoming', 'planned']),
+                  sql`${cycleT.startDate} > ${current.endDate}`
+               )
+            )
             .orderBy(asc(cycleT.startDate))
             .limit(1);
          if (!next) {
             next = await createNextCycle(tx, teamId, current);
             touched.created = next.id;
-         } else touched.updated.add(next.id);
+         } else {
+            if (next.status === 'planned') {
+               await tx.update(cycleT).set({ status: 'upcoming' }).where(eq(cycleT.id, next.id));
+               next = { ...next, status: 'upcoming' };
+            }
+            touched.updated.add(next.id);
+         }
 
          // Retrato do fechamento ANTES de carregar as abertas: é a base do success rate.
          const closing = await aggregatesByCycle(tx as unknown as Db, [current.id], []);
@@ -492,8 +506,16 @@ async function createNextCycle(tx: Tx, teamId: string, prev: CycleRow): Promise<
       .from(cycleT)
       .where(eq(cycleT.teamId, teamId));
    const number = (max?.m ?? 0) + 1;
-   const startDate = addDays(prev.endDate, 1 + (team?.cooldown ?? 0));
-   const endDate = addDays(startDate, diffDays(prev.startDate, prev.endDate));
+   const duration = diffDays(prev.startDate, prev.endDate);
+   let startDate = addDays(prev.endDate, 1 + (team?.cooldown ?? 0));
+   // Sem sobrepor outro ciclo do time: se as datas naturais já estão ocupadas, começa
+   // depois do último ciclo que as ocupa.
+   const [latest] = await tx
+      .select({ end: sql<string | null>`max(${cycleT.endDate})` })
+      .from(cycleT)
+      .where(and(eq(cycleT.teamId, teamId), gte(cycleT.endDate, startDate)));
+   if (latest?.end) startDate = addDays(String(latest.end).slice(0, 10), 1);
+   const endDate = addDays(startDate, duration);
    const [row] = await tx
       .insert(cycleT)
       .values({

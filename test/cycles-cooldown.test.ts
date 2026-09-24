@@ -114,6 +114,52 @@ describe('rollover com cool-down (#24)', () => {
    });
 });
 
+describe('rollover com ciclo planned', () => {
+   it('um planned futuro é o destino: recebe as abertas e nenhum ciclo novo é criado', async () => {
+      const db = await setup(0);
+      await db.insert(cycle).values({
+         id: 'c2',
+         number: 2,
+         name: 'Planejado',
+         teamId: 'CORE',
+         status: 'planned',
+         startDate: '2026-01-15',
+         endDate: '2026-01-28',
+         capacity: 0,
+      });
+
+      await rolloverCyclesForTeam(db, 'CORE', at('2026-01-15'));
+
+      const rows = await cyclesOf(db);
+      expect(rows).toHaveLength(2);
+      expect(rows[1]).toMatchObject({ id: 'c2', status: 'current' });
+      const [i1] = await db.select().from(issue).where(eq(issue.id, 'i1'));
+      expect(i1.cycleId).toBe('c2');
+   });
+
+   it('ciclo criado pelo rollover não sobrepõe as datas de outro ciclo do time', async () => {
+      const db = await setup(0);
+      // Um ciclo já concluído ocupa justamente as datas que o rollover escolheria.
+      await db.insert(cycle).values({
+         id: 'c-old',
+         number: 2,
+         name: 'Antigo',
+         teamId: 'CORE',
+         status: 'completed',
+         startDate: '2026-01-20',
+         endDate: '2026-01-25',
+         capacity: 0,
+      });
+
+      await rolloverCyclesForTeam(db, 'CORE', at('2026-01-15'));
+
+      const created = (await cyclesOf(db)).find((c) => c.number === 3)!;
+      expect(created.startDate > '2026-01-25').toBe(true);
+      const [i1] = await db.select().from(issue).where(eq(issue.id, 'i1'));
+      expect(i1.cycleId).toBe(created.id);
+   });
+});
+
 describe('cooldownUntil (UI)', () => {
    const base = { teamId: 'CORE', capacity: 0, scope: 0, scopeDelta: 0, started: 0, completed: 0 };
    const c = (p: Pick<Cycle, 'id' | 'status' | 'startDate' | 'endDate'>): Cycle => ({
