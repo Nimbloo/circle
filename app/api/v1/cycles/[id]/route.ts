@@ -31,8 +31,8 @@ const UpdateSchema = z.object({
       .max(96, 'name deve ter no máximo 96 caracteres')
       .optional(),
    status: z.enum(['planned', 'upcoming', 'current', 'completed']).optional(),
-   startDate: z.string().trim().min(1).optional(),
-   endDate: z.string().trim().min(1).optional(),
+   startDate: z.string().trim().date('use o formato YYYY-MM-DD').optional(),
+   endDate: z.string().trim().date('use o formato YYYY-MM-DD').optional(),
    capacity: z
       .number({ invalid_type_error: 'capacity deve ser um inteiro maior ou igual a zero' })
       .int('capacity deve ser um inteiro maior ou igual a zero')

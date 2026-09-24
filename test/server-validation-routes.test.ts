@@ -235,6 +235,28 @@ describe('validação textual das rotas da frente S', () => {
       );
    });
 
+   it('ciclo recusa data fora do formato YYYY-MM-DD (a comparação de texto deixava passar)', async () => {
+      // "2026-9-30" > "2026-10-01" como texto: passava pelo `start <= end` e o banco
+      // gravava um ciclo que termina antes de começar.
+      await expectValidation(
+         await createCycle(
+            request('POST', '/api/v1/teams/CORE/cycles', {
+               name: 'Sprint',
+               startDate: '2026-10-01',
+               endDate: '2026-9-30',
+            }),
+            { params: Promise.resolve({ teamKey: 'CORE' }) }
+         ),
+         'endDate'
+      );
+      await expectValidation(
+         await updateCycle(request('PATCH', '/api/v1/cycles/missing', { startDate: 'amanhã' }), {
+            params: Promise.resolve({ id: 'missing' }),
+         }),
+         'startDate'
+      );
+   });
+
    it('rejeita nome acima de 128 caracteres com 400 claro', async () => {
       const res = await createProject(
          request('POST', '/api/v1/projects', {
