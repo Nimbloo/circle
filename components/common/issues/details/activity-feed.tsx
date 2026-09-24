@@ -720,6 +720,7 @@ const CommentCard = memo(function CommentCard({
                      placeholder="Reply… (@ to mention)"
                      onCancel={() => setReplying(false)}
                      onSubmitStart={onOwnAction}
+                     onCreated={() => onChanged?.()}
                      onPosted={(result) => {
                         onChanged?.();
                         // Anexo que falhou mantém o composer aberto (com "Retry upload").
@@ -896,6 +897,7 @@ export function ActivityFeed({
                // A ação própria é marcada ANTES do POST: o eco do SSE chega antes da
                // resposta e, sem a marca, disparava um GET do feed além do `onPosted`.
                onSubmitStart={onOwnAction}
+               onCreated={() => onCommentAdded?.()}
                onPosted={() => onCommentAdded?.()}
             />
          )}
