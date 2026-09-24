@@ -156,3 +156,28 @@ describe('BlockEditor — pré-validação do upload de imagem', () => {
       expect(EDITOR_IMAGE_MAX_BYTES).toBe(MAX_UPLOAD_BYTES);
    });
 });
+
+describe('BlockEditor — imagem externa colada', () => {
+   it('descarta <img> de terceiro (CSP bloqueia) e avisa; mantém CDN e data:', async () => {
+      vi.stubEnv('NEXT_PUBLIC_CIRCLE_CDN_URL', 'https://cdn.test');
+      try {
+         const { editor } = await mount({ doc: paragraph('') });
+         toastMocks.warning.mockClear();
+         act(() => {
+            editor.commands.focus('end');
+            editor.view.pasteHTML(
+               '<p>texto</p><img src="https://terceiro.example/x.png">' +
+                  '<img src="https://cdn.test/uploads/ok.png">',
+               new ClipboardEvent('paste')
+            );
+         });
+         const json = JSON.stringify(editor.getJSON());
+         expect(json).toContain('texto');
+         expect(json).toContain('https://cdn.test/uploads/ok.png');
+         expect(json).not.toContain('terceiro.example');
+         expect(toastMocks.warning).toHaveBeenCalledTimes(1);
+      } finally {
+         vi.unstubAllEnvs();
+      }
+   });
+});

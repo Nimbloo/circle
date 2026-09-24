@@ -9,6 +9,7 @@
  */
 import { Extension, type Editor } from '@tiptap/core';
 import Image from '@tiptap/extension-image';
+import { Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 
@@ -21,6 +22,63 @@ export interface ImageUploadOptions {
     * recusa (vai para `onUploadError`) ou null. Ex.: `validateEditorImage`.
     */
    validate?: (file: File) => string | null;
+   /**
+    * Colar HTML: `<img>` cujo `src` a página não pode exibir (CSP `img-src`) é descartado
+    * e `onImagesDropped` avisa quantas saíram. Sem ele, colar mantém tudo.
+    */
+   isEmbeddableSrc?: (src: string) => boolean;
+   onImagesDropped?: (count: number) => void;
+}
+
+/**
+ * `src` que o CSP da página deixa exibir (`img-src 'self' data: blob: <CDN>`): mesma
+ * origem, `data:image/…` ou o CDN (`NEXT_PUBLIC_CIRCLE_CDN_URL`, injetado pelo
+ * next.config). Imagem de terceiro colada ficaria quebrada para sempre: o fetch para
+ * re-subir também é barrado (`connect-src 'self'`), então ela é descartada com aviso.
+ */
+export function isEmbeddableImageSrc(src: string): boolean {
+   if (/^data:image\//i.test(src)) return true;
+   if (src.startsWith('/') && !src.startsWith('//')) return true;
+   let url: URL;
+   try {
+      url = new URL(src);
+   } catch {
+      return false;
+   }
+   const cdn = process.env.NEXT_PUBLIC_CIRCLE_CDN_URL;
+   const allowed = [typeof window === 'undefined' ? null : window.location.origin];
+   if (cdn) {
+      try {
+         allowed.push(new URL(cdn).origin);
+      } catch {
+         // CDN mal configurado: só a mesma origem
+      }
+   }
+   return allowed.includes(url.origin);
+}
+
+/** Tira do conteúdo colado as imagens que não podem ser exibidas; conta as removidas. */
+function stripImages(
+   fragment: Fragment,
+   keep: (src: string) => boolean,
+   removed: { count: number }
+): Fragment {
+   const nodes: PMNode[] = [];
+   fragment.forEach((node) => {
+      if (node.type.name === 'image' && !keep(String(node.attrs.src ?? ''))) {
+         removed.count++;
+         return;
+      }
+      if (node.isLeaf || node.content.size === 0) {
+         nodes.push(node);
+         return;
+      }
+      const content = stripImages(node.content, keep, removed);
+      // Contêiner que ficou vazio/inválido sem a imagem (ex.: item de lista) sai junto.
+      if (content.size === 0 || !node.type.validContent(content)) return;
+      nodes.push(node.copy(content));
+   });
+   return Fragment.fromArray(nodes);
 }
 
 /** Tipos que `POST /uploads` aceita (`lib/api/uploads.ts`: raster comum, sem SVG). */
@@ -180,7 +238,13 @@ export const ImageUpload = Extension.create<ImageUploadOptions, ImageUploadStora
    name: 'imageUpload',
 
    addOptions() {
-      return { upload: undefined, onUploadError: undefined, validate: undefined };
+      return {
+         upload: undefined,
+         onUploadError: undefined,
+         validate: undefined,
+         isEmbeddableSrc: undefined,
+         onImagesDropped: undefined,
+      };
    },
 
    addStorage() {
@@ -257,6 +321,17 @@ export const ImageUpload = Extension.create<ImageUploadOptions, ImageUploadStora
          new Plugin({
             key: new PluginKey('imageUpload'),
             props: {
+               transformPasted: (slice) => {
+                  const keep = this.options.isEmbeddableSrc;
+                  if (!keep) return slice;
+                  const removed = { count: 0 };
+                  const content = stripImages(slice.content, keep, removed);
+                  if (removed.count === 0) return slice;
+                  this.options.onImagesDropped?.(removed.count);
+                  return content.size === 0
+                     ? Slice.empty
+                     : new Slice(content, slice.openStart, slice.openEnd);
+               },
                handlePaste: (view, event) => upload(view, imageFiles(event.clipboardData?.files)),
                handleDrop: (view, event) => {
                   const files = imageFiles(event.dataTransfer?.files);

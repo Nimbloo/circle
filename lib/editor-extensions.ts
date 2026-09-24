@@ -57,6 +57,8 @@ export function editorExtensions(options: EditorExtensionOptions = {}): Extensio
          upload: options.upload,
          onUploadError: options.onUploadError,
          validate: options.validate,
+         isEmbeddableSrc: options.isEmbeddableSrc,
+         onImagesDropped: options.onImagesDropped,
       }),
       Video,
       options.issueRef ?? IssueRef,

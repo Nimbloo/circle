@@ -6,6 +6,7 @@ import { EMPTY_DOC, type EditorDoc } from '@/lib/editor-doc';
 import { editorExtensions } from '@/lib/editor-extensions';
 import {
    docHasPendingUploads,
+   isEmbeddableImageSrc,
    resolveUploadPlaceholders,
    settleUploads,
    validateEditorImage,
@@ -392,6 +393,15 @@ export function BlockEditor({
             upload: (file) => (onUploadRef.current ?? uploadViaApi)(file),
             // Tipo/tamanho que `POST /uploads` recusaria: avisa sem ler o arquivo.
             validate: validateEditorImage,
+            // Imagem colada de outro site: o CSP não a exibe — sai do conteúdo, com aviso.
+            isEmbeddableSrc: isEmbeddableImageSrc,
+            onImagesDropped: (count) =>
+               toast.warning(
+                  count === 1
+                     ? 'Uma imagem externa foi removida — baixe e arraste o arquivo para anexá-la'
+                     : `${count} imagens externas foram removidas — baixe e arraste os arquivos para anexá-las`,
+                  { id: 'editor-external-images' }
+               ),
             onUploadError: (error) => {
                const detail = error instanceof Error && error.message ? `: ${error.message}` : '';
                toast.error(`Falha ao enviar a imagem${detail}`);
