@@ -13,7 +13,6 @@ import { status } from './helpers/catalog-fixture';
 import { useDisplaySettingsStore } from '@/store/display-settings-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { DELETE_UNDO_MS } from '@/components/common/issues/delete-with-undo';
 
 const apiMocks = vi.hoisted(() => ({ update: vi.fn(), remove: vi.fn() }));
 const menuRenders = vi.hoisted(() => ({ ids: [] as (string | undefined)[] }));
@@ -107,7 +106,7 @@ describe('R7 menu de contexto único no nível da lista', () => {
       expect(await screen.findByText('Delete...')).toBeTruthy();
    });
 
-   // is#16: o DELETE só sai quando a janela de desfazer fecha; o erro segue avisado
+   // is#16: o DELETE só sai quando o toast de desfazer fecha; o erro segue avisado
    // pelo store (rollback + toast.error) e nunca há toast de sucesso antes da API.
    it('Is#13/is#16: excluir espera a janela de Undo e avisa a falha', async () => {
       apiMocks.remove.mockRejectedValue(new Error('x'));
@@ -120,8 +119,14 @@ describe('R7 menu de contexto único no nível da lista', () => {
       );
       expect(apiMocks.remove).not.toHaveBeenCalled();
 
+      // O commit segue o toast: fecha sozinho → DELETE.
+      const undoToast = vi
+         .mocked(toast)
+         .mock.calls.find((c) => (c[1] as { onAutoClose?: () => void })?.onAutoClose)?.[1] as {
+         onAutoClose: () => void;
+      };
       await act(async () => {
-         await new Promise((r) => setTimeout(r, DELETE_UNDO_MS + 20));
+         undoToast.onAutoClose();
       });
       await waitFor(() => expect(apiMocks.remove).toHaveBeenCalledWith('i2'));
       await waitFor(() => expect(toast.error).toHaveBeenCalled());

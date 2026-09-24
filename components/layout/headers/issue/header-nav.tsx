@@ -41,7 +41,7 @@ import {
    Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -78,8 +78,20 @@ export default function HeaderNav() {
    const subscribed = useWorkspaceStore((s) =>
       issue ? (s.me?.subscribedIssueIds.includes(issue.id) ?? false) : false
    );
+   const router = useRouter();
+   // Depois de excluir a issue aberta, sai dela (a página ficaria sobre uma issue apagada).
+   const leaveDeletedIssue = () => {
+      if (issue) router.push(`/${orgId}/team/${issue.teamId}/all`);
+   };
+   // Exclui pela issue do contexto: aberta por deep-link frio, ela não está no store.
+   const deleteCurrent = () => {
+      if (issue && deleteIssuesWithUndo([issue.id], { fallback: [issue] })) leaveDeletedIssue();
+   };
    // ⌘⌫ exclui a issue aberta (is#16).
-   useIssueDeleteShortcut(issue?.id);
+   useIssueDeleteShortcut(issue?.id, {
+      contextIssue: issue,
+      onContextDeleted: leaveDeletedIssue,
+   });
    const toggleSubscription = useWorkspaceStore((s) => s.toggleSubscription);
    const ensureSubscriptionKnown = useWorkspaceStore((s) => s.ensureSubscriptionKnown);
    // Issue fechada não vem nas assinaturas do bootstrap: consulta a dela uma vez.
@@ -242,7 +254,7 @@ export default function HeaderNav() {
                         {/* is#16: o detalhe não tinha como excluir; o Undo do toast é a rede. */}
                         <DropdownMenuItem
                            variant="destructive"
-                           onSelect={() => deleteIssuesWithUndo([issue.id])}
+                           onSelect={deleteCurrent}
                         >
                            <Trash2 className="size-4" />
                            Delete

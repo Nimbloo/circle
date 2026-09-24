@@ -9,7 +9,11 @@ import { priorities } from '@/data/priorities';
 import { seedCatalog, status } from './helpers/catalog-fixture';
 import { useIssuesStore } from '@/store/issues-store';
 import { useBulkSelectionStore } from '@/store/bulk-selection-store';
-import { DELETE_UNDO_MS, deleteIssuesWithUndo } from '@/components/common/issues/delete-with-undo';
+import {
+   DELETE_UNDO_CEILING_MS,
+   DELETE_UNDO_MS,
+   deleteIssuesWithUndo,
+} from '@/components/common/issues/delete-with-undo';
 import { useIssueDeleteShortcut } from '@/components/common/issues/use-issue-delete-shortcut';
 
 /**
@@ -53,22 +57,35 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-/** Última ação do toast com Undo. */
-function undoAction() {
-   const call = toastMock.mock.calls.at(-1)?.[1] as {
-      action?: { label: string; onClick: () => void };
-   };
-   return call?.action;
+interface UndoToastOptions {
+   duration?: number;
+   onAutoClose?: () => void;
+   onDismiss?: () => void;
+   action?: { label: string; onClick: () => void };
 }
 
+/** Opções do último toast com Undo. */
+const undoToast = () =>
+   toastMock.mock.calls.findLast((c) => (c[1] as UndoToastOptions | undefined)?.action)?.[1] as
+      | UndoToastOptions
+      | undefined;
+
+/** Última ação do toast com Undo. */
+function undoAction() {
+   return undoToast()?.action;
+}
+
+/** O sonner fecha o toast sozinho (timer esgotado, sem hover). */
+const autoClose = () => undoToast()?.onAutoClose?.();
+
 describe('excluir issue com Undo (is#16)', () => {
-   it('some da lista na hora e o DELETE só sai depois da janela de desfazer', async () => {
+   it('some da lista na hora e o DELETE só sai quando o toast fecha', async () => {
       act(() => void deleteIssuesWithUndo(['b']));
       expect(ids()).toEqual(['a', 'c']);
       expect(apiMocks.remove).not.toHaveBeenCalled();
 
       await act(async () => {
-         vi.advanceTimersByTime(DELETE_UNDO_MS + 10);
+         autoClose();
       });
       expect(apiMocks.remove).toHaveBeenCalledWith('b');
    });
@@ -80,7 +97,7 @@ describe('excluir issue com Undo (is#16)', () => {
       expect(ids()).toEqual(['a', 'b', 'c']);
 
       await act(async () => {
-         vi.advanceTimersByTime(DELETE_UNDO_MS + 10);
+         autoClose();
       });
       expect(apiMocks.remove).not.toHaveBeenCalled();
    });
@@ -94,7 +111,7 @@ describe('excluir issue com Undo (is#16)', () => {
       expect(ids()).toEqual(['a', 'c']); // não volta
 
       await act(async () => {
-         vi.advanceTimersByTime(DELETE_UNDO_MS + 10);
+         autoClose();
       });
       expect(apiMocks.remove).not.toHaveBeenCalled(); // sem DELETE inútil (404)
    });
@@ -103,7 +120,7 @@ describe('excluir issue com Undo (is#16)', () => {
       apiMocks.remove.mockRejectedValueOnce(new Error('boom'));
       act(() => void deleteIssuesWithUndo(['b']));
       await act(async () => {
-         vi.advanceTimersByTime(DELETE_UNDO_MS + 10);
+         autoClose();
          await Promise.resolve();
          await Promise.resolve();
       });
@@ -117,7 +134,7 @@ describe('excluir issue com Undo (is#16)', () => {
       );
       act(() => void deleteIssuesWithUndo(['b']));
       await act(async () => {
-         vi.advanceTimersByTime(DELETE_UNDO_MS + 10);
+         autoClose();
       });
       expect(apiMocks.remove).toHaveBeenCalledWith('b');
       act(() => useIssuesStore.getState().removeRemote('b'));
@@ -135,6 +152,65 @@ describe('excluir issue com Undo (is#16)', () => {
       expect(apiMocks.remove).not.toHaveBeenCalled();
       act(() => void window.dispatchEvent(new Event('pagehide')));
       expect(apiMocks.remove).toHaveBeenCalledWith('b');
+   });
+
+   it('toast pausado (hover) passa dos 6 s e o Undo ainda desfaz', async () => {
+      act(() => void deleteIssuesWithUndo(['b']));
+      await act(async () => {
+         vi.advanceTimersByTime(DELETE_UNDO_MS * 3);
+      });
+      expect(apiMocks.remove).not.toHaveBeenCalled();
+      act(() => undoAction()?.onClick());
+      expect(ids()).toEqual(['a', 'b', 'c']);
+      act(() => autoClose());
+      expect(apiMocks.remove).not.toHaveBeenCalled();
+   });
+
+   it('dispensar o toast (X/swipe) envia o DELETE', () => {
+      act(() => void deleteIssuesWithUndo(['b']));
+      act(() => undoToast()?.onDismiss?.());
+      expect(apiMocks.remove).toHaveBeenCalledWith('b');
+   });
+
+   it('teto de segurança envia o DELETE se o toast nunca fechar', async () => {
+      act(() => void deleteIssuesWithUndo(['b']));
+      await act(async () => {
+         vi.advanceTimersByTime(DELETE_UNDO_CEILING_MS + 10);
+      });
+      expect(apiMocks.remove).toHaveBeenCalledTimes(1);
+   });
+
+   it('Undo depois do DELETE enviado avisa que a issue já foi excluída', async () => {
+      act(() => void deleteIssuesWithUndo(['b']));
+      act(() => void window.dispatchEvent(new Event('pagehide')));
+      const undo = undoAction();
+      toastMock.mockClear();
+      act(() => undo?.onClick());
+      expect(toastMock).toHaveBeenCalledWith('Issue já foi excluída');
+      expect(ids()).toEqual(['a', 'c']);
+   });
+
+   it('issue fora do store (deep-link frio) é excluída pela issue do contexto', async () => {
+      const cold = make('z');
+      expect(deleteIssuesWithUndo(['z'], { fallback: [cold] })).toBe(true);
+      expect(toastMock).toHaveBeenCalledWith('ENG-z deleted', expect.anything());
+      await act(async () => {
+         autoClose();
+      });
+      expect(apiMocks.remove).toHaveBeenCalledWith('z');
+   });
+
+   it('Undo da issue fria cancela o DELETE sem injetá-la na lista', async () => {
+      deleteIssuesWithUndo(['z'], { fallback: [make('z')] });
+      act(() => undoAction()?.onClick());
+      act(() => autoClose());
+      expect(apiMocks.remove).not.toHaveBeenCalled();
+      expect(ids()).toEqual(['a', 'b', 'c']);
+   });
+
+   it('sem issue no store nem no contexto não faz nada', () => {
+      expect(deleteIssuesWithUndo(['z'])).toBe(false);
+      expect(toastMock).not.toHaveBeenCalled();
    });
 
    it('o toast dura exatamente a janela de desfazer', () => {
