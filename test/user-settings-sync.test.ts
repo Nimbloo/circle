@@ -131,4 +131,18 @@ describe('user-settings-sync (layout)', () => {
       expect(Object.keys(body.layout.displayByView as object)).toEqual(['my-issues']);
       expect(body.layout.viewTypeByView).toEqual({ 'team/ENG/all': 'grid' });
    });
+
+   it('reload (evento/reconexão) com gravação local pendente não sobrescreve a edição', async () => {
+      const { reloadUserSettings } = await import('@/lib/user-settings-sync');
+      get.mockClear();
+      useViewTypeStore.getState().setViewType('inbox', 'grid'); // edição ainda no debounce
+      await reloadUserSettings();
+      expect(get).not.toHaveBeenCalled();
+      expect(useViewTypeStore.getState().viewTypeByView.inbox).toBe('grid');
+
+      await vi.advanceTimersByTimeAsync(900); // salvou: agora o reload volta a ler
+      get.mockResolvedValueOnce({ layout: serverLayout });
+      await reloadUserSettings();
+      expect(get).toHaveBeenCalledTimes(1);
+   });
 });

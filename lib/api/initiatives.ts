@@ -151,6 +151,27 @@ export async function publishInitiativeRollups(
    for (const id of ids) publish({ entity: 'initiative', action: 'updated', id });
 }
 
+/**
+ * `project updated` para os projetos (des)vinculados, cada um com o `teamId` DELE: sem
+ * o time, o convidado recebia o evento redigido e re-hidratava o workspace inteiro em
+ * vez de aplicar só o projeto. Chamar depois do commit.
+ */
+async function publishProjectsTouched(db: Db, projectIds: readonly string[]): Promise<void> {
+   if (projectIds.length === 0) return;
+   const rows = await db
+      .select({ id: projectT.id, teamId: projectT.teamId })
+      .from(projectT)
+      .where(inArray(projectT.id, [...projectIds]));
+   const teamById = new Map(rows.map((r) => [r.id, r.teamId]));
+   for (const projectId of projectIds)
+      publish({
+         entity: 'project',
+         action: 'updated',
+         id: projectId,
+         teamId: teamById.get(projectId),
+      });
+}
+
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 /**
@@ -419,8 +440,7 @@ export async function createInitiative(
       former = await linkProjects(tx, id, projectIds);
    });
    publish({ entity: 'initiative', action: 'created', id });
-   for (const projectId of projectIds)
-      publish({ entity: 'project', action: 'updated', id: projectId });
+   await publishProjectsTouched(db, projectIds);
    await publishInitiativeRollups(db, [input.parentId, ...former]);
    return (await getInitiative(db, id))!;
 }
@@ -569,8 +589,7 @@ export async function updateInitiative(
       }
    });
    publish({ entity: 'initiative', action: 'updated', id });
-   for (const projectId of touchedProjects)
-      publish({ entity: 'project', action: 'updated', id: projectId });
+   await publishProjectsTouched(db, touchedProjects);
    // Rollup: ancestrais desta, as que perderam projeto e a mãe antiga (se trocou de pai).
    await publishInitiativeRollups(db, [
       ...(await initiativeAncestorIds(db, id)),
@@ -621,7 +640,7 @@ export async function listInitiativeActivity(
 export async function deleteInitiative(db: Db, id: string): Promise<boolean> {
    const existing = await db.select({ id: initT.id }).from(initT).where(eq(initT.id, id)).limit(1);
    if (existing.length === 0) return false;
-   await db.transaction(async (tx) => {
+   const reparented = await db.transaction(async (tx) => {
       // Sub-initiatives (#100): as filhas sobem pro avô — o FK self-referente não
       // aceita pai inexistente.
       const [row] = await tx
@@ -629,16 +648,24 @@ export async function deleteInitiative(db: Db, id: string): Promise<boolean> {
          .from(initT)
          .where(eq(initT.id, id))
          .limit(1);
-      await tx
+      const children = await tx
          .update(initT)
          .set({ parentId: row?.parentId ?? null })
-         .where(eq(initT.parentId, id));
+         .where(eq(initT.parentId, id))
+         .returning({ id: initT.id });
       await tx.delete(initiativeProject).where(eq(initiativeProject.initiativeId, id));
       await tx.delete(initiativeLabel).where(eq(initiativeLabel.initiativeId, id));
       // project.initiativeId é RESTRICT e nullable: desvincula os projetos antes de deletar.
       await tx.update(projectT).set({ initiativeId: null }).where(eq(projectT.initiativeId, id));
       await tx.delete(initT).where(eq(initT.id, id));
+      return { parentId: row?.parentId ?? null, childIds: children.map((c) => c.id) };
    });
    publish({ entity: 'initiative', action: 'deleted', id });
+   // As filhas mudaram de pai (subiram pro avô): sem o evento, a árvore dos outros
+   // clientes seguia pendurada numa initiative que não existe mais. O avô ganhou
+   // filhas e perdeu a subárvore apagada — o rollup dele (e dos ancestrais) mudou.
+   for (const childId of reparented.childIds)
+      publish({ entity: 'initiative', action: 'updated', id: childId });
+   await publishInitiativeRollups(db, [reparented.parentId]);
    return true;
 }
