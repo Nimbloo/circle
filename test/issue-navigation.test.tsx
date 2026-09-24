@@ -176,4 +176,30 @@ describe('lista publica a ordem visível e aceita J/K', () => {
       });
       expect(clicked).toEqual(['/nimbloo/issue/CORE-1']);
    });
+
+   it('Enter num botão focado ativa o botão, não abre a issue do cursor', () => {
+      const issues = [make(1), make(2)];
+      useIssuesStore.setState({ issues });
+      render(
+         <>
+            <button type="button">Display</button>
+            <GroupedIssuesView
+               issues={issues}
+               totalIssues={issues}
+               statuses={status}
+               isViewTypeGrid={false}
+            />
+         </>
+      );
+      act(() => {
+         fireEvent.keyDown(window, { key: 'j' });
+      });
+      expect(document.querySelector('[data-active="true"]')).toBeTruthy();
+      const button = screen.getByRole('button', { name: 'Display' });
+      button.focus();
+      act(() => {
+         fireEvent.keyDown(button, { key: 'Enter' });
+      });
+      expect(clicked).toEqual([]);
+   });
 });

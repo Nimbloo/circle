@@ -134,6 +134,10 @@ function SubGroupHeader({
    );
 }
 
+/** Alvos que tratam o próprio Enter (o cursor J/K não os atropela). */
+const INTERACTIVE_SELECTOR =
+   'a[href], button, [role="button"], [role="combobox"], [role="menuitem"], [role="tab"], [role="checkbox"], [role="switch"], [role="option"]';
+
 /**
  * List view VIRTUALIZADA (estilo Linear): achata [header, ...rows, header, ...] numa
  * lista única e só renderiza as linhas VISÍVEIS (@tanstack/react-virtual). Com centenas/
@@ -270,6 +274,8 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
       const onKey = (e: KeyboardEvent) => {
          if (e.key === 'Enter') {
             if (!activeKeyRef.current || isKeyNavBlocked(e)) return;
+            // Foco num controle (botão, link, seletor): o Enter é dele, não do cursor J/K.
+            if ((e.target as Element | null)?.closest?.(INTERACTIVE_SELECTOR)) return;
             const link = parentRef.current?.querySelector<HTMLAnchorElement>(
                '[data-active="true"] a[href]'
             );
