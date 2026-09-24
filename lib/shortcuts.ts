@@ -78,6 +78,13 @@ export const SHORTCUTS: readonly Shortcut[] = [
       keys: ['mod+b'],
    },
    {
+      id: 'account.logout',
+      label: 'Log out',
+      group: 'General',
+      scope: 'global',
+      keys: ['alt+shift+q'],
+   },
+   {
       id: 'agent.ask',
       label: 'Ask the Agent (in the command menu)',
       group: 'General',
@@ -391,6 +398,9 @@ function matchesCombo(combo: Combo, e: KeyboardEvent): boolean {
    if (combo.shift !== e.shiftKey) return false;
    if (CODE_OF[combo.key]) return e.code === CODE_OF[combo.key] || e.key === LABEL_OF[combo.key];
    if (KEY_OF[combo.key]) return e.key === KEY_OF[combo.key];
+   // Com Alt, o `key` de uma letra vira símbolo no Mac (⌥⇧Q = "Œ"): casa pelo `code` físico.
+   if (combo.alt && /^[a-z]$/.test(combo.key) && e.code === `Key${combo.key.toUpperCase()}`)
+      return true;
    return e.key.toLowerCase() === combo.key;
 }
 

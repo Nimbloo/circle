@@ -425,6 +425,7 @@ function describe(rule: TeamAutomationDto): string {
 export default function TeamWorkflowsSettings({ teamId }: { teamId: string }) {
    const teams = useWorkspaceStore((s) => s.teams);
    const me = useWorkspaceStore((s) => s.me);
+   const loaded = useWorkspaceStore((s) => s.loaded);
    const priorities = usePriorities();
    const team = teams.find((t) => t.id === teamId);
    const isAdmin = me?.admin ?? false;
@@ -520,7 +521,11 @@ export default function TeamWorkflowsSettings({ teamId }: { teamId: string }) {
       }
    };
 
-   if (!team) return <SettingsShell title="Team not found">{null}</SettingsShell>;
+   if (!team) {
+      // Deep-link frio: "not found" só depois que o workspace hidratou.
+      if (!loaded) return <LoadingArea rows={8} className="h-full" />;
+      return <SettingsShell title="Team not found">{null}</SettingsShell>;
+   }
 
    const hoursOf = (priorityId: string) =>
       slas.find((s) => s.priorityId === priorityId)?.hours ?? null;

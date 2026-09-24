@@ -15,6 +15,8 @@ vi.mock('next/navigation', () => ({
    useRouter: () => ({ push: nav.push }),
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+const logOut = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/logout', () => ({ logOut }));
 
 import { KeyboardShortcuts } from '@/components/layout/keyboard-shortcuts';
 import { ISSUE_SHORTCUT_EVENT, OPEN_COMMAND_EVENT } from '@/lib/shortcuts';
@@ -132,5 +134,34 @@ describe('teclas da issue', () => {
       render(<KeyboardShortcuts />);
       press('i');
       expect(updateIssueAssignee).toHaveBeenCalledWith('a', meUser);
+   });
+});
+
+describe('⌥⇧Q sai da conta (paridade Linear)', () => {
+   beforeEach(() => logOut.mockReset());
+
+   it('dispara o mesmo logout do menu, também no Mac (key vira "Œ", o code é KeyQ)', () => {
+      render(<KeyboardShortcuts />);
+      press('Œ', { code: 'KeyQ', altKey: true, shiftKey: true });
+      expect(logOut).toHaveBeenCalledTimes(1);
+   });
+
+   it('não dispara digitando num input nem sem o Shift', () => {
+      render(
+         <>
+            <KeyboardShortcuts />
+            <input aria-label="campo" />
+         </>
+      );
+      act(() => {
+         fireEvent.keyDown(screen.getByLabelText('campo'), {
+            key: 'Œ',
+            code: 'KeyQ',
+            altKey: true,
+            shiftKey: true,
+         });
+      });
+      press('œ', { code: 'KeyQ', altKey: true });
+      expect(logOut).not.toHaveBeenCalled();
    });
 });

@@ -49,6 +49,8 @@ const NotificationsSchema = z
       // esta chave e o backend (notify.ts) a lê — precisa estar no schema senão o
       // .strict() rejeita TODO o save de settings com 400.
       slackNotifications: z.boolean().optional(),
+      // LEGADAS: toggles de "Updates from Nimbloo" removidos da UI (sem efeito). Seguem
+      // aceitas para não recusar com 400 o save de blobs antigos.
       showUpdatesInSidebar: z.boolean().optional(),
       changelogNewsletter: z.boolean().optional(),
       marketing: z.boolean().optional(),

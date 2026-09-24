@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 import { ChevronsUpDown, Search, SquarePen } from 'lucide-react';
-import { signOut } from 'next-auth/react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
@@ -21,6 +20,7 @@ import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui
 import { NimblooLogo } from '@/components/brand/nimbloo-logo';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
+import { logOut } from '@/lib/logout';
 import { ThemeToggle } from '../theme-toggle';
 import { Button } from '@/components/ui/button';
 
@@ -117,7 +117,7 @@ export function OrgSwitcher() {
                      <ThemeToggle />
                   </div>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={() => signOut({ callbackUrl: '/login' })}>
+                  <DropdownMenuItem onSelect={() => void logOut()}>
                      Log out
                      <DropdownMenuShortcut>⌥⇧Q</DropdownMenuShortcut>
                   </DropdownMenuItem>

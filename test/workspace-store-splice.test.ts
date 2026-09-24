@@ -296,6 +296,23 @@ describe('workspace-store — splice por entidade', () => {
          expectUntouched(before, ['teams', 'users', 'me', 'projects', 'cycles', 'initiatives']);
       });
 
+      it('removeTeamLocal reancora os sub-times no avô, como o servidor', () => {
+         useWorkspaceStore.setState({
+            teams: [
+               { ...team('ROOT', []), parentId: null },
+               { ...team('MID', []), parentId: 'ROOT' },
+               { ...team('LEAF', []), parentId: 'MID' },
+               { ...team('SOLO', []), parentId: 'MID' },
+            ],
+         });
+         st().removeTeamLocal('MID');
+         expect(st().teams.map((t) => [t.id, t.parentId])).toEqual([
+            ['ROOT', null],
+            ['LEAF', 'ROOT'],
+            ['SOLO', 'ROOT'],
+         ]);
+      });
+
       it('removeTeamLocal poda projetos, ciclos, views e issues do time (cascata)', () => {
          useWorkspaceStore.setState({
             projects: [...st().projects, project('p3', 'OPS')],

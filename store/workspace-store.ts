@@ -426,8 +426,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       for (const v of s0.views) if (v.teamId === id) touch('view', v.id);
       useIssuesStore.getState().dropTeam(id, projectIds, cycleIds);
       const goneProjects = new Set(projectIds);
+      // Sub-times vão para o avô, como no servidor (`deleteTeam`), que não emite evento
+      // por filho: sem isto ficavam com o pai morto (raiz na sidebar) até recarregar.
+      const grandparent = s0.teams.find((t) => t.id === id)?.parentId ?? null;
+      for (const t of s0.teams) if (t.parentId === id) touch('team', t.id);
       set((s) => ({
-         teams: s.teams.filter((t) => t.id !== id),
+         teams: s.teams
+            .filter((t) => t.id !== id)
+            .map((t) => (t.parentId === id ? { ...t, parentId: grandparent } : t)),
          projects: projectIds.length ? s.projects.filter((p) => p.teamId !== id) : s.projects,
          cycles: cycleIds.length ? s.cycles.filter((c) => c.teamId !== id) : s.cycles,
          views: s.views.some((v) => v.teamId === id)

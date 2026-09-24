@@ -5,7 +5,7 @@ import { useNotificationPrefsStore } from '@/store/notification-prefs-store';
 import { Mail, Slack } from 'lucide-react';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
 
-/** Personal notification settings (push channels + product updates). */
+/** Personal notification settings: os canais que o servidor honra (`notify.ts`). */
 export default function AccountNotifications() {
    const prefs = useNotificationPrefsStore();
    return (
@@ -36,78 +36,6 @@ export default function AccountNotifications() {
                         aria-label="Slack notifications"
                         checked={prefs.slackNotifications}
                         onCheckedChange={(v) => prefs.setPref('slackNotifications', v)}
-                     />
-                  }
-               />
-            </SettingsCard>
-         </SettingsSection>
-
-         <SettingsSection
-            title="Updates from Nimbloo"
-            description="Subscribe to product announcements and important changes from the Nimbloo team"
-         >
-            <h3 className="text-sm font-medium mt-2">Changelog</h3>
-            <SettingsCard>
-               <SettingsRow
-                  title="Show updates in sidebar"
-                  description="Highlight new features and improvements in the app sidebar"
-                  trailing={
-                     <Switch
-                        aria-label="Show updates in sidebar"
-                        checked={prefs.showUpdatesInSidebar}
-                        onCheckedChange={(v) => prefs.setPref('showUpdatesInSidebar', v)}
-                     />
-                  }
-               />
-               <SettingsRow
-                  title="Changelog newsletter"
-                  description="Receive an email twice a month highlighting new features and improvements"
-                  trailing={
-                     <Switch
-                        aria-label="Changelog newsletter"
-                        checked={prefs.changelogNewsletter}
-                        onCheckedChange={(v) => prefs.setPref('changelogNewsletter', v)}
-                     />
-                  }
-               />
-            </SettingsCard>
-
-            <h3 className="text-sm font-medium mt-2">Marketing</h3>
-            <SettingsCard>
-               <SettingsRow
-                  title="Marketing and onboarding"
-                  description="Occasional updates to help you get the most out of Nimbloo"
-                  trailing={
-                     <Switch
-                        aria-label="Marketing and onboarding"
-                        checked={prefs.marketing}
-                        onCheckedChange={(v) => prefs.setPref('marketing', v)}
-                     />
-                  }
-               />
-            </SettingsCard>
-
-            <h3 className="text-sm font-medium mt-2">Other updates</h3>
-            <SettingsCard>
-               <SettingsRow
-                  title="Invite accepted"
-                  description="Receive an email when an invite you sent is accepted"
-                  trailing={
-                     <Switch
-                        aria-label="Invite accepted"
-                        checked={prefs.inviteAccepted}
-                        onCheckedChange={(v) => prefs.setPref('inviteAccepted', v)}
-                     />
-                  }
-               />
-               <SettingsRow
-                  title="Privacy and legal updates"
-                  description="Important updates about terms of service or privacy policy changes"
-                  trailing={
-                     <Switch
-                        aria-label="Privacy and legal updates"
-                        checked={prefs.privacyLegal}
-                        onCheckedChange={(v) => prefs.setPref('privacyLegal', v)}
                      />
                   }
                />
