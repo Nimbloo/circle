@@ -193,8 +193,56 @@ describe('thread de comentários do review (Overview)', () => {
          </Harness>
       );
       await user.click(screen.getByRole('button', { name: 'Delete comment' }));
+      await user.click(await screen.findByRole('button', { name: 'Delete' }));
       await waitFor(() => expect(screen.getByText('keep me')).toBeTruthy());
       expect(apiMocks.removeComment).toHaveBeenCalledWith('x/y#7', 'c1');
+   });
+
+   it('excluir pede confirmação (como no feed da issue); cancelar não remove', async () => {
+      const user = userEvent.setup();
+      apiMocks.removeComment.mockResolvedValue(undefined);
+      render(
+         <Harness initial={[comment({ id: 'c1', body: 'keep me' })]}>
+            {(cs, handle) => <ReviewCommentsSection review={review(cs)} handle={handle} />}
+         </Harness>
+      );
+      await user.click(screen.getByRole('button', { name: 'Delete comment' }));
+      expect(apiMocks.removeComment).not.toHaveBeenCalled();
+      await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+      expect(screen.getByText('keep me')).toBeTruthy();
+      expect(apiMocks.removeComment).not.toHaveBeenCalled();
+   });
+
+   it('composer fica readOnly (não disabled) durante o envio — o foco não se perde', async () => {
+      const user = userEvent.setup();
+      apiMocks.addComment.mockReturnValue(new Promise(() => {}));
+      render(
+         <Harness initial={[]}>
+            {(cs, handle) => <ReviewCommentsSection review={review(cs)} handle={handle} />}
+         </Harness>
+      );
+      const box = screen.getByRole('textbox', { name: 'Leave a comment' }) as HTMLTextAreaElement;
+      await user.type(box, 'Ship it');
+      await user.keyboard('{Control>}{Enter}{/Control}');
+      await waitFor(() => expect(box.readOnly).toBe(true));
+      expect(box.disabled).toBe(false);
+      expect(document.activeElement).toBe(box);
+   });
+
+   it('Escape na edição cancela sem propagar (não fecha o painel de fora)', async () => {
+      const user = userEvent.setup();
+      const outer = vi.fn();
+      render(
+         <div onKeyDown={(e) => e.key === 'Escape' && outer()}>
+            <Harness initial={[comment({ id: 'c1', body: 'texto' })]}>
+               {(cs, handle) => <ReviewCommentsSection review={review(cs)} handle={handle} />}
+            </Harness>
+         </div>
+      );
+      await user.click(screen.getByRole('button', { name: 'Edit comment' }));
+      await user.keyboard('{Escape}');
+      expect(screen.queryByRole('textbox', { name: 'Edit comment body' })).toBeNull();
+      expect(outer).not.toHaveBeenCalled();
    });
 });
 

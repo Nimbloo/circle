@@ -119,13 +119,19 @@ describe('card Suggested da triagem (#94)', () => {
    it('falha no Accept faz rollback (card volta) e avisa com toast de erro', async () => {
       const user = userEvent.setup();
       apiMocks.suggestion.mockResolvedValue(AI_SUGGESTION);
-      apiMocks.accept.mockRejectedValue(new Error('Sugestão já aplicada'));
+      apiMocks.accept.mockRejectedValue(
+         Object.assign(new Error('Sugestão já aplicada'), { status: 409 })
+      );
       render(<TriageSuggestionCard issueId="i1" />);
       await screen.findByText('Suggested');
 
       await user.click(screen.getByRole('button', { name: 'Accept' }));
 
-      await waitFor(() => expect(toastMocks.error).toHaveBeenCalledWith('Sugestão já aplicada'));
+      await waitFor(() =>
+         expect(toastMocks.error).toHaveBeenCalledWith(
+            'Falha ao aplicar a sugestão: Sugestão já aplicada'
+         )
+      );
       expect(toastMocks.success).not.toHaveBeenCalled();
       expect(screen.getByText('Suggested')).toBeTruthy();
    });

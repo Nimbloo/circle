@@ -10,6 +10,7 @@ import { Plus } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { errorReason } from '@/lib/error-reason';
 
 export function AddTeamMemberButton() {
    const { teamId } = useParams<{ orgId: string; teamId: string }>();
@@ -47,8 +48,8 @@ export function AddTeamMemberButton() {
          setQuery('');
          setOpen(false);
          toast.success(`${email} added to ${team.name}`);
-      } catch {
-         toast.error('Could not add the member');
+      } catch (e) {
+         toast.error(errorReason(e, 'Could not add the member'));
       } finally {
          setBusy(false);
       }

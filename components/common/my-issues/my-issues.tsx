@@ -28,6 +28,9 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { useEffect, useMemo, useState } from 'react';
 import { scopeMyIssues, useMyIssuesActiveIds, useMyIssuesTab } from './use-my-issues';
 import { SidePanelSlot } from '@/components/common/detail-side-panel';
+import { toast } from 'sonner';
+
+const SUBSCRIPTIONS_ERROR_TOAST = 'my-issues-subscriptions-error';
 
 /**
  * "My issues" body — the exact same machinery as the team issue views
@@ -54,17 +57,39 @@ export default function MyIssues() {
    // Aba "Subscribed": o bootstrap só traz as assinaturas de issues abertas; a lista
    // completa (com as fechadas) vem sob demanda e é unida às vivas do store.
    const [allSubscribed, setAllSubscribed] = useState<readonly string[]>([]);
+   const [subscriptionsAttempt, setSubscriptionsAttempt] = useState(0);
    useEffect(() => {
       if (tab !== 'subscribed') return;
       let alive = true;
       api.me
          .subscriptions()
-         .then(({ issueIds }) => alive && setAllSubscribed(issueIds))
-         .catch(() => {});
+         .then(({ issueIds }) => {
+            if (!alive) return;
+            setAllSubscribed(issueIds);
+            toast.dismiss(SUBSCRIPTIONS_ERROR_TOAST);
+         })
+         // Falha calada mostrava só as abertas como se fosse tudo: avisa, com retry.
+         .catch(() => {
+            if (!alive) return;
+            toast.error('Não foi possível carregar as assinaturas de issues fechadas', {
+               id: SUBSCRIPTIONS_ERROR_TOAST,
+               action: {
+                  label: 'Tentar novamente',
+                  onClick: () => setSubscriptionsAttempt((n) => n + 1),
+               },
+            });
+         });
       return () => {
          alive = false;
       };
-   }, [tab, subscribedIssueIds]);
+   }, [tab, subscribedIssueIds, subscriptionsAttempt]);
+   // O Retry do toast só busca nesta aba: sair dela (ou da tela) dispensa o aviso.
+   useEffect(() => {
+      if (tab !== 'subscribed') return;
+      return () => {
+         toast.dismiss(SUBSCRIPTIONS_ERROR_TOAST);
+      };
+   }, [tab]);
    const subscribedIds = useMemo(() => {
       const live = new Set(subscribedIssueIds ?? []);
       return new Set([...(tab === 'subscribed' ? allSubscribed : []), ...live]);

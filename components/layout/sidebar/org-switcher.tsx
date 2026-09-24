@@ -88,7 +88,7 @@ export function OrgSwitcher() {
                   <DropdownMenuLabel className="flex items-center gap-2 font-normal">
                      <Avatar className="size-7 rounded-md">
                         <AvatarImage src={me?.avatarUrl ?? undefined} alt={name} />
-                        <AvatarFallback delayMs={500} className="rounded-md text-xs">
+                        <AvatarFallback className="rounded-md text-xs">
                            {name.charAt(0).toUpperCase()}
                         </AvatarFallback>
                      </Avatar>

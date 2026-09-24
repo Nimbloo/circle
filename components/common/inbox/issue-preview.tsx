@@ -6,7 +6,6 @@ import {
    DetailSidePanelTrigger,
 } from '@/components/common/detail-side-panel';
 import { userDisplayName } from '@/lib/display-name';
-import { IssueDetailView } from '@/components/common/issues/details/issue-details';
 import { LoadingArea } from '@/components/common/loading-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -26,6 +25,14 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { NotificationBox } from './icons/motification-box';
 import type { ComponentType } from 'react';
+import dynamic from 'next/dynamic';
+
+// Code-split: o detalhe da issue traz o editor de blocos (Tiptap) — só carrega quando uma
+// notificação é aberta, fora do first load de /inbox.
+const IssueDetailView = dynamic(
+   () => import('@/components/common/issues/details/issue-details').then((m) => m.IssueDetailView),
+   { ssr: false, loading: () => <LoadingArea className="h-full" /> }
+);
 
 /** Notificação do preview: a da linha + o status com ícone (quando a issue é conhecida). */
 type InboxPreviewItem = Omit<InboxLineItem, 'status'> & {

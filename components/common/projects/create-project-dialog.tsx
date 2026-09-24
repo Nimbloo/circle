@@ -1,6 +1,5 @@
 'use client';
 
-import { BlockEditor } from '@/components/common/editor/block-editor';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,7 +14,7 @@ import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { api } from '@/lib/client';
 import type { ProjectTemplateDto } from '@/lib/api/project-templates';
-import { EMPTY_DOC, type EditorDoc } from '@/lib/editor-doc';
+import type { EditorDoc } from '@/lib/editor-doc';
 import { cn } from '@/lib/utils';
 import {
    useLabels,
@@ -41,6 +40,9 @@ import type { ComponentType, CSSProperties } from 'react';
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 import { persistNewProject, type CreateProgress } from './create-project-persist';
 import { toast } from 'sonner';
+import dynamic from 'next/dynamic';
+import { LoadingArea } from '@/components/common/loading-area';
+import { errorReason } from '@/lib/error-reason';
 import { labelColor } from '@/components/common/palette';
 import { InitiativeGlyph } from '@/components/common/initiatives/initiative-glyph';
 
@@ -78,6 +80,13 @@ const Chip = forwardRef<
       </button>
    );
 });
+
+// Code-split: o editor de blocos (Tiptap) só carrega quando o dialog abre — o botão fica
+// no header de /projects e não deve trazer o editor para o first load da rota.
+const BlockEditor = dynamic(
+   () => import('@/components/common/editor/block-editor').then((m) => m.BlockEditor),
+   { ssr: false, loading: () => <LoadingArea rows={1} size="sm" className="justify-start" /> }
+);
 
 /**
  * Modal de criação de projeto no padrão Linear: breadcrumb de time + título grande
@@ -231,8 +240,8 @@ export function CreateProjectButton() {
          setOpen(false);
          toast.success('Project created');
          reset();
-      } catch {
-         toast.error('Could not create the project');
+      } catch (e) {
+         toast.error(errorReason(e, 'Could not create the project'));
       } finally {
          setBusy(false);
       }
@@ -630,7 +639,7 @@ export function CreateProjectButton() {
                   <BlockEditor
                      key={editorKey}
                      variant="compact"
-                     doc={EMPTY_DOC}
+                     doc={null}
                      placeholder="Write a description, a project brief, or collect ideas…"
                      onChange={setDescriptionDoc}
                   />

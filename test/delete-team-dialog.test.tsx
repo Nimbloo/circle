@@ -38,6 +38,8 @@ vi.mock('@/store/workspace-store', () => ({
 }));
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock('sonner', () => ({ toast }));
+// Destino resolvido no cliente (regra em `test/landing.test.ts`).
+vi.mock('@/lib/landing', () => ({ landingHref: (orgId: string) => `/${orgId}/team/NEXT/all` }));
 
 const { DeleteTeamDialog } = await import('@/components/common/teams/delete-team-dialog');
 const { ApiError } = await import('@/lib/client');
@@ -134,8 +136,8 @@ describe('DeleteTeamDialog', () => {
       await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Time excluído'));
       expect(store.removeTeamLocal).toHaveBeenCalledWith('DOOM');
       expect(onOpenChange).toHaveBeenCalledWith(false);
-      // A tela atual era do time: sai dela.
-      expect(nav.push).toHaveBeenCalledWith('/acme');
+      // A tela atual era do time: sai dela direto para a landing (não `/acme` + redirect).
+      expect(nav.push).toHaveBeenCalledWith('/acme/team/NEXT/all');
    });
 
    it('fora de uma tela do time, não navega', async () => {
@@ -167,8 +169,26 @@ describe('DeleteTeamDialog', () => {
       await user.type(screen.getByLabelText(/para confirmar/), 'Doom');
       await user.click(confirmButton());
 
-      await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Apenas admin'));
+      await waitFor(() =>
+         expect(toast.error).toHaveBeenCalledWith('Não foi possível excluir o time: Apenas admin')
+      );
       expect(toast.success).not.toHaveBeenCalled();
       expect(store.removeTeamLocal).not.toHaveBeenCalled();
+   });
+
+   // Auditoria (item 11): erro do impacto num <p> sem role nem retry — o botão de excluir
+   // ficava desabilitado para sempre.
+   it('falha ao verificar o impacto: alerta com retry que destrava a exclusão', async () => {
+      const user = userEvent.setup();
+      apiMocks.deletionImpact.mockRejectedValueOnce(new ApiError(500, 'Internal Server Error'));
+      renderDialog();
+      const alert = await screen.findByRole('alert');
+      expect(alert.textContent).toMatch(/Não foi possível verificar o conteúdo do time/);
+      expect(alert.textContent).not.toMatch(/Internal Server Error/);
+
+      await user.click(screen.getByRole('button', { name: 'Tentar novamente' }));
+      await screen.findByRole('list', { name: 'Conteúdo que será excluído' });
+      await user.type(screen.getByLabelText(/para confirmar/), 'Doom');
+      expect((confirmButton() as HTMLButtonElement).disabled).toBe(false);
    });
 });

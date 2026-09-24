@@ -1,10 +1,12 @@
 'use client';
 
+import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/client';
+import { errorReason } from '@/lib/error-reason';
 import { SettingsCard } from './shared';
 import type { SlackConfigDto } from '@/lib/api/integrations/slack';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 const EVENTS: { key: keyof SlackConfigDto; label: string; hint: string }[] = [
@@ -20,17 +22,25 @@ const EVENTS: { key: keyof SlackConfigDto; label: string; hint: string }[] = [
  */
 export function SlackEventsConfig() {
    const [cfg, setCfg] = useState<SlackConfigDto | null>(null);
+   // Falha na carga era engolida e a seção sumia (`!cfg`): agora vira erro com retry.
+   const [loadFailed, setLoadFailed] = useState(false);
+   const alive = useRef(true);
 
-   useEffect(() => {
-      let alive = true;
+   const load = useCallback(() => {
+      setLoadFailed(false);
       void api.integrations
          .slackConfig()
-         .then((c) => alive && setCfg(c))
-         .catch(() => {});
-      return () => {
-         alive = false;
-      };
+         .then((c) => alive.current && setCfg(c))
+         .catch(() => alive.current && setLoadFailed(true));
    }, []);
+
+   useEffect(() => {
+      alive.current = true;
+      load();
+      return () => {
+         alive.current = false;
+      };
+   }, [load]);
 
    // Otimista e reconciliado POR CAMPO (Ad#36): a resposta ou o revert de um toggle não
    // desfaz outro toggle em voo.
@@ -41,12 +51,32 @@ export function SlackEventsConfig() {
       try {
          const next = await api.integrations.updateSlackConfig({ [key]: value });
          setCfg((c) => (c ? { ...c, [key]: next[key] } : next));
-      } catch {
+      } catch (err) {
          // Só reverte se o campo ainda mostra o valor otimista deste toggle.
          setCfg((c) => (c && c[key] === value ? { ...c, [key]: prev } : c));
-         toast.error('Só admin pode mudar as notificações do Slack');
+         // Só o 403 é "não é admin"; o resto (5xx, rede, 4xx) mostra o motivo real.
+         toast.error(
+            (err as { status?: unknown })?.status === 403
+               ? 'Só admin pode mudar as notificações do Slack'
+               : errorReason(err, 'Não foi possível salvar as notificações do Slack')
+         );
       }
    };
+
+   if (loadFailed)
+      return (
+         <SettingsCard>
+            <div
+               role="alert"
+               className="flex flex-col items-center gap-2 px-4 py-6 text-sm text-muted-foreground"
+            >
+               Não foi possível carregar as notificações do Slack.
+               <Button size="sm" variant="outline" onClick={load}>
+                  Tentar novamente
+               </Button>
+            </div>
+         </SettingsCard>
+      );
 
    if (!cfg) return null;
 

@@ -19,11 +19,12 @@ import {
    SelectTrigger,
    SelectValue,
 } from '@/components/ui/select';
-import { api, ApiError } from '@/lib/client';
+import { api } from '@/lib/client';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Plus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { errorReason } from '@/lib/error-reason';
 
 /**
  * Cria um cycle via api.cycles.create e aplica o DTO no workspace.
@@ -65,7 +66,7 @@ export function CreateCycleButton({ defaultTeamId }: { defaultTeamId?: string })
          setOpen(false);
          toast.success('Cycle created');
       } catch (e) {
-         toast.error(e instanceof ApiError ? e.message : 'Could not create the cycle');
+         toast.error(errorReason(e, 'Could not create the cycle'));
       } finally {
          creatingRef.current = false;
          setBusy(false);

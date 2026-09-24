@@ -13,7 +13,6 @@ import { status } from './helpers/catalog-fixture';
 import { useDisplaySettingsStore } from '@/store/display-settings-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { DELETE_UNDO_MS } from '@/components/common/issues/delete-with-undo';
 
 const apiMocks = vi.hoisted(() => ({ update: vi.fn(), remove: vi.fn() }));
 const menuRenders = vi.hoisted(() => ({ ids: [] as (string | undefined)[] }));
@@ -107,24 +106,51 @@ describe('R7 menu de contexto único no nível da lista', () => {
       expect(await screen.findByText('Delete...')).toBeTruthy();
    });
 
-   // is#16: o DELETE só sai quando a janela de desfazer fecha; o erro segue avisado
+   // is#16: o DELETE só sai quando o toast de desfazer fecha; o erro segue avisado
    // pelo store (rollback + toast.error) e nunca há toast de sucesso antes da API.
    it('Is#13/is#16: excluir espera a janela de Undo e avisa a falha', async () => {
       apiMocks.remove.mockRejectedValue(new Error('x'));
       render(view());
       fireEvent.contextMenu(screen.getByText('Issue 2'));
       await userEvent.setup().click(await screen.findByText('Delete...'));
+      // Texto coerente com o Undo que vem logo depois (auditoria de toasts, item 2).
+      expect((await screen.findByRole('alertdialog')).textContent).not.toMatch(
+         /não pode ser desfeita|permanentemente/
+      );
       await userEvent.setup().click(await screen.findByRole('button', { name: 'Delete' }));
       await waitFor(() =>
          expect(useIssuesStore.getState().issues.map((i) => i.id)).toEqual(['i1', 'i3'])
       );
       expect(apiMocks.remove).not.toHaveBeenCalled();
 
+      // O commit segue o toast: fecha sozinho → DELETE.
+      const undoToast = vi
+         .mocked(toast)
+         .mock.calls.find((c) => (c[1] as { onAutoClose?: () => void })?.onAutoClose)?.[1] as {
+         onAutoClose: () => void;
+      };
       await act(async () => {
-         await new Promise((r) => setTimeout(r, DELETE_UNDO_MS + 20));
+         undoToast.onAutoClose();
       });
       await waitFor(() => expect(apiMocks.remove).toHaveBeenCalledWith('i2'));
       await waitFor(() => expect(toast.error).toHaveBeenCalled());
       expect(toast.success).not.toHaveBeenCalled();
+   });
+
+   // Auditoria de diálogos (15c): o diálogo nasce de um item do menu de contexto, que
+   // desmonta — ao cancelar, o foco caía no <body> em vez de voltar para a issue.
+   it('cancelar "Delete issue?" devolve o foco para a linha da issue', async () => {
+      render(view());
+      fireEvent.contextMenu(screen.getByText('Issue 2'));
+      await userEvent.setup().click(await screen.findByText('Delete...'));
+      await userEvent.setup().click(await screen.findByRole('button', { name: 'Cancel' }));
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+      await waitFor(() =>
+         expect(
+            (document.activeElement as HTMLElement | null)
+               ?.closest('[data-issue-id]')
+               ?.getAttribute('data-issue-id')
+         ).toBe('i2')
+      );
    });
 });

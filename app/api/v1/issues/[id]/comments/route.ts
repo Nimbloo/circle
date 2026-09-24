@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { COMMENT_MAX_LENGTH } from '@/lib/comment-limits';
 import { db } from '@/db';
 import { ok } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
@@ -10,7 +11,7 @@ export const dynamic = 'force-dynamic';
 type Params = { params: Promise<{ id: string }> };
 
 const CommentSchema = z.object({
-   body: z.string().min(1).max(10000),
+   body: z.string().min(1).max(COMMENT_MAX_LENGTH),
    parentId: z.string().min(1).nullable().optional(),
 });
 

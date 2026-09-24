@@ -37,7 +37,11 @@ const nextConfig: NextConfig = {
    ...(process.env.ANALYZE === 'true' ? { distDir: '.next-analyze' } : {}),
    devIndicators: false,
    // Vira o `release` do Sentry (`circle@X.Y.Z`), ligando o erro à versão da imagem.
-   env: { NEXT_PUBLIC_APP_VERSION: process.env.npm_package_version ?? 'dev' },
+   // CDN: o editor descarta imagem colada de outra origem que o `img-src` bloquearia.
+   env: {
+      NEXT_PUBLIC_APP_VERSION: process.env.npm_package_version ?? 'dev',
+      NEXT_PUBLIC_CIRCLE_CDN_URL: CDN,
+   },
    // Tree-shake barrels grandes (ícones/UI/charts) — só o que é usado entra no chunk.
    experimental: {
       optimizePackageImports: ['lucide-react', 'recharts'],
