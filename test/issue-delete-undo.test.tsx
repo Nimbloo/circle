@@ -256,4 +256,22 @@ describe('excluir issue com Undo (is#16)', () => {
       });
       expect(ids()).toEqual(['a', 'b', 'c']);
    });
+
+   it('com dialog/menu aberto o atalho não exclui o que está por baixo', () => {
+      function Host() {
+         useIssueDeleteShortcut('c');
+         return (
+            <div role="dialog" data-state="open">
+               <button>Salvar</button>
+            </div>
+         );
+      }
+      const { getByText } = render(<Host />);
+      act(() => useBulkSelectionStore.getState().set(['a']));
+      act(() => {
+         fireEvent.keyDown(getByText('Salvar'), { key: 'Backspace', metaKey: true });
+      });
+      expect(ids()).toEqual(['a', 'b', 'c']);
+      expect(useBulkSelectionStore.getState().selected.size).toBe(1);
+   });
 });
