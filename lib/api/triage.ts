@@ -526,7 +526,8 @@ export interface AcceptTriageInput {
 
 /**
  * Move a issue de time: `team_id` + identifier NOVO (a numeração é por time). Só é
- * chamado quando o time sugerido difere do atual.
+ * chamado quando o time sugerido difere do atual. Projeto (e a milestone dele), ciclo e
+ * pai são do time ANTIGO — o resto do sistema recusa esse vínculo cruzado, então saem.
  */
 async function moveIssueToTeam(db: Db | Tx, issueId: string, teamId: string): Promise<string> {
    const [seq] = await db
@@ -536,7 +537,18 @@ async function moveIssueToTeam(db: Db | Tx, issueId: string, teamId: string): Pr
       .returning({ seq: teamT.issueSeq });
    if (!seq) throw new ApiError(400, `Team '${teamId}' não existe`);
    const identifier = `${teamId}-${seq.seq}`;
-   await db.update(issueT).set({ teamId, identifier }).where(eq(issueT.id, issueId));
+   await db
+      .update(issueT)
+      .set({
+         teamId,
+         identifier,
+         projectId: null,
+         milestoneId: null,
+         cycleId: null,
+         parentId: null,
+         updatedAt: new Date(),
+      })
+      .where(eq(issueT.id, issueId));
    return identifier;
 }
 
@@ -564,6 +576,9 @@ export async function acceptTriageSuggestion(
    const actor = await getOrCreateUser(db, actorEmail);
    const catalogs = await getCachedCatalogs(db);
    const teamId = input.teamId !== undefined ? input.teamId : suggestion.teamId;
+   // O time SUGERIDO também é destino: o modelo escolhe entre todos os times do workspace.
+   if (teamId && teamId !== target.teamId && teamId !== input.teamId)
+      await assertCanWriteTeam(db, scope, teamId);
    const priorityId = input.priorityId !== undefined ? input.priorityId : suggestion.priorityId;
    const labelIds = input.labelIds ?? suggestion.labelIds;
    const duplicateIds = input.duplicateIds ?? suggestion.duplicates.map((d) => d.issueId);
