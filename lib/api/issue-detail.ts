@@ -934,7 +934,8 @@ export async function deleteComment(
    return true;
 }
 
-const CYCLE_CHANGE = /^changed cycle from (\S+) to (\S+)$/;
+// `to` vazio: remoção gravada com `cycleId: ""` antes da correção — lê como "none".
+const CYCLE_CHANGE = /^changed cycle from (\S+) to (\S*)$/;
 const CYCLE_AUTO_ADD = /^added to cycle (\S+) on start$/;
 
 /**
@@ -949,7 +950,7 @@ async function humanizeCycleEvents(
    for (const e of events) {
       if (e.event !== 'cycle' || !e.text) continue;
       const m = e.text.match(CYCLE_CHANGE) ?? e.text.match(CYCLE_AUTO_ADD);
-      for (const id of m?.slice(1) ?? []) if (id !== 'none') ids.add(id);
+      for (const id of m?.slice(1) ?? []) if (id && id !== 'none') ids.add(id);
    }
    const names = new Map<string, string>();
    if (ids.size === 0) return names;
@@ -967,7 +968,8 @@ function cycleEventText(text: string, names: Map<string, string>): string {
    if (auto) return `added to cycle ${name(auto[1])} on start`;
    const change = text.match(CYCLE_CHANGE);
    if (!change) return text;
-   const [, from, to] = change;
+   const [, from, rawTo] = change;
+   const to = rawTo || 'none';
    if (from === 'none') return `added to cycle ${name(to)}`;
    if (to === 'none') return `removed from cycle ${name(from)}`;
    return `moved from ${name(from)} to ${name(to)}`;
