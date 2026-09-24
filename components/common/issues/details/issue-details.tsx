@@ -144,6 +144,7 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
    // Texto local que o 409 descartou (o save recusado e o flush do editor antigo): o
    // toast do conflito oferece reaplicá-lo sobre a versão nova.
    const conflictDraft = useRef<EditorDoc | null>(null);
+   const restoreDraftRef = useRef<() => void>(() => undefined);
    // Saves da descrição em voo e confirmados: um refetch que saiu antes de um save (ou
    // durante) traz o conteúdo de ANTES dele — não pode reverter o editor nem a versão.
    const descriptionWrites = useRef({ inFlight: 0, seq: 0 });
@@ -348,13 +349,6 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
 
    // O editor já mostra o que o usuário digitou; só o erro precisa de feedback (sem
    // toast de sucesso — o save é contínuo, com debounce).
-   const saveDescription = (doc: EditorDoc) => {
-      if (conflict.current) {
-         conflictDraft.current = doc;
-         return;
-      }
-      enqueueDescriptionSave(doc);
-   };
    // `force`: o "Restaurar minha versão" grava mesmo durante o remount que ele provoca.
    const enqueueDescriptionSave = (doc: EditorDoc, force = false) => {
       saveQueue.current = saveQueue.current.then(async () => {
@@ -391,7 +385,10 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
                {
                   id: `description-conflict:${issue.id}`,
                   duration: 15_000,
-                  action: { label: 'Restaurar minha versão', onClick: restoreConflictDraft },
+                  action: {
+                     label: 'Restaurar minha versão',
+                     onClick: () => restoreDraftRef.current(),
+                  },
                }
             );
             try {
@@ -406,6 +403,13 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
          }
       });
    };
+   const saveDescription = (doc: EditorDoc) => {
+      if (conflict.current) {
+         conflictDraft.current = doc;
+         return;
+      }
+      enqueueDescriptionSave(doc);
+   };
    // Reaplica o texto local sobre a versão nova (já adotada) e salva com ela. O flush do
    // editor que sai no remount é descartado (`conflict` até o remount), senão ele iria
    // depois e sobrescreveria o texto restaurado.
@@ -418,6 +422,7 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
       setEditorEpoch((n) => n + 1);
       enqueueDescriptionSave(mine, true);
    };
+   restoreDraftRef.current = restoreConflictDraft;
 
    return (
       <div className={cn(fade && 'content-enter', 'flex h-full w-full overflow-hidden')}>
