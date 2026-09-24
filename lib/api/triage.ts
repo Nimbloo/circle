@@ -730,6 +730,9 @@ export async function acceptTriageSuggestion(
       id: issueId,
       teamId: movedTeam ? teamId! : target.teamId,
    });
+   // Mudou de time: o time antigo não recebe o evento acima (escopo) e as filhas soltas
+   // ficaram lá — um sinal coarse (sem id) faz os clientes dele refazerem a lista.
+   if (movedTeam) publish({ entity: 'issue', action: 'updated', teamId: target.teamId });
    return (await getTriageSuggestion(db, issueId))!;
 }
 

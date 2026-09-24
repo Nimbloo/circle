@@ -11,6 +11,7 @@ import {
 } from '@/db/schema';
 import { createIssue, deleteIssue, getIssue, updateIssue } from '@/lib/api/issues';
 import { createProject } from '@/lib/api/projects';
+import { subscribe, type CircleEvent } from '@/lib/api/events';
 
 // O Bedrock é o único ponto de IA: mockado, cada caso decide se responde JSON válido,
 // lixo, ou explode (que é o comportamento REAL em produção — modelo bloqueado).
@@ -454,6 +455,27 @@ describe('accept', () => {
             .where(and(eq(activityEvent.issueId, target.id), eq(activityEvent.event, 'triage')))
       ).toEqual([]);
       expect((await getTriageSuggestion(db, target.id))?.appliedAt).toBeFalsy();
+   });
+
+   it('mover de time avisa o time antigo (as filhas soltas ficam lá)', async () => {
+      const db = await setup();
+      const target = await newTriageIssue(db, 'Pai na triagem');
+      agentMocks.invokeText.mockResolvedValue(
+         JSON.stringify({ teamId: 'DESIGN', priorityId: 'high', labelIds: [], duplicates: [] })
+      );
+      await generateTriageSuggestion(db, target.id, { force: true });
+      const events: CircleEvent[] = [];
+      const stop = subscribe((e) => events.push(e));
+      try {
+         await acceptTriageSuggestion(db, target.id, ANA);
+      } finally {
+         stop();
+      }
+      expect(events).toContainEqual(
+         expect.objectContaining({ entity: 'issue', action: 'updated', teamId: 'CORE' })
+      );
+      const coarse = events.find((e) => e.entity === 'issue' && e.teamId === 'CORE');
+      expect(coarse?.id).toBeUndefined();
    });
 
    it('recusa label inexistente sem tocar na issue', async () => {
