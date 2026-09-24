@@ -21,7 +21,9 @@ export function useIssueDeleteShortcut(
    options: IssueDeleteShortcutOptions = {}
 ): void {
    const optionsRef = useRef(options);
-   optionsRef.current = options;
+   useEffect(() => {
+      optionsRef.current = options;
+   });
    useEffect(() => {
       const onKey = (e: KeyboardEvent) => {
          if (e.key !== 'Backspace' && e.key !== 'Delete') return;
