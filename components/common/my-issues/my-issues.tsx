@@ -132,7 +132,7 @@ export default function MyIssues() {
                      </div>
                      <div className="divide-y">
                         {searchedIssues.map((issue) => (
-                           <IssueLine key={issue.id} issue={issue} layoutId={false} />
+                           <IssueLine key={issue.id} issue={issue} />
                         ))}
                      </div>
                   </div>

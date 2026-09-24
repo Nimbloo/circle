@@ -160,7 +160,7 @@ export function SearchIssues() {
                         <GroupShell title={GROUP_LABEL.issue} count={issueResults.length}>
                            {issueResults.map(({ item, issue }) => (
                               <div key={issue.id}>
-                                 <IssueLine issue={issue} layoutId={false} />
+                                 <IssueLine issue={issue} />
                                  <SearchSnippet html={item.snippet} className="px-6 pb-2" />
                               </div>
                            ))}

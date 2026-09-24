@@ -8,7 +8,6 @@ import { useDisplaySetting } from '@/store/display-settings-store';
 import { format } from 'date-fns';
 import { MaybeLink } from './maybe-link';
 import { useParams } from 'next/navigation';
-import { motion } from 'motion/react';
 import { memo, useEffect, useRef } from 'react';
 import { DragSourceMonitor, useDrag, useDragLayer } from 'react-dnd';
 import { getEmptyImage } from 'react-dnd-html5-backend';
@@ -32,9 +31,6 @@ type IssueGridProps = {
    /** Grupo do card e suas issues — lido no drop (reorder/move). Getter estável (não o
     *  array), para o drop não re-registrar a cada mudança do grupo. */
    getGroup: () => IssueGroupContext;
-   /** Animação de layout do motion (layoutId). Desligada na coluna virtualizada
-    *  (o mount/unmount da virtualização brigaria com a animação de layout). */
-   layout?: boolean;
 };
 
 // Custom DragLayer component to render the drag preview
@@ -100,7 +96,7 @@ export function CustomDragLayer() {
    );
 }
 
-function IssueGridComponent({ issue, getGroup, layout = true }: IssueGridProps) {
+function IssueGridComponent({ issue, getGroup }: IssueGridProps) {
    const ref = useRef<HTMLDivElement>(null);
    const { orgId } = useParams<{ orgId: string }>();
    const displayProperties = useDisplaySetting('displayProperties');
@@ -141,18 +137,14 @@ function IssueGridComponent({ issue, getGroup, layout = true }: IssueGridProps) 
    // Connect drag and drop to the element.
    drag(drop(ref));
 
-   // Sem animação de layout (coluna virtualizada): div simples, sem o runtime do motion.
-   const Card = layout ? motion.div : 'div';
-
    const card = (
-      <Card
+      <div
          ref={ref}
          data-issue-id={issue.id}
          className={cn(
             'group/card w-full cursor-default rounded-lg bg-card p-2 shadow-[var(--card-shadow)]',
             selected && 'ring-2 ring-primary'
          )}
-         {...(layout && { layoutId: `issue-grid-${issue.identifier || issue.id}` })}
          style={{
             opacity: isDragging ? 0.5 : 1,
             cursor: isDragging ? 'grabbing' : 'default',
@@ -233,7 +225,7 @@ function IssueGridComponent({ issue, getGroup, layout = true }: IssueGridProps) 
             )}
             <SubIssueProgress count={issue.subIssueCount} done={issue.subIssueDoneCount} />
          </div>
-      </Card>
+      </div>
    );
 
    // No board o menu de contexto é um só (R7); card avulso monta o seu.

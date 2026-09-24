@@ -49,6 +49,8 @@ interface IssueLineProps<T extends InboxLineItem> {
    showStatusIcon?: boolean;
    /** Saindo da lista (adiada/excluída): colapsa a altura antes de sumir. */
    leaving?: boolean;
+   /** Acabou de chegar pelo realtime: abre a altura em vez de empurrar a lista. */
+   entering?: boolean;
 }
 
 /**
@@ -68,6 +70,7 @@ function IssueLine<T extends InboxLineItem>({
    showId = true,
    showStatusIcon = true,
    leaving = false,
+   entering = false,
 }: IssueLineProps<T>) {
    // Status VIVO da issue com fallback pro snapshot da notificação — o ícone na linha
    // acompanha mudanças de status em tempo real (padrão Linear).
@@ -82,7 +85,8 @@ function IssueLine<T extends InboxLineItem>({
          // Saída da lista (co#9): a linha tem 55 px fixos, então colapsa a altura + opacity.
          className={cn(
             'h-[55px] w-full overflow-hidden pl-2.5 transition-[height,opacity] duration-150 ease-in motion-reduce:transition-none',
-            leaving && 'pointer-events-none h-0 opacity-0'
+            leaving && 'pointer-events-none h-0 opacity-0',
+            entering && 'list-grow'
          )}
       >
          <div
