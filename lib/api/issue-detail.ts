@@ -230,11 +230,17 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
       await Promise.all([
          db.select().from(issueContent).where(eq(issueContent.issueId, issueId)).limit(1),
          db.select().from(issueRelation).where(eq(issueRelation.issueId, issueId)),
-         // Lado inverso: outras issues que declaram ESTA como blocked_by → ESTA as bloqueia.
+         // Lado inverso: outras issues que declaram ESTA como blocked_by → ESTA as bloqueia;
+         // `related` é simétrica (Linear): quem relacionou ESTA também aparece aqui.
          db
-            .select({ issueId: issueRelation.issueId })
+            .select({ issueId: issueRelation.issueId, kind: issueRelation.kind })
             .from(issueRelation)
-            .where(and(eq(issueRelation.relatedId, issueId), eq(issueRelation.kind, 'blocked_by'))),
+            .where(
+               and(
+                  eq(issueRelation.relatedId, issueId),
+                  inArray(issueRelation.kind, ['blocked_by', 'related'])
+               )
+            ),
          // O id do vínculo é md5("issueId|repo#número") (reviews.ts `prLinkId`), e
          // "repo#número" é o id da review: o join devolve número/repo/url sem coluna nova.
          // Vínculo antigo (id por título) não casa e fica só com título e status.
@@ -304,9 +310,14 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
       parent: parentRows[0] ?? null,
       subIssues,
       subIssueIds: subIssues.map((s) => s.id),
-      relatedIds: relations.filter((r) => r.kind === 'related').map((r) => r.relatedId),
+      relatedIds: [
+         ...new Set([
+            ...relations.filter((r) => r.kind === 'related').map((r) => r.relatedId),
+            ...blocking.filter((b) => b.kind === 'related').map((b) => b.issueId),
+         ]),
+      ],
       blockedByIds: relations.filter((r) => r.kind === 'blocked_by').map((r) => r.relatedId),
-      blockingIds: blocking.map((b) => b.issueId),
+      blockingIds: blocking.filter((b) => b.kind === 'blocked_by').map((b) => b.issueId),
       duplicateIds: relations.filter((r) => r.kind === 'duplicate').map((r) => r.relatedId),
       prLinks: prs.map((p) => ({
          id: p.id,
@@ -450,6 +461,16 @@ async function recordRelationEvent(
    });
 }
 
+/** O par da relação: `related` é simétrica (vale gravada em qualquer direção). */
+function relationPair(issueId: string, relatedId: string, kind: RelationKind) {
+   const forward = and(eq(issueRelation.issueId, issueId), eq(issueRelation.relatedId, relatedId));
+   if (kind !== 'related') return forward;
+   return or(
+      forward,
+      and(eq(issueRelation.issueId, relatedId), eq(issueRelation.relatedId, issueId))
+   );
+}
+
 /** Cria uma relação issueId -> relatedId (idempotente). Retorna o detail atualizado. */
 export async function addRelation(
    db: Db,
@@ -487,13 +508,7 @@ export async function addRelation(
    const existing = await db
       .select({ id: issueRelation.id })
       .from(issueRelation)
-      .where(
-         and(
-            eq(issueRelation.issueId, issueId),
-            eq(issueRelation.relatedId, relatedId),
-            eq(issueRelation.kind, kind)
-         )
-      )
+      .where(and(relationPair(issueId, relatedId, kind), eq(issueRelation.kind, kind)))
       .limit(1);
    if (existing.length === 0) {
       await db.insert(issueRelation).values({ id: randomUUID(), issueId, relatedId, kind });
@@ -505,6 +520,13 @@ export async function addRelation(
       action: 'updated',
       id: issueId,
       teamId: await issueTeamId(db, issueId),
+   });
+   // A outra ponta também mostra o vínculo (Blocks/Related): a tela dela recarrega.
+   publish({
+      entity: 'issue',
+      action: 'updated',
+      id: relatedId,
+      teamId: await issueTeamId(db, relatedId),
    });
    return getIssueDetail(db, issueId);
 }
@@ -535,13 +557,7 @@ export async function removeRelation(
    }
    const deleted = await db
       .delete(issueRelation)
-      .where(
-         and(
-            eq(issueRelation.issueId, issueId),
-            eq(issueRelation.relatedId, relatedId),
-            eq(issueRelation.kind, kind)
-         )
-      )
+      .where(and(relationPair(issueId, relatedId, kind), eq(issueRelation.kind, kind)))
       .returning({ id: issueRelation.id });
    if (deleted.length > 0) await recordRelationEvent(db, issueId, kind, false, actorEmail);
    publish({
@@ -549,6 +565,13 @@ export async function removeRelation(
       action: 'updated',
       id: issueId,
       teamId: await issueTeamId(db, issueId),
+   });
+   // A outra ponta também mostra o vínculo (Blocks/Related): a tela dela recarrega.
+   publish({
+      entity: 'issue',
+      action: 'updated',
+      id: relatedId,
+      teamId: await issueTeamId(db, relatedId),
    });
    return getIssueDetail(db, issueId);
 }
