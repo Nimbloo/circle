@@ -210,6 +210,10 @@ describe('ProjectsBoard — agrupado por time', () => {
       apiMocks.update.mockRejectedValue(err);
       render(<TeamHarness />);
       act(() => lastTestBackend!.simulateDragDrop(cardIn('Core'), column('Design')));
-      await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Não é possível trocar o time'));
+      await waitFor(() =>
+         expect(toast.error).toHaveBeenCalledWith(
+            'Could not update the project: Não é possível trocar o time'
+         )
+      );
    });
 });

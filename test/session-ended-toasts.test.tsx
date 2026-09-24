@@ -51,8 +51,10 @@ describe('toasts depois do fim de sessão', () => {
       render(<Toaster />);
       await act(async () => {
          await api.audit().catch(() => toast.error('Não foi possível carregar'));
-         await new Promise((r) => setTimeout(r, 100));
+         await new Promise((r) => setTimeout(r, 25));
       });
+      // Sessão encerrada: o Toaster nem está montado, então nenhum toast pode aparecer.
+      expect(document.querySelector('[data-sonner-toaster]')).toBeNull();
       expect(screen.queryByText('Não foi possível carregar')).toBeNull();
    });
 });
