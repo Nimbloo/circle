@@ -40,6 +40,13 @@ export function useMyIssuesActiveIds(tab: MyIssuesTab): MyIssuesActivity {
    const [attempt, setAttempt] = useState(0);
    // Qual tentativa já respondeu, e se falhou: `loading` é derivado (sem set no effect).
    const [settled, setSettled] = useState<{ attempt: number; error: boolean } | null>(null);
+   // Reabrir a aba é uma busca nova: novo `attempt`, senão o resultado (ou erro) da busca
+   // anterior casaria com ele e apareceria no lugar do carregando.
+   const [prevTab, setPrevTab] = useState(tab);
+   if (tab !== prevTab) {
+      setPrevTab(tab);
+      if (tab === 'activity') setAttempt((n) => n + 1);
+   }
    useEffect(() => {
       if (tab !== 'activity') return;
       let alive = true;
