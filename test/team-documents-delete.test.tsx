@@ -10,10 +10,15 @@ for (const method of ['hasPointerCapture', 'setPointerCapture', 'releasePointerC
    Object.defineProperty(Element.prototype, method, { configurable: true, value: () => false });
 }
 vi.mock('next/navigation', () => ({ useParams: () => ({ teamId: 'CORE' }) }));
-const apiMocks = vi.hoisted(() => ({ documents: vi.fn(), remove: vi.fn(), update: vi.fn() }));
+const apiMocks = vi.hoisted(() => ({
+   documents: vi.fn(),
+   remove: vi.fn(),
+   update: vi.fn(),
+   createDocument: vi.fn(),
+}));
 vi.mock('@/lib/client', () => ({
    api: {
-      teams: { documents: apiMocks.documents },
+      teams: { documents: apiMocks.documents, createDocument: apiMocks.createDocument },
       documents: { remove: apiMocks.remove, update: apiMocks.update },
    },
 }));
@@ -129,5 +134,20 @@ describe('auditoria de diálogos — exclusão e recarga', () => {
       // A recarga antiga chega por último com a d2: não pode trazê-la de volta.
       await act(async () => resolveOld(folder([doc('d2', 'ADR')])));
       expect(screen.queryByText('ADR')).toBeNull();
+   });
+
+   it('documento criado com recarga falhando: sucesso, lista mantida e sem tela de erro', async () => {
+      apiMocks.createDocument.mockResolvedValue({ id: 'd9' });
+      const user = userEvent.setup();
+      render(<TeamDocuments />);
+      await screen.findByText('RFC');
+      await user.click(screen.getByRole('button', { name: /New document/ }));
+      await user.type(await screen.findByPlaceholderText('Document name'), 'Runbook');
+      apiMocks.documents.mockRejectedValue(new Error('Failed to fetch'));
+      await user.click(screen.getByRole('button', { name: /Create document/ }));
+      await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith('Documento criado'));
+      await waitFor(() => expect(toastMock.warning).toHaveBeenCalled());
+      expect(screen.queryByText('Não foi possível carregar os documentos')).toBeNull();
+      expect(screen.getByText('RFC')).toBeTruthy();
    });
 });
