@@ -462,7 +462,7 @@ export default function TeamDocuments() {
                         e.preventDefault();
                         if (folderToDelete) void removeFolder(folderToDelete.id);
                      }}
-                     className="bg-destructive text-white hover:bg-destructive/90"
+                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
                      Excluir pasta
                   </AlertDialogAction>

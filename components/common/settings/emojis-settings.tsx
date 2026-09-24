@@ -299,7 +299,7 @@ export default function EmojisSettings() {
                         void confirmRemove();
                      }}
                      disabled={removeBusy}
-                     className="bg-destructive text-white hover:bg-destructive/90"
+                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
                      {removeBusy ? 'Removendo…' : 'Remover'}
                   </AlertDialogAction>
