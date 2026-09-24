@@ -118,10 +118,12 @@ export default function TeamDocumentView({
 
    // 409: entre o conflito e o remount, `conflict` descarta a fila e o flush do editor
    // antigo (unmount) — senão o corpo velho iria com a versão nova e apagaria o do outro.
-   const saveBody = (next: EditorDoc) => {
-      if (conflict.current) return;
+   // `epoch`: a geração do editor que produziu o save. Um save ADIADO (upload em curso) do
+   // editor antigo pode chegar depois do remount — aí ele é de outra geração e é descartado.
+   const saveBody = (next: EditorDoc, epoch: number) => {
+      if (conflict.current || epoch !== epochRef.current) return;
       saveQueue.current = saveQueue.current.then(async () => {
-         if (conflict.current) return;
+         if (conflict.current || epoch !== epochRef.current) return;
          try {
             const dto = await api.documents.update(documentId, {
                descriptionDoc: next,
@@ -160,7 +162,9 @@ export default function TeamDocumentView({
    };
    // Depois do remount pós-conflito o editor novo volta a salvar (o flush do antigo, no
    // unmount, já foi descartado — o cleanup do filho roda antes deste efeito).
+   const epochRef = useRef(editorEpoch);
    useEffect(() => {
+      epochRef.current = editorEpoch;
       conflict.current = false;
    }, [editorEpoch]);
 
@@ -336,7 +340,7 @@ export default function TeamDocumentView({
                      key={`${documentId}:${editorEpoch}`}
                      doc={doc.descriptionDoc}
                      placeholder="Write something, or press / for commands…"
-                     onSave={saveBody}
+                     onSave={(next) => saveBody(next, editorEpoch)}
                   />
                </div>
             </div>

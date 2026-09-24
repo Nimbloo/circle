@@ -34,6 +34,9 @@ const body = (text: string): EditorDoc => ({
 });
 // `unmountFlush.doc`: como o editor real, o dublê faz FLUSH do pendente ao desmontar.
 const unmountFlush = vi.hoisted(() => ({ doc: null as EditorDoc | null }));
+// `firstSave`: o onSave da 1ª instância do editor — simula um save ADIADO (ex.: upload em
+// curso) que só dispara depois que o editor já foi trocado pelo remount do 409.
+const firstSave = vi.hoisted(() => ({ fn: null as ((d: EditorDoc) => void) | null }));
 vi.mock('@/components/common/editor/block-editor', async () => {
    const R = await import('react');
    return {
@@ -46,6 +49,7 @@ vi.mock('@/components/common/editor/block-editor', async () => {
       }) => {
          const saveRef = R.useRef(onSave);
          saveRef.current = onSave;
+         if (!firstSave.fn && onSave) firstSave.fn = onSave;
          R.useEffect(
             () => () => {
                if (unmountFlush.doc) saveRef.current?.(unmountFlush.doc);
@@ -145,6 +149,28 @@ describe('página do documento (corpo com editor de blocos)', () => {
       });
       await waitFor(() => expect(toastMocks.warning).toHaveBeenCalled());
       await waitFor(() => expect(screen.getByTestId('editor-doc').textContent).toContain('da Ana'));
+   });
+
+   it('409: save adiado do editor antigo, disparado depois do remount, não é gravado', async () => {
+      firstSave.fn = null;
+      apiMocks.get.mockResolvedValueOnce(dto());
+      apiMocks.update.mockRejectedValueOnce(new ApiError(409, 'alterado'));
+      apiMocks.get.mockResolvedValueOnce(
+         dto({ descriptionDoc: body('da Ana'), descriptionVersion: 'v9' })
+      );
+      renderView();
+      await screen.findByDisplayValue('RFC 1');
+      const stale = firstSave.fn!;
+      await act(async () => {
+         fireEvent.click(screen.getByText('fake-save'));
+      });
+      await waitFor(() => expect(screen.getByTestId('editor-doc').textContent).toContain('da Ana'));
+      // O upload do editor antigo terminou agora: o save dele chega atrasado.
+      await act(async () => {
+         stale(body('local atrasado'));
+      });
+      await act(async () => {});
+      expect(apiMocks.update).toHaveBeenCalledTimes(1);
    });
 
    it('409: o flush do editor antigo (remount) não sobrescreve a versão nova', async () => {

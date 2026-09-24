@@ -58,6 +58,7 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    const saveQueue = useRef<Promise<void>>(Promise.resolve());
    const conflict = useRef(false);
    const [editorEpoch, setEditorEpoch] = useState(0);
+   const epochRef = useRef(0);
 
    const handleSaveSummary = async () => {
       if (summaryDraft === null) return;
@@ -109,10 +110,12 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    // meio: recarrega a versão dela e remonta o editor em vez de sobrescrever. Entre o 409
    // e o remount, `conflict` descarta a fila e o flush do editor antigo (unmount) — senão
    // o doc velho iria com a versão nova e apagaria a edição da outra pessoa.
-   const saveDescription = (next: EditorDoc) => {
-      if (conflict.current) return;
+   // `epoch`: a geração do editor que produziu o save. Save ADIADO (upload em curso) do
+   // editor antigo que chega depois do remount é de outra geração e é descartado.
+   const saveDescription = (next: EditorDoc, epoch: number) => {
+      if (conflict.current || epoch !== epochRef.current) return;
       saveQueue.current = saveQueue.current.then(async () => {
-         if (conflict.current) return;
+         if (conflict.current || epoch !== epochRef.current) return;
          try {
             const dto = await trackDescriptionSave(
                api.projects.updateDetail(projectId, {
@@ -153,6 +156,7 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    // Depois do remount pós-conflito o editor novo volta a salvar (o flush do antigo, no
    // unmount, já foi descartado — o cleanup do filho roda antes deste efeito).
    useEffect(() => {
+      epochRef.current = editorEpoch;
       conflict.current = false;
    }, [editorEpoch]);
    // Versão vinda de recarga (1ª carga, evento remoto, conflito): só é adotada com o
@@ -287,7 +291,7 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                            doc={doc}
                            placeholder="Add a description…"
                            onChange={onEditorChange}
-                           onSave={saveDescription}
+                           onSave={(next) => saveDescription(next, editorEpoch)}
                            headingAnchors
                         />
                      ) : (

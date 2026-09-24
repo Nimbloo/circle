@@ -165,6 +165,7 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
    // durante) traz o conteúdo de ANTES dele — não pode reverter o editor nem a versão.
    const descriptionWrites = useRef({ inFlight: 0, seq: 0 });
    const [editorEpoch, setEditorEpoch] = useState(0);
+   const epochRef = useRef(0);
    const descriptionBox = useRef<HTMLDivElement>(null);
 
    // O fetch depende do id (não do objeto): o splice do SSE (applyRemote) troca a
@@ -354,6 +355,7 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
    // Depois do remount pós-conflito, o editor novo volta a salvar (o flush do editor
    // antigo, no unmount, já foi descartado).
    useEffect(() => {
+      epochRef.current = editorEpoch;
       conflict.current = false;
    }, [editorEpoch]);
 
@@ -488,8 +490,10 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
          }
       });
    };
-   const saveDescription = (doc: EditorDoc) => {
-      if (conflict.current) {
+   // `epoch`: geração do editor que produziu o save. Save ADIADO (upload em curso) do editor
+   // antigo que chega depois do remount vira rascunho do conflito, não sobrescreve.
+   const saveDescription = (doc: EditorDoc, epoch: number) => {
+      if (conflict.current || epoch !== epochRef.current) {
          conflictDraft.current = doc;
          return;
       }
@@ -584,7 +588,7 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
                      key={`${issue.id}:${editorEpoch}`}
                      doc={descriptionDoc}
                      placeholder="Add a description…"
-                     onSave={saveDescription}
+                     onSave={(doc) => saveDescription(doc, editorEpoch)}
                      context={
                         issue.teamId
                            ? {
