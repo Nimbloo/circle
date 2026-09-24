@@ -252,10 +252,7 @@ export default function HeaderNav() {
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         {/* is#16: o detalhe não tinha como excluir; o Undo do toast é a rede. */}
-                        <DropdownMenuItem
-                           variant="destructive"
-                           onSelect={deleteCurrent}
-                        >
+                        <DropdownMenuItem variant="destructive" onSelect={deleteCurrent}>
                            <Trash2 className="size-4" />
                            Delete
                            <span className="ml-auto text-xs text-muted-foreground">⌘⌫</span>

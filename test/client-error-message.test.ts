@@ -11,6 +11,15 @@ import { errorReason } from '@/lib/error-reason';
 
 afterEach(() => vi.unstubAllGlobals());
 
+/** O erro rejeitado por `api.audit()` (a chamada sempre falha nestes testes). */
+const failure = () =>
+   api.audit().then(
+      () => {
+         throw new Error('esperava falha');
+      },
+      (e: unknown) => e as Error & { status: number }
+   );
+
 const respondRaw = (status: number, body: string, statusText = '') =>
    vi.stubGlobal(
       'fetch',
@@ -20,20 +29,20 @@ const respondRaw = (status: number, body: string, statusText = '') =>
 describe('parseResponse — erro sem corpo legível', () => {
    it('502 sem JSON e sem statusText vira mensagem genérica com o status', async () => {
       respondRaw(502, '<html>Bad Gateway</html>');
-      const err = await api.audit().catch((e: unknown) => e as Error & { status: number });
+      const err = await failure();
       expect(err.status).toBe(502);
       expect(err.message).toBe('Falha na requisição (HTTP 502)');
    });
 
    it('statusText presente continua sendo usado quando não há JSON', async () => {
       respondRaw(504, '', 'Gateway Timeout');
-      const err = await api.audit().catch((e: unknown) => e as Error);
+      const err = await failure();
       expect(err.message).toBe('Gateway Timeout');
    });
 
    it('ProblemDetail continua prevalecendo', async () => {
       respondRaw(400, JSON.stringify({ title: 'Bad Request', detail: 'Nome obrigatório' }));
-      const err = await api.audit().catch((e: unknown) => e as Error);
+      const err = await failure();
       expect(err.message).toBe('Nome obrigatório');
    });
 });
@@ -46,9 +55,7 @@ describe('errorReason', () => {
    });
 
    it('5xx com title cru prefere o fallback amigável', () => {
-      expect(errorReason({ status: 500, message: 'Internal Server Error' }, 'Falha')).toBe(
-         'Falha'
-      );
+      expect(errorReason({ status: 500, message: 'Internal Server Error' }, 'Falha')).toBe('Falha');
    });
 
    it('erro de rede ("Failed to fetch") fica no fallback', () => {

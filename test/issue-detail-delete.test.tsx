@@ -81,7 +81,9 @@ const renderHeader = () =>
 
 const autoCloseUndoToast = () =>
    (
-      toastMock.mock.calls.find((c) => (c[1] as { onAutoClose?: () => void })?.onAutoClose)?.[1] as {
+      toastMock.mock.calls.find(
+         (c) => (c[1] as { onAutoClose?: () => void })?.onAutoClose
+      )?.[1] as {
          onAutoClose: () => void;
       }
    ).onAutoClose();

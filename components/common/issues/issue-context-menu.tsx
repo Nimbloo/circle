@@ -501,8 +501,7 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
                <AlertDialogHeader>
                   <AlertDialogTitle>Delete issue?</AlertDialogTitle>
                   <AlertDialogDescription>
-                     A issue sai da lista na hora. Dá para desfazer pelo toast por alguns
-                     segundos.
+                     A issue sai da lista na hora. Dá para desfazer pelo toast por alguns segundos.
                   </AlertDialogDescription>
                </AlertDialogHeader>
                <AlertDialogFooter>

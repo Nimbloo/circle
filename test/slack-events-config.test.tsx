@@ -83,7 +83,9 @@ describe('SlackEventsConfig — erros', () => {
       render(<SlackEventsConfig />);
       await user.click(await screen.findByRole('switch', { name: 'Issue criada' }));
       await waitFor(() =>
-         expect(toastMock.error).toHaveBeenCalledWith('Só admin pode mudar as notificações do Slack')
+         expect(toastMock.error).toHaveBeenCalledWith(
+            'Só admin pode mudar as notificações do Slack'
+         )
       );
    });
 

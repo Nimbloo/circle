@@ -80,7 +80,10 @@ const dto = (id: string, parentId: string | null) => ({
 beforeEach(() => {
    vi.clearAllMocks();
    useWorkspaceStore.setState({
-      initiatives: [initiative('mother', 'Mother', null, ['child']), initiative('child', 'Child', 'mother')],
+      initiatives: [
+         initiative('mother', 'Mother', null, ['child']),
+         initiative('child', 'Child', 'mother'),
+      ],
       projects: [],
       users: [],
       loaded: true,

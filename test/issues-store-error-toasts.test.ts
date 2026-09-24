@@ -83,7 +83,8 @@ describe('issues-store — toasts de erro com o motivo da API', () => {
          'Falha ao adicionar a label: Só uma label do grupo Tipo por issue',
          { id: ISSUE_LABEL_TOAST }
       );
-      for (const call of toastMock.error.mock.calls) expect(call[1]).toEqual({ id: ISSUE_LABEL_TOAST });
+      for (const call of toastMock.error.mock.calls)
+         expect(call[1]).toEqual({ id: ISSUE_LABEL_TOAST });
    });
 
    it('remove label com falha usa o mesmo id e o motivo', async () => {

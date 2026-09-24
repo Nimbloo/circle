@@ -167,7 +167,9 @@ describe('DeleteTeamDialog', () => {
       await user.type(screen.getByLabelText(/para confirmar/), 'Doom');
       await user.click(confirmButton());
 
-      await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Não foi possível excluir o time: Apenas admin'));
+      await waitFor(() =>
+         expect(toast.error).toHaveBeenCalledWith('Não foi possível excluir o time: Apenas admin')
+      );
       expect(toast.success).not.toHaveBeenCalled();
       expect(store.removeTeamLocal).not.toHaveBeenCalled();
    });
@@ -188,4 +190,3 @@ describe('DeleteTeamDialog', () => {
       expect((confirmButton() as HTMLButtonElement).disabled).toBe(false);
    });
 });
-
