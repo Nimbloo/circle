@@ -3,7 +3,8 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { api, ApiError } from '@/lib/client';
+import { api } from '@/lib/client';
+import { errorReason } from '@/lib/error-reason';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
@@ -30,11 +31,8 @@ export function NewTeamButton() {
          setOpen(false);
          toast.success(`Team ${id} created`);
       } catch (e) {
-         toast.error(
-            e instanceof ApiError
-               ? e.message
-               : 'Could not create the team (key inválida ou já existe)'
-         );
+         // Motivo da API só em 4xx (detail legível); 5xx/rede ficam no texto genérico.
+         toast.error(errorReason(e, 'Could not create the team'));
       } finally {
          setBusy(false);
       }

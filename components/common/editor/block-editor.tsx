@@ -3,8 +3,17 @@
 import { api } from '@/lib/client';
 import { cn } from '@/lib/utils';
 import { EMPTY_DOC, type EditorDoc } from '@/lib/editor-doc';
-import { editorExtensions } from '@/lib/editor-extensions';
+import { DEFAULT_PLACEHOLDER, editorExtensions } from '@/lib/editor-extensions';
+import {
+   docHasPendingUploads,
+   isEmbeddableImageSrc,
+   resolveUploadPlaceholders,
+   settleUploads,
+   validateEditorImage,
+} from '@/lib/editor-image';
+import { HeadingAnchors } from '@/lib/editor-heading-anchors';
 import { IssueRef } from '@/lib/editor-issue-ref';
+import { LinkOpen } from '@/lib/editor-link-open';
 import { Emoticons } from '@/lib/editor-emoticons';
 import { TaskItemExt, linkedIssueIdentifier } from '@/lib/editor-tasks';
 import type { Issue } from '@/data/issues';
@@ -28,7 +37,7 @@ import {
    Video as VideoIcon,
    type LucideIcon,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
@@ -49,6 +58,8 @@ export interface BlockEditorProps {
    doc: EditorDoc | null;
    editable?: boolean;
    placeholder?: string;
+   /** Nome acessível do editor. Default: o placeholder sem as reticências. */
+   ariaLabel?: string;
    /** A cada mudança, imediato (outline, contadores…). */
    onChange?: (doc: EditorDoc) => void;
    /** Persistência: com debounce de `saveDelayMs`, e flush no blur/unmount se houver pendência. */
@@ -67,6 +78,11 @@ export interface BlockEditorProps {
     * Fixo por montagem — o editor não é recriado quando muda.
     */
    context?: BlockEditorContext;
+   /**
+    * Headings de 1º nível ganham `id="doc-h-N"` (decoration do ProseMirror) para o outline
+    * navegar. Fixo por montagem.
+    */
+   headingAnchors?: boolean;
 }
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -189,6 +205,7 @@ export function BlockEditor({
    doc,
    editable = true,
    placeholder,
+   ariaLabel,
    onChange,
    onSave,
    saveDelayMs = 800,
@@ -197,6 +214,7 @@ export function BlockEditor({
    variant = 'default',
    className,
    context,
+   headingAnchors = false,
 }: BlockEditorProps) {
    // Callbacks em refs: o editor é criado uma vez e não deve ser recriado quando o pai
    // re-renderiza com closures novas.
@@ -205,24 +223,29 @@ export function BlockEditor({
    const onReadyRef = useRef(onReady);
    const onUploadRef = useRef(onUpload);
    const contextRef = useRef(context);
+   const placeholderRef = useRef(placeholder);
    useEffect(() => {
       onChangeRef.current = onChange;
       onSaveRef.current = onSave;
       onReadyRef.current = onReady;
       onUploadRef.current = onUpload;
       contextRef.current = context;
+      placeholderRef.current = placeholder;
    });
    const editorRef = useRef<Editor | null>(null);
 
    // Debounce do save + flush (blur/unmount) para não perder a última edição.
+   // Imagem subindo (placeholder `blob:`) NÃO é salva: o save fica adiado até o upload
+   // terminar — a troca pela URL final é uma nova mudança, que reagenda o save.
    const pendingRef = useRef<EditorDoc | null>(null);
    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
    const flush = useCallback(() => {
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = null;
       const pending = pendingRef.current;
+      if (!pending || docHasPendingUploads(pending)) return;
       pendingRef.current = null;
-      if (pending) onSaveRef.current?.(pending);
+      onSaveRef.current?.(pending);
    }, []);
    const schedule = useCallback(
       (next: EditorDoc) => {
@@ -232,7 +255,24 @@ export function BlockEditor({
       },
       [flush, saveDelayMs]
    );
-   useEffect(() => flush, [flush]);
+   // Unmount: com upload em curso, espera os uploads e salva o doc com as URLs finais
+   // (o editor já foi destruído — a troca do placeholder é feita no JSON).
+   useEffect(
+      () => () => {
+         const pending = pendingRef.current;
+         if (!pending || !docHasPendingUploads(pending)) {
+            flush();
+            return;
+         }
+         if (timerRef.current) clearTimeout(timerRef.current);
+         pendingRef.current = null;
+         const save = onSaveRef.current;
+         void settleUploads(editorRef.current?.storage.imageUpload).then((results) =>
+            save?.(resolveUploadPlaceholders(pending, results))
+         );
+      },
+      [flush]
+   );
 
    // Task item → sub-issue: cria a issue filha com o texto do item e troca o conteúdo
    // do item pelo chip `issueRef` (o check passa a seguir o status dela). O save
@@ -307,7 +347,10 @@ export function BlockEditor({
    useEffect(() => {
       createSubIssueRef.current = createSubIssueFromTaskItem;
    }, [createSubIssueFromTaskItem]);
-   const hasContext = context !== undefined;
+   // Extensões são fixas por montagem (o `setOptions` do Tiptap ignora extensões novas):
+   // o que decide a lista é congelado aqui; o placeholder é lido por função (abaixo).
+   const [hasContext] = useState(context !== undefined);
+   const [withHeadingAnchors] = useState(headingAnchors);
 
    const slash = useSuggestionMenu<SlashItem>();
    const issueMenu = useSuggestionMenu<Issue>();
@@ -355,8 +398,19 @@ export function BlockEditor({
    const extensions = useMemo(
       () => [
          ...editorExtensions({
-            placeholder,
+            placeholder: () => placeholderRef.current ?? DEFAULT_PLACEHOLDER,
             upload: (file) => (onUploadRef.current ?? uploadViaApi)(file),
+            // Tipo/tamanho que `POST /uploads` recusaria: avisa sem ler o arquivo.
+            validate: validateEditorImage,
+            // Imagem colada de outro site: o CSP não a exibe — sai do conteúdo, com aviso.
+            isEmbeddableSrc: isEmbeddableImageSrc,
+            onImagesDropped: (count) =>
+               toast.warning(
+                  count === 1
+                     ? 'Uma imagem externa foi removida — baixe e arraste o arquivo para anexá-la'
+                     : `${count} imagens externas foram removidas — baixe e arraste os arquivos para anexá-las`,
+                  { id: 'editor-external-images' }
+               ),
             onUploadError: (error) => {
                const detail = error instanceof Error && error.message ? `: ${error.message}` : '';
                toast.error(`Falha ao enviar a imagem${detail}`);
@@ -409,20 +463,59 @@ export function BlockEditor({
          Emoticons.configure({
             isEnabled: () => usePreferencesStore.getState().convertEmoticons,
          }),
+         // Ctrl/Cmd+clique e botão do meio abrem o link em nova aba.
+         LinkOpen,
+         ...(withHeadingAnchors ? [HeadingAnchors] : []),
       ],
-      [placeholder, slash.render, issueMenu.render, hasContext, openVideoPrompt]
+      [slash.render, issueMenu.render, hasContext, openVideoPrompt, withHeadingAnchors]
+   );
+
+   // A11y: o `.ProseMirror` é um textbox multilinha com nome; com um menu `/`/`#` aberto
+   // (listbox em portal), o editor aponta para ele e para a opção ativa — o foco fica no
+   // editor, então o leitor de tela acompanha pelo `aria-activedescendant`.
+   const menuBaseId = useId();
+   const slashListId = `${menuBaseId}-slash`;
+   const issueListId = `${menuBaseId}-issue`;
+   const canPortal = editable && typeof document !== 'undefined';
+   const slashOpen = canPortal && slash.state !== null && slash.state.items.length > 0;
+   const issueOpen = canPortal && issueMenu.state !== null && issueMenu.state.items.length > 0;
+   const openListId = slashOpen ? slashListId : issueOpen ? issueListId : null;
+   const openIndex = slashOpen ? slash.state!.index : issueOpen ? issueMenu.state!.index : 0;
+   const label = ariaLabel ?? (placeholder ?? DEFAULT_PLACEHOLDER).replace(/[….\s]+$/, '');
+   const editorProps = useMemo(
+      () => ({
+         attributes: {
+            'role': 'textbox',
+            'aria-label': label,
+            'aria-multiline': 'true',
+            'aria-haspopup': 'listbox',
+            'aria-expanded': String(openListId !== null),
+            ...(openListId
+               ? {
+                    'aria-controls': openListId,
+                    'aria-activedescendant': `${openListId}-${openIndex}`,
+                 }
+               : {}),
+         },
+      }),
+      [label, openListId, openIndex]
    );
 
    const editor = useEditor({
       extensions,
       content: doc ?? EMPTY_DOC,
       editable,
+      editorProps,
       immediatelyRender: false,
       onCreate: ({ editor: created }) => {
          editorRef.current = created;
          onReadyRef.current?.(created);
       },
-      onUpdate: ({ editor: updated }) => {
+      onUpdate: ({ editor: updated, transaction }) => {
+         // Só a transação raiz é edição. Se o doc mudou apenas pelas anexadas por plugins
+         // (o `TrailingNode` do StarterKit põe um parágrafo no fim na 1ª transação de
+         // QUALQUER tipo — vazia, só meta, só seleção), é normalização: não salva.
+         if (!transaction.docChanged) return;
          const json = updated.getJSON();
          onChangeRef.current?.(json);
          if (onSaveRef.current) schedule(json);
@@ -434,17 +527,27 @@ export function BlockEditor({
       if (editor && editor.isEditable !== editable) editor.setEditable(editable);
    }, [editor, editable]);
 
+   // Placeholder novo: a decoration só é recalculada numa transação — uma vazia basta
+   // (só quando ele MUDA; na montagem a decoration já nasce certa). A guarda não é de
+   // correção — transação vazia é inócua —, mas na montagem ela deixaria o `TrailingNode`
+   // pôr o parágrafo final, o doc divergiria do prop e o efeito abaixo faria um
+   // `setContent` inútil (remontando os NodeViews).
+   const shownPlaceholder = useRef(placeholder);
+   useEffect(() => {
+      if (!editor || editor.isDestroyed || shownPlaceholder.current === placeholder) return;
+      shownPlaceholder.current = placeholder;
+      editor.view.dispatch(editor.state.tr);
+   }, [editor, placeholder]);
+
    // Doc externo (refetch/realtime): entra só sem foco, para não pisar no que o usuário
-   // está digitando. Sem emitir update — não é uma edição do usuário.
+   // está digitando. Sem emitir update — não é uma edição do usuário — e fora do
+   // histórico: Ctrl+Z não pode voltar ao texto local e o autosave sobrescrever a
+   // versão de outra pessoa.
    useEffect(() => {
       if (!editor || !doc || editor.isFocused) return;
       if (JSON.stringify(editor.getJSON()) === JSON.stringify(doc)) return;
-      editor.commands.setContent(doc, { emitUpdate: false });
+      editor.chain().setMeta('addToHistory', false).setContent(doc, { emitUpdate: false }).run();
    }, [editor, doc]);
-
-   const canPortal = editable && typeof document !== 'undefined';
-   const slashOpen = canPortal && slash.state !== null && slash.state.items.length > 0;
-   const issueOpen = canPortal && issueMenu.state !== null && issueMenu.state.items.length > 0;
 
    return (
       <div
@@ -505,6 +608,7 @@ export function BlockEditor({
          {slashOpen
             ? createPortal(
                  <SuggestionMenu
+                    id={slashListId}
                     label="Insert block"
                     state={slash.state!}
                     setState={slash.setState}
@@ -525,6 +629,7 @@ export function BlockEditor({
          {issueOpen
             ? createPortal(
                  <SuggestionMenu
+                    id={issueListId}
                     label="Reference issue"
                     className="w-80"
                     state={issueMenu.state!}
@@ -553,6 +658,7 @@ export function BlockEditor({
 }
 
 function SuggestionMenu<T>({
+   id,
    label,
    className,
    state,
@@ -560,6 +666,7 @@ function SuggestionMenu<T>({
    keyOf,
    renderItem,
 }: {
+   id: string;
    label: string;
    className?: string;
    state: MenuState<T>;
@@ -577,6 +684,7 @@ function SuggestionMenu<T>({
 
    return (
       <div
+         id={id}
          role="listbox"
          aria-label={label}
          style={style}
@@ -590,8 +698,11 @@ function SuggestionMenu<T>({
             return (
                <button
                   key={keyOf(item)}
+                  id={`${id}-${i}`}
                   type="button"
                   role="option"
+                  // Fora do Tab: a navegação é pelas setas, com o foco no editor.
+                  tabIndex={-1}
                   aria-selected={selected}
                   // mousedown (não click) para não tirar o foco do editor antes do comando.
                   onMouseDown={(event) => {

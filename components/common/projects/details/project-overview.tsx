@@ -6,8 +6,10 @@ import { DetailSidePanelTrigger } from '@/components/common/detail-side-panel';
 import { BlockEditor } from '@/components/common/editor/block-editor';
 import { Button } from '@/components/ui/button';
 import { ErrorState } from '@/components/common/error-state';
+import { adaptProjectDetail } from '@/lib/adapters-project-detail';
 import { api, ApiError } from '@/lib/client';
 import { blocksToDoc, docHeadings, type EditorDoc } from '@/lib/editor-doc';
+import { headingAnchorId } from '@/lib/editor-heading-anchors';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { ChevronDown, PenLine } from 'lucide-react';
 import Link from 'next/link';
@@ -20,6 +22,9 @@ import { DocumentOutline, type OutlineItem } from './document-outline';
 import { ProjectResources } from './project-resources';
 import { useSharedProjectDetail } from './use-project-detail';
 import { LoadingArea, useEnterFade } from '@/components/common/loading-area';
+
+/** Atraso do outline em relação à digitação. */
+const OUTLINE_DEBOUNCE_MS = 300;
 
 interface ProjectOverviewProps {
    projectId: string;
@@ -37,14 +42,23 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    // Detalhe compartilhado pelas abas (layout da rota, #45): loading/ready/error, live
    // reload e refetch que preserva a tela. O editor só monta com `ready` — montar vazio
    // (1ª carga falha ou em curso) e o autosave apagaria a descrição real (#34).
-   const { status, detail, reload, setDetail, descriptionVersion, setDescriptionVersion } =
-      useSharedProjectDetail(projectId);
+   const {
+      status,
+      detail,
+      reload,
+      setDetail,
+      descriptionVersion,
+      setDescriptionVersion,
+      trackDescriptionSave,
+   } = useSharedProjectDetail(projectId);
    const detailReady = status === 'ready';
    const [summaryDraft, setSummaryDraft] = useState<string | null>(null);
    // Concorrência otimista da descrição (#18): versão vista + fila de saves + conflito.
    const versionRef = useRef<string | null>(null);
    const saveQueue = useRef<Promise<void>>(Promise.resolve());
+   const conflict = useRef(false);
    const [editorEpoch, setEditorEpoch] = useState(0);
+   const epochRef = useRef(0);
 
    const handleSaveSummary = async () => {
       if (summaryDraft === null) return;
@@ -61,58 +75,90 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    };
 
    // Descrição: doc do servidor ou conversão da projeção em blocos. `liveDoc` acompanha o
-   // que está no editor (antes do save) para o outline reagir enquanto se digita.
+   // que está no editor (antes do save) para o outline reagir enquanto se digita — com
+   // debounce: recalcular o outline e re-renderizar a aba a cada tecla pesa em doc longo.
    const doc = useMemo(
       () => detail.descriptionDoc ?? blocksToDoc(detail.description),
       [detail.descriptionDoc, detail.description]
    );
    const [liveDoc, setLiveDoc] = useState<EditorDoc | null>(null);
+   const liveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+   const onEditorChange = useCallback((next: EditorDoc) => {
+      if (liveTimer.current) clearTimeout(liveTimer.current);
+      liveTimer.current = setTimeout(() => setLiveDoc(next), OUTLINE_DEBOUNCE_MS);
+   }, []);
+   useEffect(
+      () => () => {
+         if (liveTimer.current) clearTimeout(liveTimer.current);
+      },
+      []
+   );
    const lastUpdate = detail.updates[0];
+   // O outline navega por `#doc-h-N`: os ids vêm do próprio editor (`headingAnchors`,
+   // decoration do ProseMirror), com a mesma numeração de `docHeadings`.
    const outlineItems = useMemo<OutlineItem[]>(
       () =>
          docHeadings(liveDoc ?? doc).map((h, index) => ({
-            id: `doc-h-${index}`,
+            id: headingAnchorId(index),
             text: h.text,
             level: h.level > 1 ? 2 : 1,
          })),
       [liveDoc, doc]
    );
-   // O outline navega por `#doc-h-N`; o ProseMirror não emite ids, então marcamos os
-   // headings renderizados (re-marcados a cada mudança de doc).
-   const markHeadings = useCallback(() => {
-      scrollRef.current
-         ?.querySelectorAll<HTMLElement>('.ProseMirror h1, .ProseMirror h2, .ProseMirror h3')
-         .forEach((el, index) => {
-            el.id = `doc-h-${index}`;
-         });
-   }, []);
-   useEffect(markHeadings, [markHeadings, outlineItems]);
 
    // Saves em fila (um por vez) mandando a versão vista; 409 = outra pessoa gravou no
-   // meio: recarrega a versão dela e remonta o editor em vez de sobrescrever.
-   const saveDescription = (next: EditorDoc) => {
+   // meio: recarrega a versão dela e remonta o editor em vez de sobrescrever. Entre o 409
+   // e o remount, `conflict` descarta a fila e o flush do editor antigo (unmount) — senão
+   // o doc velho iria com a versão nova e apagaria a edição da outra pessoa.
+   // `epoch`: a geração do editor que produziu o save. Save ADIADO (upload em curso) do
+   // editor antigo que chega depois do remount é de outra geração e é descartado.
+   const saveDescription = (next: EditorDoc, epoch: number) => {
+      if (conflict.current || epoch !== epochRef.current) return;
       saveQueue.current = saveQueue.current.then(async () => {
+         if (conflict.current || epoch !== epochRef.current) return;
          try {
-            const dto = await api.projects.updateDetail(projectId, {
-               descriptionDoc: next,
-               expectedDescriptionVersion: versionRef.current,
-            });
-            versionRef.current = dto.descriptionVersion ?? null;
+            const dto = await trackDescriptionSave(
+               api.projects.updateDetail(projectId, {
+                  descriptionDoc: next,
+                  expectedDescriptionVersion: versionRef.current,
+               })
+            );
+            versionRef.current = dto.descriptionVersion ?? versionRef.current;
             setDescriptionVersion(versionRef.current);
          } catch (e) {
             if (!(e instanceof ApiError && e.status === 409)) {
-               toast.error('Could not save the description');
+               // id fixo: sem rede, cada autosave substitui o mesmo toast (não empilha).
+               toast.error('Could not save the description', {
+                  id: `project-description-save:${projectId}`,
+               });
                return;
             }
-            toast.warning(
-               'The description was changed by someone else. Loaded the latest version.'
-            );
-            versionRef.current = null;
-            await reload();
-            setEditorEpoch((n) => n + 1);
+            conflict.current = true;
+            try {
+               const fresh = await api.projects.detail(projectId);
+               versionRef.current = fresh.descriptionVersion;
+               setDetail(() => adaptProjectDetail(fresh));
+               setDescriptionVersion(fresh.descriptionVersion);
+               toast.warning(
+                  'The description was changed by someone else. Loaded the latest version.'
+               );
+               setEditorEpoch((n) => n + 1);
+            } catch {
+               // Sem a versão nova: o editor fica como está e a versão VISTA continua a
+               // antiga — o próximo save volta a dar 409 e tenta recarregar de novo (nunca
+               // vira save incondicional).
+               conflict.current = false;
+               toast.error('The description was changed by someone else. Could not load it.');
+            }
          }
       });
    };
+   // Depois do remount pós-conflito o editor novo volta a salvar (o flush do antigo, no
+   // unmount, já foi descartado — o cleanup do filho roda antes deste efeito).
+   useEffect(() => {
+      epochRef.current = editorEpoch;
+      conflict.current = false;
+   }, [editorEpoch]);
    // Versão vinda de recarga (1ª carga, evento remoto, conflito): só é adotada com o
    // editor SEM foco — é quando o editor também aceita o doc externo. Digitando, fica a
    // versão antiga e o próximo save detecta o conflito (409) em vez de sobrescrever.
@@ -244,9 +290,9 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                            key={`${projectId}:${editorEpoch}`}
                            doc={doc}
                            placeholder="Add a description…"
-                           onChange={setLiveDoc}
-                           onSave={saveDescription}
-                           onReady={markHeadings}
+                           onChange={onEditorChange}
+                           onSave={(next) => saveDescription(next, editorEpoch)}
+                           headingAnchors
                         />
                      ) : (
                         <LoadingArea rows={1} size="sm" className="justify-start" />

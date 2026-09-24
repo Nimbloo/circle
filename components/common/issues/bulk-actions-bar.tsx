@@ -31,6 +31,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { BarChart3, CircleDot, Trash2, User as UserIcon, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { deleteIssuesWithUndo } from './delete-with-undo';
 
 /**
  * Barra de ações em lote (Linear-style): aparece quando há issues selecionadas
@@ -43,15 +44,13 @@ export function BulkActionsBar() {
    const users = useMemo(() => activeUsers(allUsers), [allUsers]);
    const allStatus = useStatuses();
    const priorities = usePriorities();
-   const { updateIssueStatus, updateIssuePriority, updateIssueAssignee, deleteIssue } =
-      useIssuesStore(
-         useShallow((s) => ({
-            updateIssueStatus: s.updateIssueStatus,
-            updateIssuePriority: s.updateIssuePriority,
-            updateIssueAssignee: s.updateIssueAssignee,
-            deleteIssue: s.deleteIssue,
-         }))
-      );
+   const { updateIssueStatus, updateIssuePriority, updateIssueAssignee } = useIssuesStore(
+      useShallow((s) => ({
+         updateIssueStatus: s.updateIssueStatus,
+         updateIssuePriority: s.updateIssuePriority,
+         updateIssueAssignee: s.updateIssueAssignee,
+      }))
+   );
    // Popover aberto (controlado): escolher uma opção fecha o seletor.
    const [open, setOpen] = useState<'status' | 'priority' | 'assignee' | null>(null);
    const openProps = (key: 'status' | 'priority' | 'assignee') => ({
@@ -102,12 +101,11 @@ export function BulkActionsBar() {
       );
    };
 
+   // Mesma exclusão do ⌘⌫ (is#16): somem da lista na hora, toast com Undo e o DELETE só
+   // quando o toast fecha. Antes o lote pela barra excluía direto, sem Undo.
    const remove = () => {
-      const n = ids.length;
-      withToast(
-         ids.map((id) => deleteIssue(id)),
-         `Deleted ${n} ${n === 1 ? 'issue' : 'issues'}`
-      );
+      setOpen(null);
+      deleteIssuesWithUndo(ids);
       clear();
    };
 
@@ -220,8 +218,8 @@ export function BulkActionsBar() {
                         Delete {ids.length} {ids.length === 1 ? 'issue' : 'issues'}?
                      </AlertDialogTitle>
                      <AlertDialogDescription>
-                        Esta ação não pode ser desfeita. As issues selecionadas serão removidas
-                        permanentemente.
+                        As issues selecionadas saem da lista na hora. Dá para desfazer pelo toast
+                        por alguns segundos.
                      </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>

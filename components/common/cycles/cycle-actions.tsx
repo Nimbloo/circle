@@ -33,12 +33,13 @@ import {
    AlertDialogHeader,
    AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { api, ApiError } from '@/lib/client';
+import { api } from '@/lib/client';
 import { Cycle, CycleStatus, cycleStatusLabel } from '@/data/cycles';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { errorReason } from '@/lib/error-reason';
 
 const STATUS_IDS: CycleStatus[] = ['planned', 'upcoming', 'current', 'completed'];
 
@@ -107,7 +108,7 @@ function EditCycleDialog({
          toast.success('Cycle updated');
       } catch (e) {
          // 409 (outro ciclo em andamento, #35) traz a explicação do servidor.
-         toast.error(e instanceof ApiError ? e.message : 'Could not update the cycle');
+         toast.error(errorReason(e, 'Could not update the cycle'));
       } finally {
          savingRef.current = false;
          setBusy(false);

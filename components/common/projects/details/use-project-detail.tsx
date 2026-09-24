@@ -28,6 +28,11 @@ export interface ProjectDetailState {
    /** Ajuste local (otimista) do detalhe já carregado. */
    setDetail: (update: (prev: ProjectDetail) => ProjectDetail) => void;
    setDescriptionVersion: (version: string | null) => void;
+   /**
+    * Envolve um save da descrição: enquanto ele voa (e depois que confirma), um refetch
+    * que saiu ANTES não sobrescreve a descrição/versão com o conteúdo antigo.
+    */
+   trackDescriptionSave: <T>(save: Promise<T>) => Promise<T>;
 }
 
 /**
@@ -49,19 +54,36 @@ export function useProjectDetail(projectId: string | null): ProjectDetailState {
       descriptionVersion: null,
    }));
    const seq = useRef(0);
+   const writes = useRef({ inFlight: 0, seq: 0 });
 
    const load = useCallback(async () => {
       if (!projectId) return;
       const mine = ++seq.current;
+      const writesAtStart = writes.current.seq;
       try {
          const dto = await api.projects.detail(projectId);
          if (mine !== seq.current) return;
-         setState({
-            id: projectId,
-            status: 'ready',
-            detail: adaptProjectDetail(dto),
-            descriptionVersion: dto.descriptionVersion ?? null,
-         });
+         const detail = adaptProjectDetail(dto);
+         const stale = writes.current.inFlight > 0 || writes.current.seq !== writesAtStart;
+         setState((prev) =>
+            // Save da descrição no meio do caminho: o resto do detalhe entra, a descrição
+            // e a versão ficam as que o save deixou.
+            stale && prev.id === projectId && prev.status === 'ready'
+               ? {
+                    ...prev,
+                    detail: {
+                       ...detail,
+                       description: prev.detail.description,
+                       descriptionDoc: prev.detail.descriptionDoc,
+                    },
+                 }
+               : {
+                    id: projectId,
+                    status: 'ready',
+                    detail,
+                    descriptionVersion: dto.descriptionVersion ?? null,
+                 }
+         );
       } catch {
          if (mine !== seq.current) return;
          // Refetch que falha não apaga a tela; só a 1ª carga vira `error`.
@@ -85,9 +107,28 @@ export function useProjectDetail(projectId: string | null): ProjectDetailState {
       };
    }, [projectId, load]);
 
-   useLiveReload(PROJECT_CHANGED_EVENT, { id: projectId ?? undefined }, () => {
+   useLiveReload(PROJECT_CHANGED_EVENT, { id: projectId ?? undefined }, (event) => {
+      // Eco do próprio autosave da descrição: a resposta do save já trouxe a versão.
+      if (event.own && event.scope === 'content') return;
       if (projectId) void load();
    });
+
+   const trackDescriptionSave = useCallback(<T,>(save: Promise<T>): Promise<T> => {
+      const w = writes.current;
+      w.inFlight += 1;
+      w.seq += 1;
+      return save.then(
+         (value) => {
+            w.inFlight -= 1;
+            w.seq += 1;
+            return value;
+         },
+         (error: unknown) => {
+            w.inFlight -= 1;
+            throw error;
+         }
+      );
+   }, []);
 
    const setDetail = useCallback(
       (update: (prev: ProjectDetail) => ProjectDetail) =>
@@ -108,8 +149,17 @@ export function useProjectDetail(projectId: string | null): ProjectDetailState {
          reload: load,
          setDetail,
          setDescriptionVersion,
+         trackDescriptionSave,
       }),
-      [status, state.detail, state.descriptionVersion, load, setDetail, setDescriptionVersion]
+      [
+         status,
+         state.detail,
+         state.descriptionVersion,
+         load,
+         setDetail,
+         setDescriptionVersion,
+         trackDescriptionSave,
+      ]
    );
 }
 
@@ -153,7 +203,9 @@ export function useProjectDependencies(projectId: string | null): ProjectDepende
          seq.current += 1;
       };
    }, [projectId, load]);
-   useLiveReload(PROJECT_CHANGED_EVENT, { id: projectId ?? undefined }, () => {
+   useLiveReload(PROJECT_CHANGED_EVENT, { id: projectId ?? undefined }, (event) => {
+      // Salvar a descrição não mexe nas dependências.
+      if (event.scope === 'content') return;
       if (projectId) void load();
    });
    const setIds = useCallback(

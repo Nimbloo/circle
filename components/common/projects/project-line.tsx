@@ -7,7 +7,7 @@ import { api } from '@/lib/client';
 import type { UpdateProjectInput } from '@/lib/api/projects';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { MoreHorizontal, Trash2 } from 'lucide-react';
@@ -51,6 +51,9 @@ export default function ProjectLine({ project, showTeam = false }: ProjectLinePr
    const applyProject = useWorkspaceStore((s) => s.applyProject);
    const removeProjectLocal = useWorkspaceStore((s) => s.removeProjectLocal);
    const [confirmOpen, setConfirmOpen] = useState(false);
+   // O diálogo nasce de um item do menu, que desmonta com ele: ao fechar, o foco volta
+   // ao botão de ações (senão caía no <body>).
+   const actionsRef = useRef<HTMLButtonElement>(null);
    const [busy, setBusy] = useState(false);
 
    // issueCount e percentComplete vêm PRONTOS do backend (assemble calcula ambos por
@@ -176,6 +179,7 @@ export default function ProjectLine({ project, showTeam = false }: ProjectLinePr
                <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                      <Button
+                        ref={actionsRef}
                         size="icon"
                         variant="ghost"
                         className="size-7 opacity-0 transition-opacity group-hover/project:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
@@ -200,7 +204,13 @@ export default function ProjectLine({ project, showTeam = false }: ProjectLinePr
             </div>
 
             <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-               <AlertDialogContent>
+               <AlertDialogContent
+                  onCloseAutoFocus={(e) => {
+                     if (!actionsRef.current?.isConnected) return;
+                     e.preventDefault();
+                     actionsRef.current.focus();
+                  }}
+               >
                   <AlertDialogHeader>
                      <AlertDialogTitle>Delete project?</AlertDialogTitle>
                      <AlertDialogDescription>

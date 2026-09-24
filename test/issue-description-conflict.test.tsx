@@ -5,6 +5,9 @@ import React from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Issue } from '@/data/issues';
+
+/** `ISSUE_CHANGED_EVENT` (literal: importar `use-live-sync` puxa os stores antes do mock). */
+const ISSUE_CHANGED_EVENT = 'circle:issue-changed';
 import { status } from './helpers/catalog-fixture';
 import { priorities } from '@/data/priorities';
 
@@ -22,7 +25,7 @@ class FakeApiError extends Error {
 const apiMocks = vi.hoisted(() => ({
    issues: {
       detail: vi.fn(),
-      activity: vi.fn(async () => ({ items: [], nextCursor: null })),
+      activity: vi.fn(async () => []),
       updateDetail: vi.fn(),
       update: vi.fn(),
    },
@@ -55,11 +58,7 @@ vi.mock('@/components/common/editor/block-editor', async () => {
             'div',
             null,
             R.createElement('span', { 'data-testid': 'doc' }, text),
-            R.createElement(
-               'button',
-               { onClick: () => onSave({ type: 'doc', content: [] }) },
-               'salvar'
-            )
+            R.createElement('button', { onClick: () => onSave(docOf('rascunho local')) }, 'salvar')
          );
       },
    };
@@ -148,5 +147,94 @@ describe('descrição: conflito de edição (#36)', () => {
             expect.objectContaining({ expectedDescriptionVersion: 'v2' })
          )
       );
+   });
+
+   it('refetch que saiu antes de um save confirmado não reverte o editor', async () => {
+      const { IssueDetailView } = await import('@/components/common/issues/details/issue-details');
+      apiMocks.issues.detail.mockResolvedValueOnce(detailDto('minha', 'v1'));
+      render(<IssueDetailView issue={issue} />);
+      await screen.findByText('minha');
+
+      // Evento de outra pessoa (ex.: status) dispara um refetch que demora…
+      let resolveStale!: (v: unknown) => void;
+      apiMocks.issues.detail.mockReturnValueOnce(new Promise((r) => (resolveStale = r)));
+      act(() => {
+         window.dispatchEvent(new CustomEvent(ISSUE_CHANGED_EVENT, { detail: { id: 'i1' } }));
+      });
+      await waitFor(() => expect(apiMocks.issues.detail).toHaveBeenCalledTimes(2));
+
+      // …enquanto o autosave grava e é confirmado (v2).
+      apiMocks.issues.updateDetail.mockResolvedValueOnce(detailDto('salvo', 'v2'));
+      await act(async () => screen.getByText('salvar').click());
+      await waitFor(() => expect(apiMocks.issues.updateDetail).toHaveBeenCalledTimes(1));
+      await act(async () => {
+         await new Promise((r) => setTimeout(r, 10));
+      });
+
+      // O refetch antigo responde com o conteúdo de ANTES do save: não pode entrar.
+      await act(async () => resolveStale(detailDto('antes do save', 'v1')));
+      await act(async () => {
+         await new Promise((r) => setTimeout(r, 10));
+      });
+      expect(screen.getByTestId('doc').textContent).not.toBe('antes do save');
+
+      apiMocks.issues.updateDetail.mockResolvedValueOnce(detailDto('salvo', 'v3'));
+      await act(async () => screen.getByText('salvar').click());
+      await waitFor(() =>
+         expect(apiMocks.issues.updateDetail).toHaveBeenLastCalledWith(
+            'i1',
+            expect.objectContaining({ expectedDescriptionVersion: 'v2' })
+         )
+      );
+   });
+
+   it('erro de rede no autosave: um toast só (id fixo), não um por save', async () => {
+      const { toast } = await import('sonner');
+      const { IssueDetailView } = await import('@/components/common/issues/details/issue-details');
+      apiMocks.issues.detail.mockResolvedValueOnce(detailDto('minha', 'v1'));
+      render(<IssueDetailView issue={issue} />);
+      await screen.findByText('minha');
+      apiMocks.issues.updateDetail.mockRejectedValue(new Error('offline'));
+      await act(async () => screen.getByText('salvar').click());
+      await act(async () => screen.getByText('salvar').click());
+      await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(2));
+      const ids = vi
+         .mocked(toast.error)
+         .mock.calls.map(([, opts]) => (opts as { id?: string })?.id);
+      expect(ids[0]).toBeTruthy();
+      expect(ids[1]).toBe(ids[0]);
+      apiMocks.issues.updateDetail.mockReset();
+   });
+
+   it('409: "Restaurar minha versão" reaplica o texto local sobre a versão nova e salva', async () => {
+      const { toast } = await import('sonner');
+      const { IssueDetailView } = await import('@/components/common/issues/details/issue-details');
+      apiMocks.issues.detail.mockResolvedValueOnce(detailDto('minha', 'v1'));
+      render(<IssueDetailView issue={issue} />);
+      await screen.findByText('minha');
+
+      apiMocks.issues.updateDetail.mockRejectedValueOnce(new FakeApiError(409));
+      apiMocks.issues.detail.mockResolvedValueOnce(detailDto('da outra pessoa', 'v2'));
+      await act(async () => screen.getByText('salvar').click());
+      await waitFor(() => expect(screen.getByTestId('doc').textContent).toBe('da outra pessoa'));
+
+      const opts = vi.mocked(toast.warning).mock.calls.at(-1)?.[1] as
+         | { action?: { label: string; onClick: () => void } }
+         | undefined;
+      expect(opts?.action?.label).toBe('Restaurar minha versão');
+
+      apiMocks.issues.updateDetail.mockResolvedValueOnce(detailDto('rascunho local', 'v3'));
+      await act(async () => opts!.action!.onClick());
+      await waitFor(() => expect(screen.getByTestId('doc').textContent).toBe('rascunho local'));
+      await waitFor(() =>
+         expect(apiMocks.issues.updateDetail).toHaveBeenLastCalledWith('i1', {
+            descriptionDoc: docOf('rascunho local'),
+            expectedDescriptionVersion: 'v2',
+         })
+      );
+      await act(async () => {
+         await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(apiMocks.issues.updateDetail).toHaveBeenCalledTimes(2);
    });
 });

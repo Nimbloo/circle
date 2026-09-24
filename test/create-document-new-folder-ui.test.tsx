@@ -44,3 +44,13 @@ describe('New document em pasta nova (Ad#37)', () => {
       expect(apiMocks.createFolder).not.toHaveBeenCalled();
    });
 });
+
+/** Auditoria (item 14): o botão do ícone só tinha o emoji "📄" para o leitor de tela. */
+describe('New document — botão do ícone', () => {
+   it('tem nome acessível', async () => {
+      const user = userEvent.setup();
+      render(<CreateDocumentButton teamId="CORE" folders={[]} onCreated={() => {}} />);
+      await user.click(screen.getByRole('button', { name: /New document/ }));
+      expect(screen.getByRole('button', { name: 'Choose document icon' })).toBeTruthy();
+   });
+});

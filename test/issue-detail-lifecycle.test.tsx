@@ -183,6 +183,26 @@ describe('detalhe da issue', () => {
       expect(apiMocks.issues.detail).toHaveBeenCalledTimes(1);
    });
 
+   it('eco do próprio autosave (own + scope content) não refaz o GET', async () => {
+      const { IssueDetailView } = await import('@/components/common/issues/details/issue-details');
+      apiMocks.issues.detail.mockResolvedValue(dto('CORE-1'));
+      render(<IssueDetailView issue={make('a', 'CORE-1')} />);
+      await waitFor(() => expect(apiMocks.issues.detail).toHaveBeenCalledTimes(1));
+      apiMocks.issues.activity.mockClear();
+      act(() => {
+         window.dispatchEvent(
+            new CustomEvent(ISSUE_CHANGED_EVENT, {
+               detail: { id: 'a', own: true, scope: 'content' },
+            })
+         );
+      });
+      await act(async () => {
+         await new Promise((r) => setTimeout(r, 30));
+      });
+      expect(apiMocks.issues.detail).toHaveBeenCalledTimes(1);
+      expect(apiMocks.issues.activity).not.toHaveBeenCalled();
+   });
+
    it('evento de outra pessoa (sem ação própria) recarrega', async () => {
       const { IssueDetailView } = await import('@/components/common/issues/details/issue-details');
       apiMocks.issues.detail.mockResolvedValue(dto('CORE-1'));

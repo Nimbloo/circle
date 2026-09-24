@@ -194,17 +194,23 @@ export async function deleteAttachment(db: Db, id: string, actorEmail: string): 
    return true;
 }
 
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+
 /**
- * Apaga as linhas de anexo dos comentários dados (usado pelo `deleteComment`) e limpa o
- * S3 em best-effort. Não publica evento — o chamador já publica o do comentário.
+ * Apaga as linhas de anexo dos comentários dados (usado pelo `deleteComment`, dentro da
+ * transação dele) e devolve as URLs — o chamador limpa o S3 depois do commit, com
+ * `removeAttachmentObjects`. Não publica evento: o chamador já publica o do comentário.
  */
-export async function deleteAttachmentsOfComments(db: Db, commentIds: string[]): Promise<void> {
-   if (commentIds.length === 0) return;
+export async function deleteAttachmentRowsOfComments(
+   db: Db | Tx,
+   commentIds: string[]
+): Promise<string[]> {
+   if (commentIds.length === 0) return [];
    const rows = await db
       .delete(attachmentT)
       .where(inArray(attachmentT.commentId, commentIds))
       .returning({ url: attachmentT.url });
-   void removeFromStorage(rows.map((r) => r.url));
+   return rows.map((r) => r.url);
 }
 
 /**
@@ -236,8 +242,20 @@ async function removeFromStorage(urls: string[]): Promise<void> {
    }
 }
 
-/** Anexo de comentário → evento `comment` (id do comentário); da issue → `issue`. */
+/**
+ * Anexo de comentário → evento `comment` (id do comentário) com o `issueId`, senão o
+ * cliente não sabe qual detalhe recarregar e todo detalhe aberto do time recarregava;
+ * da issue → `issue`.
+ */
 function publishFor(row: Row, action: 'updated', actorEmail: string, teamId?: string): void {
-   if (row.commentId) publish({ entity: 'comment', action, id: row.commentId, actorEmail, teamId });
+   if (row.commentId)
+      publish({
+         entity: 'comment',
+         action,
+         id: row.commentId,
+         actorEmail,
+         issueId: row.issueId,
+         teamId,
+      });
    else publish({ entity: 'issue', action, id: row.issueId, actorEmail, teamId });
 }

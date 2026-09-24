@@ -1,8 +1,9 @@
 'use client';
 
-import type { CSSProperties } from 'react';
+import { useSyncExternalStore, type CSSProperties } from 'react';
 import { useTheme } from 'next-themes';
 import { Toaster as Sonner, ToasterProps } from 'sonner';
+import { isSessionEnded, subscribeSessionEnded } from '@/lib/session-redirect';
 
 /**
  * Pele do popover no toast. O CSS do sonner é injetado sem layer e vence as utilities do
@@ -19,6 +20,10 @@ const POPOVER_SKIN = {
 
 const Toaster = ({ style, ...props }: ToasterProps) => {
    const { theme = 'system' } = useTheme();
+   // 401 encerra a sessão e relança o erro: o toast do chamador ("Não foi possível…")
+   // apareceria na tela que já está indo para o login. Sessão encerrada = sem toasts.
+   const sessionEnded = useSyncExternalStore(subscribeSessionEnded, isSessionEnded, () => false);
+   if (sessionEnded) return null;
 
    return (
       <Sonner

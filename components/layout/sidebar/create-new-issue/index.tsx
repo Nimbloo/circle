@@ -10,6 +10,7 @@ import { useIssuesStore } from '@/store/issues-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
 import { usePreferencesStore } from '@/store/preferences-store';
 import { toast } from 'sonner';
+import { errorReason } from '@/lib/error-reason';
 import { StatusSelector } from './status-selector';
 import { PrioritySelector } from './priority-selector';
 import { AssigneeSelector } from './assignee-selector';
@@ -176,9 +177,9 @@ export function CreateNewIssue() {
          }
          setAddIssueForm(createDefaultData());
          setEditorKey((k) => k + 1);
-      } catch {
+      } catch (e) {
          // A issue otimista já foi revertida no store; mantém o modal aberto p/ retry.
-         toast.error('Falha ao criar a issue');
+         toast.error(errorReason(e, 'Falha ao criar a issue'));
       } finally {
          setSubmitting(false);
       }

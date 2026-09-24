@@ -10,6 +10,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { Issue } from '@/data/issues';
 import { api } from '@/lib/client';
+import { errorReason } from '@/lib/error-reason';
 import { useIssuesStore } from '@/store/issues-store';
 import { ChevronDown, CornerLeftUp, Plus } from 'lucide-react';
 import Link from 'next/link';
@@ -26,16 +27,19 @@ import { IssuePicker } from './issue-picker';
 export function useSetParent() {
    return useCallback(async (childId: string, parentId: string | null): Promise<boolean> => {
       const store = useIssuesStore.getState();
+      // Caminho decidido ANTES do request: a issue pode entrar/sair do store no meio
+      // (live-sync) e olhar depois da falha calava ou duplicava o toast.
+      const viaStore = !!store.getIssueById(childId);
       try {
-         if (store.getIssueById(childId)) {
+         if (viaStore) {
             await store.updateIssue(childId, { parentId });
          } else {
             await api.issues.update(childId, { parentId });
          }
          return true;
-      } catch {
+      } catch (err) {
          // O store já toastou o erro no caminho otimista; o caminho direto toasta aqui.
-         if (!store.getIssueById(childId)) toast.error('Could not update the parent issue');
+         if (!viaStore) toast.error(errorReason(err, 'Could not update the parent issue'));
          return false;
       }
    }, []);

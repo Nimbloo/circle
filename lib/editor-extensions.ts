@@ -22,7 +22,8 @@ import { TaskItemExt, TaskListExt } from './editor-tasks';
 export const DEFAULT_PLACEHOLDER = 'Add a description…';
 
 export interface EditorExtensionOptions extends ImageUploadOptions {
-   placeholder?: string;
+   /** Texto ou função (lida a cada render da decoration — reflete mudanças sem recriar). */
+   placeholder?: string | (() => string);
    /**
     * Nó de referência a issue já configurado pelo cliente (NodeView React + sugestões
     * do `#`). Default: o `IssueRef` estático — suficiente para o servidor.
@@ -39,8 +40,9 @@ export function editorExtensions(options: EditorExtensionOptions = {}): Extensio
    return [
       StarterKit.configure({
          heading: { levels: [1, 2, 3] },
-         // Clique NÃO navega no modo de edição (padrão de editores); no modo leitura o
-         // <a> nativo funciona, porque o contenteditable está desligado.
+         // Clique NÃO navega no modo de edição (padrão de editores); Ctrl/Cmd+clique e o
+         // botão do meio abrem em nova aba (`editor-link-open.ts`, só no cliente). No modo
+         // leitura o <a> nativo funciona, porque o contenteditable está desligado.
          link: {
             openOnClick: false,
             autolink: true,
@@ -53,7 +55,13 @@ export function editorExtensions(options: EditorExtensionOptions = {}): Extensio
       PasteLists,
       Placeholder.configure({ placeholder: options.placeholder ?? DEFAULT_PLACEHOLDER }),
       ImageNode,
-      ImageUpload.configure({ upload: options.upload, onUploadError: options.onUploadError }),
+      ImageUpload.configure({
+         upload: options.upload,
+         onUploadError: options.onUploadError,
+         validate: options.validate,
+         isEmbeddableSrc: options.isEmbeddableSrc,
+         onImagesDropped: options.onImagesDropped,
+      }),
       Video,
       options.issueRef ?? IssueRef,
    ];
