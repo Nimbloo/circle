@@ -435,11 +435,17 @@ export function BlockEditor({
    }, [editor, editable]);
 
    // Doc externo (refetch/realtime): entra só sem foco, para não pisar no que o usuário
-   // está digitando. Sem emitir update — não é uma edição do usuário.
+   // está digitando. Sem emitir update — não é uma edição do usuário — e fora do
+   // histórico: Ctrl+Z não pode voltar ao texto local e o autosave sobrescrever a
+   // versão de outra pessoa.
    useEffect(() => {
       if (!editor || !doc || editor.isFocused) return;
       if (JSON.stringify(editor.getJSON()) === JSON.stringify(doc)) return;
-      editor.commands.setContent(doc, { emitUpdate: false });
+      editor
+         .chain()
+         .setMeta('addToHistory', false)
+         .setContent(doc, { emitUpdate: false })
+         .run();
    }, [editor, doc]);
 
    const canPortal = editable && typeof document !== 'undefined';
