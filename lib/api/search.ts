@@ -428,7 +428,7 @@ async function ftsDocuments(
       rank: num(row.rank),
       teamId: row.team_id ?? null,
       statusId: null,
-      url: `/team/${row.team_id ?? ''}/documents`,
+      url: `/team/${row.team_id ?? ''}/documents/${row.id}`,
    }));
 }
 
@@ -559,7 +559,7 @@ async function likeSearch(db: Db, o: SearchOptions, limit: number): Promise<Sear
             rank: 0,
             teamId: row.team_id ?? null,
             statusId: null,
-            url: `/team/${row.team_id ?? ''}/documents`,
+            url: `/team/${row.team_id ?? ''}/documents/${row.id}`,
          })),
       });
    }

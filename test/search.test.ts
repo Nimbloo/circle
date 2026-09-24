@@ -125,6 +125,13 @@ describe('search — ranking e casamento', () => {
       const res = await search(db, { q: 'relatório' });
       expect(res.groups.map((g) => g.type)).toEqual(['issue', 'project', 'initiative', 'document']);
       expect(itemsOf(res.groups, 'document').map((i) => i.id)).toEqual(['d-1']);
+      // Abre o DOCUMENTO, não a lista de documentos do time.
+      expect(itemsOf(res.groups, 'document')[0].url).toBe('/team/CORE/documents/d-1');
+
+      // O fallback ilike (pedaço no meio da palavra) leva ao mesmo lugar.
+      const like = await search(db, { q: 'ncident' });
+      expect(like.fallback).toBe(true);
+      expect(itemsOf(like.groups, 'document')[0].url).toBe('/team/CORE/documents/d-1');
    });
 
    it('casa a descrição do projeto (project_detail) e devolve a url do overview', async () => {
