@@ -22,7 +22,8 @@ import { TaskItemExt, TaskListExt } from './editor-tasks';
 export const DEFAULT_PLACEHOLDER = 'Add a description…';
 
 export interface EditorExtensionOptions extends ImageUploadOptions {
-   placeholder?: string;
+   /** Texto ou função (lida a cada render da decoration — reflete mudanças sem recriar). */
+   placeholder?: string | (() => string);
    /**
     * Nó de referência a issue já configurado pelo cliente (NodeView React + sugestões
     * do `#`). Default: o `IssueRef` estático — suficiente para o servidor.

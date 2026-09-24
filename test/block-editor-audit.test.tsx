@@ -267,3 +267,22 @@ describe('BlockEditor — acessibilidade', () => {
       expect(root.hasAttribute('aria-activedescendant')).toBe(false);
    });
 });
+
+describe('BlockEditor — opções depois de montar', () => {
+   it('placeholder que muda depois de montar aparece no editor', async () => {
+      const { container, rerender } = await mount({ doc: paragraph(''), placeholder: 'Primeiro…' });
+      const root = container.querySelector('.ProseMirror')!;
+      await waitFor(() =>
+         expect(root.querySelector('[data-placeholder]')?.getAttribute('data-placeholder')).toBe(
+            'Primeiro…'
+         )
+      );
+      rerender(<BlockEditor doc={paragraph('')} saveDelayMs={0} placeholder="Segundo…" />);
+      await waitFor(() =>
+         expect(root.querySelector('[data-placeholder]')?.getAttribute('data-placeholder')).toBe(
+            'Segundo…'
+         )
+      );
+      expect(root.getAttribute('aria-label')).toBe('Segundo');
+   });
+});

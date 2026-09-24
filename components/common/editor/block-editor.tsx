@@ -223,12 +223,14 @@ export function BlockEditor({
    const onReadyRef = useRef(onReady);
    const onUploadRef = useRef(onUpload);
    const contextRef = useRef(context);
+   const placeholderRef = useRef(placeholder);
    useEffect(() => {
       onChangeRef.current = onChange;
       onSaveRef.current = onSave;
       onReadyRef.current = onReady;
       onUploadRef.current = onUpload;
       contextRef.current = context;
+      placeholderRef.current = placeholder;
    });
    const editorRef = useRef<Editor | null>(null);
 
@@ -345,7 +347,10 @@ export function BlockEditor({
    useEffect(() => {
       createSubIssueRef.current = createSubIssueFromTaskItem;
    }, [createSubIssueFromTaskItem]);
-   const hasContext = context !== undefined;
+   // Extensões são fixas por montagem (o `setOptions` do Tiptap ignora extensões novas):
+   // o que decide a lista é congelado aqui; o placeholder é lido por função (abaixo).
+   const [hasContext] = useState(context !== undefined);
+   const [withHeadingAnchors] = useState(headingAnchors);
 
    const slash = useSuggestionMenu<SlashItem>();
    const issueMenu = useSuggestionMenu<Issue>();
@@ -393,7 +398,7 @@ export function BlockEditor({
    const extensions = useMemo(
       () => [
          ...editorExtensions({
-            placeholder,
+            placeholder: () => placeholderRef.current ?? DEFAULT_PLACEHOLDER,
             upload: (file) => (onUploadRef.current ?? uploadViaApi)(file),
             // Tipo/tamanho que `POST /uploads` recusaria: avisa sem ler o arquivo.
             validate: validateEditorImage,
@@ -460,9 +465,9 @@ export function BlockEditor({
          }),
          // Ctrl/Cmd+clique e botão do meio abrem o link em nova aba.
          LinkOpen,
-         ...(headingAnchors ? [HeadingAnchors] : []),
+         ...(withHeadingAnchors ? [HeadingAnchors] : []),
       ],
-      [placeholder, slash.render, issueMenu.render, hasContext, openVideoPrompt, headingAnchors]
+      [slash.render, issueMenu.render, hasContext, openVideoPrompt, withHeadingAnchors]
    );
 
    // A11y: o `.ProseMirror` é um textbox multilinha com nome; com um menu `/`/`#` aberto
@@ -517,6 +522,15 @@ export function BlockEditor({
    useEffect(() => {
       if (editor && editor.isEditable !== editable) editor.setEditable(editable);
    }, [editor, editable]);
+
+   // Placeholder novo: a decoration só é recalculada numa transação — uma vazia basta
+   // (só quando ele MUDA; na montagem a decoration já nasce certa).
+   const shownPlaceholder = useRef(placeholder);
+   useEffect(() => {
+      if (!editor || editor.isDestroyed || shownPlaceholder.current === placeholder) return;
+      shownPlaceholder.current = placeholder;
+      editor.view.dispatch(editor.state.tr);
+   }, [editor, placeholder]);
 
    // Doc externo (refetch/realtime): entra só sem foco, para não pisar no que o usuário
    // está digitando. Sem emitir update — não é uma edição do usuário — e fora do
