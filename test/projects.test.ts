@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
-import { issue as issueT, projectUpdate, projectMilestone } from '@/db/schema';
+import { issue as issueT, project as projectT, projectUpdate, projectMilestone } from '@/db/schema';
 import {
    createProject,
    listProjects,
@@ -118,6 +118,22 @@ describe('projects', () => {
       expect(moved?.startDate).toBe('2026-06-10');
       // Limpar uma das datas continua valendo.
       expect((await updateProject(db, p.id, { targetDate: null }))?.targetDate).toBeNull();
+   });
+
+   it('o banco recusa intervalo invertido mesmo se a checagem da app passar (corrida)', async () => {
+      const { db } = await setup();
+      const p = await createProject(db, {
+         name: 'Corrida',
+         statusId: 'proj-in-progress',
+         startDate: '2026-05-01',
+         targetDate: '2026-05-31',
+         ...base,
+      });
+      // Simula o 2º patch concorrente: validou contra datas antigas e grava direto.
+      await db.update(projectT).set({ targetDate: '2026-05-10' }).where(eq(projectT.id, p.id));
+      await expect(
+         db.update(projectT).set({ startDate: '2026-05-20' }).where(eq(projectT.id, p.id))
+      ).rejects.toMatchObject({ cause: { code: '23514' } });
    });
 
    it('updating health stamps healthUpdatedAt', async () => {
