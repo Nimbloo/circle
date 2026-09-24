@@ -4,11 +4,7 @@ import { api } from '@/lib/client';
 import { cn } from '@/lib/utils';
 import { EMPTY_DOC, type EditorDoc } from '@/lib/editor-doc';
 import { editorExtensions } from '@/lib/editor-extensions';
-import {
-   docHasPendingUploads,
-   resolveUploadPlaceholders,
-   settleUploads,
-} from '@/lib/editor-image';
+import { docHasPendingUploads, resolveUploadPlaceholders, settleUploads } from '@/lib/editor-image';
 import { HeadingAnchors } from '@/lib/editor-heading-anchors';
 import { IssueRef } from '@/lib/editor-issue-ref';
 import { Emoticons } from '@/lib/editor-emoticons';
@@ -474,11 +470,7 @@ export function BlockEditor({
    useEffect(() => {
       if (!editor || !doc || editor.isFocused) return;
       if (JSON.stringify(editor.getJSON()) === JSON.stringify(doc)) return;
-      editor
-         .chain()
-         .setMeta('addToHistory', false)
-         .setContent(doc, { emitUpdate: false })
-         .run();
+      editor.chain().setMeta('addToHistory', false).setContent(doc, { emitUpdate: false }).run();
    }, [editor, doc]);
 
    const canPortal = editable && typeof document !== 'undefined';

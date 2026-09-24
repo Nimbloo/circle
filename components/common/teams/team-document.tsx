@@ -136,7 +136,10 @@ export default function TeamDocumentView({
                return;
             }
             if (!(e instanceof ApiError && e.status === 409)) {
-               toast.error(errorReason(e, 'Could not save the document'));
+               // id fixo: sem rede, cada autosave substitui o mesmo toast (não empilha).
+               toast.error(errorReason(e, 'Could not save the document'), {
+                  id: `document-save:${documentId}`,
+               });
                return;
             }
             conflict.current = true;

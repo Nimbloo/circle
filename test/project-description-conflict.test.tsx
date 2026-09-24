@@ -64,7 +64,13 @@ const docOf = (text: string): EditorDoc => ({
 vi.mock('@/components/common/editor/block-editor', async () => {
    const R = await import('react');
    return {
-      BlockEditor: ({ doc, onSave }: { doc: EditorDoc | null; onSave?: (d: EditorDoc) => void }) => {
+      BlockEditor: ({
+         doc,
+         onSave,
+      }: {
+         doc: EditorDoc | null;
+         onSave?: (d: EditorDoc) => void;
+      }) => {
          const saveRef = R.useRef(onSave);
          saveRef.current = onSave;
          R.useEffect(() => () => saveRef.current?.(docOf('flush do editor antigo')), []);
@@ -213,5 +219,18 @@ describe('descrição do projeto: eco e refetch fora de ordem', () => {
             expectedDescriptionVersion: 'v2',
          })
       );
+   });
+
+   it('erro de rede no autosave: um toast só (id fixo), não um por save', async () => {
+      mocks.detail.mockResolvedValue(dto('original', 'v1'));
+      renderOverview();
+      await waitFor(() => expect(screen.getByTestId('doc').textContent).toBe('original'));
+      mocks.updateDetail.mockRejectedValue(new Error('offline'));
+      await act(async () => screen.getByText('salvar').click());
+      await act(async () => screen.getByText('salvar').click());
+      await waitFor(() => expect(toastMocks.error).toHaveBeenCalledTimes(2));
+      const ids = toastMocks.error.mock.calls.map(([, opts]) => (opts as { id?: string })?.id);
+      expect(ids[0]).toBeTruthy();
+      expect(ids[1]).toBe(ids[0]);
    });
 });

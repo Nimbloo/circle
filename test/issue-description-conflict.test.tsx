@@ -191,4 +191,22 @@ describe('descrição: conflito de edição (#36)', () => {
          )
       );
    });
+
+   it('erro de rede no autosave: um toast só (id fixo), não um por save', async () => {
+      const { toast } = await import('sonner');
+      const { IssueDetailView } = await import('@/components/common/issues/details/issue-details');
+      apiMocks.issues.detail.mockResolvedValueOnce(detailDto('minha', 'v1'));
+      render(<IssueDetailView issue={issue} />);
+      await screen.findByText('minha');
+      apiMocks.issues.updateDetail.mockRejectedValue(new Error('offline'));
+      await act(async () => screen.getByText('salvar').click());
+      await act(async () => screen.getByText('salvar').click());
+      await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(2));
+      const ids = vi
+         .mocked(toast.error)
+         .mock.calls.map(([, opts]) => (opts as { id?: string })?.id);
+      expect(ids[0]).toBeTruthy();
+      expect(ids[1]).toBe(ids[0]);
+      apiMocks.issues.updateDetail.mockReset();
+   });
 });

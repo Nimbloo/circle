@@ -365,7 +365,8 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
             writes.seq += 1;
          } catch (e) {
             if (!(e instanceof ApiError && e.status === 409)) {
-               toast.error('Falha ao salvar a descrição');
+               // id fixo: sem rede, cada autosave substitui o mesmo toast (não empilha).
+               toast.error('Falha ao salvar a descrição', { id: `description-save:${issue.id}` });
                return;
             }
             // Outra pessoa gravou no meio: carrega a versão dela em vez de sobrescrever.

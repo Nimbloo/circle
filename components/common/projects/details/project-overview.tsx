@@ -124,7 +124,10 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
             setDescriptionVersion(versionRef.current);
          } catch (e) {
             if (!(e instanceof ApiError && e.status === 409)) {
-               toast.error('Could not save the description');
+               // id fixo: sem rede, cada autosave substitui o mesmo toast (não empilha).
+               toast.error('Could not save the description', {
+                  id: `project-description-save:${projectId}`,
+               });
                return;
             }
             conflict.current = true;

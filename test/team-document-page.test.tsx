@@ -37,7 +37,13 @@ const unmountFlush = vi.hoisted(() => ({ doc: null as EditorDoc | null }));
 vi.mock('@/components/common/editor/block-editor', async () => {
    const R = await import('react');
    return {
-      BlockEditor: ({ doc, onSave }: { doc: EditorDoc | null; onSave?: (d: EditorDoc) => void }) => {
+      BlockEditor: ({
+         doc,
+         onSave,
+      }: {
+         doc: EditorDoc | null;
+         onSave?: (d: EditorDoc) => void;
+      }) => {
          const saveRef = R.useRef(onSave);
          saveRef.current = onSave;
          R.useEffect(
