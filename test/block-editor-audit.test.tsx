@@ -5,6 +5,7 @@ import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '@tiptap/react';
+import { closeHistory } from '@tiptap/pm/history';
 import { BlockEditor } from '@/components/common/editor/block-editor';
 import { blocksToDoc, type EditorDoc } from '@/lib/editor-doc';
 import { EDITOR_IMAGE_MAX_BYTES } from '@/lib/editor-image';
@@ -128,9 +129,9 @@ describe('BlockEditor — placeholder órfão (CodeRabbit #190)', () => {
       });
       await waitFor(() => expect(onUpload).toHaveBeenCalled());
       // Upload mais longo que a janela de agrupamento do histórico: a troca pela URL
-      // final vira um passo de undo próprio.
-      await act(async () => {
-         await new Promise((r) => setTimeout(r, 600));
+      // final vira um passo de undo próprio (fecha o grupo sem esperar os 500 ms).
+      act(() => {
+         editor.view.dispatch(closeHistory(editor.state.tr));
       });
       await act(async () => resolve('https://cdn.test/uploads/tela.png'));
       await waitFor(() =>
@@ -166,9 +167,9 @@ describe('BlockEditor — placeholder órfão (CodeRabbit #190)', () => {
       });
       await waitFor(() => expect(onUpload).toHaveBeenCalled());
       // Upload mais longo que a janela de agrupamento do histórico: a troca pela URL
-      // final vira um passo de undo próprio.
-      await act(async () => {
-         await new Promise((r) => setTimeout(r, 600));
+      // final vira um passo de undo próprio (fecha o grupo sem esperar os 500 ms).
+      act(() => {
+         editor.view.dispatch(closeHistory(editor.state.tr));
       });
       await act(async () => resolve('https://cdn.test/uploads/b.png'));
       await waitFor(() =>
