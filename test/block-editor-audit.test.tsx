@@ -225,3 +225,45 @@ describe('BlockEditor — links', () => {
       }
    });
 });
+
+describe('BlockEditor — acessibilidade', () => {
+   it('o editor tem nome acessível (do placeholder) e é multilinha', async () => {
+      const { container } = await mount({ placeholder: 'Add a description…' });
+      const root = container.querySelector('.ProseMirror')!;
+      expect(root.getAttribute('role')).toBe('textbox');
+      expect(root.getAttribute('aria-label')).toBe('Add a description');
+      expect(root.getAttribute('aria-multiline')).toBe('true');
+   });
+
+   it('menu "/" ligado ao editor: expanded/controls/activedescendant; opções fora do Tab', async () => {
+      const { editor, container } = await mount({ doc: paragraph('') });
+      const root = container.querySelector('.ProseMirror')!;
+      expect(root.getAttribute('aria-expanded')).toBe('false');
+      act(() => {
+         editor.chain().focus('end').insertContent('/').run();
+      });
+      const menu = await waitFor(() => {
+         const el = document.querySelector('[role="listbox"][aria-label="Insert block"]');
+         expect(el).not.toBeNull();
+         return el!;
+      });
+      const options = Array.from(menu.querySelectorAll('[role="option"]'));
+      expect(options.length).toBeGreaterThan(1);
+      options.forEach((o) => expect(o.getAttribute('tabindex')).toBe('-1'));
+      await waitFor(() => expect(root.getAttribute('aria-expanded')).toBe('true'));
+      expect(root.getAttribute('aria-controls')).toBe(menu.id);
+      expect(menu.id).toBeTruthy();
+      expect(root.getAttribute('aria-activedescendant')).toBe(options[0].id);
+
+      act(() => {
+         fireEvent.keyDown(root, { key: 'ArrowDown' });
+      });
+      await waitFor(() => expect(root.getAttribute('aria-activedescendant')).toBe(options[1].id));
+
+      act(() => {
+         fireEvent.keyDown(root, { key: 'Escape' });
+      });
+      await waitFor(() => expect(root.getAttribute('aria-expanded')).toBe('false'));
+      expect(root.hasAttribute('aria-activedescendant')).toBe(false);
+   });
+});
