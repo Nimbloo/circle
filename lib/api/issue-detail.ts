@@ -557,6 +557,22 @@ async function commentScope(
    return row ? { issueId: row.issueId, teamId: row.teamId } : {};
 }
 
+/**
+ * Toda mutação de comentário (reagir, editar, resolver, excluir) exige escopo de ESCRITA
+ * na issue — a mesma regra do `addComment`. Antes só a autoria era checada: um convidado
+ * reagia em comentário de outro time sabendo o id, e quem saiu do time seguia editando.
+ */
+async function assertCanWriteComment(
+   db: Db,
+   commentId: string,
+   actorEmail: string
+): Promise<{ issueId: string; teamId?: string }> {
+   const scope = await commentScope(db, commentId);
+   if (!scope.issueId) throw new ApiError(404, 'Comentário não encontrado');
+   await assertCanWriteIssue(db, actorEmail, scope.issueId);
+   return { issueId: scope.issueId, teamId: scope.teamId };
+}
+
 async function issueTeamId(db: Db, issueId: string): Promise<string | undefined> {
    const [row] = await db
       .select({ teamId: issueT.teamId })
@@ -745,6 +761,7 @@ export async function updateComment(
    const rows = await db.select().from(commentT).where(eq(commentT.id, commentId)).limit(1);
    if (rows.length === 0) return null;
    const c = rows[0];
+   await assertCanWriteComment(db, commentId, actorEmail);
    const actor = await getOrCreateUser(db, actorEmail);
    if (c.authorId !== actor.id) throw new ApiError(403, 'Só o autor pode editar o comentário');
    const updatedAt = new Date();
@@ -782,6 +799,7 @@ export async function resolveComment(
    const rows = await db.select().from(commentT).where(eq(commentT.id, commentId)).limit(1);
    if (rows.length === 0) return null;
    const c = rows[0];
+   await assertCanWriteComment(db, commentId, actorEmail);
    if (c.parentId) throw new ApiError(400, 'Só o comentário-raiz de uma thread pode ser resolvido');
    const actor = await getOrCreateUser(db, actorEmail);
    const [iss] = await db
@@ -825,6 +843,7 @@ export async function deleteComment(
    const rows = await db.select().from(commentT).where(eq(commentT.id, commentId)).limit(1);
    if (rows.length === 0) return false;
    const c = rows[0];
+   await assertCanWriteComment(db, commentId, actorEmail);
    const actor = await getOrCreateUser(db, actorEmail);
    if (c.authorId !== actor.id) throw new ApiError(403, 'Só o autor pode excluir o comentário');
    // Threading: excluir um comentário-raiz leva junto suas respostas (e as reactions
@@ -1034,18 +1053,13 @@ export async function addReaction(
    emoji: string,
    actorEmail: string
 ): Promise<void> {
+   const scope = await assertCanWriteComment(db, commentId, actorEmail);
    const user = await getOrCreateUser(db, actorEmail);
    await db
       .insert(commentReaction)
       .values({ commentId, emoji, userId: user.id })
       .onConflictDoNothing();
-   publish({
-      entity: 'comment',
-      action: 'updated',
-      id: commentId,
-      actorEmail,
-      ...(await commentScope(db, commentId)),
-   });
+   publish({ entity: 'comment', action: 'updated', id: commentId, actorEmail, ...scope });
 }
 
 export async function removeReaction(
@@ -1054,6 +1068,7 @@ export async function removeReaction(
    emoji: string,
    actorEmail: string
 ): Promise<void> {
+   await assertCanWriteComment(db, commentId, actorEmail);
    const user = await getOrCreateUser(db, actorEmail);
    await db
       .delete(commentReaction)
