@@ -5,6 +5,7 @@ import { ApiError } from '@/lib/api/errors';
 import { createProject } from '@/lib/api/projects';
 import { getProjectDetail, updateProjectDetail } from '@/lib/api/project-detail';
 import type { EditorDoc } from '@/lib/editor-doc';
+import { subscribe, type CircleEvent } from '@/lib/api/events';
 
 const doc = (text: string): EditorDoc => ({
    type: 'doc',
@@ -61,5 +62,15 @@ describe('descrição do projeto com descriptionVersion (#18)', () => {
       });
       await updateProjectDetail(db, id, { descriptionDoc: doc('sem versão') });
       expect((await getProjectDetail(db, id))!.descriptionDoc).toEqual(doc('sem versão'));
+   });
+
+   it('salvar a descrição publica project com scope content (eco reconhecível pela aba)', async () => {
+      const { db, id } = await aProject();
+      const seen: CircleEvent[] = [];
+      const unsub = subscribe((e) => seen.push(e));
+      await updateProjectDetail(db, id, { descriptionDoc: doc('meu') });
+      unsub();
+      const ev = seen.find((e) => e.entity === 'project' && e.id === id);
+      expect(ev).toMatchObject({ action: 'updated', scope: 'content' });
    });
 });

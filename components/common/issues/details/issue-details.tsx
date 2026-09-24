@@ -157,6 +157,13 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
    const descriptionVersion = useRef<string | null>(null);
    const saveQueue = useRef<Promise<void>>(Promise.resolve());
    const conflict = useRef(false);
+   // Texto local que o 409 descartou (o save recusado e o flush do editor antigo): o
+   // toast do conflito oferece reaplicá-lo sobre a versão nova.
+   const conflictDraft = useRef<EditorDoc | null>(null);
+   const restoreDraftRef = useRef<() => void>(() => undefined);
+   // Saves da descrição em voo e confirmados: um refetch que saiu antes de um save (ou
+   // durante) traz o conteúdo de ANTES dele — não pode reverter o editor nem a versão.
+   const descriptionWrites = useRef({ inFlight: 0, seq: 0 });
    const [editorEpoch, setEditorEpoch] = useState(0);
    const descriptionBox = useRef<HTMLDivElement>(null);
 
@@ -196,6 +203,7 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
       if (!detailIssueId) return;
       let active = true;
       const startedAt = patchSeq.current;
+      const writesAtStart = descriptionWrites.current.seq;
       // Refetch silencioso (stale-while-revalidate): o conteúdo atual permanece na tela
       // enquanto o novo detail chega — loading só na primeira carga (detail === null).
       Promise.all([api.issues.detail(detailIssueId), api.issues.activity(detailIssueId)])
@@ -207,6 +215,8 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
                };
                setDetail(adapted);
                onDetailLoaded?.(adapted);
+               const writes = descriptionWrites.current;
+               if (writes.inFlight > 0 || writes.seq !== writesAtStart) return;
                // O editor com foco NÃO adota o doc recarregado (preserva a digitação): aí a
                // versão também não avança, e o próximo save acusa o conflito (409).
                const typing = descriptionBox.current?.contains(document.activeElement) ?? false;
@@ -309,11 +319,15 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
    useEffect(() => {
       const onChanged = (e: Event) => {
          const d =
-            (e as CustomEvent<{ id?: string; own?: boolean; scope?: 'activity' }>).detail ?? {};
+            (e as CustomEvent<{ id?: string; own?: boolean; scope?: 'activity' | 'content' }>)
+               .detail ?? {};
          if (d.id && d.id !== detailIssueId) return;
          // Eco do próprio comentário/reação (clientId desta aba): quem agiu já aplicou o
          // patch ou recarregou o feed — outro GET seria só duplicado.
          if (d.own && d.scope === 'activity') return;
+         // Eco do próprio autosave da descrição: o editor já tem o conteúdo e a resposta do
+         // save já trouxe a versão — refazer detail + activity a cada save é desperdício.
+         if (d.own && d.scope === 'content') return;
          const remaining = ownActionUntil.current - Date.now();
          if (remaining > 0) {
             if (d.own) return;
@@ -420,25 +434,47 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
 
    // O editor já mostra o que o usuário digitou; só o erro precisa de feedback (sem
    // toast de sucesso — o save é contínuo, com debounce).
-   const saveDescription = (doc: EditorDoc) => {
-      if (conflict.current) return;
+   // `force`: o "Restaurar minha versão" grava mesmo durante o remount que ele provoca.
+   const enqueueDescriptionSave = (doc: EditorDoc, force = false) => {
       saveQueue.current = saveQueue.current.then(async () => {
-         if (conflict.current) return;
+         if (conflict.current && !force) {
+            conflictDraft.current = doc;
+            return;
+         }
+         const writes = descriptionWrites.current;
+         writes.inFlight += 1;
+         writes.seq += 1;
          try {
-            const dto = await api.issues.updateDetail(issue.id, {
-               descriptionDoc: doc,
-               expectedDescriptionVersion: descriptionVersion.current,
-            });
+            const dto = await api.issues
+               .updateDetail(issue.id, {
+                  descriptionDoc: doc,
+                  expectedDescriptionVersion: descriptionVersion.current,
+               })
+               .finally(() => {
+                  writes.inFlight -= 1;
+               });
             descriptionVersion.current = dto.descriptionVersion ?? null;
+            writes.seq += 1;
          } catch (e) {
             if (!(e instanceof ApiError && e.status === 409)) {
-               toast.error('Falha ao salvar a descrição');
+               // id fixo: sem rede, cada autosave substitui o mesmo toast (não empilha).
+               toast.error('Falha ao salvar a descrição', { id: `description-save:${issue.id}` });
                return;
             }
-            // Outra pessoa gravou no meio: carrega a versão dela em vez de sobrescrever.
+            // Outra pessoa gravou no meio: carrega a versão dela em vez de sobrescrever, e
+            // guarda o texto local para o usuário poder reaplicá-lo.
             conflict.current = true;
+            conflictDraft.current = doc;
             toast.warning(
-               'A descrição foi alterada por outra pessoa. Carregamos a versão mais recente.'
+               'A descrição foi alterada por outra pessoa. Carregamos a versão mais recente.',
+               {
+                  id: `description-conflict:${issue.id}`,
+                  duration: 15_000,
+                  action: {
+                     label: 'Restaurar minha versão',
+                     onClick: () => restoreDraftRef.current(),
+                  },
+               }
             );
             try {
                const fresh = await api.issues.detail(issue.id);
@@ -452,6 +488,26 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
          }
       });
    };
+   const saveDescription = (doc: EditorDoc) => {
+      if (conflict.current) {
+         conflictDraft.current = doc;
+         return;
+      }
+      enqueueDescriptionSave(doc);
+   };
+   // Reaplica o texto local sobre a versão nova (já adotada) e salva com ela. O flush do
+   // editor que sai no remount é descartado (`conflict` até o remount), senão ele iria
+   // depois e sobrescreveria o texto restaurado.
+   const restoreConflictDraft = () => {
+      const mine = conflictDraft.current;
+      if (!mine) return;
+      conflictDraft.current = null;
+      conflict.current = true;
+      setDescriptionDoc(mine);
+      setEditorEpoch((n) => n + 1);
+      enqueueDescriptionSave(mine, true);
+   };
+   restoreDraftRef.current = restoreConflictDraft;
 
    return (
       <div className={cn(fade && 'content-enter', 'flex h-full w-full overflow-hidden')}>

@@ -366,11 +366,14 @@ export async function updateProjectDetail(
             .onConflictDoUpdate({ target: projectDetail.projectId, set });
       });
    }
+   // Summary/descrição só vivem no detalhe: `scope: 'content'` deixa a aba que salvou
+   // reconhecer o eco do próprio autosave e não refazer o GET do detalhe.
    publish({
       entity: 'project',
       action: 'updated',
       id: projectId,
       teamId: await projectTeamId(db, projectId),
+      scope: 'content',
    });
    return getProjectDetail(db, projectId);
 }
