@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, gte, inArray, lte, ne, notInArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lte, ne, notInArray, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    cycle as cycleT,
@@ -198,11 +198,24 @@ function buildBurnup(
    });
 }
 
-function toDto(row: CycleRow, agg: Agg, snapshots: SnapshotRow[], today: string): CycleDto {
+function toDto(
+   row: CycleRow,
+   agg: Agg,
+   snapshots: SnapshotRow[],
+   today: string,
+   final?: SnapshotRow
+): CycleDto {
+   // Ciclo fechado: o rollover já levou as abertas para o próximo, então o agregado atual
+   // só tem o que ficou (quase tudo concluído). O retrato do FECHAMENTO é a medida certa.
+   const closing = final && final.date >= row.endDate && final.scope > 0 ? final : null;
    const successRate =
-      row.status === 'completed' && agg.scope > 0
-         ? Math.round((agg.completed / agg.scope) * 100)
-         : null;
+      row.status !== 'completed'
+         ? null
+         : closing
+           ? Math.round((closing.completed / closing.scope) * 100)
+           : agg.scope > 0
+             ? Math.round((agg.completed / agg.scope) * 100)
+             : null;
    // Variação de escopo (%) desde o primeiro snapshot do ciclo; 0 sem histórico.
    const first = snapshots[0];
    const scopeDelta =
@@ -262,6 +275,17 @@ async function snapshotsByCycle(
       result.set(r.cycleId, arr);
    }
    return result;
+}
+
+/** Último snapshot de cada ciclo (o do fechamento, nos ciclos concluídos). */
+async function lastSnapshots(db: Db, cycleIds: string[]): Promise<Map<string, SnapshotRow>> {
+   if (cycleIds.length === 0) return new Map();
+   const rows = await db
+      .selectDistinctOn([snapshotT.cycleId])
+      .from(snapshotT)
+      .where(inArray(snapshotT.cycleId, cycleIds))
+      .orderBy(asc(snapshotT.cycleId), desc(snapshotT.date));
+   return new Map(rows.map((r) => [r.cycleId, r]));
 }
 
 /**
@@ -333,14 +357,22 @@ async function toDtos(
    burnupIds: readonly string[] = rows.map((r) => r.id)
 ): Promise<CycleDto[]> {
    const ids = rows.map((r) => r.id);
-   const [aggs, snaps] = await Promise.all([
+   const completedIds = rows.filter((r) => r.status === 'completed').map((r) => r.id);
+   const [aggs, snaps, finals] = await Promise.all([
       aggregatesByCycle(db, ids, burnupIds),
       snapshotsByCycle(db, ids, burnupIds),
+      lastSnapshots(db, completedIds),
    ]);
    const today = workspaceDay(now);
    const withBurnup = new Set(burnupIds);
    return rows.map((r) => {
-      const dto = toDto(r, aggs.get(r.id) ?? EMPTY_AGG(), snaps.get(r.id) ?? [], today);
+      const dto = toDto(
+         r,
+         aggs.get(r.id) ?? EMPTY_AGG(),
+         snaps.get(r.id) ?? [],
+         today,
+         finals.get(r.id)
+      );
       if (!withBurnup.has(r.id)) dto.burnup = null;
       return dto;
    });
@@ -386,6 +418,14 @@ export async function rolloverCyclesForTeam(
             next = await createNextCycle(tx, teamId, current);
             touched.created = next.id;
          } else touched.updated.add(next.id);
+
+         // Retrato do fechamento ANTES de carregar as abertas: é a base do success rate.
+         const closing = await aggregatesByCycle(tx as unknown as Db, [current.id], []);
+         await upsertSnapshots(
+            tx as unknown as Db,
+            [{ cycleId: current.id, agg: closing.get(current.id) ?? EMPTY_AGG() }],
+            current.endDate
+         );
 
          const statuses = await tx.select().from(statusT);
          // Paridade Linear: só issues "em aberto" (unstarted/started) rolam pro próximo ciclo.
