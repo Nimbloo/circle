@@ -175,7 +175,14 @@ export function CreateNewIssue() {
          if (!createMore) {
             closeModal();
          }
-         setAddIssueForm(createDefaultData());
+         const fresh = createDefaultData();
+         // "Create more" segue no time escolhido no modal (voltar ao da rota criava a
+         // próxima no time errado sem aviso); projeto/estimativa do contexto são do outro time.
+         setAddIssueForm(
+            createMore && formTeamId !== fresh.teamId
+               ? { ...fresh, teamId: formTeamId, project: undefined, estimate: undefined }
+               : fresh
+         );
          setEditorKey((k) => k + 1);
       } catch (e) {
          // A issue otimista já foi revertida no store; mantém o modal aberto p/ retry.

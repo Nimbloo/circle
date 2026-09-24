@@ -142,6 +142,48 @@ describe('modal de criar issue', () => {
       expect(titleInput().value).toBe('');
    });
 
+   it('"Create more" mantém o time escolhido no modal para a próxima issue', async () => {
+      createMock.mockReset();
+      createMock.mockImplementation(async (input: { title: string; teamId: string }) => ({
+         id: `srv-${input.title}`,
+         identifier: `${input.teamId}-1`,
+         teamId: input.teamId,
+         title: input.title,
+         status: { id: 'to-do', name: 'Todo', color: '#000', category: 'unstarted' },
+         priority: { id: 'no-priority', name: 'No priority' },
+         assignee: null,
+         assignees: [],
+         labels: [],
+         createdAt: '2026-01-01T00:00:00.000Z',
+         updatedAt: '2026-01-01T00:00:00.000Z',
+         cycleId: '',
+         rank: 'a',
+      }));
+      const team = (id: string, name: string) =>
+         ({ id, name, joined: true, color: '#000', icon: '' }) as unknown as ReturnType<
+            typeof useWorkspaceStore.getState
+         >['teams'][number];
+      useWorkspaceStore.setState({ teams: [team('ENG', 'Engineering'), team('DES', 'Design')] });
+      const user = userEvent.setup({ pointerEventsCheck: 0 });
+      render(<CreateNewIssue />);
+      act(() => useCreateIssueStore.getState().openModal());
+
+      await user.click(screen.getByLabelText('Team: Engineering'));
+      await user.click(await screen.findByRole('menuitemradio', { name: /Design/ }));
+      await user.click(screen.getByRole('switch'));
+      await user.type(titleInput(), 'Primeira');
+      await user.keyboard('{Control>}{Enter}{/Control}');
+      await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));
+      expect(createMock.mock.calls[0][0].teamId).toBe('DES');
+
+      await waitFor(() => expect(titleInput().value).toBe(''));
+      expect(screen.getByLabelText('Team: Design')).toBeTruthy();
+      await user.type(titleInput(), 'Segunda');
+      await user.keyboard('{Control>}{Enter}{/Control}');
+      await waitFor(() => expect(createMock).toHaveBeenCalledTimes(2));
+      expect(createMock.mock.calls[1][0].teamId).toBe('DES');
+   });
+
    it('#5 o botão da sidebar abre UMA instância do modal (a do provider)', async () => {
       const user = userEvent.setup();
       render(
