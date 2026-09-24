@@ -136,4 +136,22 @@ describe('R7 menu de contexto único no nível da lista', () => {
       await waitFor(() => expect(toast.error).toHaveBeenCalled());
       expect(toast.success).not.toHaveBeenCalled();
    });
+
+   // Auditoria de diálogos (15c): o diálogo nasce de um item do menu de contexto, que
+   // desmonta — ao cancelar, o foco caía no <body> em vez de voltar para a issue.
+   it('cancelar "Delete issue?" devolve o foco para a linha da issue', async () => {
+      render(view());
+      fireEvent.contextMenu(screen.getByText('Issue 2'));
+      await userEvent.setup().click(await screen.findByText('Delete...'));
+      await userEvent.setup().click(await screen.findByRole('button', { name: 'Cancel' }));
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+      await waitFor(() =>
+         expect(
+            (document.activeElement as HTMLElement | null)
+               ?.closest('[data-issue-id]')
+               ?.getAttribute('data-issue-id')
+         ).toBe('i2')
+      );
+   });
 });
+

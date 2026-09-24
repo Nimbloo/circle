@@ -48,6 +48,24 @@ import { labelColor } from '@/components/common/palette';
 import { deleteIssuesWithUndo } from './delete-with-undo';
 import { startIssueOnBranchCopy } from '@/components/layout/context-issue';
 
+/**
+ * O diálogo nasce de um item do menu de contexto, que desmonta com ele: o Radix devolvia
+ * o foco a um nó morto (<body>). Volta para o link da linha/card da issue, se ela ainda
+ * está na tela.
+ */
+function focusIssueRow(e: Event, issueId: string | undefined): void {
+   if (!issueId) return;
+   const row = [...document.querySelectorAll<HTMLElement>('[data-issue-id]')].find(
+      (el) => el.dataset.issueId === issueId
+   );
+   const target =
+      row?.querySelector<HTMLElement>('a[href]') ??
+      row?.querySelector<HTMLElement>('button, [tabindex]:not([tabindex="-1"])');
+   if (!target) return;
+   e.preventDefault();
+   target.focus();
+}
+
 interface IssueContextMenuProps {
    issueId?: string;
 }
@@ -479,7 +497,7 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
          </ContextMenuContent>
 
          <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-            <AlertDialogContent>
+            <AlertDialogContent onCloseAutoFocus={(e) => focusIssueRow(e, issueId)}>
                <AlertDialogHeader>
                   <AlertDialogTitle>Delete issue?</AlertDialogTitle>
                   <AlertDialogDescription>
