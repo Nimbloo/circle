@@ -13,6 +13,7 @@ import {
 } from '@/lib/editor-image';
 import { HeadingAnchors } from '@/lib/editor-heading-anchors';
 import { IssueRef } from '@/lib/editor-issue-ref';
+import { LinkOpen } from '@/lib/editor-link-open';
 import { Emoticons } from '@/lib/editor-emoticons';
 import { TaskItemExt, linkedIssueIdentifier } from '@/lib/editor-tasks';
 import type { Issue } from '@/data/issues';
@@ -454,6 +455,8 @@ export function BlockEditor({
          Emoticons.configure({
             isEnabled: () => usePreferencesStore.getState().convertEmoticons,
          }),
+         // Ctrl/Cmd+clique e botão do meio abrem o link em nova aba.
+         LinkOpen,
          ...(headingAnchors ? [HeadingAnchors] : []),
       ],
       [placeholder, slash.render, issueMenu.render, hasContext, openVideoPrompt, headingAnchors]

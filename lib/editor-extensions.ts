@@ -39,8 +39,9 @@ export function editorExtensions(options: EditorExtensionOptions = {}): Extensio
    return [
       StarterKit.configure({
          heading: { levels: [1, 2, 3] },
-         // Clique NÃO navega no modo de edição (padrão de editores); no modo leitura o
-         // <a> nativo funciona, porque o contenteditable está desligado.
+         // Clique NÃO navega no modo de edição (padrão de editores); Ctrl/Cmd+clique e o
+         // botão do meio abrem em nova aba (`editor-link-open.ts`, só no cliente). No modo
+         // leitura o <a> nativo funciona, porque o contenteditable está desligado.
          link: {
             openOnClick: false,
             autolink: true,

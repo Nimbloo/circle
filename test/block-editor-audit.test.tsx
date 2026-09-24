@@ -181,3 +181,47 @@ describe('BlockEditor — imagem externa colada', () => {
       }
    });
 });
+
+describe('BlockEditor — links', () => {
+   const LINKED: EditorDoc = {
+      type: 'doc',
+      content: [
+         {
+            type: 'paragraph',
+            content: [
+               {
+                  type: 'text',
+                  text: 'site',
+                  marks: [{ type: 'link', attrs: { href: 'https://linear.app/docs' } }],
+               },
+            ],
+         },
+      ],
+   };
+
+   it('Ctrl/Cmd+clique e botão do meio abrem o link em nova aba (noopener); clique simples não', async () => {
+      const open = vi.spyOn(window, 'open').mockReturnValue(null);
+      try {
+         const { container } = await mount({ doc: LINKED });
+         const a = container.querySelector('.ProseMirror a[href]')!;
+         expect(a).not.toBeNull();
+
+         fireEvent.click(a);
+         expect(open).not.toHaveBeenCalled();
+
+         fireEvent.click(a, { ctrlKey: true });
+         expect(open).toHaveBeenLastCalledWith(
+            'https://linear.app/docs',
+            '_blank',
+            expect.stringContaining('noopener')
+         );
+         fireEvent.click(a, { metaKey: true });
+         expect(open).toHaveBeenCalledTimes(2);
+
+         fireEvent(a, new MouseEvent('auxclick', { button: 1, bubbles: true, cancelable: true }));
+         expect(open).toHaveBeenCalledTimes(3);
+      } finally {
+         open.mockRestore();
+      }
+   });
+});
