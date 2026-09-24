@@ -55,4 +55,17 @@ describe('preferência "Convert text emoticons into emojis"', () => {
       type(editor, ':path ');
       expect(editor.getText()).toContain(':path');
    });
+
+   it('Enter logo depois do emoticon cria o parágrafo (não vira emoji + quebra no texto)', async () => {
+      usePreferencesStore.getState().setPref('convertEmoticons', true);
+      const editor = await mount();
+      editor.commands.focus('end');
+      type(editor, 'oi :)');
+      editor.view.someProp('handleKeyDown', (f) =>
+         f(editor.view, new KeyboardEvent('keydown', { key: 'Enter' }))
+      );
+      const json = editor.getJSON();
+      expect(json.content?.filter((n) => n.type === 'paragraph').length).toBeGreaterThanOrEqual(2);
+      expect(editor.getText()).not.toContain('🙂\n');
+   });
 });
