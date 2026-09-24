@@ -273,6 +273,9 @@ export async function deleteView(db: Db, id: string, actorEmail: string): Promis
 /** Teto de issues em `/views/:id/results` (o mesmo default da listagem). */
 export const VIEW_RESULTS_LIMIT = 500;
 
+/** Teto da busca de uma saved search (o `MAX_LIMIT` de `search`). */
+const SAVED_SEARCH_LIMIT = 100;
+
 export async function resolveView(
    db: Db,
    id: string,
@@ -310,7 +313,7 @@ export async function resolveView(
          // `limit + 1` para saber se havia mais (antes cortava em 500 em silêncio).
          limit: limit + 1,
       });
-      const truncated = issues.length > limit;
+      let truncated = issues.length > limit;
       if (truncated) issues = issues.slice(0, limit);
       if (f.hasProject) issues = issues.filter((i) => i.project !== null);
       if (f.q?.trim()) {
@@ -319,8 +322,10 @@ export async function resolveView(
          const ranked = await searchIssueIds(db, {
             q: f.q,
             teamId: view.teamId ?? undefined,
-            limit: 100,
+            limit: SAVED_SEARCH_LIMIT,
          });
+         // A busca para no teto: pode haver mais resultados do que os devolvidos.
+         if (ranked.length >= SAVED_SEARCH_LIMIT) truncated = true;
          const position = new Map(ranked.map((id, i) => [id, i]));
          issues = issues
             .filter((i) => position.has(i.id))

@@ -10,8 +10,8 @@ import {
 } from '@/components/layout/header-primitives';
 import { ViewActions } from '@/components/common/views/view-actions';
 import { DisplayOptions } from '../display-options';
-import { filterIssuesForView, filterProjectsForView } from '@/data/views';
-import { useIssuesStore } from '@/store/issues-store';
+import { filterProjectsForView, type View } from '@/data/views';
+import { useViewIssues } from '@/components/common/views/use-view-issues';
 import { useRightPanelStore } from '@/store/right-panel-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useFavoritesStore } from '@/store/favorites-store';
@@ -24,7 +24,6 @@ export default function Header() {
    const { orgId, viewId } = useParams<{ orgId: string; viewId: string }>();
    const view = useWorkspaceStore((s) => s.getViewById(viewId));
    const teams = useWorkspaceStore((s) => s.teams);
-   const liveIssues = useIssuesStore((s) => s.issues);
    const liveProjects = useWorkspaceStore((s) => s.projects);
    const { openPanel, togglePanel } = useRightPanelStore();
    const isFavorite = useFavoritesStore((s) => s.isFavorite('view', viewId));
@@ -34,11 +33,14 @@ export default function Header() {
 
    const team = view.teamId ? teams.find((candidate) => candidate.id === view.teamId) : undefined;
 
-   // Conta contra os stores vivos (hidratados da API), não os mocks.
+   // Conta contra os stores vivos (hidratados da API), não os mocks. Views de issue
+   // contam a MESMA lista do corpo (com o termo da saved search aplicado).
    const count =
-      view.type === 'issue'
-         ? filterIssuesForView(view, liveIssues).length
-         : filterProjectsForView(view, liveProjects).length;
+      view.type === 'issue' ? (
+         <IssueViewCount view={view} />
+      ) : (
+         filterProjectsForView(view, liveProjects).length
+      );
 
    return (
       <>
@@ -119,4 +121,9 @@ export default function Header() {
          </ViewBar>
       </>
    );
+}
+
+/** Contador da view de issues: mesma fonte do corpo (`useViewIssues`). */
+function IssueViewCount({ view }: { view: View }) {
+   return <>{useViewIssues(view).issues.length}</>;
 }

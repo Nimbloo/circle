@@ -1,17 +1,20 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, inArray, ne } from 'drizzle-orm';
+import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    initiative as initT,
    initiativeActivity,
    initiativeLabel,
    initiativeProject,
+   initiativeUpdate,
    project as projectT,
    priority as priorityT,
    health as healthT,
    projectStatus as projectStatusT,
    appUser,
    label as labelT,
+   issue as issueT,
+   status as issueStatusT,
 } from '@/db/schema';
 import { targetDateFromLabel } from '@/lib/initiative-period';
 import { ApiError } from './errors';
@@ -86,7 +89,7 @@ async function projectsByInitiative(db: Db, initIds: string[]) {
            .where(inArray(initiativeProject.initiativeId, initIds))
       : [];
    const projectIds = [...new Set(links.map((l) => l.projectId))];
-   const [projects, statuses] = await Promise.all([
+   const [projects, statuses, issueCounts] = await Promise.all([
       projectIds.length
          ? db
               .select({
@@ -99,14 +102,33 @@ async function projectsByInitiative(db: Db, initIds: string[]) {
          : Promise.resolve([]),
       // Categorias dos status de PROJETO (projeto usa project_status, não o de issue).
       db.select().from(projectStatusT),
+      // % real derivado das issues (done/total), a mesma conta da lista e do roadmap.
+      projectIds.length
+         ? db
+              .select({
+                 projectId: issueT.projectId,
+                 total: sql<number>`count(*)`,
+                 done: sql<number>`count(*) filter (where ${issueStatusT.category} = 'completed')`,
+              })
+              .from(issueT)
+              .innerJoin(issueStatusT, eq(issueT.statusId, issueStatusT.id))
+              .where(inArray(issueT.projectId, projectIds))
+              .groupBy(issueT.projectId)
+         : Promise.resolve([]),
    ]);
    const catById = new Map(statuses.map((s) => [s.id, s.category]));
+   const pctById = new Map(
+      issueCounts.map((c) => [
+         c.projectId,
+         Number(c.total) > 0 ? Math.round((Number(c.done) / Number(c.total)) * 100) : null,
+      ])
+   );
    const isCompleted = new Map(
       projects.map((p) => [
          p.id,
          isProjectCompleted({
             status: { category: catById.get(p.statusId) ?? '' },
-            percentComplete: p.percentComplete,
+            percentComplete: pctById.get(p.id) ?? p.percentComplete,
          }),
       ])
    );
@@ -655,6 +677,10 @@ export async function deleteInitiative(db: Db, id: string): Promise<boolean> {
          .returning({ id: initT.id });
       await tx.delete(initiativeProject).where(eq(initiativeProject.initiativeId, id));
       await tx.delete(initiativeLabel).where(eq(initiativeLabel.initiativeId, id));
+      // Feed e updates de health referenciam a initiative sem cascade: sem isto, excluir
+      // uma initiative já editada (ou com update postado) estourava a FK (23503).
+      await tx.delete(initiativeActivity).where(eq(initiativeActivity.initiativeId, id));
+      await tx.delete(initiativeUpdate).where(eq(initiativeUpdate.initiativeId, id));
       // project.initiativeId é RESTRICT e nullable: desvincula os projetos antes de deletar.
       await tx.update(projectT).set({ initiativeId: null }).where(eq(projectT.initiativeId, id));
       await tx.delete(initT).where(eq(initT.id, id));

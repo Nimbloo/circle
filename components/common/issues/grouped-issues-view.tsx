@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { Issue, sortIssuesByPriority } from '@/data/issues';
 import { Status } from '@/data/status';
 import { usePriorities, useLabels } from '@/store/catalog-store';
-import { useDisplaySetting } from '@/store/display-settings-store';
+import { DEFAULT_DISPLAY_SETTINGS, useDisplaySetting } from '@/store/display-settings-store';
 import { useFilterStore } from '@/store/filter-store';
 import { useBulkSelectionStore } from '@/store/bulk-selection-store';
 import { useIssueNavigationStore, type IssueNavItem } from '@/store/issue-navigation-store';
@@ -35,6 +35,11 @@ interface GroupedIssuesViewProps {
    isViewTypeGrid: boolean;
    /** Hidratação em andamento — distingue "carregando" de "vazio real". */
    loading?: boolean;
+   /**
+    * A ordem de `issues` já é a certa (relevância da saved search): na ordenação PADRÃO
+    * ela é mantida dentro de cada grupo; uma ordenação escolhida no Display prevalece.
+    */
+   keepInputOrder?: boolean;
    /** Última hidratação falhou — mostra a falha + botão de retry no lugar do vazio. */
    error?: boolean;
    /** Re-tenta a hidratação (usado pelo estado de falha). */
@@ -100,6 +105,8 @@ const sortIssues = (issues: Issue[], ordering: string, completedByRecency = fals
             );
          case 'title':
             return [...issues].sort((a, b) => a.title.localeCompare(b.title));
+         case 'input':
+            return [...issues];
          case 'manual':
             // Ordem manual do Linear: pelo `rank` (LexoRank), ascendente.
             return [...issues].sort((a, b) => a.rank.localeCompare(b.rank));
@@ -204,13 +211,19 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
    error,
    onRetry,
    currentProjectId,
+   keepInputOrder = false,
 }) => {
    // Troca de irmão (aba, item, layout) não pisca: só a primeira chegada de conteúdo.
    const fade = useEnterFade('issues-view');
    // Selectors individuais: re-render só quando a chave usada muda (não o store inteiro).
    const grouping = useDisplaySetting('grouping');
    const subGrouping = useDisplaySetting('subGrouping');
-   const ordering = useDisplaySetting('ordering');
+   const chosenOrdering = useDisplaySetting('ordering');
+   // Relevância (saved search) na ordenação padrão: `input` preserva a ordem recebida.
+   const ordering =
+      keepInputOrder && chosenOrdering === DEFAULT_DISPLAY_SETTINGS.ordering
+         ? 'input'
+         : chosenOrdering;
    const orderCompletedByRecency = useDisplaySetting('orderCompletedByRecency');
    const completedIssues = useDisplaySetting('completedIssues');
    const showEmptyGroups = useDisplaySetting('showEmptyGroups');

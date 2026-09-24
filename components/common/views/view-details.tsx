@@ -15,7 +15,9 @@ const InsightsPanel = dynamic(
 );
 import ProjectsList from '@/components/common/projects/projects-list';
 import { ProjectGroup } from '@/components/common/projects/projects';
-import { filterIssuesForView, filterProjectsForView, View } from '@/data/views';
+import { filterProjectsForView, View } from '@/data/views';
+import { SAVED_SEARCH_LIMIT, savedSearchKey, useViewIssues } from './use-view-issues';
+import { useSavedSearchStore } from '@/store/saved-search-store';
 import { ViewFilterChips } from './view-filter-chips';
 import { useDisplayOrderedStatuses } from '@/store/catalog-store';
 import { selectIssuesLoading, useIssuesStore } from '@/store/issues-store';
@@ -31,61 +33,48 @@ function IssueViewBody({ view }: { view: View }) {
    // Mesmas colunas/ordem e mesmo layout (list/board do "Display") das demais listas.
    const allStatus = useDisplayOrderedStatuses();
    const { viewType } = useViewStore();
-   // Filtra contra o store vivo (hidratado da API), não o mock vazio.
-   const liveIssues = useIssuesStore((s) => s.issues);
    const loading = useIssuesStore(selectIssuesLoading);
    const error = useIssuesStore((s) => s.error);
    const hydrate = useIssuesStore((s) => s.hydrate);
-   const filtered = useMemo(() => filterIssuesForView(view, liveIssues), [view, liveIssues]);
-
    // Saved search (#99): quando a view guarda um termo, o RANKING vem do servidor
    // (`/api/v1/search`, o mesmo motor da tela de busca) e a lista é a interseção com o
-   // que os demais filtros da view já deixaram passar, na ordem de relevância.
-   const q = view.filter.q?.trim() ?? '';
-   const [rankedIds, setRankedIds] = useState<string[] | null>(null);
-   const [searchError, setSearchError] = useState(false);
+   // que os demais filtros da view já deixaram passar, na ordem de relevância. O
+   // resultado vive no `saved-search-store`: o header conta a MESMA lista.
+   const { q, issues, searching, searchError, truncated } = useViewIssues(view);
+   const searchKey = savedSearchKey(view);
+   const setEntry = useSavedSearchStore((s) => s.setEntry);
    const [attempt, setAttempt] = useState(0);
-   // Is#19/Ad#15: sem termo zera; com termo, a 1ª busca mostra carregando (não o vazio) e
-   // falha vira erro com retry. Mudança nas issues (eventos) refaz a busca com debounce,
-   // mantendo o resultado anterior na tela (sem voltar ao carregando).
-   // Termo/time novos (view editada): o ranking antigo não vale — volta ao carregando.
-   const searchKey = `${q}|${view.teamId ?? ''}`;
-   const [prevSearchKey, setPrevSearchKey] = useState(searchKey);
-   if (searchKey !== prevSearchKey) {
-      setPrevSearchKey(searchKey);
-      setRankedIds(null);
-      setSearchError(false);
-   }
-   const hasResult = rankedIds !== null;
+   // Is#19/Ad#15: com termo, a 1ª busca mostra carregando (não o vazio) e falha vira erro
+   // com retry. Mudança nas issues (eventos) refaz a busca com debounce, mantendo o
+   // resultado anterior na tela (sem voltar ao carregando).
    // Assinatura (não o array): muda só quando alguma issue muda de fato, não a cada
    // re-hidratação ou update otimista que recria o array com o mesmo conteúdo.
    const issuesSignature = useIssuesStore((s) =>
       s.issues.map((i) => `${i.id}:${i.updatedAt ?? ''}`).join('|')
    );
    useEffect(() => {
-      if (!q) {
-         setRankedIds(null);
-         setSearchError(false);
-         return;
-      }
+      if (!q) return;
       let active = true;
+      const hasResult = () =>
+         (useSavedSearchStore.getState().byKey[searchKey]?.rankedIds ?? null) !== null;
       const timer = setTimeout(
          () => {
             api.search
-               .query({ q, types: ['issue'], teamId: view.teamId, limit: 100 })
+               .query({ q, types: ['issue'], teamId: view.teamId, limit: SAVED_SEARCH_LIMIT })
                .then((res) => {
                   if (!active) return;
-                  setSearchError(false);
-                  setRankedIds(
-                     res.groups.find((g) => g.type === 'issue')?.items.map((i) => i.id) ?? []
-                  );
+                  setEntry(searchKey, {
+                     rankedIds:
+                        res.groups.find((g) => g.type === 'issue')?.items.map((i) => i.id) ?? [],
+                     error: false,
+                  });
                })
                .catch(() => {
                   // Refetch em segundo plano que falha mantém o resultado que já está na tela.
-                  if (active && !hasResult) setSearchError(true);
+                  if (active && !hasResult()) setEntry(searchKey, { rankedIds: null, error: true });
                });
          },
-         hasResult ? 400 : 0
+         hasResult() ? 400 : 0
       );
       return () => {
          active = false;
@@ -93,20 +82,16 @@ function IssueViewBody({ view }: { view: View }) {
       };
       // `issuesSignature`: evento remoto/local mudou as issues → o ranking pode ter mudado.
       // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [q, view.teamId, attempt, issuesSignature]);
-
-   const issues = useMemo(() => {
-      if (!q) return filtered;
-      if (rankedIds === null) return [];
-      const position = new Map(rankedIds.map((id, i) => [id, i]));
-      return filtered
-         .filter((i) => position.has(i.id))
-         .sort((a, b) => position.get(a.id)! - position.get(b.id)!);
-   }, [q, rankedIds, filtered]);
+   }, [q, searchKey, attempt, issuesSignature]);
 
    return (
       <div className="w-full h-full flex flex-col overflow-hidden">
          <ViewFilterChips view={view} />
+         {truncated && (
+            <p className="border-b px-6 py-1.5 text-xs text-muted-foreground">
+               Showing the first {SAVED_SEARCH_LIMIT} matches — refine the search to see the rest.
+            </p>
+         )}
          <div className="flex-1 min-h-0 w-full flex overflow-hidden">
             <div className="flex-1 min-w-0 h-full overflow-hidden">
                <GroupedIssuesView
@@ -114,12 +99,13 @@ function IssueViewBody({ view }: { view: View }) {
                   totalIssues={issues}
                   statuses={allStatus}
                   isViewTypeGrid={viewType === 'grid'}
-                  loading={loading || (!!q && rankedIds === null && !searchError)}
+                  loading={loading || searching}
                   error={error || searchError}
+                  keepInputOrder={!!q}
                   onRetry={() => {
                      if (error) void hydrate();
                      if (searchError) {
-                        setSearchError(false);
+                        setEntry(searchKey, { rankedIds: null, error: false });
                         setAttempt((n) => n + 1);
                      }
                   }}

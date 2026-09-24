@@ -105,6 +105,7 @@ export interface IssueDetail {
    blockedByIds?: string[];
    blockingIds?: string[];
    duplicateIds?: string[];
+   duplicatedByIds?: string[];
    prLinks?: PrLink[];
    /** Anexos da issue (os de comentário vêm em cada comentário do feed). */
    attachments?: Attachment[];

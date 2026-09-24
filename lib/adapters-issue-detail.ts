@@ -164,6 +164,7 @@ export function adaptIssueDetail(dto: IssueDetailDto, activity: ActivityDto[]): 
       blockedByIds: dto.blockedByIds,
       blockingIds: dto.blockingIds,
       duplicateIds: dto.duplicateIds,
+      duplicatedByIds: dto.duplicatedByIds ?? [],
       prLinks: dto.prLinks.map((p) => ({ ...p, status: p.status as PrLink['status'] })),
       attachments: (dto.attachments ?? []).map(adaptAttachment),
       milestone: dto.milestone ?? undefined,

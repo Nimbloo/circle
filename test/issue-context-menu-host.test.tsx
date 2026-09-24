@@ -153,4 +153,21 @@ describe('R7 menu de contexto único no nível da lista', () => {
          ).toBe('i2')
       );
    });
+
+   it('Project lista só os projetos do time da issue (o servidor recusa os de outro time)', async () => {
+      const mk = (id: string, name: string, teamId: string) =>
+         ({ id, name, teamId, icon: () => null }) as unknown as ReturnType<
+            typeof useWorkspaceStore.getState
+         >['projects'][number];
+      useWorkspaceStore.setState({
+         projects: [mk('p-eng', 'Portal ENG', 'ENG'), mk('p-des', 'Marca DES', 'DES')],
+      });
+      render(view());
+      fireEvent.contextMenu(screen.getByText('Issue 2'));
+      const trigger = await screen.findByText('Project');
+      trigger.focus();
+      fireEvent.keyDown(trigger, { key: 'ArrowRight' });
+      expect(await screen.findByText('Portal ENG')).toBeTruthy();
+      expect(screen.queryByText('Marca DES')).toBeNull();
+   });
 });

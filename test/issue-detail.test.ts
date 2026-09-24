@@ -3,6 +3,7 @@ import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
 import { listInbox } from '@/lib/api/notifications';
 import { createIssue } from '@/lib/api/issues';
+import { issueRelation } from '@/db/schema';
 import {
    getIssueDetail,
    addComment,
@@ -114,6 +115,29 @@ describe('issue detail / comments / activity', () => {
       expect(afterRemove?.blockedByIds).toEqual([]);
    });
 
+   it('dois adds simultâneos da mesma relação gravam UM vínculo (índice único)', async () => {
+      const { db, issue } = await anIssue();
+      const other = await createIssue(
+         db,
+         { teamId: 'CORE', title: 'Bloqueadora', statusId: 'to-do', priorityId: 'low' },
+         ME
+      );
+      await Promise.all([
+         addRelation(db, issue.id, other.id, 'blocked_by', ME),
+         addRelation(db, issue.id, other.id, 'blocked_by', ME),
+      ]);
+      expect((await getIssueDetail(db, issue.id))?.blockedByIds).toEqual([other.id]);
+      // Mesmo contornando a checagem da aplicação, o banco recusa a linha repetida.
+      await expect(
+         db.insert(issueRelation).values({
+            id: 'dup-row',
+            issueId: issue.id,
+            relatedId: other.id,
+            kind: 'blocked_by',
+         })
+      ).rejects.toThrow();
+   });
+
    it('rejects self-relation and unknown related issue', async () => {
       const { db, issue } = await anIssue();
       await expect(addRelation(db, issue.id, issue.id, 'related')).rejects.toThrow();
@@ -140,6 +164,27 @@ describe('issue detail / comments / activity', () => {
       expect(blockerDetail?.blockedByIds).toEqual([]);
    });
 
+   it('related é simétrica: aparece e sai dos DOIS lados (paridade Linear)', async () => {
+      const { db, issue } = await anIssue();
+      const other = await createIssue(
+         db,
+         { teamId: 'CORE', title: 'Parecida', statusId: 'to-do', priorityId: 'low' },
+         ME
+      );
+      await addRelation(db, issue.id, other.id, 'related', ME);
+      expect((await getIssueDetail(db, other.id))?.relatedIds).toEqual([issue.id]);
+
+      // Relacionar de volta pelo outro lado não duplica o vínculo.
+      const back = await addRelation(db, other.id, issue.id, 'related', ME);
+      expect(back?.relatedIds).toEqual([issue.id]);
+      expect((await getIssueDetail(db, issue.id))?.relatedIds).toEqual([other.id]);
+
+      // Remover pelo lado de quem RECEBEU a relação desfaz o vínculo nos dois.
+      const removed = await removeRelation(db, other.id, issue.id, 'related', ME);
+      expect(removed?.relatedIds).toEqual([]);
+      expect((await getIssueDetail(db, issue.id))?.relatedIds).toEqual([]);
+   });
+
    it('relação duplicate popula duplicateIds (paridade Linear)', async () => {
       const { db, issue } = await anIssue();
       const canonical = await createIssue(
@@ -149,6 +194,11 @@ describe('issue detail / comments / activity', () => {
       );
       const dto = await addRelation(db, issue.id, canonical.id, 'duplicate', ME);
       expect(dto?.duplicateIds).toEqual([canonical.id]);
+      expect(dto?.duplicatedByIds).toEqual([]);
+      // Lado inverso (Linear "Duplicated by"): a canônica lista quem a duplica.
+      const canonicalDetail = await getIssueDetail(db, canonical.id);
+      expect(canonicalDetail?.duplicatedByIds).toEqual([issue.id]);
+      expect(canonicalDetail?.duplicateIds).toEqual([]);
       expect(dto?.relatedIds).toEqual([]);
       const removed = await removeRelation(db, issue.id, canonical.id, 'duplicate', ME);
       expect(removed?.duplicateIds).toEqual([]);
