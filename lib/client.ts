@@ -67,6 +67,7 @@ import type {
    IssueDetailDto,
    CommentDto,
    ActivityItem,
+   ActivityCursor,
    MyActivityItemDto,
    UpdateIssueContentInput,
 } from '@/lib/api/issue-detail';
@@ -364,6 +365,20 @@ export const api = {
          del<{ id: string; subscribed: boolean }>(`/issues/${id}/subscription`),
       activity: (id: string, limit?: number) =>
          get<ActivityItem[]>(`/issues/${id}/activity${limit != null ? `?limit=${limit}` : ''}`),
+      /** Página do feed: sem `before`, a mais recente; com ele, a anterior ao cursor. */
+      activityPage: async (
+         id: string,
+         opts: { limit?: number; before?: ActivityCursor } = {}
+      ): Promise<{ items: ActivityItem[]; hasMore: boolean }> => {
+         const qs = new URLSearchParams();
+         if (opts.limit != null) qs.set('limit', String(opts.limit));
+         if (opts.before) qs.set('before', `${opts.before.createdAt},${opts.before.id}`);
+         const query = qs.toString();
+         const { data, meta } = await requestEnvelope<ActivityItem[]>(
+            `/issues/${id}/activity${query ? `?${query}` : ''}`
+         );
+         return { items: data, hasMore: !!(meta as { hasMore?: boolean } | undefined)?.hasMore };
+      },
       addComment: (id: string, body: string, parentId?: string | null) =>
          post<CommentDto>(`/issues/${id}/comments`, { body, parentId: parentId ?? null }),
       aggregate: (team?: string) =>

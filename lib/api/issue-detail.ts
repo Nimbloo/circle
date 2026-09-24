@@ -79,9 +79,21 @@ export interface ActivityItem {
    resolvedBy?: UserRef | null;
    reactions?: ReactionDto[];
    attachments?: AttachmentDto[];
+   /**
+    * Fora da janela pedida: comentário da thread de uma resposta presente (a raiz e as
+    * outras respostas dela), incluído só para a resposta não ficar órfã. O cursor da
+    * próxima página ignora estes itens — eles voltam de novo na página deles.
+    */
+   context?: boolean;
 }
 
 export const DEFAULT_ISSUE_FEED_LIMIT = 200;
+
+/** Posição no feed (`createdAt` em ISO + `id` de desempate): pede os itens ANTES dela. */
+export interface ActivityCursor {
+   createdAt: string;
+   id: string;
+}
 
 export interface SubIssueRef {
    id: string;
@@ -597,6 +609,14 @@ export async function listComments(
       .orderBy(desc(commentT.createdAt))
       .limit(limit)
       .then((rows) => rows.reverse());
+   return commentDtos(db, comments, meEmail);
+}
+
+async function commentDtos(
+   db: Db,
+   comments: CommentRow[],
+   meEmail?: string
+): Promise<CommentDto[]> {
    // Resolve o "me" por SELECT read-only — o usuário já está autenticado, não se faz
    // INSERT (getOrCreateUser) num handler de leitura. Não achou → undefined (reactedByMe=false).
    let meUserId: string | undefined;
@@ -690,16 +710,14 @@ export async function addComment(
    // seguir a issue) numa transação só — falhar a subscription não deixa o comentário
    // gravado atrás de um 500 (o retry do cliente o duplicava).
    await db.transaction(async (tx) => {
-      await tx
-         .insert(commentT)
-         .values({
-            id,
-            issueId,
-            authorId: author.id,
-            body,
-            parentId: rootParentId,
-            createdAt: now,
-         });
+      await tx.insert(commentT).values({
+         id,
+         issueId,
+         authorId: author.id,
+         body,
+         parentId: rootParentId,
+         createdAt: now,
+      });
       await tx
          .insert(issueSubscription)
          .values([author.id, ...mentionedIds].map((userId) => ({ issueId, userId })))
@@ -955,32 +973,141 @@ function cycleEventText(text: string, names: Map<string, string>): string {
    return `moved from ${name(from)} to ${name(to)}`;
 }
 
-/** Feed unificado: eventos + comentários, ordenado por data. */
+/** Ordem do feed: data (ms) e, no empate, o id — a mesma chave do cursor. */
+function feedOrder(a: { createdAt: string; id: string }, b: { createdAt: string; id: string }) {
+   if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
+   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/**
+ * `(created_at, id) < cursor`, comparando a data em milissegundos (a precisão do ISO que
+ * o cliente recebe) e o id em collation "C" (a mesma ordem do `feedOrder`).
+ */
+function beforeCursor(
+   createdAt: typeof commentT.createdAt | typeof activityEvent.createdAt,
+   id: typeof commentT.id | typeof activityEvent.id,
+   cursor: ActivityCursor
+) {
+   const ms = sql`date_trunc('milliseconds', ${createdAt})`;
+   const at = sql`${cursor.createdAt}::timestamp`;
+   return sql`(${ms} < ${at} or (${ms} = ${at} and ${id} collate "C" < ${cursor.id} collate "C"))`;
+}
+
+function newestFirst(
+   createdAt: typeof commentT.createdAt | typeof activityEvent.createdAt,
+   id: typeof commentT.id | typeof activityEvent.id
+) {
+   return [sql`date_trunc('milliseconds', ${createdAt}) desc`, sql`${id} collate "C" desc`];
+}
+
+/**
+ * Feed unificado: eventos + comentários, ordenado por data. Devolve os `limit` itens mais
+ * recentes — ou, com `before`, os `limit` anteriores ao cursor (paginação "Show older").
+ * Resposta cuja raiz ficou fora da janela traz a thread junto, marcada `context`.
+ */
 export async function listActivity(
    db: Db,
    issueId: string,
    meEmail?: string,
-   limit = DEFAULT_ISSUE_FEED_LIMIT
+   limit = DEFAULT_ISSUE_FEED_LIMIT,
+   before?: ActivityCursor
 ): Promise<ActivityItem[]> {
-   const [events, comments] = await Promise.all([
+   return (await listActivityPage(db, issueId, meEmail, limit, before)).items;
+}
+
+/** `listActivity` + `hasMore`: há itens mais antigos que os desta página. */
+export async function listActivityPage(
+   db: Db,
+   issueId: string,
+   meEmail?: string,
+   limit = DEFAULT_ISSUE_FEED_LIMIT,
+   before?: ActivityCursor
+): Promise<{ items: ActivityItem[]; hasMore: boolean }> {
+   const [events, commentRows] = await Promise.all([
       db
          .select()
          .from(activityEvent)
-         .where(eq(activityEvent.issueId, issueId))
-         .orderBy(desc(activityEvent.createdAt))
-         .limit(limit),
-      listComments(db, issueId, meEmail, limit),
+         .where(
+            before
+               ? and(
+                    eq(activityEvent.issueId, issueId),
+                    beforeCursor(activityEvent.createdAt, activityEvent.id, before)
+                 )
+               : eq(activityEvent.issueId, issueId)
+         )
+         .orderBy(...newestFirst(activityEvent.createdAt, activityEvent.id))
+         .limit(limit + 1),
+      db
+         .select()
+         .from(commentT)
+         .where(
+            before
+               ? and(
+                    eq(commentT.issueId, issueId),
+                    beforeCursor(commentT.createdAt, commentT.id, before)
+                 )
+               : eq(commentT.issueId, issueId)
+         )
+         .orderBy(...newestFirst(commentT.createdAt, commentT.id))
+         .limit(limit + 1),
    ]);
-   const [users, cycleNames] = await Promise.all([
-      loadUsers(db, events.map((e) => e.actorId).filter(Boolean) as string[]),
-      humanizeCycleEvents(db, events),
+   const toIso = (d: Date | string) => (d instanceof Date ? d.toISOString() : String(d));
+
+   // A janela: os `limit` mais recentes de eventos + comentários juntos (um a mais de
+   // cada lado só para saber se há página anterior).
+   const merged = [
+      ...events.map((e) => ({
+         kind: 'event' as const,
+         id: e.id,
+         createdAt: toIso(e.createdAt),
+         e,
+      })),
+      ...commentRows.map((c) => ({
+         kind: 'comment' as const,
+         id: c.id,
+         createdAt: toIso(c.createdAt),
+         c,
+      })),
+   ].sort(feedOrder);
+   const hasMore = merged.length > limit;
+   const window = merged.slice(-limit);
+   const windowEvents = window.flatMap((w) => (w.kind === 'event' ? [w.e] : []));
+   const windowComments = window.flatMap((w) => (w.kind === 'comment' ? [w.c] : []));
+
+   // Respostas cuja raiz caiu fora da janela: a thread (raiz + demais respostas) vem junto,
+   // senão a resposta não tinha onde pendurar e sumia do feed.
+   const present = new Set(windowComments.map((c) => c.id));
+   const missingRoots = [
+      ...new Set(
+         windowComments.flatMap((c) => (c.parentId && !present.has(c.parentId) ? [c.parentId] : []))
+      ),
+   ];
+   const contextRows = missingRoots.length
+      ? (
+           await db
+              .select()
+              .from(commentT)
+              .where(
+                 and(
+                    eq(commentT.issueId, issueId),
+                    or(inArray(commentT.id, missingRoots), inArray(commentT.parentId, missingRoots))
+                 )
+              )
+        ).filter((c) => !present.has(c.id))
+      : [];
+   const contextIds = new Set(contextRows.map((c) => c.id));
+
+   const [comments, users, cycleNames] = await Promise.all([
+      commentDtos(db, [...windowComments, ...contextRows], meEmail),
+      loadUsers(db, windowEvents.map((e) => e.actorId).filter(Boolean) as string[]),
+      humanizeCycleEvents(db, windowEvents),
    ]);
 
-   const eventItems: ActivityItem[] = events.map((e) => ({
+   const eventItems: ActivityItem[] = windowEvents.map((e) => ({
       kind: 'event',
       id: e.id,
       actor: userRef(e.actorId ? users.get(e.actorId) : undefined),
-      createdAt: e.createdAt instanceof Date ? e.createdAt.toISOString() : String(e.createdAt),
+      createdAt: toIso(e.createdAt),
       event: e.event,
       text:
          e.event === 'cycle' && e.text ? cycleEventText(e.text, cycleNames) : (e.text ?? undefined),
@@ -990,6 +1117,7 @@ export async function listActivity(
       id: c.id,
       actor: c.author,
       createdAt: c.createdAt,
+      ...(contextIds.has(c.id) ? { context: true } : {}),
       body: c.body,
       parentId: c.parentId,
       updatedAt: c.updatedAt,
@@ -998,9 +1126,7 @@ export async function listActivity(
       reactions: c.reactions,
       attachments: c.attachments,
    }));
-   return [...eventItems, ...commentItems]
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-      .slice(-limit);
+   return { items: [...eventItems, ...commentItems].sort(feedOrder), hasMore };
 }
 
 export interface MyActivityItemDto {
