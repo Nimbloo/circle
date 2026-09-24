@@ -51,12 +51,20 @@ export type ActivityItem =
         event: string;
         text: string;
         timeAgo: string;
+        /** ISO do servidor: ordem e cursor da paginação do feed. */
+        createdAt?: string;
+        /** Veio fora da página só como contexto de thread (não conta no cursor). */
+        context?: boolean;
      }
    | {
         kind: 'comment';
         id: string;
         actor: User;
         timeAgo: string;
+        /** ISO do servidor: ordem e cursor da paginação do feed. */
+        createdAt?: string;
+        /** Veio fora da página só como contexto de thread (não conta no cursor). */
+        context?: boolean;
         body: ContentBlock[];
         /** Texto (markdown) original do comentário — a edição parte dele (is#2). */
         source?: string;

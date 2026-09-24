@@ -1,8 +1,18 @@
 'use client';
 
 import { TimeAgo } from './time-ago';
+import {
+   AlertDialog,
+   AlertDialogAction,
+   AlertDialogCancel,
+   AlertDialogContent,
+   AlertDialogDescription,
+   AlertDialogFooter,
+   AlertDialogHeader,
+   AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import type { Review, ReviewComment, ReviewVerdictKind } from '@/data/reviews';
 import { addReviewComment, removeReviewComment, updateReviewComment } from '@/lib/adapters-reviews';
 import { cn } from '@/lib/utils';
@@ -133,8 +143,11 @@ export function ReviewCommentComposer({
                     : 'Leave a comment'
             }
             rows={2}
-            disabled={submitting}
-            className="w-full resize-none bg-transparent outline-none text-sm font-sans placeholder:text-muted-foreground disabled:opacity-60"
+            // readOnly (e não disabled) durante o envio, como no composer da issue:
+            // desabilitar tira o foco do textarea e ele ia parar no body.
+            readOnly={submitting}
+            aria-busy={submitting}
+            className="w-full resize-none bg-transparent outline-none text-sm font-sans placeholder:text-muted-foreground read-only:opacity-60"
          />
          <div className="flex items-center justify-end gap-2">
             {onCancel && (
@@ -169,6 +182,7 @@ export function ReviewCommentItem({
    const [editing, setEditing] = useState(false);
    const [draft, setDraft] = useState('');
    const [busy, setBusy] = useState(false);
+   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
    const isAuthor = !!handle.meId && comment.author?.id === handle.meId;
    const canEdit = isAuthor;
@@ -248,7 +262,7 @@ export function ReviewCommentItem({
                   {canDelete && (
                      <button
                         type="button"
-                        onClick={() => void remove()}
+                        onClick={() => setConfirmingDelete(true)}
                         disabled={busy}
                         aria-label="Delete comment"
                         className="text-muted-foreground hover:text-destructive disabled:opacity-40"
@@ -270,7 +284,12 @@ export function ReviewCommentItem({
                         event.preventDefault();
                         void save();
                      }
-                     if (event.key === 'Escape') setEditing(false);
+                     if (event.key === 'Escape') {
+                        // Cancela só a edição — sem propagar para o painel/diálogo de fora.
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setEditing(false);
+                     }
                   }}
                   rows={2}
                   autoFocus
@@ -299,6 +318,27 @@ export function ReviewCommentItem({
                </p>
             )
          )}
+
+         {/* Excluir pede confirmação, como no feed da issue. */}
+         <AlertDialog open={confirmingDelete} onOpenChange={setConfirmingDelete}>
+            <AlertDialogContent>
+               <AlertDialogHeader>
+                  <AlertDialogTitle>Delete comment?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                     This comment will be permanently deleted.
+                  </AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                     className={buttonVariants({ variant: 'destructive' })}
+                     onClick={() => void remove()}
+                  >
+                     Delete
+                  </AlertDialogAction>
+               </AlertDialogFooter>
+            </AlertDialogContent>
+         </AlertDialog>
       </div>
    );
 }

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { COMMENT_MAX_LENGTH } from '@/lib/comment-limits';
 import { db } from '@/db';
 import { ok, notFound } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
@@ -13,7 +14,7 @@ type Params = { params: Promise<{ id: string }> };
 // assignee ou admin). Ao menos um dos dois. Com ambos, aplica na ordem body → resolved.
 const CommentSchema = z
    .object({
-      body: z.string().min(1).max(10000).optional(),
+      body: z.string().min(1).max(COMMENT_MAX_LENGTH).optional(),
       resolved: z.boolean().optional(),
    })
    .refine((v) => v.body !== undefined || v.resolved !== undefined, {

@@ -23,13 +23,15 @@ import { isAdmin } from './auth';
 import { updateIssue, type UserRef } from './issues';
 import {
    attachmentsByComment,
-   deleteAttachmentsOfComments,
+   deleteAttachmentRowsOfComments,
+   removeAttachmentObjects,
    listIssueAttachments,
    type AttachmentDto,
 } from './attachments';
 import { assertCanWriteIssue } from './scope';
 import { projectDescriptionDoc } from './description-doc';
 import type { EditorDoc } from '@/lib/editor-doc';
+import { mentionSlugs } from '@/lib/mentions';
 
 function userRef(
    u:
@@ -77,9 +79,21 @@ export interface ActivityItem {
    resolvedBy?: UserRef | null;
    reactions?: ReactionDto[];
    attachments?: AttachmentDto[];
+   /**
+    * Fora da janela pedida: comentário da thread de uma resposta presente (a raiz e as
+    * outras respostas dela), incluído só para a resposta não ficar órfã. O cursor da
+    * próxima página ignora estes itens — eles voltam de novo na página deles.
+    */
+   context?: boolean;
 }
 
 export const DEFAULT_ISSUE_FEED_LIMIT = 200;
+
+/** Posição no feed (`createdAt` em ISO + `id` de desempate): pede os itens ANTES dela. */
+export interface ActivityCursor {
+   createdAt: string;
+   id: string;
+}
 
 export interface SubIssueRef {
    id: string;
@@ -595,6 +609,14 @@ export async function listComments(
       .orderBy(desc(commentT.createdAt))
       .limit(limit)
       .then((rows) => rows.reverse());
+   return commentDtos(db, comments, meEmail);
+}
+
+async function commentDtos(
+   db: Db,
+   comments: CommentRow[],
+   meEmail?: string
+): Promise<CommentDto[]> {
    // Resolve o "me" por SELECT read-only — o usuário já está autenticado, não se faz
    // INSERT (getOrCreateUser) num handler de leitura. Não achou → undefined (reactedByMe=false).
    let meUserId: string | undefined;
@@ -616,6 +638,17 @@ export async function listComments(
       attachmentsByComment(db, commentIds),
    ]);
    return comments.map((c) => commentDto(c, users, reactions, attachments));
+}
+
+/** Ids dos usuários citados com @slug no corpo (pontuação final ignorada). */
+async function mentionedUserIds(db: Db, body: string): Promise<string[]> {
+   const slugs = mentionSlugs(body);
+   if (slugs.length === 0) return [];
+   const rows = await db
+      .select({ id: appUser.id })
+      .from(appUser)
+      .where(inArray(appUser.slug, slugs));
+   return rows.map((r) => r.id);
 }
 
 export async function addComment(
@@ -667,24 +700,29 @@ export async function addComment(
    const author = await getOrCreateUser(db, actorEmail);
    const id = randomUUID();
    const now = new Date();
-   await db
-      .insert(commentT)
-      .values({ id, issueId, authorId: author.id, body, parentId: rootParentId, createdAt: now });
 
    // @mentions: resolve os slugs (prefixo do e-mail) citados no corpo e notifica.
-   const slugs = [
-      ...new Set((body.match(/@([a-z0-9._-]+)/gi) ?? []).map((m) => m.slice(1).toLowerCase())),
-   ];
-   const mentioned = slugs.length
-      ? await db.select().from(appUser).where(inArray(appUser.slug, slugs))
-      : [];
-   const mentionedIds = new Set(mentioned.filter((u) => u.id !== author.id).map((u) => u.id));
+   const mentionedIds = new Set(
+      (await mentionedUserIds(db, body)).filter((userId) => userId !== author.id)
+   );
 
-   // auto-subscribe (Linear-style): quem comenta e quem é mencionado passa a seguir a issue
-   await db
-      .insert(issueSubscription)
-      .values([author.id, ...mentionedIds].map((userId) => ({ issueId, userId })))
-      .onConflictDoNothing();
+   // Comentário e auto-subscribe (Linear-style: quem comenta e quem é mencionado passa a
+   // seguir a issue) numa transação só — falhar a subscription não deixa o comentário
+   // gravado atrás de um 500 (o retry do cliente o duplicava).
+   await db.transaction(async (tx) => {
+      await tx.insert(commentT).values({
+         id,
+         issueId,
+         authorId: author.id,
+         body,
+         parentId: rootParentId,
+         createdAt: now,
+      });
+      await tx
+         .insert(issueSubscription)
+         .values([author.id, ...mentionedIds].map((userId) => ({ issueId, userId })))
+         .onConflictDoNothing();
+   });
 
    const notifications: NotifyInput[] = [...mentionedIds].map((recipientId) => ({
       type: 'mention',
@@ -764,8 +802,31 @@ export async function updateComment(
    await assertCanWriteComment(db, commentId, actorEmail);
    const actor = await getOrCreateUser(db, actorEmail);
    if (c.authorId !== actor.id) throw new ApiError(403, 'Só o autor pode editar o comentário');
+   // Menções NOVAS da edição (as que já estavam no corpo antigo já foram notificadas).
+   const before = new Set(await mentionedUserIds(db, c.body));
+   const added = (await mentionedUserIds(db, body)).filter(
+      (userId) => userId !== actor.id && !before.has(userId)
+   );
    const updatedAt = new Date();
-   await db.update(commentT).set({ body, updatedAt }).where(eq(commentT.id, commentId));
+   await db.transaction(async (tx) => {
+      await tx.update(commentT).set({ body, updatedAt }).where(eq(commentT.id, commentId));
+      if (added.length)
+         await tx
+            .insert(issueSubscription)
+            .values(added.map((userId) => ({ issueId: c.issueId, userId })))
+            .onConflictDoNothing();
+   });
+   if (added.length)
+      void dispatchNotifications(
+         db,
+         added.map((recipientId) => ({
+            type: 'mention',
+            issueId: c.issueId,
+            recipientId,
+            actorId: actor.id,
+            content: `${actor.name} mencionou você em um comentário`,
+         }))
+      ).catch((e) => console.error('[circle] notificações de menção falharam:', e));
    publish({
       entity: 'comment',
       action: 'updated',
@@ -853,9 +914,15 @@ export async function deleteComment(
       .from(commentT)
       .where(eq(commentT.parentId, commentId));
    const ids = [commentId, ...replies.map((r) => r.id)];
-   await db.delete(commentReaction).where(inArray(commentReaction.commentId, ids));
-   await deleteAttachmentsOfComments(db, ids);
-   await db.delete(commentT).where(inArray(commentT.id, ids));
+   // Reações, anexos e comentários saem juntos ou nada sai; o S3 só é limpo depois do
+   // commit (best-effort) — um rollback não pode deixar linha apontando pra objeto apagado.
+   const urls = await db.transaction(async (tx) => {
+      await tx.delete(commentReaction).where(inArray(commentReaction.commentId, ids));
+      const removed = await deleteAttachmentRowsOfComments(tx, ids);
+      await tx.delete(commentT).where(inArray(commentT.id, ids));
+      return removed;
+   });
+   void removeAttachmentObjects(urls);
    publish({
       entity: 'comment',
       action: 'deleted',
@@ -906,32 +973,141 @@ function cycleEventText(text: string, names: Map<string, string>): string {
    return `moved from ${name(from)} to ${name(to)}`;
 }
 
-/** Feed unificado: eventos + comentários, ordenado por data. */
+/** Ordem do feed: data (ms) e, no empate, o id — a mesma chave do cursor. */
+function feedOrder(a: { createdAt: string; id: string }, b: { createdAt: string; id: string }) {
+   if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
+   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/**
+ * `(created_at, id) < cursor`, comparando a data em milissegundos (a precisão do ISO que
+ * o cliente recebe) e o id em collation "C" (a mesma ordem do `feedOrder`).
+ */
+function beforeCursor(
+   createdAt: typeof commentT.createdAt | typeof activityEvent.createdAt,
+   id: typeof commentT.id | typeof activityEvent.id,
+   cursor: ActivityCursor
+) {
+   const ms = sql`date_trunc('milliseconds', ${createdAt})`;
+   const at = sql`${cursor.createdAt}::timestamp`;
+   return sql`(${ms} < ${at} or (${ms} = ${at} and ${id} collate "C" < ${cursor.id} collate "C"))`;
+}
+
+function newestFirst(
+   createdAt: typeof commentT.createdAt | typeof activityEvent.createdAt,
+   id: typeof commentT.id | typeof activityEvent.id
+) {
+   return [sql`date_trunc('milliseconds', ${createdAt}) desc`, sql`${id} collate "C" desc`];
+}
+
+/**
+ * Feed unificado: eventos + comentários, ordenado por data. Devolve os `limit` itens mais
+ * recentes — ou, com `before`, os `limit` anteriores ao cursor (paginação "Show older").
+ * Resposta cuja raiz ficou fora da janela traz a thread junto, marcada `context`.
+ */
 export async function listActivity(
    db: Db,
    issueId: string,
    meEmail?: string,
-   limit = DEFAULT_ISSUE_FEED_LIMIT
+   limit = DEFAULT_ISSUE_FEED_LIMIT,
+   before?: ActivityCursor
 ): Promise<ActivityItem[]> {
-   const [events, comments] = await Promise.all([
+   return (await listActivityPage(db, issueId, meEmail, limit, before)).items;
+}
+
+/** `listActivity` + `hasMore`: há itens mais antigos que os desta página. */
+export async function listActivityPage(
+   db: Db,
+   issueId: string,
+   meEmail?: string,
+   limit = DEFAULT_ISSUE_FEED_LIMIT,
+   before?: ActivityCursor
+): Promise<{ items: ActivityItem[]; hasMore: boolean }> {
+   const [events, commentRows] = await Promise.all([
       db
          .select()
          .from(activityEvent)
-         .where(eq(activityEvent.issueId, issueId))
-         .orderBy(desc(activityEvent.createdAt))
-         .limit(limit),
-      listComments(db, issueId, meEmail, limit),
+         .where(
+            before
+               ? and(
+                    eq(activityEvent.issueId, issueId),
+                    beforeCursor(activityEvent.createdAt, activityEvent.id, before)
+                 )
+               : eq(activityEvent.issueId, issueId)
+         )
+         .orderBy(...newestFirst(activityEvent.createdAt, activityEvent.id))
+         .limit(limit + 1),
+      db
+         .select()
+         .from(commentT)
+         .where(
+            before
+               ? and(
+                    eq(commentT.issueId, issueId),
+                    beforeCursor(commentT.createdAt, commentT.id, before)
+                 )
+               : eq(commentT.issueId, issueId)
+         )
+         .orderBy(...newestFirst(commentT.createdAt, commentT.id))
+         .limit(limit + 1),
    ]);
-   const [users, cycleNames] = await Promise.all([
-      loadUsers(db, events.map((e) => e.actorId).filter(Boolean) as string[]),
-      humanizeCycleEvents(db, events),
+   const toIso = (d: Date | string) => (d instanceof Date ? d.toISOString() : String(d));
+
+   // A janela: os `limit` mais recentes de eventos + comentários juntos (um a mais de
+   // cada lado só para saber se há página anterior).
+   const merged = [
+      ...events.map((e) => ({
+         kind: 'event' as const,
+         id: e.id,
+         createdAt: toIso(e.createdAt),
+         e,
+      })),
+      ...commentRows.map((c) => ({
+         kind: 'comment' as const,
+         id: c.id,
+         createdAt: toIso(c.createdAt),
+         c,
+      })),
+   ].sort(feedOrder);
+   const hasMore = merged.length > limit;
+   const window = merged.slice(-limit);
+   const windowEvents = window.flatMap((w) => (w.kind === 'event' ? [w.e] : []));
+   const windowComments = window.flatMap((w) => (w.kind === 'comment' ? [w.c] : []));
+
+   // Respostas cuja raiz caiu fora da janela: a thread (raiz + demais respostas) vem junto,
+   // senão a resposta não tinha onde pendurar e sumia do feed.
+   const present = new Set(windowComments.map((c) => c.id));
+   const missingRoots = [
+      ...new Set(
+         windowComments.flatMap((c) => (c.parentId && !present.has(c.parentId) ? [c.parentId] : []))
+      ),
+   ];
+   const contextRows = missingRoots.length
+      ? (
+           await db
+              .select()
+              .from(commentT)
+              .where(
+                 and(
+                    eq(commentT.issueId, issueId),
+                    or(inArray(commentT.id, missingRoots), inArray(commentT.parentId, missingRoots))
+                 )
+              )
+        ).filter((c) => !present.has(c.id))
+      : [];
+   const contextIds = new Set(contextRows.map((c) => c.id));
+
+   const [comments, users, cycleNames] = await Promise.all([
+      commentDtos(db, [...windowComments, ...contextRows], meEmail),
+      loadUsers(db, windowEvents.map((e) => e.actorId).filter(Boolean) as string[]),
+      humanizeCycleEvents(db, windowEvents),
    ]);
 
-   const eventItems: ActivityItem[] = events.map((e) => ({
+   const eventItems: ActivityItem[] = windowEvents.map((e) => ({
       kind: 'event',
       id: e.id,
       actor: userRef(e.actorId ? users.get(e.actorId) : undefined),
-      createdAt: e.createdAt instanceof Date ? e.createdAt.toISOString() : String(e.createdAt),
+      createdAt: toIso(e.createdAt),
       event: e.event,
       text:
          e.event === 'cycle' && e.text ? cycleEventText(e.text, cycleNames) : (e.text ?? undefined),
@@ -941,6 +1117,7 @@ export async function listActivity(
       id: c.id,
       actor: c.author,
       createdAt: c.createdAt,
+      ...(contextIds.has(c.id) ? { context: true } : {}),
       body: c.body,
       parentId: c.parentId,
       updatedAt: c.updatedAt,
@@ -949,9 +1126,7 @@ export async function listActivity(
       reactions: c.reactions,
       attachments: c.attachments,
    }));
-   return [...eventItems, ...commentItems]
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-      .slice(-limit);
+   return { items: [...eventItems, ...commentItems].sort(feedOrder), hasMore };
 }
 
 export interface MyActivityItemDto {
