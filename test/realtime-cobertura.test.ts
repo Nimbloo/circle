@@ -120,3 +120,65 @@ describe('escritas que precisam chegar em tempo real', () => {
       expect(doTipo('member')).toEqual([]);
    });
 });
+
+describe('auditoria de 24/09: lacunas que sobraram', () => {
+   it('papel sincronizado no login publica member do próprio usuário (re-escopo do stream)', async () => {
+      const { getOrCreateUser } = await import('@/lib/api/users');
+      const eu = await getOrCreateUser(db, EMAIL);
+      eventos.length = 0;
+
+      // Rebaixado no Keycloak: o stream já aberto dele precisa re-resolver o escopo JÁ.
+      await getOrCreateUser(db, EMAIL, 'Guest', { syncRole: true });
+      expect(eventos.filter((e) => e.entity === 'member').map((e) => e.id)).toEqual([eu.id]);
+
+      // Papel igual: nada a avisar.
+      eventos.length = 0;
+      await getOrCreateUser(db, EMAIL, 'Guest', { syncRole: true });
+      expect(doTipo('member')).toEqual([]);
+   });
+
+   it('relação publica as DUAS pontas, cada uma com o time dela', async () => {
+      const { createIssue } = await import('@/lib/api/issues');
+      const { addRelation, removeRelation } = await import('@/lib/api/issue-detail');
+      await seedTeam(db, 'OPS', 'Ops');
+      const ADMIN = 'admin@nimbloo.ai';
+      await seedUser(db, { name: 'Admin', email: ADMIN, teamIds: ['CORE', 'OPS'], role: 'Admin' });
+      const base = { statusId: 'to-do', priorityId: 'no-priority' };
+      const a = await createIssue(db, { ...base, teamId: 'CORE', title: 'A' }, ADMIN);
+      const b = await createIssue(db, { ...base, teamId: 'OPS', title: 'B' }, ADMIN);
+
+      const daIssue = () =>
+         eventos
+            .filter((e) => e.entity === 'issue' && e.action === 'updated')
+            .map((e) => `${e.id}@${e.teamId}`);
+
+      eventos.length = 0;
+      await addRelation(db, a.id, b.id, 'blocked_by', ADMIN);
+      expect(daIssue()).toEqual([`${a.id}@CORE`, `${b.id}@OPS`]);
+
+      eventos.length = 0;
+      await removeRelation(db, a.id, b.id, 'blocked_by', ADMIN);
+      expect(daIssue()).toEqual([`${a.id}@CORE`, `${b.id}@OPS`]);
+   });
+
+   it('apagar initiative avisa as filhas que subiram pro avô (e o rollup do avô)', async () => {
+      const { createInitiative, updateInitiative, deleteInitiative } = await import(
+         '@/lib/api/initiatives'
+      );
+      const BASE = { priorityId: 'high', healthId: 'on-track' };
+      const avo = await createInitiative(db, { ...BASE, slug: 'avo', name: 'Avô' });
+      const mae = await createInitiative(db, { ...BASE, slug: 'mae', name: 'Mãe' });
+      const filha = await createInitiative(db, { ...BASE, slug: 'filha', name: 'Filha' });
+      await updateInitiative(db, mae.id, { parentId: avo.id });
+      await updateInitiative(db, filha.id, { parentId: mae.id });
+
+      eventos.length = 0;
+      await deleteInitiative(db, mae.id);
+
+      const init = eventos.filter((e) => e.entity === 'initiative');
+      expect(init.find((e) => e.action === 'deleted')?.id).toBe(mae.id);
+      const atualizadas = init.filter((e) => e.action === 'updated').map((e) => e.id);
+      expect(atualizadas).toContain(filha.id);
+      expect(atualizadas).toContain(avo.id);
+   });
+});

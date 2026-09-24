@@ -218,6 +218,10 @@ export async function getOrCreateUser(
          .returning();
       const result = updated ?? existing[0];
       requestCacheSet(cacheKey, result);
+      // Papel mudou no login (ex.: rebaixado a Guest no Keycloak): as abas JÁ abertas dele
+      // re-resolvem o escopo do stream agora (evento `member` com o próprio id), e não só
+      // na revalidação de 5 min; a lista de membros dos outros mostra o papel novo.
+      publish({ entity: 'member', action: 'updated', id: result.id });
       return result;
    }
 

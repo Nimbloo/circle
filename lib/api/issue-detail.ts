@@ -506,6 +506,7 @@ export async function addRelation(
       id: issueId,
       teamId: await issueTeamId(db, issueId),
    });
+   if (existing.length === 0) await publishRelatedSide(db, relatedId);
    return getIssueDetail(db, issueId);
 }
 
@@ -550,7 +551,22 @@ export async function removeRelation(
       id: issueId,
       teamId: await issueTeamId(db, issueId),
    });
+   if (deleted.length > 0) await publishRelatedSide(db, relatedId);
    return getIssueDetail(db, issueId);
+}
+
+/**
+ * A OUTRA ponta da relação também mudou: o detalhe dela mostra o vínculo inverso
+ * ("blocks"/"related"). Sem este evento, quem estava com ela aberta via o estado velho.
+ * `teamId` é o DELA (pode ser outro time), para o corte por escopo do stream.
+ */
+async function publishRelatedSide(db: Db, relatedId: string): Promise<void> {
+   publish({
+      entity: 'issue',
+      action: 'updated',
+      id: relatedId,
+      teamId: await issueTeamId(db, relatedId),
+   });
 }
 
 /**
