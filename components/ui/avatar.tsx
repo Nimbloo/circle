@@ -71,6 +71,8 @@ function AvatarImage({ className, src, alt = '', ...props }: React.ComponentProp
 
    if (!shown) return null;
    return (
+      // Avatar pequeno de URL própria/externa (e data: no preview): next/image não agrega.
+      // eslint-disable-next-line @next/next/no-img-element
       <img
          data-slot="avatar-image"
          className={cn('aspect-square size-full', className)}
