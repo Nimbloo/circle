@@ -506,9 +506,13 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
       const mine = conflictDraft.current;
       if (!mine) return;
       conflictDraft.current = null;
-      conflict.current = true;
-      setDescriptionDoc(mine);
-      setEditorEpoch((n) => n + 1);
+      // Na fila: clicado com o reload do conflito ainda em voo, o doc/época dele viriam
+      // depois e o editor mostraria a outra versão (o próximo autosave apagaria a minha).
+      saveQueue.current = saveQueue.current.then(() => {
+         conflict.current = true;
+         setDescriptionDoc(mine);
+         setEditorEpoch((n) => n + 1);
+      });
       enqueueDescriptionSave(mine, true);
    };
    restoreDraftRef.current = restoreConflictDraft;
