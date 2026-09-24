@@ -501,14 +501,21 @@ export default function TeamWorkflowsSettings({ teamId }: { teamId: string }) {
    };
 
    const remove = async (rule: TeamAutomationDto) => {
-      const previous = automations;
+      const index = automations.findIndex((r) => r.id === rule.id);
       setAutomations((list) => list.filter((r) => r.id !== rule.id));
       setRemoving(null);
       try {
          await api.automations.remove(teamId, rule.id);
          toast.success('Automação excluída');
       } catch {
-         setAutomations(previous);
+         // Rollback SÓ do item: restaurar a lista inteira desfazia o que mudou no meio
+         // (toggle/criação de outra automação enquanto o DELETE estava em voo).
+         setAutomations((list) => {
+            if (list.some((r) => r.id === rule.id)) return list;
+            const next = [...list];
+            next.splice(Math.max(0, Math.min(index, next.length)), 0, rule);
+            return next;
+         });
          toast.error('Não foi possível excluir a automação');
       }
    };

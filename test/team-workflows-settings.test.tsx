@@ -2,7 +2,7 @@
 
 import './setup-dom';
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TeamWorkflowsSettings from '@/components/common/settings/team-workflows-settings';
@@ -166,5 +166,29 @@ describe('Team settings → Workflows & automations (#97)', () => {
       await waitFor(() => expect(toggle.getAttribute('data-state')).toBe('checked'));
       expect(toastMocks.error).toHaveBeenCalledWith('Não foi possível atualizar a automação');
       expect(toastMocks.success).not.toHaveBeenCalled();
+   });
+
+   // Auditoria (item 9): o rollback restaurava a lista INTEIRA e desfazia o toggle de outra
+   // automação que mudou enquanto o DELETE estava em voo.
+   it('exclusão que falha devolve só a automação excluída, sem desfazer o toggle de outra', async () => {
+      const user = userEvent.setup();
+      const other: TeamAutomationDto = { ...PR_RULE, id: 'a2', name: 'Outra regra', position: 1 };
+      apiMocks.list.mockResolvedValue([PR_RULE, other]);
+      let rejectRemove!: (e: unknown) => void;
+      apiMocks.remove.mockReturnValue(new Promise((_, rej) => (rejectRemove = rej)));
+      apiMocks.update.mockResolvedValue({ ...other, enabled: false });
+      await mount();
+
+      await user.click(screen.getByRole('button', { name: 'Delete PR merged → Done' }));
+      await user.click(await screen.findByRole('button', { name: 'Excluir' }));
+      await waitFor(() => expect(screen.queryByText('PR merged → Done')).toBeNull());
+      await user.click(screen.getByRole('switch', { name: 'Toggle Outra regra' }));
+      await waitFor(() => expect(apiMocks.update).toHaveBeenCalled());
+      await act(async () => rejectRemove(new Error('500')));
+
+      await screen.findByText('PR merged → Done');
+      expect(
+         screen.getByRole('switch', { name: 'Toggle Outra regra' }).getAttribute('data-state')
+      ).toBe('unchecked');
    });
 });
