@@ -23,13 +23,15 @@ import { isAdmin } from './auth';
 import { updateIssue, type UserRef } from './issues';
 import {
    attachmentsByComment,
-   deleteAttachmentsOfComments,
+   deleteAttachmentRowsOfComments,
+   removeAttachmentObjects,
    listIssueAttachments,
    type AttachmentDto,
 } from './attachments';
 import { assertCanWriteIssue } from './scope';
 import { projectDescriptionDoc } from './description-doc';
 import type { EditorDoc } from '@/lib/editor-doc';
+import { mentionSlugs } from '@/lib/mentions';
 
 function userRef(
    u:
@@ -618,6 +620,17 @@ export async function listComments(
    return comments.map((c) => commentDto(c, users, reactions, attachments));
 }
 
+/** Ids dos usuários citados com @slug no corpo (pontuação final ignorada). */
+async function mentionedUserIds(db: Db, body: string): Promise<string[]> {
+   const slugs = mentionSlugs(body);
+   if (slugs.length === 0) return [];
+   const rows = await db
+      .select({ id: appUser.id })
+      .from(appUser)
+      .where(inArray(appUser.slug, slugs));
+   return rows.map((r) => r.id);
+}
+
 export async function addComment(
    db: Db,
    issueId: string,
@@ -667,24 +680,31 @@ export async function addComment(
    const author = await getOrCreateUser(db, actorEmail);
    const id = randomUUID();
    const now = new Date();
-   await db
-      .insert(commentT)
-      .values({ id, issueId, authorId: author.id, body, parentId: rootParentId, createdAt: now });
 
    // @mentions: resolve os slugs (prefixo do e-mail) citados no corpo e notifica.
-   const slugs = [
-      ...new Set((body.match(/@([a-z0-9._-]+)/gi) ?? []).map((m) => m.slice(1).toLowerCase())),
-   ];
-   const mentioned = slugs.length
-      ? await db.select().from(appUser).where(inArray(appUser.slug, slugs))
-      : [];
-   const mentionedIds = new Set(mentioned.filter((u) => u.id !== author.id).map((u) => u.id));
+   const mentionedIds = new Set(
+      (await mentionedUserIds(db, body)).filter((userId) => userId !== author.id)
+   );
 
-   // auto-subscribe (Linear-style): quem comenta e quem é mencionado passa a seguir a issue
-   await db
-      .insert(issueSubscription)
-      .values([author.id, ...mentionedIds].map((userId) => ({ issueId, userId })))
-      .onConflictDoNothing();
+   // Comentário e auto-subscribe (Linear-style: quem comenta e quem é mencionado passa a
+   // seguir a issue) numa transação só — falhar a subscription não deixa o comentário
+   // gravado atrás de um 500 (o retry do cliente o duplicava).
+   await db.transaction(async (tx) => {
+      await tx
+         .insert(commentT)
+         .values({
+            id,
+            issueId,
+            authorId: author.id,
+            body,
+            parentId: rootParentId,
+            createdAt: now,
+         });
+      await tx
+         .insert(issueSubscription)
+         .values([author.id, ...mentionedIds].map((userId) => ({ issueId, userId })))
+         .onConflictDoNothing();
+   });
 
    const notifications: NotifyInput[] = [...mentionedIds].map((recipientId) => ({
       type: 'mention',
@@ -764,8 +784,31 @@ export async function updateComment(
    await assertCanWriteComment(db, commentId, actorEmail);
    const actor = await getOrCreateUser(db, actorEmail);
    if (c.authorId !== actor.id) throw new ApiError(403, 'Só o autor pode editar o comentário');
+   // Menções NOVAS da edição (as que já estavam no corpo antigo já foram notificadas).
+   const before = new Set(await mentionedUserIds(db, c.body));
+   const added = (await mentionedUserIds(db, body)).filter(
+      (userId) => userId !== actor.id && !before.has(userId)
+   );
    const updatedAt = new Date();
-   await db.update(commentT).set({ body, updatedAt }).where(eq(commentT.id, commentId));
+   await db.transaction(async (tx) => {
+      await tx.update(commentT).set({ body, updatedAt }).where(eq(commentT.id, commentId));
+      if (added.length)
+         await tx
+            .insert(issueSubscription)
+            .values(added.map((userId) => ({ issueId: c.issueId, userId })))
+            .onConflictDoNothing();
+   });
+   if (added.length)
+      void dispatchNotifications(
+         db,
+         added.map((recipientId) => ({
+            type: 'mention',
+            issueId: c.issueId,
+            recipientId,
+            actorId: actor.id,
+            content: `${actor.name} mencionou você em um comentário`,
+         }))
+      ).catch((e) => console.error('[circle] notificações de menção falharam:', e));
    publish({
       entity: 'comment',
       action: 'updated',
@@ -853,9 +896,15 @@ export async function deleteComment(
       .from(commentT)
       .where(eq(commentT.parentId, commentId));
    const ids = [commentId, ...replies.map((r) => r.id)];
-   await db.delete(commentReaction).where(inArray(commentReaction.commentId, ids));
-   await deleteAttachmentsOfComments(db, ids);
-   await db.delete(commentT).where(inArray(commentT.id, ids));
+   // Reações, anexos e comentários saem juntos ou nada sai; o S3 só é limpo depois do
+   // commit (best-effort) — um rollback não pode deixar linha apontando pra objeto apagado.
+   const urls = await db.transaction(async (tx) => {
+      await tx.delete(commentReaction).where(inArray(commentReaction.commentId, ids));
+      const removed = await deleteAttachmentRowsOfComments(tx, ids);
+      await tx.delete(commentT).where(inArray(commentT.id, ids));
+      return removed;
+   });
+   void removeAttachmentObjects(urls);
    publish({
       entity: 'comment',
       action: 'deleted',
