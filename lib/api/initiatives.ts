@@ -6,6 +6,7 @@ import {
    initiativeActivity,
    initiativeLabel,
    initiativeProject,
+   initiativeUpdate,
    project as projectT,
    priority as priorityT,
    health as healthT,
@@ -635,6 +636,10 @@ export async function deleteInitiative(db: Db, id: string): Promise<boolean> {
          .where(eq(initT.parentId, id));
       await tx.delete(initiativeProject).where(eq(initiativeProject.initiativeId, id));
       await tx.delete(initiativeLabel).where(eq(initiativeLabel.initiativeId, id));
+      // Feed e updates de health referenciam a initiative sem cascade: sem isto, excluir
+      // uma initiative já editada (ou com update postado) estourava a FK (23503).
+      await tx.delete(initiativeActivity).where(eq(initiativeActivity.initiativeId, id));
+      await tx.delete(initiativeUpdate).where(eq(initiativeUpdate.initiativeId, id));
       // project.initiativeId é RESTRICT e nullable: desvincula os projetos antes de deletar.
       await tx.update(projectT).set({ initiativeId: null }).where(eq(projectT.initiativeId, id));
       await tx.delete(initT).where(eq(initT.id, id));
