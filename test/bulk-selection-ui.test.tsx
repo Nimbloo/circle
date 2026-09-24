@@ -75,7 +75,7 @@ describe('seleção em lote (is#10)', () => {
       const user = userEvent.setup();
       render(
          <Dnd>
-            <IssueGrid issue={ISSUES[0]} layout={false} getGroup={getGroup} />
+            <IssueGrid issue={ISSUES[0]} getGroup={getGroup} />
          </Dnd>
       );
       await user.click(screen.getByRole('button', { name: 'Select issue' }));

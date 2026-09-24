@@ -27,7 +27,6 @@ import { ProjectSelector } from '@/components/layout/sidebar/create-new-issue/pr
 import { EstimateSelector } from '@/components/layout/sidebar/create-new-issue/estimate-selector';
 import { DueDateSelector } from '@/components/layout/sidebar/create-new-issue/due-date-selector';
 import { estimateLabel, normalizeScale } from '@/data/estimate-scales';
-import { motion } from 'motion/react';
 import {
    createContext,
    memo,
@@ -46,7 +45,6 @@ import { useInIssueMenuHost } from './issue-context-menu-host';
 
 interface IssueLineProps {
    issue: Issue;
-   layoutId?: boolean;
    /**
     * Grupo da linha e suas issues — liga o drag-and-drop (reordenar no grupo; soltar em
     * outro grupo aplica o campo do agrupamento). Ausente (busca, listas fora de um
@@ -84,14 +82,12 @@ export function IssueLineProjectScopeProvider({
 function IssueRow({
    ref,
    issue,
-   layoutId = false,
    dragging = false,
    dropIndicator = null,
    getGroup,
 }: {
    ref?: Ref<HTMLDivElement>;
    issue: Issue;
-   layoutId?: boolean;
    dragging?: boolean;
    /** Linha de inserção de 2px (is#21): onde a issue arrastada vai cair ao soltar aqui. */
    dropIndicator?: 'above' | 'below' | null;
@@ -138,14 +134,10 @@ function IssueRow({
          .forEach((l) => void removeIssueLabel(issue.id, l.id).catch(() => undefined));
    };
 
-   // Sem layoutId não há animação: div simples, sem o runtime do motion por linha.
-   const Row = layoutId ? motion.div : 'div';
-
    const row = (
-      <Row
+      <div
          ref={ref}
          data-issue-id={issue.id}
-         {...(layoutId && { layoutId: `issue-line-${issue.identifier || issue.id}` })}
          className={cn(
             'group/line relative flex h-11 w-full items-center justify-start px-3 hover:bg-accent/40 focus-within:bg-accent/40',
             selected && 'bg-primary/5'
@@ -293,7 +285,7 @@ function IssueRow({
                </span>
             )}
          </div>
-      </Row>
+      </div>
    );
 
    // Dentro da lista, o menu de contexto é um só (R7); linha avulsa (busca) monta o seu.
@@ -313,11 +305,9 @@ function IssueRow({
  */
 function DraggableIssueRow({
    issue,
-   layoutId,
    getGroup,
 }: {
    issue: Issue;
-   layoutId?: boolean;
    getGroup: () => IssueGroupContext;
 }) {
    const ref = useRef<HTMLDivElement>(null);
@@ -343,7 +333,6 @@ function DraggableIssueRow({
       <IssueRow
          ref={ref}
          issue={issue}
-         layoutId={layoutId}
          dragging={isDragging}
          dropIndicator={isOver ? (dropAbove ? 'above' : 'below') : null}
          getGroup={getGroup}
@@ -351,11 +340,11 @@ function DraggableIssueRow({
    );
 }
 
-function IssueLineComponent({ issue, layoutId = false, getGroup }: IssueLineProps) {
+function IssueLineComponent({ issue, getGroup }: IssueLineProps) {
    return getGroup ? (
-      <DraggableIssueRow issue={issue} layoutId={layoutId} getGroup={getGroup} />
+      <DraggableIssueRow issue={issue} getGroup={getGroup} />
    ) : (
-      <IssueRow issue={issue} layoutId={layoutId} />
+      <IssueRow issue={issue} />
    );
 }
 

@@ -6,9 +6,10 @@ import { useViewStore } from '@/store/view-store';
 import { useCreateIssueStore } from '@/store/create-issue-store';
 import { cn } from '@/lib/utils';
 import { Plus } from 'lucide-react';
-import { FC, ReactNode, useCallback, useRef } from 'react';
+import { FC, ReactNode, useCallback, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { AnimatePresence, motion } from 'motion/react';
+import { useListMotion } from '@/lib/list-motion';
+import { useViewKey } from '@/lib/view-key';
 import { Button } from '../../ui/button';
 import { IssueGrid } from './issue-grid';
 import { IssueLine } from './issue-line';
@@ -74,31 +75,32 @@ const IssueGridList: FC<{ issues: Issue[]; group: IssueGroupDescriptor }> = ({ i
       getItemKey: (i) => issues[i].id,
    });
 
+   // Realtime: card que chega (criado, arrastado por alguém, mudou de status) entra com
+   // fade e os vizinhos deslizam; carga, troca de view e lote não animam.
+   const viewKey = useViewKey();
+   const issueIds = useMemo(() => issues.map((issue) => issue.id), [issues]);
+   const listMotion = useListMotion(issueIds, `${viewKey}|${group.id}`);
+
    return (
       <div
          ref={ref}
          className="relative h-full flex-1 overflow-y-auto pb-3 pl-[13px] pr-4 pt-[9px]"
       >
-         <AnimatePresence>
-            {isOver && (
-               <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.1 }}
-                  className="fixed top-0 left-0 right-0 bottom-0 z-10 flex items-center justify-center pointer-events-none bg-background/90"
-                  style={{
-                     width: ref.current?.getBoundingClientRect().width || '100%',
-                     height: ref.current?.getBoundingClientRect().height || '100%',
-                     transform: `translate(${ref.current?.getBoundingClientRect().left || 0}px, ${ref.current?.getBoundingClientRect().top || 0}px)`,
-                  }}
-               >
-                  <div className="max-w-[90%] rounded-lg border border-border bg-card p-3 shadow-md">
-                     <p className="text-sm font-medium text-center">Move to {group.name}</p>
-                  </div>
-               </motion.div>
-            )}
-         </AnimatePresence>
+         {/* Dica de drop: entra com fade (CSS) e sai no drop, sem saída animada. */}
+         {isOver && (
+            <div
+               className="content-enter fixed top-0 left-0 right-0 bottom-0 z-10 flex items-center justify-center pointer-events-none bg-background/90"
+               style={{
+                  width: ref.current?.getBoundingClientRect().width || '100%',
+                  height: ref.current?.getBoundingClientRect().height || '100%',
+                  transform: `translate(${ref.current?.getBoundingClientRect().left || 0}px, ${ref.current?.getBoundingClientRect().top || 0}px)`,
+               }}
+            >
+               <div className="max-w-[90%] rounded-lg border border-border bg-card p-3 shadow-md">
+                  <p className="text-sm font-medium text-center">Move to {group.name}</p>
+               </div>
+            </div>
+         )}
          <div style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
             {virtualizer.getVirtualItems().map((vi) => {
                const issue = issues[vi.index];
@@ -107,6 +109,10 @@ const IssueGridList: FC<{ issues: Issue[]; group: IssueGroupDescriptor }> = ({ i
                      key={issue.id}
                      data-index={vi.index}
                      ref={virtualizer.measureElement}
+                     className={cn(
+                        listMotion.moving && 'list-move',
+                        listMotion.entering.has(issue.id) && 'list-enter'
+                     )}
                      style={{
                         position: 'absolute',
                         top: 0,
@@ -116,7 +122,7 @@ const IssueGridList: FC<{ issues: Issue[]; group: IssueGroupDescriptor }> = ({ i
                         paddingBottom: 8, // gap entre cards (medido junto com a altura)
                      }}
                   >
-                     <IssueGrid issue={issue} getGroup={getGroup} layout={false} />
+                     <IssueGrid issue={issue} getGroup={getGroup} />
                   </div>
                );
             })}
@@ -191,7 +197,7 @@ export function GroupIssues({ group, issues, count }: GroupIssuesProps) {
          {viewType === 'list' ? (
             <div className="space-y-0">
                {issues.map((issue) => (
-                  <IssueLine key={issue.id} issue={issue} getGroup={getGroup} layoutId={true} />
+                  <IssueLine key={issue.id} issue={issue} getGroup={getGroup} />
                ))}
             </div>
          ) : (

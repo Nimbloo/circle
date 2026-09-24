@@ -13,6 +13,7 @@ import {
    CommandList,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 import { useCommandPages } from '@/components/ui/use-command-pages';
 import {
    Select,
@@ -49,7 +50,6 @@ import { useParams } from 'next/navigation';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
 import { useMemo, useState } from 'react';
 import { format, parseISO } from 'date-fns';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { InitiativeStatusIcon } from './initiative-status-icon';
 import { InitiativesSidePanel } from './initiatives-side-panel';
 import { InlineNewInitiative } from './inline-new-initiative';
@@ -501,7 +501,6 @@ export default function Initiatives() {
    const loaded = useWorkspaceStore((s) => s.loaded);
    const creating = useInlineInitiativeStore((s) => s.creating);
    const startCreate = useInlineInitiativeStore((s) => s.start);
-   const prefersReducedMotion = useReducedMotion();
 
    const displayed = useMemo(() => {
       let list = allInitiatives.slice();
@@ -565,23 +564,15 @@ export default function Initiatives() {
                )}
             </div>
 
-            <AnimatePresence initial={false}>
-               {creating && (
-                  <motion.div
-                     key="new-initiative"
-                     initial={{ height: 0, opacity: 0 }}
-                     animate={{ height: 'auto', opacity: 1 }}
-                     exit={{ height: 0, opacity: 0 }}
-                     transition={{
-                        duration: prefersReducedMotion ? 0 : 0.2,
-                        ease: [0.2, 0, 0, 1],
-                     }}
-                     className="overflow-hidden pt-3"
-                  >
+            {/* Abre/fecha a altura pelo Collapsible (CSS de `collapsible-content`, 200ms,
+                desligado em reduced-motion); o Radix segura a saída até a animação acabar. */}
+            <Collapsible open={creating}>
+               <CollapsibleContent>
+                  <div className="pt-3">
                      <InlineNewInitiative defaultStatus={tab} />
-                  </motion.div>
-               )}
-            </AnimatePresence>
+                  </div>
+               </CollapsibleContent>
+            </Collapsible>
 
             {displayed.length === 0 && !creating && !loaded ? (
                // Hidratando → loading; o empty state "No initiatives yet" só depois
