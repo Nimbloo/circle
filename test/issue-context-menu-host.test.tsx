@@ -113,6 +113,10 @@ describe('R7 menu de contexto único no nível da lista', () => {
       render(view());
       fireEvent.contextMenu(screen.getByText('Issue 2'));
       await userEvent.setup().click(await screen.findByText('Delete...'));
+      // Texto coerente com o Undo que vem logo depois (auditoria de toasts, item 2).
+      expect((await screen.findByRole('alertdialog')).textContent).not.toMatch(
+         /não pode ser desfeita|permanentemente/
+      );
       await userEvent.setup().click(await screen.findByRole('button', { name: 'Delete' }));
       await waitFor(() =>
          expect(useIssuesStore.getState().issues.map((i) => i.id)).toEqual(['i1', 'i3'])

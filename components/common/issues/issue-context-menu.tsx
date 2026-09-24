@@ -483,7 +483,8 @@ export function IssueContextMenu({ issueId }: IssueContextMenuProps) {
                <AlertDialogHeader>
                   <AlertDialogTitle>Delete issue?</AlertDialogTitle>
                   <AlertDialogDescription>
-                     Esta ação não pode ser desfeita. A issue será removida permanentemente.
+                     A issue sai da lista na hora. Dá para desfazer pelo toast por alguns
+                     segundos.
                   </AlertDialogDescription>
                </AlertDialogHeader>
                <AlertDialogFooter>
