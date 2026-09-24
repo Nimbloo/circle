@@ -527,7 +527,8 @@ export interface AcceptTriageInput {
 /**
  * Move a issue de time: `team_id` + identifier NOVO (a numeração é por time). Só é
  * chamado quando o time sugerido difere do atual. Projeto (e a milestone dele), ciclo e
- * pai são do time ANTIGO — o resto do sistema recusa esse vínculo cruzado, então saem.
+ * pai são do time ANTIGO — o resto do sistema recusa esse vínculo cruzado, então saem
+ * (inclusive o vínculo com as sub-issues, que ficam no time antigo).
  */
 async function moveIssueToTeam(db: Db | Tx, issueId: string, teamId: string): Promise<string> {
    const [seq] = await db
@@ -549,6 +550,12 @@ async function moveIssueToTeam(db: Db | Tx, issueId: string, teamId: string): Pr
          updatedAt: new Date(),
       })
       .where(eq(issueT.id, issueId));
+   // Pai e filha são sempre do mesmo time (`assertParentOfTeam`): as sub-issues ficam no
+   // time antigo e perdem o pai, como a issue movida perdeu o dela.
+   await db
+      .update(issueT)
+      .set({ parentId: null, updatedAt: new Date() })
+      .where(eq(issueT.parentId, issueId));
    return identifier;
 }
 

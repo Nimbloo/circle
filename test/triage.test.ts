@@ -353,6 +353,31 @@ describe('accept', () => {
       expect(row.projectId).toBeNull();
    });
 
+   it('mover de time solta as sub-issues (pai e filha são sempre do mesmo time)', async () => {
+      const db = await setup();
+      const target = await newTriageIssue(db, 'Pai na triagem');
+      const child = await createIssue(
+         db,
+         {
+            teamId: 'CORE',
+            title: 'Filha',
+            statusId: 'to-do',
+            priorityId: 'low',
+            parentId: target.id,
+         },
+         ANA
+      );
+      agentMocks.invokeText.mockResolvedValue(
+         JSON.stringify({ teamId: 'DESIGN', priorityId: 'high', labelIds: [], duplicates: [] })
+      );
+      await generateTriageSuggestion(db, target.id, { force: true });
+      await acceptTriageSuggestion(db, target.id, ANA);
+
+      const [row] = await db.select().from(issueT).where(eq(issueT.id, child.id));
+      expect(row.teamId).toBe('CORE');
+      expect(row.parentId).toBeNull();
+   });
+
    it('recusa label inexistente sem tocar na issue', async () => {
       const db = await setup();
       const target = await newTriageIssue(db, 'Coisa qualquer');
