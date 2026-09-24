@@ -8,11 +8,13 @@ import { useSearchStore } from '@/store/search-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { hasOpenOverlay, isTypingTarget } from '@/lib/keyboard-guard';
+import { logOut } from '@/lib/logout';
 import {
    createSequenceTracker,
    dispatchIssueShortcut,
    findShortcut,
    getShortcut,
+   matchesShortcut,
    openCommandMenu,
    OPEN_SHORTCUTS_EVENT,
    supportsIssueSearch,
@@ -121,6 +123,12 @@ export function KeyboardShortcuts() {
          const issueShortcut = findShortcut('issue', e);
          if (issueShortcut) {
             runIssue(issueShortcut.id, e);
+            return;
+         }
+         // ⌥⇧Q (o único global com modificador): o mesmo logout do menu da org.
+         if (matchesShortcut('account.logout', e)) {
+            e.preventDefault();
+            void logOut();
             return;
          }
          if (e.metaKey || e.ctrlKey || e.altKey) return;
