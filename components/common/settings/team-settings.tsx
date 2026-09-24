@@ -59,6 +59,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { errorReason } from '@/lib/error-reason';
+import { landingHref } from '@/lib/landing';
 import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
 import { useSeedOnOpen } from '@/hooks/use-seed-on-open';
 
@@ -416,7 +417,7 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
       try {
          applyTeamMembers(team.id, await api.teams.leave(team.id));
          toast.success('Você saiu do time');
-         router.push(`/${orgId}`);
+         router.push(landingHref(orgId));
       } catch {
          toast.error('Não foi possível sair do time');
          setBusy(false);

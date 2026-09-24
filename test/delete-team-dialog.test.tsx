@@ -38,6 +38,8 @@ vi.mock('@/store/workspace-store', () => ({
 }));
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock('sonner', () => ({ toast }));
+// Destino resolvido no cliente (regra em `test/landing.test.ts`).
+vi.mock('@/lib/landing', () => ({ landingHref: (orgId: string) => `/${orgId}/team/NEXT/all` }));
 
 const { DeleteTeamDialog } = await import('@/components/common/teams/delete-team-dialog');
 const { ApiError } = await import('@/lib/client');
@@ -134,8 +136,8 @@ describe('DeleteTeamDialog', () => {
       await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Time excluído'));
       expect(store.removeTeamLocal).toHaveBeenCalledWith('DOOM');
       expect(onOpenChange).toHaveBeenCalledWith(false);
-      // A tela atual era do time: sai dela.
-      expect(nav.push).toHaveBeenCalledWith('/acme');
+      // A tela atual era do time: sai dela direto para a landing (não `/acme` + redirect).
+      expect(nav.push).toHaveBeenCalledWith('/acme/team/NEXT/all');
    });
 
    it('fora de uma tela do time, não navega', async () => {

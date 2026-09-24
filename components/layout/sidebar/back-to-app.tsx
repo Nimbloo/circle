@@ -3,13 +3,15 @@
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, Search } from 'lucide-react';
 import Link from 'next/link';
+import { useLandingHref } from '@/lib/landing';
 
 export function BackToApp({ orgId }: { orgId: string }) {
+   const href = useLandingHref(orgId);
    return (
       <div className="flex w-full flex-col gap-3">
          <Button className="h-7 w-fit px-1 text-[13px]" size="xs" variant="ghost" asChild>
-            {/* Landing da org: redireciona server-side pro 1º time do usuário (não hardcode CORE). */}
-            <Link href={`/${orgId}`}>
+            {/* Landing resolvida no cliente: `/[orgId]` + redirect do servidor deixava o usuário em settings. */}
+            <Link href={href}>
                <ChevronLeft className="size-3.5" />
                Back to app
             </Link>
