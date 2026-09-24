@@ -530,7 +530,11 @@ export interface AcceptTriageInput {
  * pai são do time ANTIGO — o resto do sistema recusa esse vínculo cruzado, então saem
  * (inclusive o vínculo com as sub-issues, que ficam no time antigo).
  */
-async function moveIssueToTeam(db: Db | Tx, issueId: string, teamId: string): Promise<string> {
+async function moveIssueToTeam(
+   db: Db | Tx,
+   issueId: string,
+   teamId: string
+): Promise<{ identifier: string; detachedChildIds: string[] }> {
    const [seq] = await db
       .update(teamT)
       .set({ issueSeq: sql`${teamT.issueSeq} + 1` })
@@ -552,11 +556,12 @@ async function moveIssueToTeam(db: Db | Tx, issueId: string, teamId: string): Pr
       .where(eq(issueT.id, issueId));
    // Pai e filha são sempre do mesmo time (`assertParentOfTeam`): as sub-issues ficam no
    // time antigo e perdem o pai, como a issue movida perdeu o dela.
-   await db
+   const detached = await db
       .update(issueT)
       .set({ parentId: null, updatedAt: new Date() })
-      .where(eq(issueT.parentId, issueId));
-   return identifier;
+      .where(eq(issueT.parentId, issueId))
+      .returning({ id: issueT.id });
+   return { identifier, detachedChildIds: detached.map((c) => c.id) };
 }
 
 /**
@@ -617,6 +622,13 @@ export async function acceptTriageSuggestion(
    if (labelIds.length) parts.push(`${labelIds.length} label(s)`);
    if (duplicateIds.length) parts.push(`${duplicateIds.length} duplicate(s) linked`);
 
+   // O que o Accept desfaz se o status falhar depois do commit (ver o catch abaixo).
+   const undo = {
+      detachedChildIds: [] as string[],
+      labelIds: [] as string[],
+      activityId: randomUUID(),
+   };
+
    // Co#16: o carimbo `applied_at` é a trava. Numa transação, só quem vira a sugestão de
    // pendente para aplicada (`WHERE applied_at IS NULL`) move o time, grava labels e a
    // activity — dois Accepts simultâneos não movem a issue duas vezes.
@@ -631,15 +643,18 @@ export async function acceptTriageSuggestion(
       if (claimed.length === 0) throw new ApiError(409, 'Sugestão já aplicada');
 
       // Time primeiro: o identifier muda, e as etapas seguintes já usam o novo.
-      if (movedTeam) await moveIssueToTeam(tx, issueId, teamId!);
+      if (movedTeam)
+         undo.detachedChildIds = (await moveIssueToTeam(tx, issueId, teamId!)).detachedChildIds;
       if (labelIds.length) {
-         await tx
+         const added = await tx
             .insert(issueLabel)
             .values(labelIds.map((labelId) => ({ issueId, labelId })))
-            .onConflictDoNothing();
+            .onConflictDoNothing()
+            .returning({ labelId: issueLabel.labelId });
+         undo.labelIds = added.map((l) => l.labelId);
       }
       await tx.insert(activityEvent).values({
-         id: randomUUID(),
+         id: undo.activityId,
          issueId,
          actorId: actor.id,
          event: 'triage',
@@ -659,11 +674,41 @@ export async function acceptTriageSuggestion(
          actorEmail
       );
    } catch (e) {
-      // Sem o status a issue segue na fila: devolve a sugestão para um novo Accept.
-      await db
-         .update(issueTriageSuggestion)
-         .set({ appliedAt: null })
-         .where(eq(issueTriageSuggestion.issueId, issueId));
+      // Sem o status a issue segue na fila: desfaz o que a transação do Accept gravou
+      // (time, identifier, projeto, milestone, ciclo, pai, filhas soltas, labels novas e a
+      // activity) e devolve a sugestão para um novo Accept. Tudo numa transação só.
+      await db.transaction(async (tx) => {
+         if (movedTeam) {
+            await tx
+               .update(issueT)
+               .set({
+                  teamId: target.teamId,
+                  identifier: target.identifier,
+                  projectId: target.projectId,
+                  milestoneId: target.milestoneId,
+                  cycleId: target.cycleId,
+                  parentId: target.parentId,
+                  updatedAt: new Date(),
+               })
+               .where(eq(issueT.id, issueId));
+            if (undo.detachedChildIds.length)
+               await tx
+                  .update(issueT)
+                  .set({ parentId: issueId, updatedAt: new Date() })
+                  .where(and(inArray(issueT.id, undo.detachedChildIds), isNull(issueT.parentId)));
+         }
+         if (undo.labelIds.length)
+            await tx
+               .delete(issueLabel)
+               .where(
+                  and(eq(issueLabel.issueId, issueId), inArray(issueLabel.labelId, undo.labelIds))
+               );
+         await tx.delete(activityEvent).where(eq(activityEvent.id, undo.activityId));
+         await tx
+            .update(issueTriageSuggestion)
+            .set({ appliedAt: null })
+            .where(eq(issueTriageSuggestion.issueId, issueId));
+      });
       throw e;
    }
 
