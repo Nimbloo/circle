@@ -9,6 +9,7 @@ import {
    resolveUploadPlaceholders,
    settleUploads,
 } from '@/lib/editor-image';
+import { HeadingAnchors } from '@/lib/editor-heading-anchors';
 import { IssueRef } from '@/lib/editor-issue-ref';
 import { Emoticons } from '@/lib/editor-emoticons';
 import { TaskItemExt, linkedIssueIdentifier } from '@/lib/editor-tasks';
@@ -72,6 +73,11 @@ export interface BlockEditorProps {
     * Fixo por montagem — o editor não é recriado quando muda.
     */
    context?: BlockEditorContext;
+   /**
+    * Headings de 1º nível ganham `id="doc-h-N"` (decoration do ProseMirror) para o outline
+    * navegar. Fixo por montagem.
+    */
+   headingAnchors?: boolean;
 }
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -202,6 +208,7 @@ export function BlockEditor({
    variant = 'default',
    className,
    context,
+   headingAnchors = false,
 }: BlockEditorProps) {
    // Callbacks em refs: o editor é criado uma vez e não deve ser recriado quando o pai
    // re-renderiza com closures novas.
@@ -434,8 +441,9 @@ export function BlockEditor({
          Emoticons.configure({
             isEnabled: () => usePreferencesStore.getState().convertEmoticons,
          }),
+         ...(headingAnchors ? [HeadingAnchors] : []),
       ],
-      [placeholder, slash.render, issueMenu.render, hasContext, openVideoPrompt]
+      [placeholder, slash.render, issueMenu.render, hasContext, openVideoPrompt, headingAnchors]
    );
 
    const editor = useEditor({

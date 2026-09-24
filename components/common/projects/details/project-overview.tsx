@@ -9,6 +9,7 @@ import { ErrorState } from '@/components/common/error-state';
 import { adaptProjectDetail } from '@/lib/adapters-project-detail';
 import { api, ApiError } from '@/lib/client';
 import { blocksToDoc, docHeadings, type EditorDoc } from '@/lib/editor-doc';
+import { headingAnchorId } from '@/lib/editor-heading-anchors';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { ChevronDown, PenLine } from 'lucide-react';
 import Link from 'next/link';
@@ -21,6 +22,9 @@ import { DocumentOutline, type OutlineItem } from './document-outline';
 import { ProjectResources } from './project-resources';
 import { useSharedProjectDetail } from './use-project-detail';
 import { LoadingArea, useEnterFade } from '@/components/common/loading-area';
+
+/** Atraso do outline em relação à digitação. */
+const OUTLINE_DEBOUNCE_MS = 300;
 
 interface ProjectOverviewProps {
    projectId: string;
@@ -63,32 +67,36 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
    };
 
    // Descrição: doc do servidor ou conversão da projeção em blocos. `liveDoc` acompanha o
-   // que está no editor (antes do save) para o outline reagir enquanto se digita.
+   // que está no editor (antes do save) para o outline reagir enquanto se digita — com
+   // debounce: recalcular o outline e re-renderizar a aba a cada tecla pesa em doc longo.
    const doc = useMemo(
       () => detail.descriptionDoc ?? blocksToDoc(detail.description),
       [detail.descriptionDoc, detail.description]
    );
    const [liveDoc, setLiveDoc] = useState<EditorDoc | null>(null);
+   const liveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+   const onEditorChange = useCallback((next: EditorDoc) => {
+      if (liveTimer.current) clearTimeout(liveTimer.current);
+      liveTimer.current = setTimeout(() => setLiveDoc(next), OUTLINE_DEBOUNCE_MS);
+   }, []);
+   useEffect(
+      () => () => {
+         if (liveTimer.current) clearTimeout(liveTimer.current);
+      },
+      []
+   );
    const lastUpdate = detail.updates[0];
+   // O outline navega por `#doc-h-N`: os ids vêm do próprio editor (`headingAnchors`,
+   // decoration do ProseMirror), com a mesma numeração de `docHeadings`.
    const outlineItems = useMemo<OutlineItem[]>(
       () =>
          docHeadings(liveDoc ?? doc).map((h, index) => ({
-            id: `doc-h-${index}`,
+            id: headingAnchorId(index),
             text: h.text,
             level: h.level > 1 ? 2 : 1,
          })),
       [liveDoc, doc]
    );
-   // O outline navega por `#doc-h-N`; o ProseMirror não emite ids, então marcamos os
-   // headings renderizados (re-marcados a cada mudança de doc).
-   const markHeadings = useCallback(() => {
-      scrollRef.current
-         ?.querySelectorAll<HTMLElement>('.ProseMirror h1, .ProseMirror h2, .ProseMirror h3')
-         .forEach((el, index) => {
-            el.id = `doc-h-${index}`;
-         });
-   }, []);
-   useEffect(markHeadings, [markHeadings, outlineItems]);
 
    // Saves em fila (um por vez) mandando a versão vista; 409 = outra pessoa gravou no
    // meio: recarrega a versão dela e remonta o editor em vez de sobrescrever. Entre o 409
@@ -266,9 +274,9 @@ export default function ProjectOverview({ projectId }: ProjectOverviewProps) {
                            key={`${projectId}:${editorEpoch}`}
                            doc={doc}
                            placeholder="Add a description…"
-                           onChange={setLiveDoc}
+                           onChange={onEditorChange}
                            onSave={saveDescription}
-                           onReady={markHeadings}
+                           headingAnchors
                         />
                      ) : (
                         <LoadingArea rows={1} size="sm" className="justify-start" />
