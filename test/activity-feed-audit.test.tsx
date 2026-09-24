@@ -9,6 +9,7 @@ import type { ActivityItem, ContentBlock } from '@/data/issue-details';
 import type { User } from '@/data/users';
 import { ActivityFeed, type CommentPatch } from '@/components/common/issues/details/activity-feed';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { COMMENT_MAX_LENGTH } from '@/lib/comment-limits';
 
 const apiMocks = vi.hoisted(() => ({
    issues: { create: vi.fn(), addComment: vi.fn() },
@@ -224,6 +225,16 @@ describe('feed — acessibilidade', () => {
          expect(el.tagName).toBe('BUTTON');
          expect(el.textContent).toContain('Reply');
       });
+   });
+});
+
+describe('feed — limite de tamanho', () => {
+   it('edição do comentário tem o mesmo maxLength da API', async () => {
+      const u = userEvent.setup();
+      render(<Harness initial={[comment('c1', ANA, 'meu')]} />);
+      await u.click(screen.getByRole('button', { name: 'Edit comment' }));
+      const box = screen.getByRole('textbox', { name: 'Edit comment' }) as HTMLTextAreaElement;
+      expect(box.maxLength).toBe(COMMENT_MAX_LENGTH);
    });
 });
 

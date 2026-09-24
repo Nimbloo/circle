@@ -60,6 +60,7 @@ import { ContentBlocks } from './content-blocks';
 import { isCommentSubmitKey } from '@/lib/comment-submit-key';
 import { userDisplayName } from '@/lib/display-name';
 import { textWithEmoticons } from '@/lib/comment-emoticons';
+import { COMMENT_MAX_LENGTH } from '@/lib/comment-limits';
 
 const EVENT_ICONS: Record<string, ReactNode> = {
    created: <PenLine className="size-3.5" />,
@@ -516,6 +517,7 @@ const CommentCard = memo(function CommentCard({
                   <div className="flex flex-col gap-2">
                      <textarea
                         aria-label="Edit comment"
+                        maxLength={COMMENT_MAX_LENGTH}
                         autoFocus
                         value={draft}
                         onChange={(e) => setDraft(textWithEmoticons(e))}
