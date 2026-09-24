@@ -27,6 +27,13 @@ export function loginRedirectUrl(pathname: string, search = ''): string {
  */
 let sessionEnded = false;
 let sessionRedirect: (url: string) => void = (url) => window.location.assign(url);
+const sessionListeners = new Set<() => void>();
+
+/** Avisa quando a sessão acaba (o Toaster some: nada de toast de erro antes do redirect). */
+export function subscribeSessionEnded(listener: () => void): () => void {
+   sessionListeners.add(listener);
+   return () => sessionListeners.delete(listener);
+}
 
 export function isSessionEnded(): boolean {
    return sessionEnded;
@@ -35,11 +42,13 @@ export function isSessionEnded(): boolean {
 export function endSession(url: string): void {
    if (sessionEnded || typeof window === 'undefined') return;
    sessionEnded = true;
+   sessionListeners.forEach((listener) => listener());
    sessionRedirect(url);
 }
 
 /** Teste: troca o redirect (jsdom não navega) e zera o estado de sessão. */
 export function __setSessionRedirectForTest(fn: ((url: string) => void) | null): void {
    sessionEnded = false;
+   sessionListeners.forEach((listener) => listener());
    sessionRedirect = fn ?? ((url) => window.location.assign(url));
 }
