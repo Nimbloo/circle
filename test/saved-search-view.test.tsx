@@ -140,6 +140,31 @@ describe('Is#19/Ad#15 saved search', () => {
       expect(screen.getByText('1 issues')).toBeTruthy();
    });
 
+   it('o header não afirma "0 issues" enquanto a busca carrega', () => {
+      searchMock.mockReturnValue(new Promise(() => {}));
+      render(
+         <SidebarProvider>
+            <ViewHeader />
+            <ViewDetails viewId="v1" />
+         </SidebarProvider>
+      );
+      expect(screen.queryByText('0 issues')).toBeNull();
+      expect(screen.getByText('– issues')).toBeTruthy();
+   });
+
+   it('o header não afirma "0 issues" depois que a busca falha', async () => {
+      searchMock.mockRejectedValue(new Error('x'));
+      render(
+         <SidebarProvider>
+            <ViewHeader />
+            <ViewDetails viewId="v1" />
+         </SidebarProvider>
+      );
+      await screen.findByText('Tentar de novo');
+      expect(screen.queryByText('0 issues')).toBeNull();
+      expect(screen.getByText('– issues')).toBeTruthy();
+   });
+
    it('na ordenação padrão mantém a ordem de relevância da busca', async () => {
       const urgent = priorities.find((p) => p.id === 'urgent')!;
       const low = priorities.find((p) => p.id === 'low')!;
