@@ -10,11 +10,11 @@ import {
    AlertDialogHeader,
    AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { LoadingArea } from '@/components/common/loading-area';
 import { useAsyncResource } from '@/hooks/use-async-resource';
-import { api, ApiError } from '@/lib/client';
+import { api } from '@/lib/client';
 import type { TeamDeletionImpact } from '@/lib/api/teams';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import {
@@ -123,11 +123,15 @@ export function DeleteTeamDialog({
             {impact.loading ? (
                <LoadingArea rows={2} size="sm" label="Verificando o conteúdo do time…" />
             ) : impact.error ? (
-               <p className="text-[13px] text-destructive">
-                  {impact.error instanceof ApiError
-                     ? impact.error.message
-                     : 'Não foi possível verificar o conteúdo do time.'}
-               </p>
+               // Sem o impacto o botão de excluir não destrava: o erro precisa de retry.
+               <div role="alert" className="flex items-center justify-between gap-3">
+                  <p className="text-[13px] text-destructive">
+                     {errorReason(impact.error, 'Não foi possível verificar o conteúdo do time')}
+                  </p>
+                  <Button size="xs" variant="outline" onClick={() => void impact.reload()}>
+                     Tentar novamente
+                  </Button>
+               </div>
             ) : rows.length > 0 ? (
                <div className="rounded-lg border bg-muted/40 px-3 py-2.5">
                   <p className="mb-1.5 text-xs text-muted-foreground">Também serão excluídos:</p>

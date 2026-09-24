@@ -171,4 +171,21 @@ describe('DeleteTeamDialog', () => {
       expect(toast.success).not.toHaveBeenCalled();
       expect(store.removeTeamLocal).not.toHaveBeenCalled();
    });
+
+   // Auditoria (item 11): erro do impacto num <p> sem role nem retry — o botão de excluir
+   // ficava desabilitado para sempre.
+   it('falha ao verificar o impacto: alerta com retry que destrava a exclusão', async () => {
+      const user = userEvent.setup();
+      apiMocks.deletionImpact.mockRejectedValueOnce(new ApiError(500, 'Internal Server Error'));
+      renderDialog();
+      const alert = await screen.findByRole('alert');
+      expect(alert.textContent).toMatch(/Não foi possível verificar o conteúdo do time/);
+      expect(alert.textContent).not.toMatch(/Internal Server Error/);
+
+      await user.click(screen.getByRole('button', { name: 'Tentar novamente' }));
+      await screen.findByRole('list', { name: 'Conteúdo que será excluído' });
+      await user.type(screen.getByLabelText(/para confirmar/), 'Doom');
+      expect((confirmButton() as HTMLButtonElement).disabled).toBe(false);
+   });
 });
+
