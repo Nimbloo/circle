@@ -141,6 +141,9 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
    const descriptionVersion = useRef<string | null>(null);
    const saveQueue = useRef<Promise<void>>(Promise.resolve());
    const conflict = useRef(false);
+   // Texto local que o 409 descartou (o save recusado e o flush do editor antigo): o
+   // toast do conflito oferece reaplicá-lo sobre a versão nova.
+   const conflictDraft = useRef<EditorDoc | null>(null);
    // Saves da descrição em voo e confirmados: um refetch que saiu antes de um save (ou
    // durante) traz o conteúdo de ANTES dele — não pode reverter o editor nem a versão.
    const descriptionWrites = useRef({ inFlight: 0, seq: 0 });
@@ -346,9 +349,19 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
    // O editor já mostra o que o usuário digitou; só o erro precisa de feedback (sem
    // toast de sucesso — o save é contínuo, com debounce).
    const saveDescription = (doc: EditorDoc) => {
-      if (conflict.current) return;
+      if (conflict.current) {
+         conflictDraft.current = doc;
+         return;
+      }
+      enqueueDescriptionSave(doc);
+   };
+   // `force`: o "Restaurar minha versão" grava mesmo durante o remount que ele provoca.
+   const enqueueDescriptionSave = (doc: EditorDoc, force = false) => {
       saveQueue.current = saveQueue.current.then(async () => {
-         if (conflict.current) return;
+         if (conflict.current && !force) {
+            conflictDraft.current = doc;
+            return;
+         }
          const writes = descriptionWrites.current;
          writes.inFlight += 1;
          writes.seq += 1;
@@ -369,10 +382,17 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
                toast.error('Falha ao salvar a descrição', { id: `description-save:${issue.id}` });
                return;
             }
-            // Outra pessoa gravou no meio: carrega a versão dela em vez de sobrescrever.
+            // Outra pessoa gravou no meio: carrega a versão dela em vez de sobrescrever, e
+            // guarda o texto local para o usuário poder reaplicá-lo.
             conflict.current = true;
+            conflictDraft.current = doc;
             toast.warning(
-               'A descrição foi alterada por outra pessoa. Carregamos a versão mais recente.'
+               'A descrição foi alterada por outra pessoa. Carregamos a versão mais recente.',
+               {
+                  id: `description-conflict:${issue.id}`,
+                  duration: 15_000,
+                  action: { label: 'Restaurar minha versão', onClick: restoreConflictDraft },
+               }
             );
             try {
                const fresh = await api.issues.detail(issue.id);
@@ -385,6 +405,18 @@ function IssueDetailBody({ issue, banner, onDetailLoaded }: IssueDetailViewProps
             }
          }
       });
+   };
+   // Reaplica o texto local sobre a versão nova (já adotada) e salva com ela. O flush do
+   // editor que sai no remount é descartado (`conflict` até o remount), senão ele iria
+   // depois e sobrescreveria o texto restaurado.
+   const restoreConflictDraft = () => {
+      const mine = conflictDraft.current;
+      if (!mine) return;
+      conflictDraft.current = null;
+      conflict.current = true;
+      setDescriptionDoc(mine);
+      setEditorEpoch((n) => n + 1);
+      enqueueDescriptionSave(mine, true);
    };
 
    return (

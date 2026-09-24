@@ -58,11 +58,7 @@ vi.mock('@/components/common/editor/block-editor', async () => {
             'div',
             null,
             R.createElement('span', { 'data-testid': 'doc' }, text),
-            R.createElement(
-               'button',
-               { onClick: () => onSave({ type: 'doc', content: [] }) },
-               'salvar'
-            )
+            R.createElement('button', { onClick: () => onSave(docOf('rascunho local')) }, 'salvar')
          );
       },
    };
@@ -208,5 +204,37 @@ describe('descrição: conflito de edição (#36)', () => {
       expect(ids[0]).toBeTruthy();
       expect(ids[1]).toBe(ids[0]);
       apiMocks.issues.updateDetail.mockReset();
+   });
+
+   it('409: "Restaurar minha versão" reaplica o texto local sobre a versão nova e salva', async () => {
+      const { toast } = await import('sonner');
+      const { IssueDetailView } = await import('@/components/common/issues/details/issue-details');
+      apiMocks.issues.detail.mockResolvedValueOnce(detailDto('minha', 'v1'));
+      render(<IssueDetailView issue={issue} />);
+      await screen.findByText('minha');
+
+      apiMocks.issues.updateDetail.mockRejectedValueOnce(new FakeApiError(409));
+      apiMocks.issues.detail.mockResolvedValueOnce(detailDto('da outra pessoa', 'v2'));
+      await act(async () => screen.getByText('salvar').click());
+      await waitFor(() => expect(screen.getByTestId('doc').textContent).toBe('da outra pessoa'));
+
+      const opts = vi.mocked(toast.warning).mock.calls.at(-1)?.[1] as
+         | { action?: { label: string; onClick: () => void } }
+         | undefined;
+      expect(opts?.action?.label).toBe('Restaurar minha versão');
+
+      apiMocks.issues.updateDetail.mockResolvedValueOnce(detailDto('rascunho local', 'v3'));
+      await act(async () => opts!.action!.onClick());
+      await waitFor(() => expect(screen.getByTestId('doc').textContent).toBe('rascunho local'));
+      await waitFor(() =>
+         expect(apiMocks.issues.updateDetail).toHaveBeenLastCalledWith('i1', {
+            descriptionDoc: docOf('rascunho local'),
+            expectedDescriptionVersion: 'v2',
+         })
+      );
+      await act(async () => {
+         await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(apiMocks.issues.updateDetail).toHaveBeenCalledTimes(2);
    });
 });
