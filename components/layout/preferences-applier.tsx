@@ -7,7 +7,7 @@ import { useEffect } from 'react';
  * Honra no app inteiro as preferências visuais de Preferences → Interface:
  * `Font size`, `Use pointer cursors` e `Underline links`. Escreve atributos
  * `data-*` no <html>; as regras vivem em globals.css (seção "user preferences").
- * As demais preferências só persistem (subsistemas ainda não construídos).
+ * As demais preferências são lidas no ponto de uso (ver store/preferences-store.ts).
  * Montado uma vez no `DataHydrator`.
  */
 const FONT_SIZE_ATTR: Record<string, string> = {

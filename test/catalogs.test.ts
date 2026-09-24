@@ -54,6 +54,12 @@ describe('catalogs', () => {
       // invalidação): sem guarda de geração, regravava o cache com o catálogo velho.
       let release!: () => void;
       const gate = new Promise<void>((r) => (release = r));
+      // Sinal de que as QUATRO leituras do catálogo (status, prioridade, label, health) já
+      // consultaram o banco antes da mutação (antes era um sleep de 50 ms).
+      const READS = 4;
+      let done = 0;
+      let reached!: () => void;
+      const readStarted = new Promise<void>((r) => (reached = r));
       const slowDb = new Proxy(db, {
          get(target, key) {
             if (key !== 'select') return Reflect.get(target, key);
@@ -63,6 +69,7 @@ describe('catalogs', () => {
                      .select()
                      .from(table)
                      .then(async (rows) => {
+                        if (++done === READS) reached();
                         await gate;
                         return rows;
                      }),
@@ -70,7 +77,7 @@ describe('catalogs', () => {
          },
       }) as typeof db;
       const inflight = getCachedCatalogs(slowDb);
-      await new Promise((r) => setTimeout(r, 50));
+      await readStarted;
       const created = await createStatus(db, {
          name: 'Race',
          color: '#ffffff',

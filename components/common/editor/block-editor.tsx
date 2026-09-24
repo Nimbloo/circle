@@ -5,10 +5,12 @@ import { cn } from '@/lib/utils';
 import { EMPTY_DOC, type EditorDoc } from '@/lib/editor-doc';
 import { editorExtensions } from '@/lib/editor-extensions';
 import { IssueRef } from '@/lib/editor-issue-ref';
+import { Emoticons } from '@/lib/editor-emoticons';
 import { TaskItemExt, linkedIssueIdentifier } from '@/lib/editor-tasks';
 import type { Issue } from '@/data/issues';
 import { useCatalogStore } from '@/store/catalog-store';
 import { useIssuesStore } from '@/store/issues-store';
+import { usePreferencesStore } from '@/store/preferences-store';
 import { EditorContent, ReactNodeViewRenderer, useEditor, type Editor } from '@tiptap/react';
 import { exitSuggestion, type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion';
 import {
@@ -402,6 +404,10 @@ export function BlockEditor({
          SlashCommand.configure({
             suggestion: { render: slash.render },
             onVideo: openVideoPrompt,
+         }),
+         // Preferência "Convert text emoticons into emojis", lida a cada tecla.
+         Emoticons.configure({
+            isEnabled: () => usePreferencesStore.getState().convertEmoticons,
          }),
       ],
       [placeholder, slash.render, issueMenu.render, hasContext, openVideoPrompt]

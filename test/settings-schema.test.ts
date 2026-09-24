@@ -40,6 +40,21 @@ describe('SettingsSchema.layout', () => {
       expect(() => SettingsSchema.parse({ layout: {} })).not.toThrow();
    });
 
+   it('aceita o sub-agrupamento por view e recusa valor fora do domínio', () => {
+      expect(() =>
+         SettingsSchema.parse({
+            layout: {
+               displayByView: { 'my-issues': { grouping: 'status', subGrouping: 'assignee' } },
+            },
+         })
+      ).not.toThrow();
+      expect(() =>
+         SettingsSchema.parse({
+            layout: { displayByView: { 'my-issues': { subGrouping: 'team' } } },
+         })
+      ).toThrow();
+   });
+
    it('rejeita chave desconhecida em layout e dentro de uma view', () => {
       expect(() => SettingsSchema.parse({ layout: { injected: true } })).toThrow();
       expect(() =>

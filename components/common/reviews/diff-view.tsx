@@ -17,6 +17,7 @@ import {
    type ReviewCommentsHandle,
 } from './review-comments';
 import { DiffStat } from './review-shared';
+import { CODE_FONT_MEDIUM, usePreferencesStore } from '@/store/preferences-store';
 
 /** Acima disto o arquivo abre colapsado (GitHub: "Load diff") — milhares de linhas no DOM. */
 export const LARGE_DIFF_LINES = 400;
@@ -75,6 +76,8 @@ function DiffViewImpl({
    serverReviewed?: boolean;
 }) {
    const path = filePath ?? (diff.path ? `${diff.path}/${diff.name}` : diff.name);
+   // Preferência "Font" de Code & reviews: 12px regular (default) ou 13px medium.
+   const mediumCode = usePreferencesStore((s) => s.codeFont === CODE_FONT_MEDIUM);
    const [fileComposer, setFileComposer] = useState(false);
    const [activeLine, setActiveLine] = useState<number | null>(null);
    const commentable = !!handle;
@@ -174,7 +177,12 @@ function DiffViewImpl({
             </button>
          )}
          {showBody && (
-            <div className="font-mono text-xs leading-5 overflow-x-auto">
+            <div
+               className={cn(
+                  'font-mono leading-5 overflow-x-auto',
+                  mediumCode ? 'text-[13px] font-medium' : 'text-xs'
+               )}
+            >
                {diff.lines.map((line, index) => {
                   if (line.type === 'skip') {
                      return (

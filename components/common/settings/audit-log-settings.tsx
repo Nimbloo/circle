@@ -8,7 +8,7 @@ import { LoadingArea } from '@/components/common/loading-area';
 import { api, ApiError } from '@/lib/client';
 import type { AuditLogDto } from '@/lib/api/audit';
 import { useWorkspaceStore } from '@/store/workspace-store';
-import { SettingsShell } from './shared';
+import { SettingsCard, SettingsShell } from './shared';
 
 /**
  * Rótulos legíveis das ações registradas. Chave desconhecida cai no próprio código
@@ -96,7 +96,7 @@ export default function AuditLogSettings() {
                className="py-10"
             />
          ) : (
-            <div className="content-enter divide-y divide-border/60 overflow-hidden rounded-[10px] bg-card">
+            <SettingsCard className="content-enter">
                {entries.map((e) => {
                   const meta = formatMeta(e.meta);
                   return (
@@ -134,7 +134,7 @@ export default function AuditLogSettings() {
                      </div>
                   );
                })}
-            </div>
+            </SettingsCard>
          )}
       </SettingsShell>
    );

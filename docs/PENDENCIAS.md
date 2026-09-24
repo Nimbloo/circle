@@ -1,6 +1,6 @@
 # Pendências do Circle
 
-Estado em **2026-09-23**, com a v0.42.0 (rodadas de sanidade 2–5) a caminho de produção. As
+Estado em **2026-09-23**, com a v0.42.0 (rodadas de sanidade 2–5) em produção. As
 seções abaixo de "Operacional" até 10/09 são histórico; o detalhe das rodadas 2–5 vive em
 `docs/superpowers/specs/2026-09-1*-sanity-audit-*` e `2026-09-22-sanity-audit-5-*`.
 
@@ -581,14 +581,16 @@ sem desligar o tracing, que está em uso.
 
 **O que sobrou, com número:**
 
-- **O cliente ainda baixa TODAS as issues do workspace.** Com 2.000, são 2 requisições e
+- **O cliente ainda baixa TODAS as issues do workspace.** (23/09: p95 430 ms em prd; decisão
+  e gatilho para refatorar em `specs/2026-09-23-issues-cache-e-bundle-medicao.md`.) Com 2.000, são 2 requisições e
   118 KB; com 10.000, viram 10 requisições e ~530 KB comprimidos — cresce linear, para
   sempre, e acontece a cada carga de página. O caminho é carregar o que a view precisa
   (filtro no servidor + paginação por scroll), tratando o store como cache. É refatoração
   de verdade, não ajuste: precisa de decisão antes.
 - **JS por rota entre 483 e 562 kB** (gzip) nas telas pesadas, com 188 kB de shared. É
-  custo de primeira visita (cache imutável de 1 ano cobre o resto). Para atacar com método,
-  falta um `@next/bundle-analyzer` — sem ele é chute.
+  custo de primeira visita (cache imutável de 1 ano cobre o resto). **Medido em 23/09**
+  com o bundle-analyzer (já existia): 452–470 kB, sem alvo gordo único — ver
+  `docs/superpowers/specs/2026-09-23-issues-cache-e-bundle-medicao.md`.
 - **Infra:** 1 réplica com `requests.cpu: 50m`. O barramento de eventos já é cross-pod
   (LISTEN/NOTIFY) e as migrations têm advisory lock, então subir para 2 réplicas é seguro
   quando fizer sentido; hoje não há contenção que justifique.

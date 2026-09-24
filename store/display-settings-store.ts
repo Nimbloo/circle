@@ -59,6 +59,8 @@ const DEFAULT_DISPLAY_PROPERTIES: Record<DisplayPropertyKey, boolean> = {
 /** Opções do popover "Display" de UMA view (grouping, ordering, …). */
 export interface ViewDisplaySettings {
    grouping: GroupingKey;
+   /** Sub-agrupamento (lista) / swimlanes (board). Nunca igual a `grouping`; `none` = off. */
+   subGrouping: GroupingKey;
    ordering: OrderingKey;
    orderCompletedByRecency: boolean;
    completedIssues: CompletedIssuesFilter;
@@ -70,6 +72,7 @@ export interface ViewDisplaySettings {
 
 export const DEFAULT_DISPLAY_SETTINGS: ViewDisplaySettings = {
    grouping: 'status',
+   subGrouping: 'none',
    ordering: 'priority',
    orderCompletedByRecency: false,
    completedIssues: 'all',
@@ -83,6 +86,7 @@ interface DisplaySettingsState {
    byView: Record<string, ViewDisplaySettings>;
 
    setGrouping: (viewKey: string, grouping: GroupingKey) => void;
+   setSubGrouping: (viewKey: string, subGrouping: GroupingKey) => void;
    setOrdering: (viewKey: string, ordering: OrderingKey) => void;
    setOrderCompletedByRecency: (viewKey: string, value: boolean) => void;
    setCompletedIssues: (viewKey: string, value: CompletedIssuesFilter) => void;
@@ -100,6 +104,16 @@ function isOneOf<T extends string>(list: readonly T[], value: unknown): value is
 }
 
 /**
+ * Sub-grupo válido para o grupo principal: fora do domínio, igual ao grupo ou sem grupo
+ * principal = `none` (leitura antiga sem o campo também cai aqui).
+ */
+function effectiveSubGrouping(grouping: GroupingKey, subGrouping: unknown): GroupingKey {
+   if (!isOneOf(GROUPING_KEYS, subGrouping)) return 'none';
+   if (grouping === 'none' || subGrouping === grouping) return 'none';
+   return subGrouping;
+}
+
+/**
  * Completa um parcial (localStorage antigo, servidor) com os defaults — garante que
  * novas display properties (ex.: estimate) apareçam para quem já tinha a view salva
  * e descarta valores fora do domínio.
@@ -113,8 +127,12 @@ export function normalizeDisplaySettings(
    (Object.keys(DEFAULT_DISPLAY_PROPERTIES) as DisplayPropertyKey[]).forEach((key) => {
       if (typeof incoming[key] === 'boolean') properties[key] = incoming[key] as boolean;
    });
+   const grouping = isOneOf(GROUPING_KEYS, p.grouping)
+      ? p.grouping
+      : DEFAULT_DISPLAY_SETTINGS.grouping;
    return {
-      grouping: isOneOf(GROUPING_KEYS, p.grouping) ? p.grouping : DEFAULT_DISPLAY_SETTINGS.grouping,
+      grouping,
+      subGrouping: effectiveSubGrouping(grouping, p.subGrouping),
       ordering: isOneOf(ORDERING_KEYS, p.ordering) ? p.ordering : DEFAULT_DISPLAY_SETTINGS.ordering,
       orderCompletedByRecency:
          typeof p.orderCompletedByRecency === 'boolean'
@@ -158,6 +176,7 @@ export function getViewDisplaySettings(
 export function isDefaultDisplaySettings(settings: ViewDisplaySettings): boolean {
    return (
       settings.grouping === DEFAULT_DISPLAY_SETTINGS.grouping &&
+      settings.subGrouping === DEFAULT_DISPLAY_SETTINGS.subGrouping &&
       settings.ordering === DEFAULT_DISPLAY_SETTINGS.ordering &&
       settings.orderCompletedByRecency === DEFAULT_DISPLAY_SETTINGS.orderCompletedByRecency &&
       settings.completedIssues === DEFAULT_DISPLAY_SETTINGS.completedIssues &&
@@ -178,17 +197,31 @@ export function isDefaultDisplaySettings(settings: ViewDisplaySettings): boolean
 export const useDisplaySettingsStore = create<DisplaySettingsState>()(
    persist(
       (set) => {
+         const patchWith = (
+            viewKey: string,
+            patchOf: (current: ViewDisplaySettings) => Partial<ViewDisplaySettings>
+         ) =>
+            set((state) => {
+               const current = getViewDisplaySettings(state.byView, viewKey);
+               return {
+                  byView: { ...state.byView, [viewKey]: { ...current, ...patchOf(current) } },
+               };
+            });
          const patchView = (viewKey: string, patch: Partial<ViewDisplaySettings>) =>
-            set((state) => ({
-               byView: {
-                  ...state.byView,
-                  [viewKey]: { ...getViewDisplaySettings(state.byView, viewKey), ...patch },
-               },
-            }));
+            patchWith(viewKey, () => patch);
          return {
             byView: {},
 
-            setGrouping: (viewKey, grouping) => patchView(viewKey, { grouping }),
+            // Grupo principal na dimensão do sub-grupo (ou sem grupo) reseta o sub-grupo.
+            setGrouping: (viewKey, grouping) =>
+               patchWith(viewKey, (current) => ({
+                  grouping,
+                  subGrouping: effectiveSubGrouping(grouping, current.subGrouping),
+               })),
+            setSubGrouping: (viewKey, subGrouping) =>
+               patchWith(viewKey, (current) => ({
+                  subGrouping: effectiveSubGrouping(current.grouping, subGrouping),
+               })),
             setOrdering: (viewKey, ordering) => patchView(viewKey, { ordering }),
             setOrderCompletedByRecency: (viewKey, orderCompletedByRecency) =>
                patchView(viewKey, { orderCompletedByRecency }),
@@ -220,7 +253,24 @@ export const useDisplaySettingsStore = create<DisplaySettingsState>()(
                   delete byView[viewKey];
                   return { byView };
                }),
-            hydrateByView: (byView) => set({ byView: normalizeByView(byView) }),
+            hydrateByView: (byView) =>
+               set((state) => {
+                  const next = normalizeByView(byView);
+                  // Blob salvo antes de o servidor guardar `subGrouping`: a view vem SEM o
+                  // campo, e o sub-grupo local é mantido. View AUSENTE do snapshot foi
+                  // limpa em outro dispositivo ("servidor vence") e não é recriada aqui.
+                  for (const [viewKey, local] of Object.entries(state.byView)) {
+                     if (local.subGrouping === 'none') continue;
+                     const incoming = byView?.[viewKey];
+                     if (!incoming || 'subGrouping' in incoming) continue;
+                     const base = next[viewKey] ?? DEFAULT_DISPLAY_SETTINGS;
+                     next[viewKey] = {
+                        ...base,
+                        subGrouping: effectiveSubGrouping(base.grouping, local.subGrouping),
+                     };
+                  }
+                  return { byView: next };
+               }),
          };
       },
       {
@@ -246,6 +296,7 @@ export const useDisplaySettingsStore = create<DisplaySettingsState>()(
 
 type DisplaySettingsActions = {
    setGrouping: (grouping: GroupingKey) => void;
+   setSubGrouping: (subGrouping: GroupingKey) => void;
    setOrdering: (ordering: OrderingKey) => void;
    setOrderCompletedByRecency: (value: boolean) => void;
    setCompletedIssues: (value: CompletedIssuesFilter) => void;
@@ -280,6 +331,7 @@ export function useDisplaySettings(): DisplaySettings {
       const store = useDisplaySettingsStore.getState();
       return {
          setGrouping: (grouping) => store.setGrouping(viewKey, grouping),
+         setSubGrouping: (subGrouping) => store.setSubGrouping(viewKey, subGrouping),
          setOrdering: (ordering) => store.setOrdering(viewKey, ordering),
          setOrderCompletedByRecency: (value) => store.setOrderCompletedByRecency(viewKey, value),
          setCompletedIssues: (value) => store.setCompletedIssues(viewKey, value),

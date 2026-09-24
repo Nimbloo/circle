@@ -6,9 +6,11 @@ import { Button } from '@/components/ui/button';
 import type { Review, ReviewComment, ReviewVerdictKind } from '@/data/reviews';
 import { addReviewComment, removeReviewComment, updateReviewComment } from '@/lib/adapters-reviews';
 import { cn } from '@/lib/utils';
+import { isCommentSubmitKey } from '@/lib/comment-submit-key';
 import { Check, CircleSlash, MessageSquare, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { textWithEmoticons } from '@/lib/comment-emoticons';
 
 /**
  * Ponte entre a thread (Overview/Diff) e o estado do review no `ReviewDetail`: quem
@@ -58,7 +60,8 @@ function byCreatedAt(a: ReviewComment, b: ReviewComment): number {
 }
 
 /**
- * Composer de comentário de review (textarea simples, Cmd/Ctrl+Enter envia). `path`/`line`
+ * Composer de comentário de review (textarea simples; tecla de envio da preferência
+ * "Send comments on..."). `path`/`line`
  * ancoram no arquivo/linha do diff. Só chama `onPosted` depois que a API confirma.
  */
 export function ReviewCommentComposer({
@@ -109,14 +112,17 @@ export function ReviewCommentComposer({
          <textarea
             autoFocus={autoFocus}
             value={draft}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) => setDraft(textWithEmoticons(event))}
             onKeyDown={(event) => {
                if (event.key === 'Escape' && onCancel) {
                   event.preventDefault();
                   onCancel();
                   return;
                }
-               if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) void submit();
+               if (isCommentSubmitKey(event)) {
+                  event.preventDefault();
+                  void submit();
+               }
             }}
             placeholder={placeholder}
             aria-label={
@@ -258,9 +264,12 @@ export function ReviewCommentItem({
             <div className="flex flex-col gap-2">
                <textarea
                   value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
+                  onChange={(event) => setDraft(textWithEmoticons(event))}
                   onKeyDown={(event) => {
-                     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) void save();
+                     if (isCommentSubmitKey(event)) {
+                        event.preventDefault();
+                        void save();
+                     }
                      if (event.key === 'Escape') setEditing(false);
                   }}
                   rows={2}

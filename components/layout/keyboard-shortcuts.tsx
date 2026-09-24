@@ -18,7 +18,12 @@ import {
    supportsIssueSearch,
    type IssueShortcutAction,
 } from '@/lib/shortcuts';
-import { getContextIssue, issueBranchName, issueUrl } from './context-issue';
+import {
+   getContextIssue,
+   issueBranchName,
+   issueUrl,
+   startIssueOnBranchCopy,
+} from './context-issue';
 import { ShortcutsHelp } from './shortcuts-help';
 
 /** Sub-página do ⌘K equivalente a cada tecla da issue (fallback sem painel aberto). */
@@ -89,7 +94,10 @@ export function KeyboardShortcuts() {
                .catch(() => {});
          } else if (id === 'copy.id') void copy('Issue ID', issue.identifier);
          else if (id === 'copy.url') void copy('Issue URL', issueUrl(org, issue.identifier));
-         else if (id === 'copy.branch') void copy('Branch name', issueBranchName(issue, me));
+         else if (id === 'copy.branch') {
+            void copy('Branch name', issueBranchName(issue, me));
+            startIssueOnBranchCopy(issue);
+         }
       };
 
       const onKey = (e: KeyboardEvent) => {

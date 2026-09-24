@@ -5,6 +5,7 @@ import { makeTestDb } from './helpers/db';
 import { seedTeam } from './helpers/fixtures';
 import { issue, issuePrLink, review } from '@/db/schema';
 import { handlePullRequestEvent } from '@/lib/api/reviews';
+import { getIssueDetail } from '@/lib/api/issue-detail';
 import { verifySignature, signatureFrom } from '@/lib/api/integrations/github';
 
 function prEvent(over: Record<string, unknown> = {}) {
@@ -55,6 +56,22 @@ describe('github webhook: handlePullRequestEvent', () => {
 
       const links = await db.select().from(issuePrLink).where(eq(issuePrLink.issueId, 'iss-eng-1'));
       expect(links).toHaveLength(1);
+   });
+
+   it('o detalhe da issue traz número, repo e review de cada PR vinculado (não o hash interno)', async () => {
+      const db = await makeTestDb();
+      await seedIssue(db);
+      await handlePullRequestEvent(db, prEvent());
+      const detail = await getIssueDetail(db, 'iss-eng-1');
+      expect(detail?.prLinks).toHaveLength(1);
+      expect(detail?.prLinks[0]).toMatchObject({
+         title: 'ENG-1 fix the thing',
+         status: 'open',
+         number: 42,
+         repo: 'nimbloo/circle',
+         reviewId: 'nimbloo/circle#42',
+         url: 'https://github.com/nimbloo/circle/pull/42',
+      });
    });
 
    it('moves the issue to Done when the PR is merged', async () => {

@@ -532,7 +532,7 @@ export default function RoadmapTimeline({
    }
 
    return (
-      <TooltipProvider delayDuration={200}>
+      <TooltipProvider delayDuration={300}>
          <div className="relative h-full w-full">
             {/* "Today" flutuante (pl#10), no padrão da timeline de projetos. */}
             <div className="absolute top-[5px] right-[10px] z-30 flex items-center gap-1">

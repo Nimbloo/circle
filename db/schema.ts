@@ -210,6 +210,9 @@ export const teamJoinRequest = pgTable(
 // ─────────────────────────────────────────────────────────────
 // Initiatives / Projects
 // ─────────────────────────────────────────────────────────────
+// Coluna `search_vector` (tsvector GERADA + índice GIN) existe no banco mas NÃO é declarada
+// aqui: vem de migration à mão (0044/0047, busca full-text). Não declarar — o drizzle-kit
+// geraria um ADD COLUMN duplicado. Consulta em `lib/api/search.ts`.
 export const initiative = pgTable(
    'initiative',
    {
@@ -241,6 +244,9 @@ export const initiative = pgTable(
    (t) => [index('idx_initiative_parent').on(t.parentId)]
 );
 
+// Coluna `search_vector` (tsvector GERADA + índice GIN) existe no banco mas NÃO é declarada
+// aqui: vem de migration à mão (0044/0047, busca full-text). Não declarar — o drizzle-kit
+// geraria um ADD COLUMN duplicado. Consulta em `lib/api/search.ts`.
 export const project = pgTable(
    'project',
    {
@@ -358,6 +364,9 @@ export const cycleSnapshot = pgTable(
    (t) => [primaryKey({ columns: [t.cycleId, t.date] })]
 );
 
+// Coluna `search_vector` (tsvector GERADA + índice GIN) existe no banco mas NÃO é declarada
+// aqui: vem de migration à mão (0044/0047, busca full-text). Não declarar — o drizzle-kit
+// geraria um ADD COLUMN duplicado. Consulta em `lib/api/search.ts`.
 export const issue = pgTable(
    'issue',
    {
@@ -442,6 +451,9 @@ export const issueLabel = pgTable(
    ]
 );
 
+// Coluna `search_vector` (tsvector GERADA + índice GIN) existe no banco mas NÃO é declarada
+// aqui: vem de migration à mão (0044/0047, busca full-text). Não declarar — o drizzle-kit
+// geraria um ADD COLUMN duplicado. Consulta em `lib/api/search.ts`.
 export const issueContent = pgTable('issue_content', {
    issueId: varchar('issue_id', { length: 36 })
       .primaryKey()
@@ -827,6 +839,9 @@ export const projectResource = pgTable(
    (t) => [index('idx_project_resource_project').on(t.projectId)]
 );
 
+// Coluna `search_vector` (tsvector GERADA + índice GIN) existe no banco mas NÃO é declarada
+// aqui: vem de migration à mão (0044/0047, busca full-text). Não declarar — o drizzle-kit
+// geraria um ADD COLUMN duplicado. Consulta em `lib/api/search.ts`.
 export const projectDetail = pgTable('project_detail', {
    projectId: varchar('project_id', { length: 36 })
       .primaryKey()
@@ -960,6 +975,9 @@ export const reviewFileState = pgTable(
    (t) => [primaryKey({ columns: [t.reviewId, t.userId, t.path] })]
 );
 
+// Coluna `search_vector` (tsvector GERADA + índice GIN) existe no banco mas NÃO é declarada
+// aqui: vem de migration à mão (0044/0047, busca full-text). Não declarar — o drizzle-kit
+// geraria um ADD COLUMN duplicado. Consulta em `lib/api/search.ts`.
 export const teamDocument = pgTable('team_document', {
    id: varchar('id', { length: 36 }).primaryKey(),
    folderId: varchar('folder_id', { length: 64 })

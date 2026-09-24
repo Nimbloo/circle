@@ -110,7 +110,8 @@ describe('card Suggested da triagem (#94)', () => {
 
       await waitFor(() => expect(apiMocks.accept).toHaveBeenCalledWith('i1', {}));
       await waitFor(() => expect(toastMocks.success).toHaveBeenCalledWith('Suggestion applied'));
-      expect(onResolved).toHaveBeenCalled();
+      // O pai é avisado depois da animação de saída do card.
+      await waitFor(() => expect(onResolved).toHaveBeenCalled());
       // O card sai da tela depois de aplicado.
       await waitFor(() => expect(screen.queryByText('Suggested')).toBeNull());
    });

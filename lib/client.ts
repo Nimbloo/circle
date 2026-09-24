@@ -61,6 +61,7 @@ import type {
    DocumentDto,
    DocumentDetailDto,
    UpdateDocumentInput,
+   ProjectDocumentDto,
 } from '@/lib/api/documents';
 import type {
    IssueDetailDto,
@@ -518,6 +519,11 @@ export const api = {
          patch<{ id: string }>(`/projects/${id}/resources/${rid}`, body),
       removeResource: (id: string, rid: string) =>
          del<{ deleted: boolean }>(`/projects/${id}/resources/${rid}`),
+      /**
+       * Cria um documento no time do projeto e o vincula como resource (atômico). A `url`
+       * volta relativa ao workspace (`/team/…`): prefixar com `/${orgId}`.
+       */
+      createDocument: (id: string) => post<ProjectDocumentDto>(`/projects/${id}/documents`, {}),
    },
 
    cycles: {

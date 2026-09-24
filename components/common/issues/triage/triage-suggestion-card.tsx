@@ -9,6 +9,7 @@ import {
    SelectValue,
 } from '@/components/ui/select';
 import { api } from '@/lib/client';
+import { MOTION_MS } from '@/lib/motion';
 import type { TriageSuggestionDto } from '@/lib/api/triage';
 import { ISSUE_CHANGED_EVENT } from '@/lib/use-live-sync';
 import { useIssuesStore } from '@/store/issues-store';
@@ -60,6 +61,27 @@ export function TriageSuggestionCard({
 
    const [suggestion, setSuggestion] = useState<TriageSuggestionDto | null>(null);
    const [hidden, setHidden] = useState(false);
+   // Saída animada (list-exit): o card colapsa por `MOTION_MS.content` antes de sumir.
+   // Rollback (API recusou) devolve `hidden=false` e o card volta inteiro.
+   const [exited, setExited] = useState(false);
+   // A API confirmou: o pai é avisado (e recarrega a fila) só DEPOIS da saída — senão uma
+   // resposta rápida tirava o card da fila no meio da animação.
+   const [resolved, setResolved] = useState(false);
+   const onResolvedRef = useRef(onResolved);
+   useEffect(() => {
+      onResolvedRef.current = onResolved;
+   }, [onResolved]);
+   useEffect(() => {
+      if (resolved && exited) onResolvedRef.current?.();
+   }, [resolved, exited]);
+   useEffect(() => {
+      if (!hidden) {
+         setExited(false);
+         return;
+      }
+      const timer = setTimeout(() => setExited(true), MOTION_MS.content);
+      return () => clearTimeout(timer);
+   }, [hidden]);
    const [pending, setPending] = useState(false);
    const [editing, setEditing] = useState(false);
    const [teamDraft, setTeamDraft] = useState<string>(NONE);
@@ -124,7 +146,7 @@ export function TriageSuggestionCard({
       return () => window.removeEventListener(ISSUE_CHANGED_EVENT, onChanged);
    }, [issueId, load, fedByQueue]);
 
-   if (!suggestion || hidden || suggestion.appliedAt || suggestion.dismissedAt) return null;
+   if (!suggestion || exited || suggestion.appliedAt || suggestion.dismissedAt) return null;
    const isHeuristic = suggestion.source === 'heuristic';
    // Fallback sem duplicata não tem o que sugerir — não ocupa espaço na tela.
    if (isHeuristic && suggestion.duplicates.length === 0) return null;
@@ -150,7 +172,7 @@ export function TriageSuggestionCard({
          );
          toast.success('Suggestion applied');
          void useIssuesStore.getState().applyRemote(issueId);
-         onResolved?.();
+         setResolved(true);
       } catch (e) {
          setHidden(false); // rollback
          toast.error(e instanceof Error ? e.message : 'Falha ao aplicar a sugestão');
@@ -164,7 +186,7 @@ export function TriageSuggestionCard({
       setHidden(true);
       try {
          await api.triage.dismiss(issueId);
-         onResolved?.();
+         setResolved(true);
       } catch {
          setHidden(false);
          toast.error('Falha ao descartar a sugestão');
@@ -176,7 +198,7 @@ export function TriageSuggestionCard({
    const toggle = (list: string[], id: string) =>
       list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
 
-   return (
+   const card = (
       <section
          aria-label="Suggested triage"
          className={`rounded-md border border-border bg-container px-3 py-2.5 text-sm ${className ?? ''}`}
@@ -339,6 +361,12 @@ export function TriageSuggestionCard({
             </Button>
          </div>
       </section>
+   );
+   if (!hidden) return card;
+   return (
+      <div aria-hidden className={`list-exit ${className ?? ''}`}>
+         <div>{card}</div>
+      </div>
    );
 }
 

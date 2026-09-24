@@ -7,9 +7,13 @@ import {
    DropdownMenuItem,
    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { api } from '@/lib/client';
 import type { ProjectResource } from '@/data/project-details';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { FileText, Link2, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
+import Link from 'next/link';
+import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -24,6 +28,10 @@ function domainOf(raw: string): string {
 }
 function normalizeUrl(raw: string): string {
    return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+}
+/** Link para uma página do próprio Circle (ex.: documento criado pelo projeto). */
+function isInternal(url: string): boolean {
+   return url.startsWith('/') && !url.startsWith('//');
 }
 
 /**
@@ -46,6 +54,34 @@ export function ProjectResources({
    const [editingId, setEditingId] = useState<string | null>(null);
    const [editLabel, setEditLabel] = useState('');
    const [busy, setBusy] = useState(false);
+   const { orgId } = useParams<{ orgId: string }>();
+   const router = useRouter();
+   // Criar documento exige ser membro do time do projeto (mesma regra do servidor).
+   const canCreateDocument = useWorkspaceStore((s) => {
+      const teamId = s.getProjectById(projectId)?.teamId;
+      return !!(teamId && s.getTeamById(teamId)?.joined);
+   });
+
+   /** Cria o documento no time do projeto já vinculado (atômico no servidor) e o abre. */
+   const createDocument = async () => {
+      if (busy || !canCreateDocument) return;
+      setBusy(true);
+      let url: string;
+      try {
+         url = (await api.projects.createDocument(projectId)).document.url;
+      } catch {
+         toast.error('Não foi possível criar o documento');
+         return;
+      } finally {
+         setBusy(false);
+      }
+      // Documento e vínculo já confirmados pela API (mesma transação).
+      toast.success('Documento criado');
+      // Abre o documento de qualquer jeito: ele já existe. O refresh da lista é best-effort
+      // (falha nele não pode prender o usuário aqui nem virar rejeição solta).
+      router.push(`/${orgId}${url}`);
+      void Promise.resolve(onChanged()).catch(() => {});
+   };
 
    const addLink = async () => {
       const value = url.trim();
@@ -115,15 +151,26 @@ export function ProjectResources({
                      key={r.id}
                      className="group/res inline-flex items-center border rounded-md h-7 pl-2 pr-0.5 gap-1 hover:bg-accent/50 transition-colors"
                   >
-                     <a
-                        href={r.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs min-w-0"
-                     >
-                        <Link2 className="size-3.5 text-muted-foreground shrink-0" />
-                        <span className="truncate max-w-48">{r.label}</span>
-                     </a>
+                     {isInternal(r.url) ? (
+                        <Link
+                           // Link interno é relativo ao workspace: prefixa a org da rota.
+                           href={`/${orgId}${r.url}`}
+                           className="inline-flex items-center gap-1.5 text-xs min-w-0"
+                        >
+                           <FileText className="size-3.5 text-muted-foreground shrink-0" />
+                           <span className="truncate max-w-48">{r.label}</span>
+                        </Link>
+                     ) : (
+                        <a
+                           href={r.url}
+                           target="_blank"
+                           rel="noreferrer"
+                           className="inline-flex items-center gap-1.5 text-xs min-w-0"
+                        >
+                           <Link2 className="size-3.5 text-muted-foreground shrink-0" />
+                           <span className="truncate max-w-48">{r.label}</span>
+                        </a>
+                     )}
                      <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                            <Button
@@ -183,10 +230,25 @@ export function ProjectResources({
                      </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
-                     <DropdownMenuItem disabled>
-                        <FileText className="size-3.5 mr-2" /> Create document…
-                        <span className="ml-2 text-[10px] text-muted-foreground">Soon</span>
-                     </DropdownMenuItem>
+                     {canCreateDocument ? (
+                        <DropdownMenuItem disabled={busy} onClick={() => void createDocument()}>
+                           <FileText className="size-3.5 mr-2" /> Create document…
+                        </DropdownMenuItem>
+                     ) : (
+                        <Tooltip>
+                           {/* Item desabilitado não recebe hover: o gatilho é o wrapper. */}
+                           <TooltipTrigger asChild>
+                              <div>
+                                 <DropdownMenuItem disabled>
+                                    <FileText className="size-3.5 mr-2" /> Create document…
+                                 </DropdownMenuItem>
+                              </div>
+                           </TooltipTrigger>
+                           <TooltipContent side="right">
+                              Only members of the project’s team can create documents
+                           </TooltipContent>
+                        </Tooltip>
+                     )}
                      <DropdownMenuItem
                         onClick={() => {
                            setUrl('');

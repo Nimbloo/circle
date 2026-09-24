@@ -1,14 +1,12 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
 import { usePreferencesStore } from '@/store/preferences-store';
-import { Check, Plus } from 'lucide-react';
-import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './shared';
+import { Check } from 'lucide-react';
+import { SettingsSection, SettingsShell } from './shared';
 
 /**
  * Personal settings for the workspace agent. A `Guidance` persiste por-usuário
- * (preferences-store → PUT /settings). Skills e MCP connectors dependem de
- * subsistemas ainda não construídos → "Soon".
+ * (preferences-store → PUT /settings).
  */
 export default function AgentPersonalization() {
    const guidance = usePreferencesStore((s) => s.agentGuidance);
@@ -33,55 +31,6 @@ export default function AgentPersonalization() {
                <Check className="size-3.5 text-success" />
                Saved automatically to your account
             </p>
-         </SettingsSection>
-
-         <SettingsSection
-            title="Skills"
-            description="Reusable prompts auto-selected by the agent or invoked via slash commands"
-         >
-            <SettingsCard>
-               <SettingsRow
-                  title="No skills created"
-                  trailing={
-                     <div className="flex items-center gap-2">
-                        <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                           Soon
-                        </span>
-                        <Button
-                           size="icon"
-                           variant="ghost"
-                           className="size-7"
-                           disabled
-                           aria-label="New skill"
-                        >
-                           <Plus className="size-4" />
-                        </Button>
-                     </div>
-                  }
-               />
-            </SettingsCard>
-         </SettingsSection>
-
-         <SettingsSection
-            title="MCP connectors"
-            description="Add MCP connectors for use with the agent. Workspace admins can manage available connectors in security settings."
-         >
-            <SettingsCard>
-               <SettingsRow
-                  title="Agent MCP access disabled in this workspace"
-                  muted
-                  trailing={
-                     <div className="flex items-center gap-2">
-                        <span className="rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                           Soon
-                        </span>
-                        <Button size="xs" variant="ghost" disabled>
-                           Configure
-                        </Button>
-                     </div>
-                  }
-               />
-            </SettingsCard>
          </SettingsSection>
       </SettingsShell>
    );

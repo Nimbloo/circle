@@ -85,6 +85,9 @@ function fire(id?: string) {
 
 describe('fila de triagem (#28)', () => {
    it('ignora evento de issue de outro time ou fora da triagem; recarrega pelos da fila', async () => {
+      // Timer falso que anda sozinho: o waitFor segue valendo e a janela do debounce
+      // é atravessada na hora, sem dormir (antes: sleep fixo).
+      vi.useFakeTimers({ shouldAdvanceTime: true });
       apiMocks.queue.mockResolvedValue([SUGGESTION]);
       render(<TriageSuggestionsQueue />);
       await screen.findByText('Suggested');
@@ -92,7 +95,7 @@ describe('fila de triagem (#28)', () => {
 
       fire('x1'); // outro time
       fire('e2'); // mesmo time, fora da triagem e fora da fila
-      await new Promise((r) => setTimeout(r, 500));
+      await act(() => vi.advanceTimersByTimeAsync(500));
       expect(apiMocks.queue).toHaveBeenCalledTimes(1);
 
       fire('i1'); // card da fila
@@ -121,12 +124,53 @@ describe('fila de triagem (#28)', () => {
       expect(screen.getByRole('button', { name: 'Bug', pressed: false })).toBeTruthy();
    });
 
+   it('dispensar anima a saída do card (list-exit) antes de ele sumir', async () => {
+      const user = userEvent.setup();
+      apiMocks.dismiss.mockResolvedValue(undefined);
+      render(<TriageSuggestionCard issueId="i1" initial={SUGGESTION} />);
+      await screen.findByText('Suggested');
+      await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+      // Saindo: ainda no DOM, dentro do wrapper que colapsa a altura.
+      const card = screen.getByLabelText('Suggested triage', { selector: 'section' });
+      expect(card.closest('.list-exit')).toBeTruthy();
+      await waitFor(() => expect(screen.queryByText('Suggested')).toBeNull(), { timeout: 1000 });
+   });
+
+   it('o pai só recarrega a fila depois da animação de saída (API rápida não corta a saída)', async () => {
+      const user = userEvent.setup();
+      apiMocks.dismiss.mockResolvedValue(undefined);
+      const onResolved = vi.fn();
+      render(<TriageSuggestionCard issueId="i1" initial={SUGGESTION} onResolved={onResolved} />);
+      await screen.findByText('Suggested');
+      await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+      // A API já respondeu, mas o card ainda está saindo: recarregar agora o arrancaria.
+      await act(async () => {});
+      expect(onResolved).not.toHaveBeenCalled();
+      await waitFor(() => expect(onResolved).toHaveBeenCalledTimes(1), { timeout: 1000 });
+   });
+
+   it('dispensa recusada: o card volta inteiro, sem ficar preso na saída', async () => {
+      const user = userEvent.setup();
+      apiMocks.dismiss.mockRejectedValue(new Error('500'));
+      render(<TriageSuggestionCard issueId="i1" initial={SUGGESTION} />);
+      await screen.findByText('Suggested');
+      await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+      await waitFor(() =>
+         expect(
+            screen.getByLabelText('Suggested triage', { selector: 'section' }).closest('.list-exit')
+         ).toBeNull()
+      );
+   });
+
    it('card alimentado pela fila não faz GET próprio em evento da issue', async () => {
+      // Timer falso que anda sozinho: o waitFor segue valendo e a janela do debounce
+      // é atravessada na hora, sem dormir (antes: sleep fixo).
+      vi.useFakeTimers({ shouldAdvanceTime: true });
       render(<TriageSuggestionCard issueId="i1" initial={SUGGESTION} />);
       await screen.findByText('Suggested');
       fire('i1');
       fire();
-      await new Promise((r) => setTimeout(r, 50));
+      await act(() => vi.advanceTimersByTimeAsync(50));
       expect(apiMocks.suggestion).not.toHaveBeenCalled();
    });
 });

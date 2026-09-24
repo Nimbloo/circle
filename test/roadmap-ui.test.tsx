@@ -3,7 +3,7 @@
 import './setup-dom';
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RoadmapDto } from '@/lib/client';
 import Roadmap from '@/components/common/roadmap/roadmap';
 import RoadmapTimeline, {
@@ -115,6 +115,8 @@ const RENDER_GROUPS: RoadmapRenderGroup[] = [
       projects: [CHILD],
    },
 ];
+
+afterEach(() => vi.useRealTimers());
 
 beforeEach(() => {
    apiMocks.roadmap.mockReset();
@@ -350,6 +352,9 @@ describe('Gráfico de progresso no tempo (#102)', () => {
 
 describe('Roadmap — recarga ao vivo e erro (#40)', () => {
    it('evento de projeto (dependência/marco) recarrega com debounce, uma vez por rajada', async () => {
+      // Timer falso que anda sozinho: o waitFor segue valendo e a janela do debounce
+      // é atravessada na hora, sem dormir (antes: sleep fixo).
+      vi.useFakeTimers({ shouldAdvanceTime: true });
       const { PROJECT_CHANGED_EVENT } = await import('@/lib/use-live-sync');
       apiMocks.roadmap.mockResolvedValue(roadmapDto());
       render(<Roadmap />);
@@ -360,11 +365,14 @@ describe('Roadmap — recarga ao vivo e erro (#40)', () => {
             new CustomEvent(PROJECT_CHANGED_EVENT, { detail: { id: 'p-mother' } })
          );
       await waitFor(() => expect(apiMocks.roadmap).toHaveBeenCalledTimes(2));
-      await new Promise((r) => setTimeout(r, 500));
+      await act(() => vi.advanceTimersByTimeAsync(500));
       expect(apiMocks.roadmap).toHaveBeenCalledTimes(2);
    });
 
    it('resposta velha não sobrescreve a mais nova (sequência)', async () => {
+      // Timer falso que anda sozinho: o waitFor segue valendo e a janela do debounce
+      // é atravessada na hora, sem dormir (antes: sleep fixo).
+      vi.useFakeTimers({ shouldAdvanceTime: true });
       const { INITIATIVE_CHANGED_EVENT } = await import('@/lib/use-live-sync');
       let resolveFirst!: (d: RoadmapDto) => void;
       apiMocks.roadmap
@@ -376,7 +384,7 @@ describe('Roadmap — recarga ao vivo e erro (#40)', () => {
       expect(await screen.findByText('Mother initiative')).toBeTruthy();
 
       resolveFirst(roadmapDto({ groups: [] }));
-      await new Promise((r) => setTimeout(r, 50));
+      await act(() => vi.advanceTimersByTimeAsync(50));
       expect(screen.getByText('Mother initiative')).toBeTruthy();
    });
 

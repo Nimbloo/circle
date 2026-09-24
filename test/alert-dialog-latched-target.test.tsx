@@ -59,7 +59,7 @@ describe('useLatchedTarget', () => {
       }
    });
 
-   it('nenhum título de AlertDialog lê o estado cru do alvo', () => {
+   it('nenhum título ou descrição de AlertDialog lê o estado cru do alvo', () => {
       const tracked = execSync('git ls-files components', { encoding: 'utf8' })
          .split('\n')
          // `components/ui` é o primitivo (o exemplo do docblock do hook mora lá).
@@ -67,9 +67,14 @@ describe('useLatchedTarget', () => {
       const offenders = tracked.filter((file) =>
          [
             ...readFileSync(file, 'utf8').matchAll(
-               /<AlertDialogTitle>[\s\S]*?<\/AlertDialogTitle>/g
+               // Com ou sem props na tag (`<AlertDialogTitle className=…>`).
+               /<AlertDialog(Title|Description)\b[^>]*>[\s\S]*?<\/AlertDialog\1>/g
             ),
-         ].some((match) => /\{(toDelete|deleting|target|removing)\?\./.test(match[0]))
+         ].some((match) =>
+            // `{alvo?.nome}`, `{alvo ? … : …}`, `{alvo && alvo.nome}` ou `{alvo.nome}` —
+            // todos esvaziam (ou quebram) durante a saída.
+            /\{\s*(toDelete|deleting|target|removing)\s*(\?|&&|\.)/.test(match[0])
+         )
       );
       expect(offenders).toEqual([]);
    });

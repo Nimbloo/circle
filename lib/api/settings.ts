@@ -59,14 +59,18 @@ const NotificationsSchema = z
 
 /**
  * Preferências das telas de Settings sem subsistema dedicado (Preferences,
- * Code & reviews, AI & Agents, Agent personalization). Espelha `Preferences`
- * de store/preferences-store.ts. `.strict()` rejeita chaves desconhecidas.
+ * Code & reviews, Agent personalization). Espelha `Preferences` de
+ * store/preferences-store.ts. `.strict()` rejeita chaves desconhecidas.
  * Selects guardam o rótulo (string); toggles guardam boolean.
+ *
+ * LEGADAS: chaves de opções removidas da UI (dependiam de algo que o Circle não faz).
+ * Continuam ACEITAS para não recusar com 400 o save de blobs antigos (abas abertas com o
+ * bundle anterior, localStorage); o cliente atual não as envia nem as lê.
  */
 const PreferencesSchema = z
    .object({
       defaultHomeView: z.string().optional(),
-      displayNames: z.string().optional(),
+      nameDisplay: z.string().optional(),
       firstDayOfWeek: z.string().optional(),
       convertEmoticons: z.boolean().optional(),
       sendCommentsOn: z.string().optional(),
@@ -76,20 +80,24 @@ const PreferencesSchema = z
       autoAssignSelf: z.boolean().optional(),
       assignSelfOnStart: z.boolean().optional(),
       codeReviewsEnabled: z.boolean().optional(),
+      codeFont: z.string().optional(),
+      gitBranchCopyMoveStarted: z.boolean().optional(),
+      openCodingToolMoveStarted: z.boolean().optional(),
+      agentGuidance: z.string().max(8000).optional(),
+      // Legadas (ver acima).
       autoConvertDrafts: z.boolean().optional(),
       mergeStrategy: z.string().optional(),
       codeTheme: z.string().optional(),
-      codeFont: z.string().optional(),
       reviewComments: z.string().optional(),
       reviewRequests: z.boolean().optional(),
       githubTeamRequests: z.boolean().optional(),
       checksMergeQueue: z.boolean().optional(),
       requireSignedCommits: z.boolean().optional(),
       gitAttachmentFormat: z.string().optional(),
-      gitBranchCopyMoveStarted: z.boolean().optional(),
-      openCodingToolMoveStarted: z.boolean().optional(),
       aiUsageFeedback: z.boolean().optional(),
-      agentGuidance: z.string().max(8000).optional(),
+      // Era o default ("Username") quando a opção não fazia nada: todo blob salvo o tem.
+      // Honrá-lo trocaria nomes por handles de repente; a opção vive em `nameDisplay`.
+      displayNames: z.string().optional(),
    })
    .strict();
 
@@ -103,6 +111,9 @@ const PreferencesSchema = z
 const ViewDisplaySchema = z
    .object({
       grouping: z.enum(['status', 'assignee', 'priority', 'project', 'label', 'none']).optional(),
+      subGrouping: z
+         .enum(['status', 'assignee', 'priority', 'project', 'label', 'none'])
+         .optional(),
       ordering: z.enum(['priority', 'created', 'title', 'manual', 'dueDate']).optional(),
       orderCompletedByRecency: z.boolean().optional(),
       completedIssues: z.enum(['all', 'none']).optional(),

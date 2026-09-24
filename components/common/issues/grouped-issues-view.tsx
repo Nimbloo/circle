@@ -1,6 +1,5 @@
 'use client';
 
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { EmptyState } from '@/components/common/empty-state';
 import { LoadingArea, useEnterFade } from '@/components/common/loading-area';
 import { cn } from '@/lib/utils';
@@ -11,11 +10,13 @@ import { useDisplaySetting } from '@/store/display-settings-store';
 import { useFilterStore } from '@/store/filter-store';
 import { useBulkSelectionStore } from '@/store/bulk-selection-store';
 import { useIssueNavigationStore, type IssueNavItem } from '@/store/issue-navigation-store';
-import { Box, ChevronDown, Layers, Tag, User, X } from 'lucide-react';
+import { ChevronDown, Layers, X } from 'lucide-react';
 import { FC, useEffect, useMemo, useState } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
-import { GroupIssues, IssueGroupDescriptor } from './group-issues';
+import { GroupIssues } from './group-issues';
+import { buildIssueGroups, subGroupDescriptor, type GroupEntry } from './issue-grouping';
+import { BoardSwimlanes, type Swimlane } from './board-swimlanes';
 import { VirtualIssueList } from './virtual-issue-list';
 import { CustomDragLayer } from './issue-grid';
 import { IssueLineDragLayer, IssueLineProjectScopeProvider } from './issue-line';
@@ -23,7 +24,6 @@ import { BulkActionsBar } from './bulk-actions-bar';
 import { useBulkSelectionKeys } from './use-bulk-selection-keys';
 import { useIssueDeleteShortcut } from './use-issue-delete-shortcut';
 import { IssueContextMenuHost } from './issue-context-menu-host';
-import { labelColor } from '@/components/common/palette';
 
 interface GroupedIssuesViewProps {
    /** Issues to display (after the filter bar has been applied). */
@@ -91,13 +91,6 @@ function IssuesEmptyState({
    );
 }
 
-interface GroupEntry {
-   group: IssueGroupDescriptor;
-   issues: Issue[];
-   /** Count of issues in this group before the filter bar. */
-   total: number;
-}
-
 const sortIssues = (issues: Issue[], ordering: string, completedByRecency = false): Issue[] => {
    const base = ((): Issue[] => {
       switch (ordering) {
@@ -131,18 +124,6 @@ const sortIssues = (issues: Issue[], ordering: string, completedByRecency = fals
       .filter((i) => i.status.category === 'completed')
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
    return [...active, ...done];
-};
-
-const groupByKey = (issues: Issue[], keyOf: (issue: Issue) => string): Map<string, Issue[]> => {
-   const map = new Map<string, Issue[]>();
-   // Push no array do grupo (O(n)); o spread por issue era O(n²) em listas grandes.
-   for (const issue of issues) {
-      const key = keyOf(issue);
-      const bucket = map.get(key);
-      if (bucket) bucket.push(issue);
-      else map.set(key, [issue]);
-   }
-   return map;
 };
 
 /** Footer shown when active filters hide issues — "n issues hidden by filters". */
@@ -228,6 +209,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
    const fade = useEnterFade('issues-view');
    // Selectors individuais: re-render só quando a chave usada muda (não o store inteiro).
    const grouping = useDisplaySetting('grouping');
+   const subGrouping = useDisplaySetting('subGrouping');
    const ordering = useDisplaySetting('ordering');
    const orderCompletedByRecency = useDisplaySetting('orderCompletedByRecency');
    const completedIssues = useDisplaySetting('completedIssues');
@@ -261,132 +243,14 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
       const visibleIssues = hideSubIssues(hideDone(issues));
       const scopeIssues = hideSubIssues(hideDone(totalIssues));
 
-      const buildGroups = (): { group: IssueGroupDescriptor; issues: Issue[]; total: number }[] => {
-         switch (grouping) {
-            case 'assignee': {
-               const keyOf = (issue: Issue) => issue.assignee?.id ?? 'no-assignee';
-               const totals = groupByKey(scopeIssues, keyOf);
-               const visible = groupByKey(visibleIssues, keyOf);
-               return [...totals.entries()]
-                  .sort((a, b) => b[1].length - a[1].length)
-                  .map(([key, totalGroup]) => {
-                     const assignee = totalGroup[0].assignee;
-                     return {
-                        group: {
-                           id: key,
-                           name: assignee?.name ?? 'No assignee',
-                           icon: assignee ? (
-                              <Avatar className="size-4">
-                                 <AvatarImage
-                                    src={assignee.avatarUrl || undefined}
-                                    alt={assignee.name}
-                                 />
-                                 <AvatarFallback>{assignee.name[0]}</AvatarFallback>
-                              </Avatar>
-                           ) : (
-                              <User className="size-4 text-muted-foreground" />
-                           ),
-                           drop: { field: 'assignee', assignee: assignee ?? null },
-                        },
-                        issues: visible.get(key) ?? [],
-                        total: totalGroup.length,
-                     };
-                  });
-            }
-            case 'priority': {
-               return priorities.map((priority) => ({
-                  group: {
-                     id: priority.id,
-                     name: priority.name,
-                     icon: <priority.icon className="size-4 text-muted-foreground" />,
-                     drop: { field: 'priority', priority },
-                  },
-                  issues: visibleIssues.filter((issue) => issue.priority.id === priority.id),
-                  total: scopeIssues.filter((issue) => issue.priority.id === priority.id).length,
-               }));
-            }
-            case 'project': {
-               const keyOf = (issue: Issue) => issue.project?.id ?? 'no-project';
-               const totals = groupByKey(scopeIssues, keyOf);
-               const visible = groupByKey(visibleIssues, keyOf);
-               return [...totals.entries()]
-                  .sort((a, b) => b[1].length - a[1].length)
-                  .map(([key, totalGroup]) => {
-                     const project = totalGroup[0].project;
-                     const Icon = project?.icon ?? Box;
-                     return {
-                        group: {
-                           id: key,
-                           name: project?.name ?? 'No project',
-                           icon: <Icon className="size-4 text-muted-foreground" />,
-                           drop: { field: 'project', project },
-                        },
-                        issues: visible.get(key) ?? [],
-                        total: totalGroup.length,
-                     };
-                  });
-            }
-            case 'label': {
-               // Multi-valorado (padrão Linear): uma issue aparece em cada label que tem.
-               const labelGroups = labels.map((label) => ({
-                  group: {
-                     id: label.id,
-                     name: label.name,
-                     icon: (
-                        <span
-                           className="size-2.5 rounded-full"
-                           style={{ backgroundColor: labelColor(label.color) }}
-                        />
-                     ),
-                  },
-                  issues: visibleIssues.filter((issue) =>
-                     issue.labels.some((l) => l.id === label.id)
-                  ),
-                  total: scopeIssues.filter((issue) => issue.labels.some((l) => l.id === label.id))
-                     .length,
-               }));
-               const noLabel = {
-                  group: {
-                     id: 'no-label',
-                     name: 'No label',
-                     icon: <Tag className="size-4 text-muted-foreground" />,
-                  },
-                  issues: visibleIssues.filter((issue) => issue.labels.length === 0),
-                  total: scopeIssues.filter((issue) => issue.labels.length === 0).length,
-               };
-               return [...labelGroups, noLabel];
-            }
-            case 'none': {
-               return [
-                  {
-                     group: {
-                        id: 'all',
-                        name: 'All issues',
-                        icon: <Box className="size-4 text-muted-foreground" />,
-                     },
-                     issues: visibleIssues,
-                     total: scopeIssues.length,
-                  },
-               ];
-            }
-            case 'status':
-            default: {
-               return statuses.map((statusItem) => ({
-                  group: {
-                     id: statusItem.id,
-                     name: statusItem.name,
-                     icon: <statusItem.icon />,
-                     status: statusItem,
-                     drop: { field: 'status', status: statusItem },
-                  },
-                  issues: visibleIssues.filter((issue) => issue.status.id === statusItem.id),
-                  total: scopeIssues.filter((issue) => issue.status.id === statusItem.id).length,
-               }));
-            }
-         }
-      };
-
-      return buildGroups().map((entry) => ({
+      return buildIssueGroups({
+         grouping,
+         visibleIssues,
+         scopeIssues,
+         statuses,
+         priorities,
+         labels,
+      }).map((entry) => ({
          ...entry,
          issues: sortIssues(entry.issues, ordering, orderCompletedByRecency),
       }));
@@ -403,6 +267,73 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
       showSubIssues,
    ]);
 
+   // Sub-grupos da lista (Display → Sub-grouping): a mesma função de agrupamento, aplicada
+   // dentro de cada grupo. A ordem das issues do grupo é preservada; sub-grupo vazio some.
+   const subGroupsById = useMemo(() => {
+      if (subGrouping === 'none') return null;
+      const map = new Map<string, GroupEntry[]>();
+      for (const entry of groups) {
+         const subs = buildIssueGroups({
+            grouping: subGrouping,
+            visibleIssues: entry.issues,
+            scopeIssues: entry.scope,
+            statuses,
+            priorities,
+            labels,
+         })
+            .filter((sub) => sub.issues.length > 0)
+            .map((sub) => ({ ...sub, group: subGroupDescriptor(entry.group, sub.group) }));
+         map.set(entry.group.id, subs);
+      }
+      return map;
+   }, [groups, subGrouping, statuses, priorities, labels]);
+
+   // Swimlanes do board (Display → Rows): uma faixa por valor do sub-grupo, com uma célula
+   // por coluna visível. Swimlane sem issue visível some.
+   const boardColumns = useMemo(
+      () => groups.filter((entry) => showEmptyGroups || entry.issues.length > 0),
+      [groups, showEmptyGroups]
+   );
+   const lanes = useMemo<Swimlane[] | null>(() => {
+      if (!isViewTypeGrid || subGrouping === 'none') return null;
+      const all = new Map<string, Issue>();
+      const scope = new Map<string, Issue>();
+      for (const column of boardColumns) {
+         for (const issue of column.issues) all.set(issue.id, issue);
+         for (const issue of column.scope) scope.set(issue.id, issue);
+      }
+      return buildIssueGroups({
+         grouping: subGrouping,
+         visibleIssues: [...all.values()],
+         scopeIssues: [...scope.values()],
+         statuses,
+         priorities,
+         labels,
+      })
+         .filter((lane) => lane.issues.length > 0)
+         .map((lane) => {
+            const inLane = new Set(lane.issues.map((issue) => issue.id));
+            return {
+               group: lane.group,
+               count: lane.issues.length,
+               cells: boardColumns.map((column) => ({
+                  group: subGroupDescriptor(column.group, lane.group),
+                  issues: column.issues.filter((issue) => inLane.has(issue.id)),
+               })),
+            };
+         });
+   }, [isViewTypeGrid, subGrouping, boardColumns, statuses, priorities, labels]);
+
+   // Ordem exibida (grupos → sub-grupos, ou swimlanes → colunas) para seleção e navegação.
+   const displayedSections = useMemo<Issue[][]>(() => {
+      if (lanes) return lanes.flatMap((lane) => lane.cells.map((cell) => cell.issues));
+      if (subGroupsById && !isViewTypeGrid)
+         return groups.flatMap((entry) =>
+            (subGroupsById.get(entry.group.id) ?? []).map((sub) => sub.issues)
+         );
+      return groups.map((entry) => entry.issues);
+   }, [groups, subGroupsById, lanes, isViewTypeGrid]);
+
    // Seleção em lote segue o que está na tela (#30): issue apagada, filtrada ou escondida
    // (done/sub-issues) sai da seleção — a barra nunca age sobre o que o usuário não vê.
    const retainSelection = useBulkSelectionStore((s) => s.retain);
@@ -411,15 +342,15 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
    useEffect(() => {
       const visible = new Set<string>();
       const order: IssueNavItem[] = [];
-      for (const entry of groups)
-         for (const issue of entry.issues) {
+      for (const section of displayedSections)
+         for (const issue of section) {
             if (visible.has(issue.id)) continue; // por label, a issue aparece em vários grupos
             visible.add(issue.id);
             order.push({ id: issue.id, identifier: issue.identifier });
          }
       retainSelection(visible);
       setNavOrder(order);
-   }, [groups, retainSelection, setNavOrder]);
+   }, [displayedSections, retainSelection, setNavOrder]);
 
    // Is#18: só o que o FILTRO escondeu. Done/sub-issues escondidas pelas opções de display
    // saem das duas contagens (antes inflavam o rodapé e o faziam aparecer à toa).
@@ -447,7 +378,7 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
 
       // Padrão Linear: TODA coluna vazia (por filtro OU naturalmente sem issues)
       // colapsa em "Hidden columns" — a menos que "Show empty groups" esteja ligado.
-      const boardGroups = groups.filter((entry) => showEmptyGroups || entry.issues.length > 0);
+      const boardGroups = boardColumns;
       const hiddenGroups = showEmptyGroups
          ? []
          : groups.filter((entry) => entry.issues.length === 0);
@@ -460,17 +391,32 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
                <div className={cn(fade && 'content-enter', 'h-full flex flex-col')}>
                   <div className="flex-1 min-h-0 overflow-x-auto">
                      <IssueContextMenuHost>
-                        <div className="flex h-full min-w-max gap-0 px-1">
-                           {boardGroups.map((entry) => (
-                              <GroupIssues
-                                 key={entry.group.id}
-                                 group={entry.group}
-                                 issues={entry.issues}
-                                 count={entry.issues.length}
+                        {lanes ? (
+                           // "Hidden columns" à direita, como no board sem Rows (antes caía
+                           // embaixo de todas as swimlanes).
+                           <div className="flex h-full min-w-max items-start overflow-y-auto">
+                              <BoardSwimlanes
+                                 columns={boardGroups.map((entry) => ({
+                                    group: entry.group,
+                                    count: entry.issues.length,
+                                 }))}
+                                 lanes={lanes}
                               />
-                           ))}
-                           {hiddenGroups.length > 0 && <HiddenColumns entries={hiddenGroups} />}
-                        </div>
+                              {hiddenGroups.length > 0 && <HiddenColumns entries={hiddenGroups} />}
+                           </div>
+                        ) : (
+                           <div className="flex h-full min-w-max gap-0 px-1">
+                              {boardGroups.map((entry) => (
+                                 <GroupIssues
+                                    key={entry.group.id}
+                                    group={entry.group}
+                                    issues={entry.issues}
+                                    count={entry.issues.length}
+                                 />
+                              ))}
+                              {hiddenGroups.length > 0 && <HiddenColumns entries={hiddenGroups} />}
+                           </div>
+                        )}
                      </IssueContextMenuHost>
                   </div>
                   {showFooter && (
@@ -485,7 +431,11 @@ export const GroupedIssuesView: FC<GroupedIssuesViewProps> = ({
    }
 
    /* -------------------------------- List ------------------------------- */
-   const listGroups = groups.filter((entry) => showEmptyGroups || entry.issues.length > 0);
+   const listGroups = groups
+      .filter((entry) => showEmptyGroups || entry.issues.length > 0)
+      .map((entry) =>
+         subGroupsById ? { ...entry, subgroups: subGroupsById.get(entry.group.id) } : entry
+      );
 
    return (
       <IssueLineProjectScopeProvider projectId={currentProjectId}>

@@ -4,6 +4,8 @@ import { useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { api } from '@/lib/client';
 import { useIssuesStore } from '@/store/issues-store';
+import { usePreferencesStore } from '@/store/preferences-store';
+import { useWorkspaceStore } from '@/store/workspace-store';
 import { toast } from 'sonner';
 
 /**
@@ -13,6 +15,12 @@ import { toast } from 'sonner';
  * cria uma sub-issue por linha; Esc fecha. Insere no issues-store (applyRemote) e
  * dispara onCreated (refetch do detalhe → lista de filhas + rollup).
  */
+/** Preferência "Auto-assign to self": a sub-issue criada inline nasce comigo como responsável. */
+function selfAssignee(): { assigneeId?: string } {
+   const meId = useWorkspaceStore.getState().me?.id;
+   return usePreferencesStore.getState().autoAssignSelf && meId ? { assigneeId: meId } : {};
+}
+
 /** Mesmo teto do título de issue no servidor. */
 const TITLE_MAX = 512;
 
@@ -39,7 +47,7 @@ export function SubIssueCreate({
       try {
          // Sequencial de propósito: mantém a ordem das linhas coladas (rank = append).
          for (const t of clean) {
-            const dto = await api.issues.create({ parentId, title: t });
+            const dto = await api.issues.create({ parentId, title: t, ...selfAssignee() });
             created += 1;
             void useIssuesStore.getState().applyRemote(dto.id);
          }
