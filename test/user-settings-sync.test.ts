@@ -140,9 +140,26 @@ describe('user-settings-sync (layout)', () => {
       expect(get).not.toHaveBeenCalled();
       expect(useViewTypeStore.getState().viewTypeByView.inbox).toBe('grid');
 
-      await vi.advanceTimersByTimeAsync(900); // salvou: agora o reload volta a ler
       get.mockResolvedValueOnce({ layout: serverLayout });
-      await reloadUserSettings();
+      await vi.advanceTimersByTimeAsync(900); // salvou: o reload adiado roda agora
       expect(get).toHaveBeenCalledTimes(1);
+      get.mockResolvedValueOnce({ layout: serverLayout });
+      await reloadUserSettings(); // sem pendência, lê direto
+      expect(get).toHaveBeenCalledTimes(2);
+   });
+
+   it('reload adiado pela gravação local roda depois que ela salva (tema de outra aba chega)', async () => {
+      const { reloadUserSettings } = await import('@/lib/user-settings-sync');
+      const { useThemeStore } = await import('@/store/theme-store');
+      get.mockClear();
+      expect(useThemeStore.getState().mode).toBe('dark');
+      useViewTypeStore.getState().setViewType('inbox', 'list'); // edição local no debounce
+      await reloadUserSettings(); // outra aba trocou o tema: adiado
+      expect(get).not.toHaveBeenCalled();
+
+      get.mockResolvedValueOnce({ theme: { mode: 'light' }, layout: serverLayout });
+      await vi.advanceTimersByTimeAsync(900); // salvou → relê o servidor
+      expect(get).toHaveBeenCalledTimes(1);
+      expect(useThemeStore.getState().mode).toBe('light');
    });
 });
