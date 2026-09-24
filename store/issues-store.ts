@@ -8,6 +8,7 @@ import { create } from 'zustand';
 import { toast } from 'sonner';
 import { api, ApiError } from '@/lib/client';
 import { markOwnMutation } from '@/lib/client-id';
+import { errorReason } from '@/lib/error-reason';
 import { issueCursor } from '@/lib/issue-cursor';
 import { adaptIssues } from '@/lib/adapters';
 import { rankBetween } from '@/lib/api/rank';
@@ -107,6 +108,8 @@ function safeRankBetween(before: string | null, after: string | null): string | 
 
 /** Id do toast de erro de mutação de issue: falhas em rajada (lote) viram UM toast. */
 export const ISSUE_MUTATION_TOAST = 'issue-mutation-error';
+/** Id do toast de erro de label: N add/remove disparados juntos viram UM toast. */
+export const ISSUE_LABEL_TOAST = 'issue-label-error';
 
 /** Token da hidratação corrente: uma hidratação que termina depois de outra mais nova é descartada. */
 let hydrateSeq = 0;
@@ -530,7 +533,7 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
          .catch((e) => {
             done();
             if (prev) set((state) => revertFields(state, id, prev, updatedIssue, keys));
-            toast.error('Falha ao atualizar a issue', { id: ISSUE_MUTATION_TOAST });
+            toast.error(errorReason(e, 'Falha ao atualizar a issue'), { id: ISSUE_MUTATION_TOAST });
             throw e;
          })
          .then((dto) => {
@@ -598,7 +601,7 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
                   i.id === issueId ? { ...i, labels: i.labels.filter((l) => l.id !== label.id) } : i
                ),
             }));
-            toast.error('Falha ao adicionar a label');
+            toast.error(errorReason(e, 'Falha ao adicionar a label'), { id: ISSUE_LABEL_TOAST });
             throw e;
          })
          .then((dto) => {
@@ -629,7 +632,7 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
                         : i
                   ),
                }));
-            toast.error('Falha ao remover a label');
+            toast.error(errorReason(e, 'Falha ao remover a label'), { id: ISSUE_LABEL_TOAST });
             throw e;
          })
          .then((dto) => {
