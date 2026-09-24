@@ -723,6 +723,12 @@ html[data-underline-links='true'] [data-slot='view-bar'] a[href] {
    min-height: 0;
    overflow: hidden;
 }
+/* Fantasma de saída da lista virtual: mesma curva e duração do `.list-move`, para a borda
+   de baixo que fecha acompanhar a linha que sobe (sem sobreposição visível). */
+.list-exit-virtual {
+   animation-duration: var(--dur-base);
+   animation-timing-function: var(--ease-std);
+}
 
 /* Lista viva (realtime): quem liga é o `useListMotion` (lib/list-motion.ts), só no render
    em que chegou uma mudança pequena — nunca na carga, na troca de view ou em lote. */

@@ -10,7 +10,8 @@ import type { IssueGroupContext, IssueGroupDescriptor } from './group-issues';
 import { useGroupDropTarget } from './use-issue-drop-target';
 import { isKeyNavBlocked, navDirectionOf } from '@/store/issue-navigation-store';
 import { useViewKey } from '@/lib/view-key';
-import { useListMotion } from '@/lib/list-motion';
+import { LeavingGhosts, useListMotion } from '@/lib/list-motion';
+import { MOTION_MS } from '@/lib/motion';
 
 /**
  * Offset do scroll por view (is#14): abrir uma issue e voltar recomeçava a lista do topo.
@@ -245,6 +246,20 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
    // Recolher/abrir grupo e trocar de view não animam (o `resetKey` muda junto).
    const rowKeys = useMemo(() => rows.map(rowKey), [rows]);
    const listMotion = useListMotion(rowKeys, `${viewKey}|${[...collapsed].join(',')}`);
+   // Issue que sai (lote pequeno): o último desenho dela fecha a altura (`.list-exit`)
+   // enquanto as de baixo sobem. Fica fora do virtualizer — não entra na contagem nem na
+   // altura total, é só um div absoluto sem eventos por ~160 ms.
+   const ghostsRef = useRef<LeavingGhosts<{ issue: Issue; start: number }> | null>(null);
+   ghostsRef.current ??= new LeavingGhosts();
+   const ghosts = ghostsRef.current.begin(listMotion);
+   // Um render depois da janela tira os fantasmas do DOM.
+   const [, sweep] = useState(0);
+   const hasGhosts = ghosts.length > 0;
+   useEffect(() => {
+      if (!hasGhosts) return;
+      const timer = setTimeout(() => sweep((n) => n + 1), MOTION_MS.modal + 120);
+      return () => clearTimeout(timer);
+   }, [hasGhosts, listMotion.version]);
    const restored = useRef(false);
    const rowCount = rows.length;
    useEffect(() => {
@@ -306,9 +321,34 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
    return (
       <div ref={parentRef} className="h-full overflow-y-auto pr-[5px] [scrollbar-gutter:stable]">
          <div style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
+            {/* Antes das linhas vivas: quem sobe passa por cima do fantasma. */}
+            {ghosts.map(({ key, value }) => (
+               <div
+                  key={`ghost:${key}`}
+                  aria-hidden
+                  data-ghost
+                  className="list-exit list-exit-virtual"
+                  style={{
+                     position: 'absolute',
+                     top: 0,
+                     left: 0,
+                     width: '100%',
+                     transform: `translateY(${value.start}px)`,
+                  }}
+               >
+                  <div>
+                     <IssueLine issue={value.issue} />
+                  </div>
+               </div>
+            ))}
             {virtualizer.getVirtualItems().map((vi) => {
                const row = rows[vi.index];
                const active = vi.key === activeKey;
+               if (row.kind === 'issue')
+                  ghostsRef.current!.remember(String(vi.key), {
+                     issue: row.issue,
+                     start: vi.start,
+                  });
                return (
                   <div
                      key={vi.key}
