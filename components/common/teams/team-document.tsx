@@ -64,6 +64,7 @@ export default function TeamDocumentView({
    const [doc, setDoc] = useState<DocumentDetailDto | null>(null);
    const [nameDraft, setNameDraft] = useState<string | null>(null);
    const [editorEpoch, setEditorEpoch] = useState(0);
+   const epochRef = useRef(0);
    const [deleteOpen, setDeleteOpen] = useState(false);
    const [deleteBusy, setDeleteBusy] = useState(false);
    const versionRef = useRef<string | null>(null);
@@ -162,7 +163,6 @@ export default function TeamDocumentView({
    };
    // Depois do remount pós-conflito o editor novo volta a salvar (o flush do antigo, no
    // unmount, já foi descartado — o cleanup do filho roda antes deste efeito).
-   const epochRef = useRef(editorEpoch);
    useEffect(() => {
       epochRef.current = editorEpoch;
       conflict.current = false;
