@@ -1,5 +1,6 @@
 import { db } from '@/db';
 import { ApiError } from '@/lib/api/errors';
+import { problem } from '@/lib/api/response';
 import { SENTRY_WEBHOOK_MAX_BYTES, payloadTooLarge, readBodyLimited } from '@/lib/api/http';
 import {
    createCardFromSentry,
@@ -16,6 +17,11 @@ function json(body: unknown, status = 200): Response {
       status,
       headers: { 'content-type': 'application/json' },
    });
+}
+
+/** 400 em ProblemDetail, com o `error` do shape antigo junto (o Sentry lê esse campo). */
+function badField(detail: string): Response {
+   return problem(400, 'Bad Request', detail, { error: detail });
 }
 
 /**
@@ -36,8 +42,14 @@ export async function POST(req: Request) {
       return json({ error: 'JSON inválido' }, 400);
    }
 
+   const fields = body.fields ?? {};
+   // Assinado não quer dizer bem tipado: `.trim()` num número virava 500.
+   const wrong = (['title', 'description', 'teamId'] as const).find(
+      (k) => fields[k] != null && typeof fields[k] !== 'string'
+   );
+   if (wrong) return badField(`fields.${wrong} precisa ser texto`);
+
    try {
-      const fields = body.fields ?? {};
       const result = await createCardFromSentry(db, {
          title: fields.title,
          description: fields.description,
