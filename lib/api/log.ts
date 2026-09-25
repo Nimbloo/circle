@@ -18,7 +18,7 @@
  * malha, então as duas pontas se cruzam.
  */
 import { randomUUID } from 'node:crypto';
-import * as Sentry from '@sentry/nextjs';
+import { trace } from '@opentelemetry/api';
 
 export const REQUEST_ID_HEADER = 'x-request-id';
 
@@ -43,17 +43,21 @@ export function requestIdFrom(req?: Request): string {
 }
 
 /**
- * `traceId` do span ativo do Sentry, quando existe. Import ESTÁTICO de propósito: o SDK
- * já está no grafo das rotas (via `observe-error`), e um import dinâmico aqui rodava a
- * inicialização do módulo DENTRO da primeira requisição — o guarda de uploads, que prova
- * que requisição recusada não aloca Buffer, flagrou exatamente isso.
+ * `traceId` do span ativo, via `@opentelemetry/api` — funciona tanto com o tracing do
+ * Sentry (hoje, sempre ligado) quanto com o OpenTelemetry->Tempo (`lib/observability/otel`,
+ * inerte até a env do chart existir): os dois publicam o span ativo no mesmo registro
+ * global da API do OTel, então uma leitura genérica cobre as duas fontes sem precisar
+ * saber qual delas está no ar. Import ESTÁTICO de propósito: o SDK já está no grafo das
+ * rotas, e um import dinâmico aqui rodava a inicialização do módulo DENTRO da primeira
+ * requisição — o guarda de uploads, que prova que requisição recusada não aloca Buffer,
+ * flagrou exatamente isso.
  */
 export function currentTraceId(): string | undefined {
    try {
-      const span = Sentry.getActiveSpan?.();
-      if (!span) return undefined;
-      const id = Sentry.spanToJSON(span).trace_id;
-      return typeof id === 'string' ? id : undefined;
+      const span = trace.getActiveSpan();
+      // `isRecording()` descarta o NonRecordingSpan (sem tracer registrado, ou span
+      // amostrado como "não gravar") — nesse caso o traceId seria só o sentinel inválido.
+      return span?.isRecording() ? span.spanContext().traceId : undefined;
    } catch {
       return undefined;
    }
