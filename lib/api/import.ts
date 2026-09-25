@@ -334,12 +334,20 @@ function parseDate(raw: string): string | null {
    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
    const iso = /^(\d{4}-\d{2}-\d{2})T/.exec(s);
    if (iso) return iso[1];
-   // dd/MMM/yy do Jira e dd/MM/yyyy: delega ao Date só quando reconhecível.
+   const pad = (n: number) => String(n).padStart(2, '0');
+   // dd/MM/yyyy (pt-BR): o Date leria como MM/dd americano — 03/04 virava 4 de março.
+   const br = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s|$)/.exec(s);
+   if (br) {
+      const [day, month, year] = [Number(br[1]), Number(br[2]), Number(br[3])];
+      const probe = new Date(Date.UTC(year, month - 1, day));
+      if (probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) return null;
+      return `${year}-${pad(month)}-${pad(day)}`;
+   }
+   // dd/MMM/yy do Jira e afins: delega ao Date só quando reconhecível.
    const d = new Date(s);
    if (Number.isNaN(d.getTime())) return null;
    // O Date lê a string no fuso LOCAL: o dia é o dos componentes locais. `toISOString()`
    // convertia para UTC e jogava "23h" para o dia seguinte (ou anterior, a leste de UTC).
-   const pad = (n: number) => String(n).padStart(2, '0');
    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 

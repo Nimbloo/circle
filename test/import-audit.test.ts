@@ -67,4 +67,11 @@ describe('import: datas', () => {
       expect(await dueOf('Mar 15, 2024 11:00 PM')).toBe('2024-03-15');
       expect(await dueOf('15/Mar/24 11:30 PM')).toBe('2024-03-15');
    });
+
+   it('dd/MM/yyyy é lido como dia/mês (não como o MM/dd americano)', async () => {
+      // Antes: 03/04/2024 virava 4 de março e 15/03/2024 era "não reconhecida".
+      expect(await dueOf('03/04/2024')).toBe('2024-04-03');
+      expect(await dueOf('15/03/2024')).toBe('2024-03-15');
+      expect(await dueOf('31/02/2024')).toBeNull();
+   });
 });
