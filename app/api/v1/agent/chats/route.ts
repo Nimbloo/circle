@@ -26,6 +26,8 @@ export async function POST(req: Request) {
    return handle(async () => {
       const email = await requireEmail(req);
       const { chatId, content } = sendSchema.parse(await req.json());
-      return ok(await sendAgentMessage(db, email, chatId ?? null, content));
+      // `req.signal` (Fetch API padrão): dispara se o cliente abortar o fetch ("Parar
+      // resposta") — propagado pro turno, que repassa pro SDK do Bedrock se ele aceitar.
+      return ok(await sendAgentMessage(db, email, chatId ?? null, content, { signal: req.signal }));
    }, req);
 }
