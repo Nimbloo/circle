@@ -1,4 +1,5 @@
 import { db } from '@/db';
+import { SENTRY_WEBHOOK_MAX_BYTES, payloadTooLarge, readBodyLimited } from '@/lib/api/http';
 import { linkCardFromSentry, verifySignature, signatureFrom } from '@/lib/api/integrations/sentry';
 
 export const runtime = 'nodejs';
@@ -17,7 +18,8 @@ function json(body: unknown, status = 200): Response {
  * Resposta: `{webUrl, project, identifier}` ou 404 se o card não existe.
  */
 export async function POST(req: Request) {
-   const raw = await req.text();
+   const raw = await readBodyLimited(req, SENTRY_WEBHOOK_MAX_BYTES);
+   if (raw === null) return payloadTooLarge();
    const sig = signatureFrom(req.headers);
    if (!verifySignature(raw, sig)) return json({ error: 'assinatura inválida' }, 401);
 
