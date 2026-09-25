@@ -10,6 +10,7 @@ import { useAgentChatStore, type AgentMessage } from '@/store/agent-chat-store';
 import { ArrowUp, Bot, CalendarClock, ListTodo, Sparkles, X } from 'lucide-react';
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { LoadingArea } from '@/components/common/loading-area';
+import { AGENT_MESSAGE_MAX_LENGTH } from '@/lib/agent-limits';
 
 /** Status HTTP de um erro do cliente da API (sem depender da classe em runtime). */
 function httpStatusOf(error: unknown): number | undefined {
@@ -189,6 +190,7 @@ function ChatComposer({
             value={value}
             autoFocus={autoFocus}
             disabled={disabled}
+            maxLength={AGENT_MESSAGE_MAX_LENGTH}
             onChange={(event) => setValue(event.target.value)}
             onKeyDown={(event) => {
                if (event.key === 'Enter' && !event.shiftKey) {

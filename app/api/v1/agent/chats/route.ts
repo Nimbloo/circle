@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { ok } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
 import { listAgentChats, sendAgentMessage } from '@/lib/api/agent';
+import { AGENT_MESSAGE_MAX_LENGTH } from '@/lib/agent-limits';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,7 +18,7 @@ export async function GET(req: Request) {
 
 const sendSchema = z.object({
    chatId: z.string().nullish(),
-   content: z.string().min(1).max(8000),
+   content: z.string().min(1).max(AGENT_MESSAGE_MAX_LENGTH),
 });
 
 /** POST /agent/chats — envia msg (cria o chat se chatId ausente); persiste e retorna a resposta. */
