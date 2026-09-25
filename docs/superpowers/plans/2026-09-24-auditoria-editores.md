@@ -11,9 +11,8 @@
   lint e build limpos; first load `/inbox` 452→240 kB, `/projects` 470→325 kB.
 - **Em andamento:** transação vazia do editor quebrava Tab-aninhar e task→sub-issue em teste
   (subagente investigando a causa raiz).
-- **Próximo passo:** concluído — v0.44.0 em prd (24/09). Sequência: auditoria de fluxos na v0.45.0.
-- **Bloqueios:** reprodução de "Back to app" / laço após excluir time e botões "apagados" dependem
-  de navegador (bypass local de E2E negado pelo modo automático; extensão do Chrome desconectada).
+- **Próximo passo:** concluído — v0.44.0 em prd (24/09). Sequência: auditoria de fluxos na v0.45.0 e contraste/scroll na v0.45.1.
+- **Bloqueios:** nenhum. Back to app e saída de settings resolvidos na v0.44.0 (landing no cliente); botões secundário/outline reforçados na v0.45.1. Falta só a conferência visual no navegador.
 
 ## Decisões
 
