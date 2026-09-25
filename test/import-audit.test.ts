@@ -42,6 +42,20 @@ describe('import: escopo', () => {
    });
 });
 
+describe('import: CSV malformado', () => {
+   it('aspas sem fechar recusam o arquivo em vez de engolir as linhas seguintes', async () => {
+      const csv = 'ID,Title\nA-1,"Aberta\nA-2,Outra\nA-3,Mais uma';
+      const mapping = { externalId: 'ID', title: 'Title' };
+      await expect(previewImport(db, { source: 'csv', csv })).rejects.toMatchObject({
+         status: 400,
+      });
+      await expect(
+         commitImport(db, { source: 'csv', csv, mapping, teamId: 'CORE' }, ADMIN)
+      ).rejects.toMatchObject({ status: 400 });
+      expect(await listIssues(db, { team: 'CORE' })).toHaveLength(0);
+   });
+});
+
 describe('import: integridade', () => {
    it('externalId acima de 128 chars é recusado antes de criar a issue', async () => {
       const csv = `ID,Title\n${'X'.repeat(129)},Longa`;

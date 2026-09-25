@@ -121,6 +121,9 @@ export function parseCsv(text: string): string[][] {
          field = '';
       } else field += c;
    }
+   // Aspas abertas até o fim: o resto do arquivo virou UMA célula (linhas engolidas em
+   // silêncio). Recusa em vez de importar dado corrompido.
+   if (quoted) throw new ApiError(400, 'CSV malformado: aspas sem fechamento');
    if (field !== '' || row.length > 0) {
       row.push(field);
       rows.push(row);
