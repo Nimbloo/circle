@@ -33,7 +33,8 @@ describe('import/export de issues (#101)', () => {
    beforeEach(async () => {
       db = await makeTestDb();
       await seedTeam(db, 'CORE', 'Core');
-      await seedUser(db, { name: 'Owner', email: ACTOR, teamIds: ['CORE'] });
+      // Admin: um dos casos cria labels no catálogo, o que é só de admin.
+      await seedUser(db, { name: 'Owner', email: ACTOR, role: 'Admin', teamIds: ['CORE'] });
    });
 
    it('parseia CSV com aspas, vírgula interna e CRLF', () => {

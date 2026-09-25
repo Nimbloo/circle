@@ -25,7 +25,7 @@ import { ApiError } from './errors';
 import { createIssue, publishAutoSubscriptions, updateIssue } from './issues';
 import { publish, publishInternal } from './events';
 import { assertCanWriteTeam } from './scope';
-import { withRequestCache } from './auth';
+import { isAdmin, withRequestCache } from './auth';
 import { getOrCreateUser } from './users';
 
 export type ImportSource = 'csv' | 'linear' | 'jira';
@@ -556,6 +556,9 @@ async function prepareImport(
    if (teamRows.length === 0) throw new ApiError(400, `Team '${input.teamId}' não existe`);
    // O time de destino vem do corpo: sem escopo, o import escrevia em qualquer time.
    await assertCanWriteTeam(db, actorEmail, input.teamId);
+   // Criar label no catálogo é só admin (`POST /labels`); o import não pode ser o atalho.
+   if (input.createMissingLabels && !(await isAdmin(actorEmail, db)))
+      throw new ApiError(403, 'Apenas admin pode criar labels pelo import');
 
    return { mapping, rows: csvToObjects(input.csv).rows };
 }
