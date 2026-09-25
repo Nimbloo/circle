@@ -838,7 +838,13 @@ async function runImportJob(
          .update(importJob)
          .set({
             status: 'succeeded',
-            processed: result.created + result.updated + result.skipped + result.errors.length,
+            // Só erros de LINHA contam: o de vínculo de pai (`row: 0`) é da 2ª passada, e
+            // somá-lo deixava `processed` > `total` (barra acima de 100%).
+            processed:
+               result.created +
+               result.updated +
+               result.skipped +
+               result.errors.filter((e) => e.row > 0).length,
             created: result.created,
             updated: result.updated,
             skipped: result.skipped,

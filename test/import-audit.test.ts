@@ -3,7 +3,8 @@ import type { Db } from '@/db';
 import { label as labelT } from '@/db/schema';
 import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
-import { commitImport, previewImport } from '@/lib/api/import';
+import { commitImport, getImportJob, previewImport, startImportJob } from '@/lib/api/import';
+import { getOrCreateUser } from '@/lib/api/users';
 import { listIssues } from '@/lib/api/issues';
 
 /** Auditoria de import (integridade, escopo e validação de input). */
@@ -73,6 +74,25 @@ describe('import: integridade', () => {
       await expect(run()).rejects.toMatchObject({ status: 400 });
       await expect(run()).rejects.toMatchObject({ status: 400 });
       expect(await listIssues(db, { team: 'CORE' })).toHaveLength(0);
+   });
+});
+
+describe('import: job', () => {
+   it('processed nunca passa de total (erro de vínculo de pai não é uma linha a mais)', async () => {
+      // Ciclo A↔B: a 2ª ligação de pai falha e vira um erro `row: 0`.
+      const csv = 'ID,Title,Parent\nA,Uma,B\nB,Outra,A';
+      const mapping = { externalId: 'ID', title: 'Title', parent: 'Parent' };
+      const { jobId, finished } = await startImportJob(
+         db,
+         { source: 'csv', csv, mapping, teamId: 'CORE' },
+         ADMIN
+      );
+      await finished;
+      const owner = await getOrCreateUser(db, ADMIN);
+      const job = (await getImportJob(db, jobId, owner.id))!;
+      expect(job.status).toBe('succeeded');
+      expect(job.errors.some((e) => e.row === 0)).toBe(true);
+      expect(job.processed).toBe(job.total);
    });
 });
 
