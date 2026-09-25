@@ -3,7 +3,7 @@ import type { Db } from '@/db';
 import { label as labelT } from '@/db/schema';
 import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
-import { commitImport } from '@/lib/api/import';
+import { commitImport, previewImport } from '@/lib/api/import';
 import { listIssues } from '@/lib/api/issues';
 
 /** Auditoria de import (integridade, escopo e validação de input). */
@@ -52,5 +52,19 @@ describe('import: integridade', () => {
       await expect(run()).rejects.toMatchObject({ status: 400 });
       await expect(run()).rejects.toMatchObject({ status: 400 });
       expect(await listIssues(db, { team: 'CORE' })).toHaveLength(0);
+   });
+});
+
+async function dueOf(raw: string): Promise<string | null> {
+   const csv = `Title,Due Date\nT,"${raw}"`;
+   const preview = await previewImport(db, { source: 'csv', csv });
+   return preview.sample[0].dueDate;
+}
+
+describe('import: datas', () => {
+   it('data com hora vira o dia escrito no arquivo, independente do fuso do servidor', async () => {
+      // Antes: `toISOString()` convertia para UTC — 23h em UTC-3 virava o dia seguinte.
+      expect(await dueOf('Mar 15, 2024 11:00 PM')).toBe('2024-03-15');
+      expect(await dueOf('15/Mar/24 11:30 PM')).toBe('2024-03-15');
    });
 });

@@ -337,7 +337,10 @@ function parseDate(raw: string): string | null {
    // dd/MMM/yy do Jira e dd/MM/yyyy: delega ao Date só quando reconhecível.
    const d = new Date(s);
    if (Number.isNaN(d.getTime())) return null;
-   return d.toISOString().slice(0, 10);
+   // O Date lê a string no fuso LOCAL: o dia é o dos componentes locais. `toISOString()`
+   // convertia para UTC e jogava "23h" para o dia seguinte (ou anterior, a leste de UTC).
+   const pad = (n: number) => String(n).padStart(2, '0');
+   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 /** Labels de uma célula: separadas por vírgula, ponto-e-vírgula ou barra vertical. */
