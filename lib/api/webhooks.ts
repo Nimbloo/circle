@@ -248,16 +248,89 @@ export async function assertSafeWebhookTarget(url: string): Promise<void> {
    if (isBlockedHostname(host)) throw new ApiError(400, 'Destino não permitido (host interno)');
    if (isPrivateAddress(host)) throw new ApiError(400, 'Destino não permitido (endereço privado)');
    if (ipv4Octets(host) || host.includes(':')) return; // literal público: nada a resolver
+   await resolvePublic(host);
+}
+
+/* ------------------------- Conexão com IP fixado -------------------------- */
+
+interface ResolvedAddress {
+   address: string;
+   family: number;
+}
+type Resolver = (host: string) => Promise<ResolvedAddress[]>;
+
+const systemResolver: Resolver = async (host) => {
    const { lookup } = await import('node:dns/promises');
-   let addresses: { address: string }[];
+   return lookup(host, { all: true });
+};
+let resolver: Resolver = systemResolver;
+
+/** Só para testes: troca o resolvedor de DNS (null restaura o do sistema). */
+export function __setWebhookResolver(fn: Resolver | null): void {
+   resolver = fn ?? systemResolver;
+}
+
+/** Resolve o host e exige que TODOS os IPs sejam públicos (salvo o escape de dev). */
+async function resolvePublic(host: string): Promise<ResolvedAddress[]> {
+   let addresses: ResolvedAddress[];
    try {
-      addresses = await lookup(host, { all: true });
+      addresses = await resolver(host);
    } catch {
       throw new ApiError(400, 'Destino não permitido (host não resolve)');
    }
-   if (addresses.length === 0 || addresses.some((a) => isPrivateAddress(a.address)))
+   if (addresses.length === 0) throw new ApiError(400, 'Destino não permitido (host não resolve)');
+   if (!privateTargetsAllowed() && addresses.some((a) => isPrivateAddress(a.address)))
       throw new ApiError(400, 'Destino não permitido (resolve para endereço privado)');
+   return addresses;
 }
+
+/**
+ * `lookup` do socket: a conexão usa EXATAMENTE os IPs que acabaram de ser validados.
+ * Sem isto o `fetch` resolvia o nome de novo depois do gate, e um DNS de TTL zero
+ * respondia público para o gate e privado para a conexão (rebind).
+ */
+function pinnedLookup(
+   hostname: string,
+   options: { all?: boolean },
+   callback: (...args: unknown[]) => void
+): void {
+   resolvePublic(hostname).then(
+      (addresses) => {
+         if (options.all) callback(null, addresses);
+         else callback(null, addresses[0].address, addresses[0].family);
+      },
+      (e: Error) => callback(Object.assign(e, { code: 'ENOTFOUND' }))
+   );
+}
+
+/**
+ * POST do webhook via `node:http(s)` com o `lookup` fixado. O Host e o SNI saem do
+ * hostname da URL (o `request` cuida dos dois), só o IP é o validado. Nunca segue
+ * redirect (o `node:http` não segue) e nunca lê o corpo da resposta.
+ */
+const pinnedFetch = (async (input: string | URL, init: RequestInit = {}) => {
+   const url = new URL(String(input));
+   const { request } =
+      url.protocol === 'https:' ? await import('node:https') : await import('node:http');
+   const status = await new Promise<number>((resolve, reject) => {
+      const req = request(
+         url,
+         {
+            method: init.method ?? 'POST',
+            headers: init.headers as Record<string, string>,
+            lookup: pinnedLookup as never,
+            signal: init.signal ?? undefined,
+         },
+         (res) => {
+            res.resume(); // descarta o corpo sem guardar
+            resolve(res.statusCode ?? 0);
+         }
+      );
+      req.on('error', reject);
+      req.end(init.body as string | undefined);
+   });
+   return new Response(null, { status });
+}) as unknown as typeof fetch;
 
 function assertValid(url: string, events: string[]): void {
    let parsed: URL;
@@ -365,7 +438,7 @@ export async function attemptDelivery(
    db: Db,
    delivery: DeliveryRow,
    hook: WebhookRow,
-   fetchImpl: typeof fetch = fetch
+   fetchImpl: typeof fetch = pinnedFetch
 ): Promise<boolean> {
    const body = JSON.stringify(delivery.payload);
    const attempts = delivery.attempts + 1;
@@ -425,7 +498,7 @@ export async function dispatchEvent(
    db: Db,
    event: WebhookEvent,
    payload: Record<string, unknown>,
-   fetchImpl: typeof fetch = fetch
+   fetchImpl: typeof fetch = pinnedFetch
 ): Promise<string[]> {
    const hooks = await db
       .select()
@@ -464,7 +537,7 @@ export async function dispatchEvent(
 export async function redeliver(
    db: Db,
    deliveryId: string,
-   fetchImpl: typeof fetch = fetch
+   fetchImpl: typeof fetch = pinnedFetch
 ): Promise<WebhookDeliveryDto> {
    const [row] = await db
       .select()
@@ -556,7 +629,7 @@ async function claimDue(db: Db, limit: number) {
  */
 export async function sweepWebhookDeliveries(
    db: Db,
-   fetchImpl: typeof fetch = fetch,
+   fetchImpl: typeof fetch = pinnedFetch,
    limit = 50
 ): Promise<number> {
    try {
