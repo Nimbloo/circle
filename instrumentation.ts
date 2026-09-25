@@ -1,13 +1,19 @@
 import * as Sentry from '@sentry/nextjs';
+import { registerTracing } from '@/lib/observability/otel';
 
 /**
- * Hook de startup do Next.js: inicializa o Sentry do runtime correspondente e, no
- * Node, aplica as migrations e semeia os catálogos no boot (idempotente; drizzle
- * rastreia migrations aplicadas). A imagem standalone tem drizzle-orm + pg (deps de
- * prod) — não precisa de drizzle-kit/tsx em runtime.
+ * Hook de startup do Next.js: registra o tracing OpenTelemetry, inicializa o Sentry do
+ * runtime correspondente e, no Node, aplica as migrations e semeia os catálogos no boot
+ * (idempotente; drizzle rastreia migrations aplicadas). A imagem standalone tem
+ * drizzle-orm + pg (deps de prod) — não precisa de drizzle-kit/tsx em runtime.
  * Seed demo NÃO roda aqui (só via `pnpm db:seed` com CIRCLE_SEED_DEMO em dev/hml).
  */
 export async function register() {
+   // OTel PRIMEIRO — precisa vencer o registro global do TracerProvider antes do
+   // Sentry.init() (ver comentário em lib/observability/otel.ts). Inerte sem
+   // OTEL_EXPORTER_OTLP_ENDPOINT.
+   if (process.env.NEXT_RUNTIME === 'nodejs') registerTracing();
+
    // Antes de qualquer early return abaixo: sem isto o Sentry do server só ligaria
    // quando as migrations rodassem, e o do Edge nunca ligaria.
    if (process.env.NEXT_RUNTIME === 'nodejs') await import('./sentry.server.config');

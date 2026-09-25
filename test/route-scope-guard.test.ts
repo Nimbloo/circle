@@ -104,9 +104,6 @@ const EXEMPT: ReadonlySet<string> = new Set([
    'POST /teams/[teamKey]/templates',
    'PATCH /teams/[teamKey]/templates/[id]',
    'DELETE /teams/[teamKey]/templates/[id]',
-
-   // 6. Import/preview: só analisa o CSV, não escreve nada (o /commit é que tem gate).
-   'POST /import/preview',
 ]);
 
 /** `app/api/v1/foo/[id]/route.ts` -> `/foo/[id]` */

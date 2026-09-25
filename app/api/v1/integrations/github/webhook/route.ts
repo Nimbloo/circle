@@ -1,5 +1,6 @@
 import { after } from 'next/server';
 import { db } from '@/db';
+import { GITHUB_WEBHOOK_MAX_BYTES, payloadTooLarge, readBodyLimited } from '@/lib/api/http';
 import { verifySignature, signatureFrom } from '@/lib/api/integrations/github';
 import {
    handleCheckRunEvent,
@@ -17,7 +18,8 @@ export const dynamic = 'force-dynamic';
  * e ACK 200. Autenticado por HMAC, não por sessão → allowlist no middleware.
  */
 export async function POST(req: Request) {
-   const raw = await req.text();
+   const raw = await readBodyLimited(req, GITHUB_WEBHOOK_MAX_BYTES);
+   if (raw === null) return payloadTooLarge();
    if (!verifySignature(raw, signatureFrom(req.headers))) {
       return new Response(JSON.stringify({ error: 'assinatura inválida' }), {
          status: 401,

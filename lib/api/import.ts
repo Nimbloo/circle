@@ -25,7 +25,7 @@ import { ApiError } from './errors';
 import { createIssue, publishAutoSubscriptions, updateIssue } from './issues';
 import { publish, publishInternal } from './events';
 import { assertCanWriteTeam } from './scope';
-import { withRequestCache } from './auth';
+import { isAdmin, withRequestCache } from './auth';
 import { getOrCreateUser } from './users';
 
 export type ImportSource = 'csv' | 'linear' | 'jira';
@@ -38,6 +38,9 @@ export const IMPORT_LIMITS = {
    maxColumns: 64,
    maxCellChars: 10_000,
 } as const;
+
+/** Tamanho de `issue_import.external_id` (varchar). */
+const IMPORT_EXTERNAL_ID_MAX = 128;
 
 /** Margem para JSON/multipart e metadados; o CSV em si continua limitado por `maxBytes`. */
 export const IMPORT_REQUEST_OVERHEAD_BYTES = 256_000;
@@ -118,6 +121,9 @@ export function parseCsv(text: string): string[][] {
          field = '';
       } else field += c;
    }
+   // Aspas abertas até o fim: o resto do arquivo virou UMA célula (linhas engolidas em
+   // silêncio). Recusa em vez de importar dado corrompido.
+   if (quoted) throw new ApiError(400, 'CSV malformado: aspas sem fechamento');
    if (field !== '' || row.length > 0) {
       row.push(field);
       rows.push(row);
@@ -168,6 +174,13 @@ export function validateImportCsv(text: string, mapping?: ImportMapping): void {
    for (const row of raw.slice(1)) {
       const externalId = row[externalIndex]?.trim();
       if (!externalId) continue;
+      // `issue_import.external_id` é varchar(128): acima disso a issue nascia sem rastro e
+      // o re-import a duplicava. Recusa o arquivo antes de escrever qualquer coisa.
+      if (externalId.length > IMPORT_EXTERNAL_ID_MAX)
+         throw new ApiError(
+            400,
+            `externalId acima de ${IMPORT_EXTERNAL_ID_MAX} caracteres: '${externalId.slice(0, 32)}…'`
+         );
       if (seen.has(externalId))
          throw new ApiError(400, `externalId duplicado no CSV: '${externalId}'`);
       seen.add(externalId);
@@ -324,10 +337,21 @@ function parseDate(raw: string): string | null {
    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
    const iso = /^(\d{4}-\d{2}-\d{2})T/.exec(s);
    if (iso) return iso[1];
-   // dd/MMM/yy do Jira e dd/MM/yyyy: delega ao Date só quando reconhecível.
+   const pad = (n: number) => String(n).padStart(2, '0');
+   // dd/MM/yyyy (pt-BR): o Date leria como MM/dd americano — 03/04 virava 4 de março.
+   const br = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s|$)/.exec(s);
+   if (br) {
+      const [day, month, year] = [Number(br[1]), Number(br[2]), Number(br[3])];
+      const probe = new Date(Date.UTC(year, month - 1, day));
+      if (probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) return null;
+      return `${year}-${pad(month)}-${pad(day)}`;
+   }
+   // dd/MMM/yy do Jira e afins: delega ao Date só quando reconhecível.
    const d = new Date(s);
    if (Number.isNaN(d.getTime())) return null;
-   return d.toISOString().slice(0, 10);
+   // O Date lê a string no fuso LOCAL: o dia é o dos componentes locais. `toISOString()`
+   // convertia para UTC e jogava "23h" para o dia seguinte (ou anterior, a leste de UTC).
+   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 /** Labels de uma célula: separadas por vírgula, ponto-e-vírgula ou barra vertical. */
@@ -372,9 +396,18 @@ export interface ImportPreviewDto {
 
 export const PREVIEW_SAMPLE_SIZE = 20;
 
+/**
+ * Desfaz o `'` anti-fórmula que o export CSV (`app/api/v1/issues/export`) põe na frente
+ * de `= + - @`/tab/CR/LF. Só tira UM `'` e só antes desses caracteres: `'texto` comum
+ * fica intacto, e `''=x` (valor original `'=x`) volta como `'=x`.
+ */
+function decodeFormulaGuard(s: string): string {
+   return /^'+[=+\-@\t\r\n]/.test(s) ? s.slice(1).trim() : s;
+}
+
 function cell(row: Record<string, string>, column: string | null | undefined): string {
    if (!column) return '';
-   return (row[column] ?? '').trim();
+   return decodeFormulaGuard((row[column] ?? '').trim());
 }
 
 function mapRow(
@@ -431,10 +464,14 @@ function mapRow(
    };
 }
 
-/** Ids externos desta origem já importados (para marcar a linha como atualização). */
+/**
+ * Ids externos desta origem já importados NO TIME (para marcar a linha como atualização).
+ * O rastro é por time: o mesmo arquivo em outro time cria issues lá, não altera as daqui.
+ */
 async function alreadyImported(
    db: Db,
    source: ImportSource,
+   teamId: string,
    externalIds: string[]
 ): Promise<Map<string, string>> {
    if (externalIds.length === 0) return new Map();
@@ -444,6 +481,7 @@ async function alreadyImported(
       .where(
          and(
             eq(issueImport.source, source),
+            eq(issueImport.teamId, teamId),
             inArray(issueImport.externalId, [...new Set(externalIds)])
          )!
       );
@@ -455,6 +493,8 @@ export interface PreviewImportInput {
    csv: string;
    /** Mapeamento explícito (o wizard reenvia o ajustado); omitido = proposto pelo preset. */
    mapping?: ImportMapping;
+   /** Time de destino: marca como "existente" o que já foi importado NELE. Sem time, nada é. */
+   teamId?: string;
 }
 
 /** Analisa o CSV sem escrever nada: colunas, mapeamento proposto, amostra e avisos. */
@@ -475,7 +515,11 @@ export async function previewImport(db: Db, input: PreviewImportInput): Promise<
    const externalIds = mapping.externalId
       ? rows.map((r) => cell(r, mapping.externalId)).filter(Boolean)
       : [];
-   const importedIds = new Set((await alreadyImported(db, input.source, externalIds)).keys());
+   const importedIds = new Set(
+      input.teamId
+         ? (await alreadyImported(db, input.source, input.teamId, externalIds)).keys()
+         : []
+   );
 
    const sample = rows
       .slice(0, PREVIEW_SAMPLE_SIZE)
@@ -551,13 +595,23 @@ async function prepareImport(
    const mapping = input.mapping ?? {};
    if (!mapping.title) throw new ApiError(400, 'mapping.title é obrigatório');
    validateImportCsv(input.csv, mapping);
+   const { columns, rows } = csvToObjects(input.csv);
+   // Coluna mapeada que não existe no cabeçalho lia '' em toda linha: o título vazio
+   // ignorava o arquivo inteiro e o job terminava "concluído" sem criar nada.
+   for (const [field, column] of Object.entries(mapping)) {
+      if (column && !columns.includes(column))
+         throw new ApiError(400, `mapping.${field}: coluna '${column}' não existe no CSV`);
+   }
 
    const teamRows = await db.select().from(teamT).where(eq(teamT.id, input.teamId)).limit(1);
    if (teamRows.length === 0) throw new ApiError(400, `Team '${input.teamId}' não existe`);
    // O time de destino vem do corpo: sem escopo, o import escrevia em qualquer time.
    await assertCanWriteTeam(db, actorEmail, input.teamId);
+   // Criar label no catálogo é só admin (`POST /labels`); o import não pode ser o atalho.
+   if (input.createMissingLabels && !(await isAdmin(actorEmail, db)))
+      throw new ApiError(403, 'Apenas admin pode criar labels pelo import');
 
-   return { mapping, rows: csvToObjects(input.csv).rows };
+   return { mapping, rows };
 }
 
 export async function commitImport(
@@ -574,6 +628,7 @@ export async function commitImport(
    const existingByExternal = await alreadyImported(
       db,
       input.source,
+      input.teamId,
       mapping.externalId ? rows.map((r) => cell(r, mapping.externalId)).filter(Boolean) : []
    );
 
@@ -667,12 +722,13 @@ export async function commitImport(
                .values({
                   source: input.source,
                   externalId: mapped.externalId,
+                  teamId: input.teamId,
                   issueId,
                   createdAt: now,
                   updatedAt: now,
                })
                .onConflictDoUpdate({
-                  target: [issueImport.source, issueImport.externalId],
+                  target: [issueImport.source, issueImport.teamId, issueImport.externalId],
                   set: { issueId, updatedAt: now },
                });
          }
@@ -804,7 +860,13 @@ async function runImportJob(
          .update(importJob)
          .set({
             status: 'succeeded',
-            processed: result.created + result.updated + result.skipped + result.errors.length,
+            // Só erros de LINHA contam: o de vínculo de pai (`row: 0`) é da 2ª passada, e
+            // somá-lo deixava `processed` > `total` (barra acima de 100%).
+            processed:
+               result.created +
+               result.updated +
+               result.skipped +
+               result.errors.filter((e) => e.row > 0).length,
             created: result.created,
             updated: result.updated,
             skipped: result.skipped,

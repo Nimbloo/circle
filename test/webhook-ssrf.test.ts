@@ -11,6 +11,7 @@ import {
    isPrivateAddress,
    listDeliveries,
    updateWebhook,
+   __setWebhookResolver,
 } from '@/lib/api/webhooks';
 import { webhook as webhookT, webhookDelivery } from '@/db/schema';
 import { eq } from 'drizzle-orm';
@@ -57,6 +58,34 @@ describe('classificação de destino', () => {
 
       for (const ip of ['8.8.8.8', '1.1.1.1', '172.32.0.1', '2606:4700::1111'])
          expect(isPrivateAddress(ip), ip).toBe(false);
+   });
+
+   it('IPv4 embutido em IPv6 na forma HEX (a que o `new URL` normaliza) também é privado', () => {
+      // `new URL('http://[::ffff:169.254.169.254]/').hostname` vira `[::ffff:a9fe:a9fe]`:
+      // a régua só reconhecia a forma pontuada, e o IMDS passava pelo gate.
+      for (const ip of [
+         '::ffff:a9fe:a9fe', // IMDS mapeado
+         '::ffff:7f00:1', // 127.0.0.1 mapeado
+         '::ffff:0:a00:1', // 10.0.0.1 (SIIT)
+         '::7f00:1', // IPv4-compatível (127.0.0.1)
+         '64:ff9b::a9fe:a9fe', // NAT64 do IMDS
+         '0:0:0:0:0:ffff:a9fe:a9fe',
+      ])
+         expect(isPrivateAddress(ip), ip).toBe(true);
+      expect(isPrivateAddress('::ffff:808:808')).toBe(false); // 8.8.8.8 mapeado
+      expect(isPrivateAddress('64:ff9b::808:808')).toBe(false);
+   });
+
+   it('URL com IPv6 mapeado para o IMDS é recusada no cadastro', async () => {
+      for (const url of [
+         'http://[::ffff:169.254.169.254]/latest/meta-data/',
+         'http://[::ffff:127.0.0.1]:8080/x',
+         'http://[64:ff9b::169.254.169.254]/x',
+      ])
+         await expect(
+            createWebhook(db, { url, events: ['issue.created'] }, ownerId),
+            url
+         ).rejects.toMatchObject({ status: 400 });
    });
 
    it('bloqueia nomes que só existem na rede interna', () => {
@@ -148,6 +177,56 @@ describe('disparo', () => {
       expect(fetchImpl).not.toHaveBeenCalled();
       const [after] = await listDeliveries(db, hook.id);
       expect(after.lastError).toMatch(/Destino não permitido/);
+   });
+
+   /** Receptor local que conta quantas requisições chegaram (e com qual Host). */
+   async function receiver() {
+      const hits: string[] = [];
+      const server: Server = createServer((req, res) => {
+         hits.push(req.headers.host ?? '');
+         res.writeHead(200).end('ok');
+      });
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const port = (server.address() as AddressInfo).port;
+      const close = () => new Promise<void>((resolve) => server.close(() => resolve()));
+      return { hits, port, close };
+   }
+
+   it('DNS rebind: o gate resolve público, a conexão resolveria privado → não conecta', async () => {
+      const rx = await receiver();
+      let calls = 0;
+      // 1ª resolução (o gate) devolve IP público; a 2ª (a da conexão) já aponta pro
+      // receptor em loopback — é o rebind entre checar e conectar.
+      __setWebhookResolver(async () => [
+         { address: ++calls === 1 ? '93.184.216.34' : '127.0.0.1', family: 4 },
+      ]);
+      try {
+         const { hook, delivery } = await seedDelivery(`http://rebind.example:${rx.port}/hook`);
+         const ok = await attemptDelivery(db, delivery, hook);
+         expect(ok).toBe(false);
+         expect(rx.hits).toHaveLength(0);
+         expect(calls).toBeGreaterThanOrEqual(2);
+         const [after] = await listDeliveries(db, hook.id);
+         expect(after.lastError).toMatch(/Destino não permitido/);
+      } finally {
+         __setWebhookResolver(null);
+         await rx.close();
+      }
+   });
+
+   it('a conexão usa o IP resolvido e validado, mantendo o Host original', async () => {
+      const rx = await receiver();
+      vi.stubEnv('CIRCLE_WEBHOOK_ALLOW_PRIVATE', 'true');
+      __setWebhookResolver(async () => [{ address: '127.0.0.1', family: 4 }]);
+      try {
+         const { hook, delivery } = await seedDelivery(`http://hook.example:${rx.port}/hook`);
+         vi.stubEnv('CIRCLE_WEBHOOK_ALLOW_PRIVATE', 'true');
+         expect(await attemptDelivery(db, delivery, hook)).toBe(true);
+         expect(rx.hits).toEqual([`hook.example:${rx.port}`]);
+      } finally {
+         __setWebhookResolver(null);
+         await rx.close();
+      }
    });
 
    it('não segue redirect: um 302 para a rede interna morre no 3xx', async () => {

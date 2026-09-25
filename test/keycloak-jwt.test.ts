@@ -113,6 +113,24 @@ describe('verifyKeycloakJwt', () => {
       expect(p).toBeNull();
    });
 
+   it('accepts client_id/clientId equal to the azp', async () => {
+      expect(
+         await verifyKeycloakJwt(makeToken({ ...validPayload(), client_id: 'circle-ci' }))
+      ).not.toBeNull();
+      expect(
+         await verifyKeycloakJwt(makeToken({ ...validPayload(), clientId: 'circle-ci' }))
+      ).not.toBeNull();
+   });
+
+   it('rejects client_id/clientId different from the azp', async () => {
+      expect(
+         await verifyKeycloakJwt(makeToken({ ...validPayload(), client_id: 'outro' }))
+      ).toBeNull();
+      expect(
+         await verifyKeycloakJwt(makeToken({ ...validPayload(), clientId: 'outro' }))
+      ).toBeNull();
+   });
+
    it('rejects a token without azp', async () => {
       const { azp: _omit, ...noAzp } = validPayload();
       expect(await verifyKeycloakJwt(makeToken(noAzp))).toBeNull();

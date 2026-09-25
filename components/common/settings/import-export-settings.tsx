@@ -74,6 +74,8 @@ function Warnings({ items }: { items: string[] }) {
 
 export default function ImportExportSettings() {
    const teams = useWorkspaceStore((s) => s.teams);
+   // Criar label é só admin (o servidor recusa com 403): o toggle nem aparece para os outros.
+   const isAdmin = useWorkspaceStore((s) => s.me?.admin ?? false);
 
    const [step, setStep] = useState<Step>('upload');
    const [source, setSource] = useState<ImportSource>('csv');
@@ -82,6 +84,10 @@ export default function ImportExportSettings() {
    const [preview, setPreview] = useState<ImportPreviewDto | null>(null);
    const [mapping, setMapping] = useState<ImportMapping>({});
    const [teamId, setTeamId] = useState('');
+   // Time para o qual o `existing` da amostra foi calculado. Diferente do `teamId` =
+   // preview desatualizado: a coluna Ação fica em branco até o novo preview chegar.
+   const [previewTeamId, setPreviewTeamId] = useState('');
+   const latestTeamRef = useRef('');
    const [createLabels, setCreateLabels] = useState(false);
    const [jobId, setJobId] = useState<string | null>(null);
    const [result, setResult] = useState<ImportJobDto | null>(null);
@@ -121,18 +127,41 @@ export default function ImportExportSettings() {
       if (!file || busy) return;
       setBusy(true);
       try {
-         const dto = await api.importIssues.preview(file, source);
+         // "Criar"/"Atualizar" da amostra é por time: usa o destino que será proposto.
+         const target = teamId || teams[0]?.id || '';
+         const dto = await api.importIssues.preview(file, source, undefined, target || undefined);
          setFileName(file.name);
          setCsv(await file.text());
          setPreview(dto);
          setMapping(dto.mapping);
-         setTeamId((current) => current || teams[0]?.id || '');
+         setTeamId(target);
+         setPreviewTeamId(target);
+         latestTeamRef.current = target;
          setStep('mapping');
       } catch (err) {
          toast.error(errorReason(err, 'Não foi possível ler o arquivo (é um CSV válido?)'));
       } finally {
          setBusy(false);
          if (inputRef.current) inputRef.current.value = '';
+      }
+   };
+
+   /** Trocar o destino refaz o preview: o `existing` de cada linha é por time. */
+   const changeTeam = async (id: string) => {
+      setTeamId(id);
+      latestTeamRef.current = id;
+      if (!preview) return;
+      try {
+         const file = new File([csv], fileName || 'import.csv', { type: 'text/csv' });
+         const dto = await api.importIssues.preview(file, preview.source, mapping, id);
+         // Só aplica se o usuário não trocou de novo enquanto esperava.
+         if (latestTeamRef.current !== id) return;
+         // O mapeamento em tela é do usuário: atualiza só a amostra/avisos.
+         setPreview((current) => (current ? { ...dto, mapping: current.mapping } : dto));
+         setPreviewTeamId(id);
+      } catch (err) {
+         if (latestTeamRef.current === id)
+            toast.error(errorReason(err, 'Não foi possível atualizar a amostra para este time'));
       }
    };
 
@@ -147,7 +176,7 @@ export default function ImportExportSettings() {
             csv,
             teamId,
             mapping,
-            createMissingLabels: createLabels,
+            createMissingLabels: isAdmin && createLabels,
          });
          // Job em background (#10): a tela acompanha o progresso até o fim.
          setJobId(id);
@@ -247,7 +276,7 @@ export default function ImportExportSettings() {
                         title="Time de destino"
                         description="As issues importadas entram neste time."
                         trailing={
-                           <Select value={teamId} onValueChange={setTeamId}>
+                           <Select value={teamId} onValueChange={(v) => void changeTeam(v)}>
                               <SelectTrigger aria-label="Time de destino" className="h-[30px] w-52">
                                  <SelectValue placeholder="Escolha o time" />
                               </SelectTrigger>
@@ -291,17 +320,19 @@ export default function ImportExportSettings() {
                            }
                         />
                      ))}
-                     <SettingsRow
-                        title="Criar labels que não existem"
-                        description="Sem isto, labels sem correspondência no catálogo são ignoradas."
-                        trailing={
-                           <Checkbox
-                              aria-label="Criar labels que não existem"
-                              checked={createLabels}
-                              onCheckedChange={(v) => setCreateLabels(v === true)}
-                           />
-                        }
-                     />
+                     {isAdmin && (
+                        <SettingsRow
+                           title="Criar labels que não existem"
+                           description="Sem isto, labels sem correspondência no catálogo são ignoradas."
+                           trailing={
+                              <Checkbox
+                                 aria-label="Criar labels que não existem"
+                                 checked={createLabels}
+                                 onCheckedChange={(v) => setCreateLabels(v === true)}
+                              />
+                           }
+                        />
+                     )}
                   </SettingsCard>
 
                   <SettingsCard>
@@ -333,7 +364,11 @@ export default function ImportExportSettings() {
                                           {row.priorityRaw ?? '—'}
                                        </td>
                                        <td className="py-1 text-muted-foreground">
-                                          {row.existing ? 'Atualizar' : 'Criar'}
+                                          {previewTeamId !== teamId
+                                             ? '—'
+                                             : row.existing
+                                               ? 'Atualizar'
+                                               : 'Criar'}
                                        </td>
                                     </tr>
                                  ))}

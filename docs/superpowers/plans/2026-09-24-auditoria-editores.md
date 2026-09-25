@@ -9,11 +9,13 @@
   no `onSave`); `new-team-button` sem erro cru de 5xx.
 - **Última verificação:** 2026-09-24, claude — `pnpm test` 428 arquivos / 2.155 testes, typecheck,
   lint e build limpos; first load `/inbox` 452→240 kB, `/projects` 470→325 kB.
-- **Em andamento:** transação vazia do editor quebrava Tab-aninhar e task→sub-issue em teste
-  (subagente investigando a causa raiz).
-- **Próximo passo:** concluído — v0.44.0 em prd (24/09). Sequência: auditoria de fluxos na v0.45.0.
-- **Bloqueios:** reprodução de "Back to app" / laço após excluir time e botões "apagados" dependem
-  de navegador (bypass local de E2E negado pelo modo automático; extensão do Chrome desconectada).
+- **Resolvido:** a transação vazia do editor que quebrava Tab-aninhar e task→sub-issue em teste
+  teve a causa raiz corrigida no `478234d` (transação sem edição não dispara onChange/autosave),
+  já na v0.44.0.
+- **Próximo passo:** concluído — v0.44.0 em prd (24/09). Sequência: auditoria de fluxos na v0.45.0 e contraste/scroll na v0.45.1.
+- **Bloqueios:** nenhum. O "Back to app" e a saída de settings foram resolvidos na v0.44.0
+  (landing no cliente); os botões secundário e outline foram reforçados na v0.45.1. Falta só a
+  conferência visual no navegador.
 
 ## Decisões
 

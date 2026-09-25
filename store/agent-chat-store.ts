@@ -48,6 +48,33 @@ interface AgentChatState {
 let nextId = 1;
 const uid = (prefix: string) => `${prefix}-${nextId++}`;
 
+/**
+ * Id de um chat novo aberto pelo cliente: UUID de verdade quando o browser suporta —
+ * dobra como `clientChatId` no envio (aditivo, ver `lib/api/agent.ts`), então o servidor
+ * já sabe onde gravar mesmo que um "Parar" no 1º envio nunca traga o chatId de volta.
+ * Sem `crypto.randomUUID` (contexto não seguro, browser antigo), monta um UUID v4 com
+ * `getRandomValues` (ou `Math.random` em último caso): o id precisa continuar valendo
+ * como `clientChatId`, senão um "Parar" no 1º envio faria o próximo criar outro chat.
+ */
+function newLocalChatId(): string {
+   try {
+      const id = globalThis.crypto?.randomUUID?.();
+      if (id) return id;
+   } catch {
+      /* segue pro fallback abaixo */
+   }
+   const bytes = new Uint8Array(16);
+   try {
+      globalThis.crypto.getRandomValues(bytes);
+   } catch {
+      for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+   }
+   bytes[6] = (bytes[6] & 0x0f) | 0x40; // versão 4
+   bytes[8] = (bytes[8] & 0x3f) | 0x80; // variante RFC 4122
+   const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 /** Título curto a partir da 1ª mensagem (primeiras palavras, sem depender de mock). */
 function chatTitleFrom(input: string): string {
    const clean = input.trim().replace(/\s+/g, ' ');
@@ -167,7 +194,7 @@ export const useAgentChatStore = create<AgentChatState>((set) => ({
             };
          }
          const chat: AgentChat = {
-            id: uid('chat'),
+            id: newLocalChatId(),
             title: chatTitleFrom(input),
             messages: [userMessage, assistantMessage],
             persisted: false,
