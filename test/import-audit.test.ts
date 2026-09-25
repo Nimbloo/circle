@@ -41,3 +41,16 @@ describe('import: escopo', () => {
       expect(ok.created).toBe(1);
    });
 });
+
+describe('import: integridade', () => {
+   it('externalId acima de 128 chars é recusado antes de criar a issue', async () => {
+      const csv = `ID,Title\n${'X'.repeat(129)},Longa`;
+      const mapping = { externalId: 'ID', title: 'Title' };
+      const run = () => commitImport(db, { source: 'csv', csv, mapping, teamId: 'CORE' }, ADMIN);
+      // Antes: a issue nascia, o `issue_import` estourava o varchar(128) e cada re-import
+      // criava mais uma cópia (sem rastro, não havia como achar a existente).
+      await expect(run()).rejects.toMatchObject({ status: 400 });
+      await expect(run()).rejects.toMatchObject({ status: 400 });
+      expect(await listIssues(db, { team: 'CORE' })).toHaveLength(0);
+   });
+});

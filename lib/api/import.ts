@@ -39,6 +39,9 @@ export const IMPORT_LIMITS = {
    maxCellChars: 10_000,
 } as const;
 
+/** Tamanho de `issue_import.external_id` (varchar). */
+const IMPORT_EXTERNAL_ID_MAX = 128;
+
 /** Margem para JSON/multipart e metadados; o CSV em si continua limitado por `maxBytes`. */
 export const IMPORT_REQUEST_OVERHEAD_BYTES = 256_000;
 
@@ -168,6 +171,13 @@ export function validateImportCsv(text: string, mapping?: ImportMapping): void {
    for (const row of raw.slice(1)) {
       const externalId = row[externalIndex]?.trim();
       if (!externalId) continue;
+      // `issue_import.external_id` é varchar(128): acima disso a issue nascia sem rastro e
+      // o re-import a duplicava. Recusa o arquivo antes de escrever qualquer coisa.
+      if (externalId.length > IMPORT_EXTERNAL_ID_MAX)
+         throw new ApiError(
+            400,
+            `externalId acima de ${IMPORT_EXTERNAL_ID_MAX} caracteres: '${externalId.slice(0, 32)}…'`
+         );
       if (seen.has(externalId))
          throw new ApiError(400, `externalId duplicado no CSV: '${externalId}'`);
       seen.add(externalId);
