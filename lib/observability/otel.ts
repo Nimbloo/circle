@@ -20,9 +20,11 @@ import {
  *
  * Casa só o PATHNAME logo após o método/prefixo do span, nunca uma ocorrência na query
  * (`GET /api/v1/issues?next=/api/healthz` é tráfego real e precisa ser amostrado).
+ * `/api/metrics` (scrape do Prometheus a cada 30s) também é ruído. Em prd o Next nomeia
+ * alguns spans raiz pelo arquivo da rota (`GET /app/api/metrics/route`): as duas formas.
  */
 const IGNORED_PATH_PATTERN =
-   /^(?:[A-Z]+|executing api route \(app\)) \/api\/(?:healthz|readyz)\/?(?:[?#]|$)/;
+   /^(?:[A-Z]+|executing api route \(app\)) (?:\/app)?\/api\/(?:healthz|readyz|metrics)(?:\/route)?\/?(?:[?#]|$)/;
 
 const RECORD_AND_SAMPLE: SamplingResult = { decision: SamplingDecision.RECORD_AND_SAMPLED };
 const DO_NOT_RECORD: SamplingResult = { decision: SamplingDecision.NOT_RECORD };
