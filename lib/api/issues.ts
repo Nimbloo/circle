@@ -1161,7 +1161,7 @@ export async function updateIssue(
       if (patch.cycleId !== undefined && (patch.cycleId || null) !== prev.cycleId)
          events.push({
             event: 'cycle',
-            text: `changed cycle from ${prev.cycleId ?? 'none'} to ${patch.cycleId ?? 'none'}`,
+            text: `changed cycle from ${prev.cycleId ?? 'none'} to ${patch.cycleId || 'none'}`,
          });
       if (autoAddedCycleId)
          events.push({

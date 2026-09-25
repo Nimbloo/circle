@@ -60,4 +60,20 @@ describe('Profile (Ad#33)', () => {
       expect(gh.disabled).toBe(false);
       expect(document.activeElement).toBe(gh);
    });
+
+   it('nome apagado não é salvo e o campo volta ao nome atual', async () => {
+      const user = userEvent.setup();
+      render(
+         <SidebarProvider>
+            <Profile />
+         </SidebarProvider>
+      );
+      const name = screen.getByDisplayValue('Ana') as HTMLInputElement;
+      await user.clear(name);
+      await user.tab();
+
+      expect(apiMocks.update).not.toHaveBeenCalled();
+      // Antes o campo ficava vazio, sugerindo um nome que não foi (nem pode ser) salvo.
+      expect(name.value).toBe('Ana');
+   });
 });

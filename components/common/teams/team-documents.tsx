@@ -134,7 +134,9 @@ export default function TeamDocuments() {
    const refreshAfterMutation = useCallback(() => {
       if (!teamId) return;
       return fetchFolders()
-         .then((next) => next && setFolders(next))
+         .then((next) => {
+            if (next) setFolders(next);
+         })
          .catch(() => {
             toast.warning('Não foi possível recarregar os documentos');
          });
@@ -238,7 +240,11 @@ export default function TeamDocuments() {
             <div className="flex items-center justify-between px-4 h-11 border-b">
                <span className="text-sm font-medium">Documents</span>
                {teamId && (
-                  <CreateDocumentButton teamId={teamId} folders={folderRefs} onCreated={reload} />
+                  <CreateDocumentButton
+                     teamId={teamId}
+                     folders={folderRefs}
+                     onCreated={refreshAfterMutation}
+                  />
                )}
             </div>
 
@@ -462,7 +468,7 @@ export default function TeamDocuments() {
                         e.preventDefault();
                         if (folderToDelete) void removeFolder(folderToDelete.id);
                      }}
-                     className="bg-destructive text-white hover:bg-destructive/90"
+                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
                      Excluir pasta
                   </AlertDialogAction>

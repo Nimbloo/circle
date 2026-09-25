@@ -119,7 +119,10 @@ export const useFavoritesStore = create<FavoritesState>()((set, get) => {
 
          if (wasFav) {
             // Otimista + splice local: remove do índice E da lista sem roundtrip de leitura.
-            const keys = new Set(get().keys);
+            const before = get().items;
+            // `keys` pode estar à frente de `items` (add em voo): o snapshot é o dos dois.
+            const keysBefore = get().keys;
+            const keys = new Set(keysBefore);
             keys.delete(k);
             set({
                keys,
@@ -130,8 +133,10 @@ export const useFavoritesStore = create<FavoritesState>()((set, get) => {
             } catch {
                toast.error('Falha ao desfavoritar');
                // Reconcilia com o servidor só se a mutação falhou.
-               const items = await api.favorites.list().catch(() => get().items);
-               if (get().seq === mySeq) set({ items, keys: keysOf(items) });
+               // Sem a lista do servidor, o remove não vingou: volta ao estado anterior.
+               const items = await api.favorites.list().catch(() => null);
+               if (get().seq === mySeq)
+                  set(items ? { items, keys: keysOf(items) } : { items: before, keys: keysBefore });
             }
             return;
          }
@@ -152,6 +157,12 @@ export const useFavoritesStore = create<FavoritesState>()((set, get) => {
          const items = await api.favorites.list().catch(() => null);
          // Só aplica se este ainda é o toggle mais recente (descarta resposta fora de ordem).
          if (items && get().seq === mySeq) set({ items, keys: keysOf(items) });
+         else if (!items && failed && get().seq === mySeq) {
+            // Add falhou e a recarga também: a estrela otimista não pode ficar acesa.
+            const back = new Set(get().keys);
+            back.delete(k);
+            set({ keys: back });
+         }
       },
    };
 });

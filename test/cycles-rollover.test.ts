@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { makeTestDb } from './helpers/db';
 import { seedTeam } from './helpers/fixtures';
 import { cycle, issue } from '@/db/schema';
-import { rolloverCyclesForTeam } from '@/lib/api/cycles';
+import { getCycle, rolloverCyclesForTeam } from '@/lib/api/cycles';
 import { workspaceDay } from '@/lib/workspace-day';
 
 async function setup() {
@@ -99,6 +99,10 @@ describe('cycles auto-rollover (#24)', () => {
       expect(byId['i4']).toBe('c2'); // unstarted (todo) migrou
       expect(byId['i2']).toBe('c1'); // concluída ficou no cycle fechado
       expect(byId['i3']).toBe('c1'); // backlog NÃO rola (Linear exclui)
+
+      // Success rate do ciclo fechado conta o escopo do FECHAMENTO (1 de 4 concluída),
+      // não só o que sobrou nele depois de carregar as abertas (1 de 2 → 50% inflado).
+      expect((await getCycle(db, 'c1'))?.successRate).toBe(25);
    });
 
    it('não faz nada se o current ainda está em andamento', async () => {

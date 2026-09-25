@@ -21,8 +21,18 @@ import { useIssueDeleteShortcut } from '@/components/common/issues/use-issue-del
  * some da lista na hora e o DELETE só sai depois da janela de desfazer.
  */
 
-const apiMocks = vi.hoisted(() => ({ remove: vi.fn(async () => ({ deleted: true })) }));
-vi.mock('@/lib/client', () => ({ api: { issues: { remove: apiMocks.remove } } }));
+const apiMocks = vi.hoisted(() => ({
+   remove: vi.fn(async () => ({ deleted: true })),
+   get: vi.fn(async (): Promise<unknown> => {
+      throw new Error('offline');
+   }),
+}));
+vi.mock('@/lib/client', () => ({
+   api: { issues: { remove: apiMocks.remove, get: apiMocks.get } },
+   ApiError: class ApiError extends Error {
+      status = 0;
+   },
+}));
 const toastMock = vi.hoisted(() => Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }));
 vi.mock('sonner', () => ({ toast: toastMock }));
 vi.mock('next/navigation', () => ({ useParams: () => ({ orgId: 'nimbloo' }) }));
@@ -100,6 +110,38 @@ describe('excluir issue com Undo (is#16)', () => {
          autoClose();
       });
       expect(apiMocks.remove).not.toHaveBeenCalled();
+   });
+
+   it('Undo traz a versão ATUAL da issue (mudança remota da janela não se perde)', async () => {
+      act(() => void deleteIssuesWithUndo(['b']));
+      const done = status.find((st) => st.category === 'completed')!;
+      apiMocks.get.mockResolvedValueOnce({
+         id: 'b',
+         identifier: 'ENG-b',
+         teamId: 'ENG',
+         title: 'Issue b',
+         status: { id: done.id, name: done.name, color: '', category: done.category },
+         priority: { id: priorities[0].id, name: priorities[0].name },
+         assignee: null,
+         assignees: [],
+         createdBy: null,
+         project: null,
+         cycleId: '',
+         labels: [],
+         rank: 'b',
+         dueDate: null,
+         estimate: null,
+         subIssueCount: 0,
+         subIssueDoneCount: 0,
+         snoozedUntil: null,
+         createdAt: '2026-01-01T00:00:00.000Z',
+         updatedAt: '2026-01-02T00:00:00.000Z',
+      });
+      await act(async () => {
+         undoAction()?.onClick();
+      });
+      expect(apiMocks.get).toHaveBeenCalledWith('b');
+      expect(useIssuesStore.getState().getIssueById('b')?.status.id).toBe(done.id);
    });
 
    it('removeRemote durante a janela invalida o Undo (outra aba já apagou)', async () => {
@@ -255,5 +297,23 @@ describe('excluir issue com Undo (is#16)', () => {
          fireEvent.keyDown(getByLabelText('campo'), { key: 'Backspace', metaKey: true });
       });
       expect(ids()).toEqual(['a', 'b', 'c']);
+   });
+
+   it('com dialog/menu aberto o atalho não exclui o que está por baixo', () => {
+      function Host() {
+         useIssueDeleteShortcut('c');
+         return (
+            <div role="dialog" data-state="open">
+               <button>Salvar</button>
+            </div>
+         );
+      }
+      const { getByText } = render(<Host />);
+      act(() => useBulkSelectionStore.getState().set(['a']));
+      act(() => {
+         fireEvent.keyDown(getByText('Salvar'), { key: 'Backspace', metaKey: true });
+      });
+      expect(ids()).toEqual(['a', 'b', 'c']);
+      expect(useBulkSelectionStore.getState().selected.size).toBe(1);
    });
 });

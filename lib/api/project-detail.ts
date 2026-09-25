@@ -505,6 +505,8 @@ export async function deleteMilestone(
       action: 'updated',
       id: rows[0].projectId,
       teamId: await projectTeamId(db, rows[0].projectId),
+      // O detalhe de issue aberto nessa milestone limpa o campo sem refazer GET.
+      removedMilestoneId: milestoneId,
    });
    return true;
 }

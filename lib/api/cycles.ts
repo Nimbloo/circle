@@ -198,11 +198,24 @@ function buildBurnup(
    });
 }
 
-function toDto(row: CycleRow, agg: Agg, snapshots: SnapshotRow[], today: string): CycleDto {
+function toDto(
+   row: CycleRow,
+   agg: Agg,
+   snapshots: SnapshotRow[],
+   today: string,
+   final?: SnapshotRow
+): CycleDto {
+   // Ciclo fechado: o rollover já levou as abertas para o próximo, então o agregado atual
+   // só tem o que ficou (quase tudo concluído). O retrato do FECHAMENTO é a medida certa.
+   const closing = final && final.scope > 0 ? final : null;
    const successRate =
-      row.status === 'completed' && agg.scope > 0
-         ? Math.round((agg.completed / agg.scope) * 100)
-         : null;
+      row.status !== 'completed'
+         ? null
+         : closing
+           ? Math.round((closing.completed / closing.scope) * 100)
+           : agg.scope > 0
+             ? Math.round((agg.completed / agg.scope) * 100)
+             : null;
    // Variação de escopo (%) desde o primeiro snapshot do ciclo; 0 sem histórico.
    const first = snapshots[0];
    const scopeDelta =
@@ -262,6 +275,20 @@ async function snapshotsByCycle(
       result.set(r.cycleId, arr);
    }
    return result;
+}
+
+/**
+ * Snapshot do FECHAMENTO de cada ciclo: o datado no `endDate` (gravado pelo rollover).
+ * Um snapshot posterior ao fim (ex.: `endDate` encurtado depois de medições) não conta.
+ */
+async function closingSnapshots(db: Db, cycleIds: string[]): Promise<Map<string, SnapshotRow>> {
+   if (cycleIds.length === 0) return new Map();
+   const rows = await db
+      .select({ snapshot: snapshotT })
+      .from(snapshotT)
+      .innerJoin(cycleT, and(eq(cycleT.id, snapshotT.cycleId), eq(cycleT.endDate, snapshotT.date)))
+      .where(inArray(snapshotT.cycleId, cycleIds));
+   return new Map(rows.map(({ snapshot }) => [snapshot.cycleId, snapshot]));
 }
 
 /**
@@ -333,14 +360,22 @@ async function toDtos(
    burnupIds: readonly string[] = rows.map((r) => r.id)
 ): Promise<CycleDto[]> {
    const ids = rows.map((r) => r.id);
-   const [aggs, snaps] = await Promise.all([
+   const completedIds = rows.filter((r) => r.status === 'completed').map((r) => r.id);
+   const [aggs, snaps, finals] = await Promise.all([
       aggregatesByCycle(db, ids, burnupIds),
       snapshotsByCycle(db, ids, burnupIds),
+      closingSnapshots(db, completedIds),
    ]);
    const today = workspaceDay(now);
    const withBurnup = new Set(burnupIds);
    return rows.map((r) => {
-      const dto = toDto(r, aggs.get(r.id) ?? EMPTY_AGG(), snaps.get(r.id) ?? [], today);
+      const dto = toDto(
+         r,
+         aggs.get(r.id) ?? EMPTY_AGG(),
+         snaps.get(r.id) ?? [],
+         today,
+         finals.get(r.id)
+      );
       if (!withBurnup.has(r.id)) dto.burnup = null;
       return dto;
    });
@@ -376,16 +411,38 @@ export async function rolloverCyclesForTeam(
          .for('update');
 
       if (current && current.endDate < today) {
+         // Destino: o próximo ciclo já agendado — `upcoming` ou `planned` (este vira o
+         // próximo da fila). Só cria um ciclo novo quando nenhum existe.
          let [next] = await tx
             .select()
             .from(cycleT)
-            .where(and(eq(cycleT.teamId, teamId), eq(cycleT.status, 'upcoming')))
+            .where(
+               and(
+                  eq(cycleT.teamId, teamId),
+                  inArray(cycleT.status, ['upcoming', 'planned']),
+                  sql`${cycleT.startDate} > ${current.endDate}`
+               )
+            )
             .orderBy(asc(cycleT.startDate))
             .limit(1);
          if (!next) {
             next = await createNextCycle(tx, teamId, current);
             touched.created = next.id;
-         } else touched.updated.add(next.id);
+         } else {
+            if (next.status === 'planned') {
+               await tx.update(cycleT).set({ status: 'upcoming' }).where(eq(cycleT.id, next.id));
+               next = { ...next, status: 'upcoming' };
+            }
+            touched.updated.add(next.id);
+         }
+
+         // Retrato do fechamento ANTES de carregar as abertas: é a base do success rate.
+         const closing = await aggregatesByCycle(tx as unknown as Db, [current.id], []);
+         await upsertSnapshots(
+            tx as unknown as Db,
+            [{ cycleId: current.id, agg: closing.get(current.id) ?? EMPTY_AGG() }],
+            current.endDate
+         );
 
          const statuses = await tx.select().from(statusT);
          // Paridade Linear: só issues "em aberto" (unstarted/started) rolam pro próximo ciclo.
@@ -452,8 +509,22 @@ async function createNextCycle(tx: Tx, teamId: string, prev: CycleRow): Promise<
       .from(cycleT)
       .where(eq(cycleT.teamId, teamId));
    const number = (max?.m ?? 0) + 1;
-   const startDate = addDays(prev.endDate, 1 + (team?.cooldown ?? 0));
-   const endDate = addDays(startDate, diffDays(prev.startDate, prev.endDate));
+   const duration = diffDays(prev.startDate, prev.endDate);
+   let startDate = addDays(prev.endDate, 1 + (team?.cooldown ?? 0));
+   // Sem sobrepor outro ciclo do time: se algum ciclo cruza o intervalo proposto
+   // [início, fim], começa depois dele e testa de novo. Ciclo posterior que não cruza
+   // o intervalo não empurra nada.
+   const later = await tx
+      .select({ start: cycleT.startDate, end: cycleT.endDate })
+      .from(cycleT)
+      .where(and(eq(cycleT.teamId, teamId), gte(cycleT.endDate, startDate)))
+      .orderBy(asc(cycleT.startDate));
+   for (const c of later) {
+      if (c.start <= addDays(startDate, duration) && c.end >= startDate) {
+         startDate = addDays(c.end, 1);
+      }
+   }
+   const endDate = addDays(startDate, duration);
    const [row] = await tx
       .insert(cycleT)
       .values({

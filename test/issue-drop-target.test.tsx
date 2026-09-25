@@ -219,4 +219,52 @@ describe('arraste na lista com ordenação padrão (priority)', () => {
       expect(useIssuesStore.getState().issues.find((i) => i.id === 'a')!.status.id).toBe('to-do');
       expect(apiMocks.reorder).not.toHaveBeenCalled();
    });
+
+   it('soltar em "No assignee" tira TODOS os responsáveis (não promove o colaborador)', async () => {
+      const ana = { id: 'u-ana', name: 'Ana' } as unknown as NonNullable<Issue['assignee']>;
+      const bia = { id: 'u-bia', name: 'Bia' } as unknown as NonNullable<Issue['assignee']>;
+      useIssuesStore.setState({
+         issues: [
+            make('a', { rank: r1, assignee: ana, assignees: [ana, bia] }),
+            make('b', { rank: r2 }),
+         ],
+      });
+      const byAssignee = (issue: Issue): IssueGroupContext =>
+         issue.assignee
+            ? {
+                 group: {
+                    id: issue.assignee.id,
+                    name: issue.assignee.name,
+                    icon: null,
+                    drop: { field: 'assignee', assignee: issue.assignee },
+                 },
+                 issues: [issue],
+              }
+            : {
+                 group: {
+                    id: 'no-assignee',
+                    name: 'No assignee',
+                    icon: null,
+                    drop: { field: 'assignee', assignee: null },
+                 },
+                 issues: [issue],
+              };
+      function AssigneeHarness() {
+         const issues = useIssuesStore((st) => st.issues);
+         return (
+            <DndProvider backend={HTML5Backend}>
+               {issues.map((issue) => (
+                  <IssueLine key={issue.id} issue={issue} getGroup={() => byAssignee(issue)} />
+               ))}
+            </DndProvider>
+         );
+      }
+      render(<AssigneeHarness />);
+      const [rowA, rowB] = rows();
+      act(() => lastTestBackend!.simulateDragDrop(rowA, rowB));
+      await waitFor(() => expect(apiMocks.update).toHaveBeenCalledWith('a', { assigneeIds: [] }));
+      const a = useIssuesStore.getState().issues.find((i) => i.id === 'a')!;
+      expect(a.assignee).toBeNull();
+      expect(a.assignees).toEqual([]);
+   });
 });

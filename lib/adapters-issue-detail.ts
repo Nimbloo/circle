@@ -13,6 +13,19 @@ import { relativeTime } from '@/lib/relative-time';
 
 export { textToBlocks };
 
+/**
+ * Milestone apagada (evento remoto): o detalhe que apontava para ela fica sem milestone.
+ * Devolve o MESMO objeto quando não é a milestone dele (sem re-render à toa).
+ */
+export function clearRemovedMilestone<T extends Pick<IssueDetail, 'milestoneId' | 'milestoneName'>>(
+   detail: T,
+   milestoneId: string
+): T {
+   return detail.milestoneId === milestoneId
+      ? { ...detail, milestoneId: null, milestoneName: null }
+      : detail;
+}
+
 export function adaptAttachment(dto: AttachmentDto): Attachment {
    return {
       id: dto.id,
@@ -151,6 +164,7 @@ export function adaptIssueDetail(dto: IssueDetailDto, activity: ActivityDto[]): 
       blockedByIds: dto.blockedByIds,
       blockingIds: dto.blockingIds,
       duplicateIds: dto.duplicateIds,
+      duplicatedByIds: dto.duplicatedByIds ?? [],
       prLinks: dto.prLinks.map((p) => ({ ...p, status: p.status as PrLink['status'] })),
       attachments: (dto.attachments ?? []).map(adaptAttachment),
       milestone: dto.milestone ?? undefined,

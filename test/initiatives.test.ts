@@ -5,6 +5,7 @@ import { makeTestDb } from './helpers/db';
 import { seedTeam } from './helpers/fixtures';
 import { initiative as initiativeT, initiativeProject } from '@/db/schema';
 import { createProject, getProject, updateProject } from '@/lib/api/projects';
+import { createIssue } from '@/lib/api/issues';
 import {
    createInitiative,
    listInitiatives,
@@ -14,6 +15,8 @@ import {
    listInitiativeActivity,
 } from '@/lib/api/initiatives';
 import { createLabel, deleteLabel } from '@/lib/api/labels';
+import { postInitiativeUpdate } from '@/lib/api/initiative-detail';
+import { getOrCreateUser } from '@/lib/api/users';
 
 async function setup() {
    const db = await makeTestDb();
@@ -40,6 +43,26 @@ describe('initiatives', () => {
       expect(init.health.id).toBe('at-risk');
       expect(init.projectCount).toBe(2);
       expect(init.completedProjectCount).toBe(1); // só p1 (done)
+   });
+
+   it('projeto com todas as issues concluídas conta como concluído (mesma regra da lista)', async () => {
+      const db = await setup();
+      const p = await createProject(db, { name: 'P', statusId: 'proj-in-progress', ...baseProj });
+      await createIssue(
+         db,
+         { teamId: 'CORE', title: 'feita', statusId: 'done', priorityId: 'low', projectId: p.id },
+         'ana@nimbloo.ai'
+      );
+      expect((await getProject(db, p.id))?.percentComplete).toBe(100);
+      const init = await createInitiative(db, {
+         slug: 'done-by-issues',
+         name: 'Done by issues',
+         priorityId: 'high',
+         healthId: 'on-track',
+         projectIds: [p.id],
+      });
+      expect(init.completedProjectCount).toBe(1);
+      expect(init.rollupCompletedProjectCount).toBe(1);
    });
 
    it('cria e atualiza labels e metadados de ícone sem quebrar campos existentes', async () => {
@@ -115,6 +138,25 @@ describe('initiatives', () => {
       const upd = await updateInitiative(db, init.id, { status: 'completed', name: 'A2' });
       expect(upd?.status).toBe('completed');
       expect(upd?.name).toBe('A2');
+      expect(await deleteInitiative(db, init.id)).toBe(true);
+      expect(await getInitiative(db, init.id)).toBeNull();
+   });
+
+   it('exclui initiative que já tem feed de alterações e updates de health', async () => {
+      const db = await setup();
+      const actor = 'ana@nimbloo.ai';
+      const init = await createInitiative(db, {
+         slug: 'hist',
+         name: 'Com histórico',
+         priorityId: 'high',
+         healthId: 'on-track',
+      });
+      await updateInitiative(db, init.id, { name: 'Com histórico v2' }, actor);
+      const author = await getOrCreateUser(db, actor);
+      await postInitiativeUpdate(db, init.id, author.id, {
+         health: 'at-risk',
+         blocks: [{ type: 'paragraph', text: 'atrasou' }],
+      });
       expect(await deleteInitiative(db, init.id)).toBe(true);
       expect(await getInitiative(db, init.id)).toBeNull();
    });

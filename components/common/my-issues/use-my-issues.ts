@@ -26,20 +26,51 @@ export function useMyIssuesTab() {
  * não divergir (is#17: o contador mostrava o total de "Subscribed" na aba Activity
  * por não ter esses ids).
  */
-export function useMyIssuesActiveIds(tab: MyIssuesTab): ReadonlySet<string> {
+export interface MyIssuesActivity {
+   activeIds: ReadonlySet<string>;
+   /** A busca da aba ainda não respondeu (a tela mostra carregando, não "vazio"). */
+   loading: boolean;
+   /** A última busca falhou (a tela mostra erro com retry). */
+   error: boolean;
+   retry: () => void;
+}
+
+export function useMyIssuesActiveIds(tab: MyIssuesTab): MyIssuesActivity {
    const [activeIds, setActiveIds] = useState<ReadonlySet<string>>(new Set());
+   const [attempt, setAttempt] = useState(0);
+   // Qual tentativa já respondeu, e se falhou: `loading` é derivado (sem set no effect).
+   const [settled, setSettled] = useState<{ attempt: number; error: boolean } | null>(null);
+   // Reabrir a aba é uma busca nova: novo `attempt`, senão o resultado (ou erro) da busca
+   // anterior casaria com ele e apareceria no lugar do carregando.
+   const [prevTab, setPrevTab] = useState(tab);
+   if (tab !== prevTab) {
+      setPrevTab(tab);
+      if (tab === 'activity') setAttempt((n) => n + 1);
+   }
    useEffect(() => {
       if (tab !== 'activity') return;
       let alive = true;
       api.me
          .activity()
-         .then((items) => alive && setActiveIds(new Set(items.map((i) => i.issueId))))
-         .catch(() => {});
+         .then((items) => {
+            if (!alive) return;
+            setActiveIds(new Set(items.map((i) => i.issueId)));
+            setSettled({ attempt, error: false });
+         })
+         .catch(() => {
+            if (alive) setSettled({ attempt, error: true });
+         });
       return () => {
          alive = false;
       };
-   }, [tab]);
-   return activeIds;
+   }, [tab, attempt]);
+   const current = settled?.attempt === attempt ? settled : null;
+   return {
+      activeIds,
+      loading: tab === 'activity' && !current,
+      error: tab === 'activity' && !!current?.error,
+      retry: () => setAttempt((n) => n + 1),
+   };
 }
 
 const isCreatedByMe = (issue: Issue, meId: string): boolean => issue.createdById === meId;

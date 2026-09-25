@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { describe, it, expect } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
-import { issue as issueT, projectUpdate, projectMilestone } from '@/db/schema';
+import { issue as issueT, project as projectT, projectUpdate, projectMilestone } from '@/db/schema';
 import {
    createProject,
    listProjects,
@@ -85,6 +85,75 @@ describe('projects', () => {
       expect(
          (await listProjects(db, { teamIds: ['CORE'] })).map((project) => project.name)
       ).toEqual(['Core']);
+   });
+
+   it('recusa início depois do alvo, olhando o estado resultante (patch + banco)', async () => {
+      const { db } = await setup();
+      await expect(
+         createProject(db, {
+            name: 'Invertido',
+            statusId: 'proj-in-progress',
+            startDate: '2026-05-10',
+            targetDate: '2026-05-01',
+            ...base,
+         })
+      ).rejects.toMatchObject({ status: 400 });
+
+      const p = await createProject(db, {
+         name: 'Ok',
+         statusId: 'proj-in-progress',
+         startDate: '2026-05-01',
+         targetDate: '2026-05-31',
+         ...base,
+      });
+      // Só o início no patch: o alvo gravado (31/05) entra na conta.
+      await expect(updateProject(db, p.id, { startDate: '2026-06-10' })).rejects.toMatchObject({
+         status: 400,
+      });
+      // As duas datas juntas (o reschedule da timeline) movem o intervalo inteiro.
+      const moved = await updateProject(db, p.id, {
+         startDate: '2026-06-10',
+         targetDate: '2026-07-10',
+      });
+      expect(moved?.startDate).toBe('2026-06-10');
+      // Limpar uma das datas continua valendo.
+      expect((await updateProject(db, p.id, { targetDate: null }))?.targetDate).toBeNull();
+   });
+
+   it('o banco recusa intervalo invertido mesmo se a checagem da app passar (corrida)', async () => {
+      const { db } = await setup();
+      const p = await createProject(db, {
+         name: 'Corrida',
+         statusId: 'proj-in-progress',
+         startDate: '2026-05-01',
+         targetDate: '2026-05-31',
+         ...base,
+      });
+      // Simula o 2º patch concorrente: validou contra datas antigas e grava direto.
+      await db.update(projectT).set({ targetDate: '2026-05-10' }).where(eq(projectT.id, p.id));
+      await expect(
+         db.update(projectT).set({ startDate: '2026-05-20' }).where(eq(projectT.id, p.id))
+      ).rejects.toMatchObject({ cause: { code: '23514' } });
+   });
+
+   it('projeto legado com datas invertidas continua editável fora das datas', async () => {
+      const { db } = await setup();
+      const p = await createProject(db, { name: 'Legado', statusId: 'proj-in-progress', ...base });
+      // Linha gravada antes da regra: o trigger não existia.
+      await db.execute(sql`ALTER TABLE project DISABLE TRIGGER project_date_order`);
+      await db
+         .update(projectT)
+         .set({ startDate: '2026-06-20', targetDate: '2026-06-10' })
+         .where(eq(projectT.id, p.id));
+      await db.execute(sql`ALTER TABLE project ENABLE TRIGGER project_date_order`);
+
+      expect((await updateProject(db, p.id, { name: 'Legado renomeado' }))?.name).toBe(
+         'Legado renomeado'
+      );
+      // Mexer nas datas e manter invertido continua recusado.
+      await expect(
+         db.update(projectT).set({ startDate: '2026-06-25' }).where(eq(projectT.id, p.id))
+      ).rejects.toMatchObject({ cause: { code: '23514' } });
    });
 
    it('updating health stamps healthUpdatedAt', async () => {

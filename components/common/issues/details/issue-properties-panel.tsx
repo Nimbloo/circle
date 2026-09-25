@@ -499,6 +499,17 @@ export function IssuePropertiesPanel({ issue, detail, onChanged }: IssueProperti
             )
          )}
 
+         {/* Duplicated by (lado inverso de duplicate) — read-only, paridade Linear */}
+         {detail.duplicatedByIds && detail.duplicatedByIds.length > 0 && (
+            <Section title="Duplicated by">
+               <div className="flex flex-col">
+                  {detail.duplicatedByIds.map((identifier) => (
+                     <IssueRefRow key={identifier} identifier={identifier} />
+                  ))}
+               </div>
+            </Section>
+         )}
+
          {detail.prLinks && detail.prLinks.length > 0 && (
             <Section title="Diffs">
                <div className="flex flex-col gap-1">

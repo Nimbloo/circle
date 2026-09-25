@@ -64,6 +64,8 @@ const server = () => [dto('a'), dto('b'), dto('c')];
 
 beforeEach(() => {
    vi.clearAllMocks();
+   // Undo/rollback re-busca a versão atual (`applyRemote`): o servidor devolve a issue.
+   apiMocks.get.mockImplementation(async (id: string) => dto(id));
    vi.useFakeTimers();
    seedCatalog();
    apiMocks.list.mockImplementation(async () => server());

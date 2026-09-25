@@ -111,6 +111,11 @@ export interface CircleEvent {
     */
    kind?: CatalogKind;
    /**
+    * Em `project updated`: a milestone apagada (aditivo). As issues dela ficaram sem
+    * milestone; o detalhe aberto limpa o campo localmente, sem GET por issue afetada.
+    */
+   removedMilestoneId?: string;
+   /**
     * Selo monotônico só para ordenação/deduplicação no cliente. É um contador
     * incremental (NÃO `Date.now()`): o valor absoluto é irrelevante e evita
     * depender de `Date.now()` — proibido em alguns ambientes de build/AOT.

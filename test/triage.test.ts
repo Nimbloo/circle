@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
 import {
@@ -10,6 +10,8 @@ import {
    issueTriageSuggestion,
 } from '@/db/schema';
 import { createIssue, deleteIssue, getIssue, updateIssue } from '@/lib/api/issues';
+import { createProject } from '@/lib/api/projects';
+import { subscribe, type CircleEvent } from '@/lib/api/events';
 
 // O Bedrock é o único ponto de IA: mockado, cada caso decide se responde JSON válido,
 // lixo, ou explode (que é o comportamento REAL em produção — modelo bloqueado).
@@ -301,6 +303,179 @@ describe('accept', () => {
       expect(after.identifier).toBe(target.identifier);
       expect(after.priority.id).toBe('low');
       expect(after.labels.map((l) => l.id)).toEqual(['design']);
+   });
+
+   it('time SUGERIDO fora do escopo de escrita do ator: 403 e a issue fica onde está', async () => {
+      const db = await setup();
+      const GUEST = 'guest@nimbloo.ai';
+      await seedUser(db, { name: 'Guest', email: GUEST, role: 'Guest', teamIds: ['CORE'] });
+      const target = await newTriageIssue(db, 'Botão sem contraste');
+      agentMocks.invokeText.mockResolvedValue(
+         JSON.stringify({ teamId: 'DESIGN', priorityId: 'high', labelIds: [], duplicates: [] })
+      );
+      await generateTriageSuggestion(db, target.id, { force: true });
+
+      await expect(acceptTriageSuggestion(db, target.id, GUEST)).rejects.toMatchObject({
+         status: 403,
+      });
+      const after = (await getIssue(db, target.id))!;
+      expect(after.teamId).toBe('CORE');
+      expect((await getTriageSuggestion(db, target.id))?.appliedAt).toBeFalsy();
+   });
+
+   it('mover de time solta o projeto do time antigo (integridade cruzada)', async () => {
+      const db = await setup();
+      const proj = await createProject(db, {
+         name: 'Portal',
+         statusId: 'proj-in-progress',
+         priorityId: 'high',
+         healthId: 'on-track',
+         teamId: 'CORE',
+      });
+      const target = await createIssue(
+         db,
+         {
+            teamId: 'CORE',
+            title: 'Menu quebrado',
+            statusId: 'triage',
+            priorityId: 'no-priority',
+            projectId: proj.id,
+         },
+         ANA
+      );
+      agentMocks.invokeText.mockResolvedValue(
+         JSON.stringify({ teamId: 'DESIGN', priorityId: 'high', labelIds: [], duplicates: [] })
+      );
+      await generateTriageSuggestion(db, target.id, { force: true });
+      await acceptTriageSuggestion(db, target.id, ANA);
+
+      const [row] = await db.select().from(issueT).where(eq(issueT.id, target.id));
+      expect(row.teamId).toBe('DESIGN');
+      expect(row.projectId).toBeNull();
+   });
+
+   it('mover de time solta as sub-issues (pai e filha são sempre do mesmo time)', async () => {
+      const db = await setup();
+      const target = await newTriageIssue(db, 'Pai na triagem');
+      const child = await createIssue(
+         db,
+         {
+            teamId: 'CORE',
+            title: 'Filha',
+            statusId: 'to-do',
+            priorityId: 'low',
+            parentId: target.id,
+         },
+         ANA
+      );
+      agentMocks.invokeText.mockResolvedValue(
+         JSON.stringify({ teamId: 'DESIGN', priorityId: 'high', labelIds: [], duplicates: [] })
+      );
+      await generateTriageSuggestion(db, target.id, { force: true });
+      await acceptTriageSuggestion(db, target.id, ANA);
+
+      const [row] = await db.select().from(issueT).where(eq(issueT.id, child.id));
+      expect(row.teamId).toBe('CORE');
+      expect(row.parentId).toBeNull();
+   });
+
+   it('se o status falha depois do commit, desfaz a mudança de time e os vínculos', async () => {
+      const db = await setup();
+      const proj = await createProject(db, {
+         name: 'Portal',
+         statusId: 'proj-in-progress',
+         priorityId: 'high',
+         healthId: 'on-track',
+         teamId: 'CORE',
+      });
+      const parent = await createIssue(
+         db,
+         { teamId: 'CORE', title: 'Pai', statusId: 'to-do', priorityId: 'low' },
+         ANA
+      );
+      const target = await createIssue(
+         db,
+         {
+            teamId: 'CORE',
+            title: 'Menu quebrado',
+            statusId: 'triage',
+            priorityId: 'no-priority',
+            projectId: proj.id,
+            parentId: parent.id,
+         },
+         ANA
+      );
+      const child = await createIssue(
+         db,
+         {
+            teamId: 'CORE',
+            title: 'Filha',
+            statusId: 'to-do',
+            priorityId: 'low',
+            parentId: target.id,
+         },
+         ANA
+      );
+      agentMocks.invokeText.mockResolvedValue(
+         JSON.stringify({ teamId: 'DESIGN', priorityId: 'high', labelIds: ['bug'], duplicates: [] })
+      );
+      await generateTriageSuggestion(db, target.id, { force: true });
+      // O `updateIssue` do status falha (simulado no banco): a issue não pode sair da
+      // fila sem time, projeto, pai e filhas.
+      await db.execute(sql`
+         CREATE FUNCTION fail_status() RETURNS trigger LANGUAGE plpgsql AS $$
+         BEGIN
+            IF NEW.status_id <> OLD.status_id THEN RAISE EXCEPTION 'falha simulada'; END IF;
+            RETURN NEW;
+         END $$
+      `);
+      await db.execute(
+         sql`CREATE TRIGGER fail_status BEFORE UPDATE ON issue FOR EACH ROW EXECUTE FUNCTION fail_status()`
+      );
+
+      await expect(acceptTriageSuggestion(db, target.id, ANA)).rejects.toThrow();
+
+      const [row] = await db.select().from(issueT).where(eq(issueT.id, target.id));
+      expect(row).toMatchObject({
+         teamId: 'CORE',
+         identifier: target.identifier,
+         projectId: proj.id,
+         parentId: parent.id,
+         statusId: 'triage',
+      });
+      const [kid] = await db.select().from(issueT).where(eq(issueT.id, child.id));
+      expect(kid.parentId).toBe(target.id);
+      expect(await db.select().from(issueLabel).where(eq(issueLabel.issueId, target.id))).toEqual(
+         []
+      );
+      expect(
+         await db
+            .select()
+            .from(activityEvent)
+            .where(and(eq(activityEvent.issueId, target.id), eq(activityEvent.event, 'triage')))
+      ).toEqual([]);
+      expect((await getTriageSuggestion(db, target.id))?.appliedAt).toBeFalsy();
+   });
+
+   it('mover de time avisa o time antigo (as filhas soltas ficam lá)', async () => {
+      const db = await setup();
+      const target = await newTriageIssue(db, 'Pai na triagem');
+      agentMocks.invokeText.mockResolvedValue(
+         JSON.stringify({ teamId: 'DESIGN', priorityId: 'high', labelIds: [], duplicates: [] })
+      );
+      await generateTriageSuggestion(db, target.id, { force: true });
+      const events: CircleEvent[] = [];
+      const stop = subscribe((e) => events.push(e));
+      try {
+         await acceptTriageSuggestion(db, target.id, ANA);
+      } finally {
+         stop();
+      }
+      expect(events).toContainEqual(
+         expect.objectContaining({ entity: 'issue', action: 'updated', teamId: 'CORE' })
+      );
+      const coarse = events.find((e) => e.entity === 'issue' && e.teamId === 'CORE');
+      expect(coarse?.id).toBeUndefined();
    });
 
    it('recusa label inexistente sem tocar na issue', async () => {

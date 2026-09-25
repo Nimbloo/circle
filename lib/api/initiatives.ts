@@ -1,17 +1,20 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, inArray, ne } from 'drizzle-orm';
+import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { Db } from '@/db';
 import {
    initiative as initT,
    initiativeActivity,
    initiativeLabel,
    initiativeProject,
+   initiativeUpdate,
    project as projectT,
    priority as priorityT,
    health as healthT,
    projectStatus as projectStatusT,
    appUser,
    label as labelT,
+   issue as issueT,
+   status as issueStatusT,
 } from '@/db/schema';
 import { targetDateFromLabel } from '@/lib/initiative-period';
 import { ApiError } from './errors';
@@ -86,7 +89,7 @@ async function projectsByInitiative(db: Db, initIds: string[]) {
            .where(inArray(initiativeProject.initiativeId, initIds))
       : [];
    const projectIds = [...new Set(links.map((l) => l.projectId))];
-   const [projects, statuses] = await Promise.all([
+   const [projects, statuses, issueCounts] = await Promise.all([
       projectIds.length
          ? db
               .select({
@@ -99,14 +102,33 @@ async function projectsByInitiative(db: Db, initIds: string[]) {
          : Promise.resolve([]),
       // Categorias dos status de PROJETO (projeto usa project_status, não o de issue).
       db.select().from(projectStatusT),
+      // % real derivado das issues (done/total), a mesma conta da lista e do roadmap.
+      projectIds.length
+         ? db
+              .select({
+                 projectId: issueT.projectId,
+                 total: sql<number>`count(*)`,
+                 done: sql<number>`count(*) filter (where ${issueStatusT.category} = 'completed')`,
+              })
+              .from(issueT)
+              .innerJoin(issueStatusT, eq(issueT.statusId, issueStatusT.id))
+              .where(inArray(issueT.projectId, projectIds))
+              .groupBy(issueT.projectId)
+         : Promise.resolve([]),
    ]);
    const catById = new Map(statuses.map((s) => [s.id, s.category]));
+   const pctById = new Map(
+      issueCounts.map((c) => [
+         c.projectId,
+         Number(c.total) > 0 ? Math.round((Number(c.done) / Number(c.total)) * 100) : null,
+      ])
+   );
    const isCompleted = new Map(
       projects.map((p) => [
          p.id,
          isProjectCompleted({
             status: { category: catById.get(p.statusId) ?? '' },
-            percentComplete: p.percentComplete,
+            percentComplete: pctById.get(p.id) ?? p.percentComplete,
          }),
       ])
    );
@@ -149,6 +171,27 @@ export async function publishInitiativeRollups(
       for (const ancestor of await initiativeAncestorIds(db, id)) ids.add(ancestor);
    }
    for (const id of ids) publish({ entity: 'initiative', action: 'updated', id });
+}
+
+/**
+ * `project updated` para os projetos (des)vinculados, cada um com o `teamId` DELE: sem
+ * o time, o convidado recebia o evento redigido e re-hidratava o workspace inteiro em
+ * vez de aplicar só o projeto. Chamar depois do commit.
+ */
+async function publishProjectsTouched(db: Db, projectIds: readonly string[]): Promise<void> {
+   if (projectIds.length === 0) return;
+   const rows = await db
+      .select({ id: projectT.id, teamId: projectT.teamId })
+      .from(projectT)
+      .where(inArray(projectT.id, [...projectIds]));
+   const teamById = new Map(rows.map((r) => [r.id, r.teamId]));
+   for (const projectId of projectIds)
+      publish({
+         entity: 'project',
+         action: 'updated',
+         id: projectId,
+         teamId: teamById.get(projectId),
+      });
 }
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -419,8 +462,7 @@ export async function createInitiative(
       former = await linkProjects(tx, id, projectIds);
    });
    publish({ entity: 'initiative', action: 'created', id });
-   for (const projectId of projectIds)
-      publish({ entity: 'project', action: 'updated', id: projectId });
+   await publishProjectsTouched(db, projectIds);
    await publishInitiativeRollups(db, [input.parentId, ...former]);
    return (await getInitiative(db, id))!;
 }
@@ -569,8 +611,7 @@ export async function updateInitiative(
       }
    });
    publish({ entity: 'initiative', action: 'updated', id });
-   for (const projectId of touchedProjects)
-      publish({ entity: 'project', action: 'updated', id: projectId });
+   await publishProjectsTouched(db, touchedProjects);
    // Rollup: ancestrais desta, as que perderam projeto e a mãe antiga (se trocou de pai).
    await publishInitiativeRollups(db, [
       ...(await initiativeAncestorIds(db, id)),
@@ -621,7 +662,7 @@ export async function listInitiativeActivity(
 export async function deleteInitiative(db: Db, id: string): Promise<boolean> {
    const existing = await db.select({ id: initT.id }).from(initT).where(eq(initT.id, id)).limit(1);
    if (existing.length === 0) return false;
-   await db.transaction(async (tx) => {
+   const reparented = await db.transaction(async (tx) => {
       // Sub-initiatives (#100): as filhas sobem pro avô — o FK self-referente não
       // aceita pai inexistente.
       const [row] = await tx
@@ -629,16 +670,28 @@ export async function deleteInitiative(db: Db, id: string): Promise<boolean> {
          .from(initT)
          .where(eq(initT.id, id))
          .limit(1);
-      await tx
+      const children = await tx
          .update(initT)
          .set({ parentId: row?.parentId ?? null })
-         .where(eq(initT.parentId, id));
+         .where(eq(initT.parentId, id))
+         .returning({ id: initT.id });
       await tx.delete(initiativeProject).where(eq(initiativeProject.initiativeId, id));
       await tx.delete(initiativeLabel).where(eq(initiativeLabel.initiativeId, id));
+      // Feed e updates de health referenciam a initiative sem cascade: sem isto, excluir
+      // uma initiative já editada (ou com update postado) estourava a FK (23503).
+      await tx.delete(initiativeActivity).where(eq(initiativeActivity.initiativeId, id));
+      await tx.delete(initiativeUpdate).where(eq(initiativeUpdate.initiativeId, id));
       // project.initiativeId é RESTRICT e nullable: desvincula os projetos antes de deletar.
       await tx.update(projectT).set({ initiativeId: null }).where(eq(projectT.initiativeId, id));
       await tx.delete(initT).where(eq(initT.id, id));
+      return { parentId: row?.parentId ?? null, childIds: children.map((c) => c.id) };
    });
    publish({ entity: 'initiative', action: 'deleted', id });
+   // As filhas mudaram de pai (subiram pro avô): sem o evento, a árvore dos outros
+   // clientes seguia pendurada numa initiative que não existe mais. O avô ganhou
+   // filhas e perdeu a subárvore apagada — o rollup dele (e dos ancestrais) mudou.
+   for (const childId of reparented.childIds)
+      publish({ entity: 'initiative', action: 'updated', id: childId });
+   await publishInitiativeRollups(db, [reparented.parentId]);
    return true;
 }

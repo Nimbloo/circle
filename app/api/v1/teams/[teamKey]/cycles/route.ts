@@ -31,8 +31,8 @@ const CreateSchema = z.object({
       .trim()
       .min(1, 'name é obrigatório')
       .max(96, 'name deve ter no máximo 96 caracteres'),
-   startDate: z.string().trim().min(1),
-   endDate: z.string().trim().min(1),
+   startDate: z.string().trim().date('use o formato YYYY-MM-DD'),
+   endDate: z.string().trim().date('use o formato YYYY-MM-DD'),
    status: z.enum(['planned', 'upcoming', 'current', 'completed']).optional(),
    capacity: z
       .number({ invalid_type_error: 'capacity deve ser um inteiro maior ou igual a zero' })

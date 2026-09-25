@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { ok } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
 import { isAdmin } from '@/lib/api/auth';
+import { assertTeamInScope, scopeForEmail } from '@/lib/api/scope';
 import { ApiError } from '@/lib/api/errors';
 import { assertAssignableUsers } from '@/lib/api/members';
 import {
@@ -30,8 +31,10 @@ const ConfigSchema = z.object({
 
 export async function GET(req: Request, { params }: Params) {
    return handle(async () => {
-      await requireEmail(req);
+      const email = await requireEmail(req);
       const { teamKey } = await params;
+      // Guest fora do time (#100): 403, como em GET /teams/{key}.
+      assertTeamInScope((await scopeForEmail(db, email)).teamIds, teamKey);
       return ok(await listTeamAutomations(db, teamKey));
    }, req);
 }

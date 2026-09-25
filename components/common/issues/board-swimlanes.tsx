@@ -52,7 +52,7 @@ function Cell({ group, issues }: SwimlaneCell) {
                // 132px = altura típica do card (mesma estimativa da coluna virtualizada).
                className="[content-visibility:auto] [contain-intrinsic-size:auto_132px]"
             >
-               <IssueGrid issue={issue} getGroup={getGroup} layout={false} />
+               <IssueGrid issue={issue} getGroup={getGroup} />
             </div>
          ))}
       </div>

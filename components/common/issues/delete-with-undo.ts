@@ -140,6 +140,11 @@ export function deleteIssuesWithUndo(
                   return;
                }
                restoreListed(stillGone);
+               // Durante a janela o store ignorou os eventos destas issues (pendingDelete):
+               // o snapshot pode estar velho — busca a versão atual de cada uma que voltou.
+               const { applyRemote } = useIssuesStore.getState();
+               for (const issue of stillGone)
+                  if (inStoreIds.has(issue.id)) void applyRemote(issue.id);
             },
          },
       }

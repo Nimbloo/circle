@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { makeTestDb } from './helpers/db';
 import { seedTeam } from './helpers/fixtures';
-import { cycle } from '@/db/schema';
+import { activityEvent, cycle } from '@/db/schema';
 import { createIssue, updateIssue } from '@/lib/api/issues';
 import { listActivity } from '@/lib/api/issue-detail';
 
@@ -64,6 +64,29 @@ describe('texto do histórico da issue (is#8)', () => {
          'removed from cycle Cycle 2',
       ]);
       expect(out.join(' ')).not.toMatch(/[0-9a-f]{8}-/);
+   });
+
+   it('remover o ciclo com "" (o que a UI envia) também vira "removed from cycle"', async () => {
+      const { db, dto } = await setup();
+      await updateIssue(db, dto.id, { cycleId: C1 }, ME);
+      await updateIssue(db, dto.id, { cycleId: '' }, ME);
+      expect(await texts(db, dto.id, 'cycle')).toEqual([
+         'added to cycle Cycle 1',
+         'removed from cycle Cycle 1',
+      ]);
+   });
+
+   it('evento legado "changed cycle from X to " (sem destino) lê como remoção', async () => {
+      const { db, dto } = await setup();
+      await db.insert(activityEvent).values({
+         id: crypto.randomUUID(),
+         issueId: dto.id,
+         actorId: null,
+         event: 'cycle',
+         text: `changed cycle from ${C2} to `,
+         createdAt: new Date(),
+      });
+      expect(await texts(db, dto.id, 'cycle')).toEqual(['removed from cycle Cycle 2']);
    });
 
    it('auto-add ao iniciar mostra o nome do ciclo', async () => {

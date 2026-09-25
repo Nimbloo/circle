@@ -127,6 +127,8 @@ export interface IssueDetailDto {
    /** Issues que ESTA bloqueia (lado inverso de blocked_by — paridade Linear "Blocks"). */
    blockingIds: string[];
    duplicateIds: string[];
+   /** Issues marcadas como duplicata DESTA (lado inverso — Linear "Duplicated by"). */
+   duplicatedByIds: string[];
    /** `reviewId`/`repo`/`number`/`url` vêm da review do PR (null em vínculo antigo). */
    prLinks: {
       id: string;
@@ -230,11 +232,17 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
       await Promise.all([
          db.select().from(issueContent).where(eq(issueContent.issueId, issueId)).limit(1),
          db.select().from(issueRelation).where(eq(issueRelation.issueId, issueId)),
-         // Lado inverso: outras issues que declaram ESTA como blocked_by → ESTA as bloqueia.
+         // Lado inverso: outras issues que declaram ESTA como blocked_by → ESTA as bloqueia;
+         // `related` é simétrica (Linear) e `duplicate` ganha o "Duplicated by" do alvo.
          db
-            .select({ issueId: issueRelation.issueId })
+            .select({ issueId: issueRelation.issueId, kind: issueRelation.kind })
             .from(issueRelation)
-            .where(and(eq(issueRelation.relatedId, issueId), eq(issueRelation.kind, 'blocked_by'))),
+            .where(
+               and(
+                  eq(issueRelation.relatedId, issueId),
+                  inArray(issueRelation.kind, ['blocked_by', 'related', 'duplicate'])
+               )
+            ),
          // O id do vínculo é md5("issueId|repo#número") (reviews.ts `prLinkId`), e
          // "repo#número" é o id da review: o join devolve número/repo/url sem coluna nova.
          // Vínculo antigo (id por título) não casa e fica só com título e status.
@@ -304,10 +312,16 @@ export async function getIssueDetail(db: Db, issueId: string): Promise<IssueDeta
       parent: parentRows[0] ?? null,
       subIssues,
       subIssueIds: subIssues.map((s) => s.id),
-      relatedIds: relations.filter((r) => r.kind === 'related').map((r) => r.relatedId),
+      relatedIds: [
+         ...new Set([
+            ...relations.filter((r) => r.kind === 'related').map((r) => r.relatedId),
+            ...blocking.filter((b) => b.kind === 'related').map((b) => b.issueId),
+         ]),
+      ],
       blockedByIds: relations.filter((r) => r.kind === 'blocked_by').map((r) => r.relatedId),
-      blockingIds: blocking.map((b) => b.issueId),
+      blockingIds: blocking.filter((b) => b.kind === 'blocked_by').map((b) => b.issueId),
       duplicateIds: relations.filter((r) => r.kind === 'duplicate').map((r) => r.relatedId),
+      duplicatedByIds: blocking.filter((b) => b.kind === 'duplicate').map((b) => b.issueId),
       prLinks: prs.map((p) => ({
          id: p.id,
          title: p.title,
@@ -450,6 +464,16 @@ async function recordRelationEvent(
    });
 }
 
+/** O par da relação: `related` é simétrica (vale gravada em qualquer direção). */
+function relationPair(issueId: string, relatedId: string, kind: RelationKind) {
+   const forward = and(eq(issueRelation.issueId, issueId), eq(issueRelation.relatedId, relatedId));
+   if (kind !== 'related') return forward;
+   return or(
+      forward,
+      and(eq(issueRelation.issueId, relatedId), eq(issueRelation.relatedId, issueId))
+   );
+}
+
 /** Cria uma relação issueId -> relatedId (idempotente). Retorna o detail atualizado. */
 export async function addRelation(
    db: Db,
@@ -487,18 +511,17 @@ export async function addRelation(
    const existing = await db
       .select({ id: issueRelation.id })
       .from(issueRelation)
-      .where(
-         and(
-            eq(issueRelation.issueId, issueId),
-            eq(issueRelation.relatedId, relatedId),
-            eq(issueRelation.kind, kind)
-         )
-      )
+      .where(and(relationPair(issueId, relatedId, kind), eq(issueRelation.kind, kind)))
       .limit(1);
    if (existing.length === 0) {
-      await db.insert(issueRelation).values({ id: randomUUID(), issueId, relatedId, kind });
+      // Add concorrente do mesmo par: o índice único segura, e só quem inseriu grava o evento.
+      const inserted = await db
+         .insert(issueRelation)
+         .values({ id: randomUUID(), issueId, relatedId, kind })
+         .onConflictDoNothing()
+         .returning({ id: issueRelation.id });
       // trilha no feed só quando o vínculo é novo (re-add idempotente não gera evento)
-      await recordRelationEvent(db, issueId, kind, true, actorEmail);
+      if (inserted.length > 0) await recordRelationEvent(db, issueId, kind, true, actorEmail);
    }
    publish({
       entity: 'issue',
@@ -506,6 +529,7 @@ export async function addRelation(
       id: issueId,
       teamId: await issueTeamId(db, issueId),
    });
+   if (existing.length === 0) await publishRelatedSide(db, relatedId);
    return getIssueDetail(db, issueId);
 }
 
@@ -535,13 +559,7 @@ export async function removeRelation(
    }
    const deleted = await db
       .delete(issueRelation)
-      .where(
-         and(
-            eq(issueRelation.issueId, issueId),
-            eq(issueRelation.relatedId, relatedId),
-            eq(issueRelation.kind, kind)
-         )
-      )
+      .where(and(relationPair(issueId, relatedId, kind), eq(issueRelation.kind, kind)))
       .returning({ id: issueRelation.id });
    if (deleted.length > 0) await recordRelationEvent(db, issueId, kind, false, actorEmail);
    publish({
@@ -550,7 +568,22 @@ export async function removeRelation(
       id: issueId,
       teamId: await issueTeamId(db, issueId),
    });
+   if (deleted.length > 0) await publishRelatedSide(db, relatedId);
    return getIssueDetail(db, issueId);
+}
+
+/**
+ * A OUTRA ponta da relação também mudou: o detalhe dela mostra o vínculo inverso
+ * ("blocks"/"related"). Sem este evento, quem estava com ela aberta via o estado velho.
+ * `teamId` é o DELA (pode ser outro time), para o corte por escopo do stream.
+ */
+async function publishRelatedSide(db: Db, relatedId: string): Promise<void> {
+   publish({
+      entity: 'issue',
+      action: 'updated',
+      id: relatedId,
+      teamId: await issueTeamId(db, relatedId),
+   });
 }
 
 /**
@@ -934,7 +967,8 @@ export async function deleteComment(
    return true;
 }
 
-const CYCLE_CHANGE = /^changed cycle from (\S+) to (\S+)$/;
+// `to` vazio: remoção gravada com `cycleId: ""` antes da correção — lê como "none".
+const CYCLE_CHANGE = /^changed cycle from (\S+) to (\S*)$/;
 const CYCLE_AUTO_ADD = /^added to cycle (\S+) on start$/;
 
 /**
@@ -949,7 +983,7 @@ async function humanizeCycleEvents(
    for (const e of events) {
       if (e.event !== 'cycle' || !e.text) continue;
       const m = e.text.match(CYCLE_CHANGE) ?? e.text.match(CYCLE_AUTO_ADD);
-      for (const id of m?.slice(1) ?? []) if (id !== 'none') ids.add(id);
+      for (const id of m?.slice(1) ?? []) if (id && id !== 'none') ids.add(id);
    }
    const names = new Map<string, string>();
    if (ids.size === 0) return names;
@@ -967,7 +1001,8 @@ function cycleEventText(text: string, names: Map<string, string>): string {
    if (auto) return `added to cycle ${name(auto[1])} on start`;
    const change = text.match(CYCLE_CHANGE);
    if (!change) return text;
-   const [, from, to] = change;
+   const [, from, rawTo] = change;
+   const to = rawTo || 'none';
    if (from === 'none') return `added to cycle ${name(to)}`;
    if (to === 'none') return `removed from cycle ${name(from)}`;
    return `moved from ${name(from)} to ${name(to)}`;

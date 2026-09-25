@@ -14,6 +14,8 @@ import { SettingsCard, SettingsRow, SettingsSection, SettingsShell } from './sha
 /** "Join or create a team" settings page. */
 export default function NewTeam() {
    const applyTeam = useWorkspaceStore((s) => s.applyTeam);
+   // Convidado não cria time (o servidor responde 403), como no botão "New team".
+   const isGuest = useWorkspaceStore((s) => s.me?.role === 'Guest');
 
    // Fonte autoritativa: a API traz `joined` + `requested` + contagens (o store adaptado
    // não carrega o `requested`). Settings não é hot-path — um fetch dedicado é ok e correto.
@@ -72,43 +74,47 @@ export default function NewTeam() {
          title="Entrar ou criar um time"
          description="Times organizam issues, ciclos e projetos em torno das pessoas que trabalham juntas"
       >
-         <SettingsSection title="Criar um novo time">
-            <SettingsCard>
-               <div className="flex items-center gap-3 p-4">
-                  <Input
-                     placeholder="Key, ex.: CORE"
-                     value={key}
-                     onChange={(e) => setKey(e.target.value.toUpperCase())}
-                     maxLength={16}
-                     className="h-8 w-32"
-                  />
-                  <Input
-                     placeholder="Nome do time, ex.: Mobile"
-                     value={name}
-                     onChange={(e) => setName(e.target.value)}
-                     onKeyDown={(e) => {
-                        if (e.key === 'Enter') void create();
-                     }}
-                     className="h-8 flex-1"
-                  />
-                  <Button
-                     size="xs"
-                     onClick={() => void create()}
-                     disabled={busy || !key.trim() || !name.trim()}
-                  >
-                     Criar time
-                  </Button>
-               </div>
-            </SettingsCard>
-         </SettingsSection>
+         {!isGuest && (
+            <SettingsSection title="Criar um novo time">
+               <SettingsCard>
+                  <div className="flex items-center gap-3 p-4">
+                     <Input
+                        placeholder="Key, ex.: CORE"
+                        value={key}
+                        onChange={(e) => setKey(e.target.value.toUpperCase())}
+                        maxLength={16}
+                        className="h-8 w-32"
+                     />
+                     <Input
+                        placeholder="Nome do time, ex.: Mobile"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        onKeyDown={(e) => {
+                           if (e.key === 'Enter') void create();
+                        }}
+                        className="h-8 flex-1"
+                     />
+                     <Button
+                        size="xs"
+                        onClick={() => void create()}
+                        disabled={busy || !key.trim() || !name.trim()}
+                     >
+                        Criar time
+                     </Button>
+                  </div>
+               </SettingsCard>
+            </SettingsSection>
+         )}
 
          <SettingsSection title="Entrar num time existente">
             <SettingsCard>
-               {notJoined.length === 0 ? (
+               {isGuest || notJoined.length === 0 ? (
                   <div className="p-4 text-sm text-muted-foreground">
-                     {teams.length === 0
-                        ? 'Nenhum time ainda — crie o primeiro acima.'
-                        : 'Você já faz parte de todos os times.'}
+                     {isGuest
+                        ? 'Convidados entram em times pelas mãos de um admin.'
+                        : teams.length === 0
+                          ? 'Nenhum time ainda — crie o primeiro acima.'
+                          : 'Você já faz parte de todos os times.'}
                   </div>
                ) : (
                   notJoined.map((team) => (

@@ -277,6 +277,9 @@ export const project = pgTable(
    (t) => [
       index('idx_project_team').on(t.teamId),
       index('idx_project_initiative').on(t.initiativeId),
+      // Ordem das datas: trigger `project_date_order` (migration 0054) recusa com 23514 só
+      // quando início/alvo mudam — dois patches parciais concorrentes não invertem o
+      // intervalo, e projeto legado com datas invertidas continua editável no resto.
    ]
 );
 
@@ -479,6 +482,8 @@ export const issueRelation = pgTable(
    (t) => [
       index('idx_issue_relation_issue').on(t.issueId),
       index('idx_issue_relation_related').on(t.relatedId),
+      // Um vínculo por (issue, relacionada, tipo): adds concorrentes não duplicam.
+      uniqueIndex('issue_relation_pair_unique').on(t.issueId, t.relatedId, t.kind),
    ]
 );
 

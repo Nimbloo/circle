@@ -60,7 +60,7 @@ function Column() {
    return (
       <>
          {issues.map((issue) => (
-            <IssueGrid key={issue.id} issue={issue} getGroup={getGroup} layout={false} />
+            <IssueGrid key={issue.id} issue={issue} getGroup={getGroup} />
          ))}
       </>
    );
