@@ -166,9 +166,14 @@ Convenções detalhadas (e como o Claude deve mexer no projeto) estão no **[CLA
 — o fluxo é `develop → main`:
 
 1. Merge de um PR `develop → main` → o workflow `.github/workflows/build-and-push.yml`
-   builda a imagem Docker e faz push para o ECR `circle/prd:<versão do package.json>`.
+   builda a imagem Docker **multi-arch** (`linux/amd64` + `linux/arm64`, um job por
+   plataforma em runner nativo — sem QEMU) e faz push do manifest combinado para o ECR
+   `circle/prd:<versão do package.json>`.
 2. O **ArgoCD Image Updater** detecta a nova tag semver, atualiza o chart em `nimbloo-k8s`
    e sincroniza — o rollout em `circle.nimbloo.ai` é **automático**.
+
+> A imagem é multi-arch desde já, mas o deploy segue em `amd64` até o chart (`nimbloo-k8s`,
+> fora deste repo) ganhar `nodeSelector: nodepool: default-arm` — passo 2, feito à parte.
 
 Regras de versão (SemVer em `package.json`):
 
