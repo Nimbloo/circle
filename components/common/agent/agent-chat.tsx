@@ -388,7 +388,9 @@ export default function AgentChat() {
          </div>
          <div className="shrink-0 border-t bg-container">
             <div className="max-w-2xl mx-auto px-6 py-4">
-               <ChatComposer onSend={handleSend} disabled={isStreaming} />
+               {/* `key`: força remontar ao trocar de chat — senão o texto ainda não
+                   enviado do chat anterior sobrevivia à troca e ia pro chat errado. */}
+               <ChatComposer key={activeChat.id} onSend={handleSend} disabled={isStreaming} />
             </div>
          </div>
       </div>
