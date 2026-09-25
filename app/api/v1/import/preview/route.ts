@@ -2,6 +2,7 @@ import { db } from '@/db';
 import { handle, requireEmail } from '@/lib/api/http';
 import { ok } from '@/lib/api/response';
 import { ApiError } from '@/lib/api/errors';
+import { assertCanWriteTeam } from '@/lib/api/scope';
 import {
    IMPORT_LIMITS,
    previewImport,
@@ -57,10 +58,13 @@ async function readCsv(
  */
 export async function POST(req: Request) {
    return handle(async () => {
-      await requireEmail(req);
+      const email = await requireEmail(req);
       validateImportRequestSize(req);
       const { csv, source, mapping, teamId } = await readCsv(req);
       validateImportCsv(csv);
+      // O `existing` de cada linha consulta o `issue_import` do time: fora do escopo,
+      // revelaria quais externalIds existem num time que o ator não enxerga.
+      if (teamId) await assertCanWriteTeam(db, email, teamId);
       return ok(await previewImport(db, { csv, source, mapping, teamId: teamId || undefined }));
    }, req);
 }
