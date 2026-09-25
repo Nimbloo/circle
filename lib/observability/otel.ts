@@ -1,5 +1,10 @@
 import { registerOTel } from '@vercel/otel';
-import { SamplingDecision, type Sampler, type SamplingResult } from '@opentelemetry/sdk-trace-base';
+import {
+   ParentBasedSampler,
+   SamplingDecision,
+   type Sampler,
+   type SamplingResult,
+} from '@opentelemetry/sdk-trace-base';
 
 /**
  * Probes do K8s (`/api/healthz`, `/api/readyz`) — o kubelet bate neles a cada poucos
@@ -29,6 +34,13 @@ export const ignoreHealthProbes: Sampler = {
 };
 
 /**
+ * Só o span RAIZ passa pelo filtro das probes; os filhos herdam a decisão do pai. Sem
+ * isso, spans filhos de uma probe descartada (cujo nome não traz o path) seriam
+ * amostrados e chegariam ao Tempo órfãos.
+ */
+export const tracingSampler: Sampler = new ParentBasedSampler({ root: ignoreHealthProbes });
+
+/**
  * Traces do servidor Next.js (App Router, route handlers) via OpenTelemetry, exportados
  * OTLP/HTTP para o Grafana Tempo.
  *
@@ -54,6 +66,6 @@ export function registerTracing(): void {
 
    registerOTel({
       serviceName: 'circle',
-      traceSampler: ignoreHealthProbes,
+      traceSampler: tracingSampler,
    });
 }
