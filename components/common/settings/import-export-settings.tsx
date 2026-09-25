@@ -74,6 +74,8 @@ function Warnings({ items }: { items: string[] }) {
 
 export default function ImportExportSettings() {
    const teams = useWorkspaceStore((s) => s.teams);
+   // Criar label é só admin (o servidor recusa com 403): o toggle nem aparece para os outros.
+   const isAdmin = useWorkspaceStore((s) => s.me?.admin ?? false);
 
    const [step, setStep] = useState<Step>('upload');
    const [source, setSource] = useState<ImportSource>('csv');
@@ -121,7 +123,13 @@ export default function ImportExportSettings() {
       if (!file || busy) return;
       setBusy(true);
       try {
-         const dto = await api.importIssues.preview(file, source);
+         // "Criar"/"Atualizar" da amostra é por time: usa o destino que será proposto.
+         const dto = await api.importIssues.preview(
+            file,
+            source,
+            undefined,
+            teamId || teams[0]?.id || undefined
+         );
          setFileName(file.name);
          setCsv(await file.text());
          setPreview(dto);
@@ -147,7 +155,7 @@ export default function ImportExportSettings() {
             csv,
             teamId,
             mapping,
-            createMissingLabels: createLabels,
+            createMissingLabels: isAdmin && createLabels,
          });
          // Job em background (#10): a tela acompanha o progresso até o fim.
          setJobId(id);
@@ -291,17 +299,19 @@ export default function ImportExportSettings() {
                            }
                         />
                      ))}
-                     <SettingsRow
-                        title="Criar labels que não existem"
-                        description="Sem isto, labels sem correspondência no catálogo são ignoradas."
-                        trailing={
-                           <Checkbox
-                              aria-label="Criar labels que não existem"
-                              checked={createLabels}
-                              onCheckedChange={(v) => setCreateLabels(v === true)}
-                           />
-                        }
-                     />
+                     {isAdmin && (
+                        <SettingsRow
+                           title="Criar labels que não existem"
+                           description="Sem isto, labels sem correspondência no catálogo são ignoradas."
+                           trailing={
+                              <Checkbox
+                                 aria-label="Criar labels que não existem"
+                                 checked={createLabels}
+                                 onCheckedChange={(v) => setCreateLabels(v === true)}
+                              />
+                           }
+                        />
+                     )}
                   </SettingsCard>
 
                   <SettingsCard>

@@ -33,7 +33,8 @@ describe('import/export de issues (#101)', () => {
    beforeEach(async () => {
       db = await makeTestDb();
       await seedTeam(db, 'CORE', 'Core');
-      await seedUser(db, { name: 'Owner', email: ACTOR, teamIds: ['CORE'] });
+      // Admin: um dos casos cria labels no catálogo, o que é só de admin.
+      await seedUser(db, { name: 'Owner', email: ACTOR, role: 'Admin', teamIds: ['CORE'] });
    });
 
    it('parseia CSV com aspas, vírgula interna e CRLF', () => {
@@ -130,7 +131,11 @@ describe('import/export de issues (#101)', () => {
    it('preview marca como existente o que já foi importado', async () => {
       const mapping = suggestMapping('linear', LINEAR_CSV.split('\n')[0].split(','));
       await commitImport(db, { source: 'linear', csv: LINEAR_CSV, mapping, teamId: 'CORE' }, ACTOR);
-      const preview = await previewImport(db, { source: 'linear', csv: LINEAR_CSV });
+      const preview = await previewImport(db, {
+         source: 'linear',
+         csv: LINEAR_CSV,
+         teamId: 'CORE',
+      });
       expect(preview.sample.every((r) => r.existing)).toBe(true);
    });
 

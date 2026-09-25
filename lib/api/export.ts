@@ -61,6 +61,19 @@ export async function exportIssueRows(
    return { issues: rows.slice(0, limit), truncated: rows.length > limit };
 }
 
+/** Descrição (texto) de cada issue — o `listIssues` não a carrega. */
+export async function exportDescriptions(
+   db: Db,
+   ids: string[]
+): Promise<Map<string, string | null>> {
+   if (ids.length === 0) return new Map();
+   const rows = await db
+      .select({ issueId: issueContent.issueId, description: issueContent.description })
+      .from(issueContent)
+      .where(inArray(issueContent.issueId, ids));
+   return new Map(rows.map((d) => [d.issueId, d.description]));
+}
+
 const iso = (v: Date | string | null): string =>
    v instanceof Date ? v.toISOString() : (v ?? '').toString();
 
@@ -69,13 +82,8 @@ export async function exportIssuesJson(db: Db, opts: IssueListOptions = {}): Pro
    const { issues, truncated } = await exportIssueRows(db, opts);
    const ids = issues.map((i) => i.id);
 
-   const [descriptions, comments] = await Promise.all([
-      ids.length
-         ? db
-              .select({ issueId: issueContent.issueId, description: issueContent.description })
-              .from(issueContent)
-              .where(inArray(issueContent.issueId, ids))
-         : Promise.resolve([]),
+   const [descById, comments] = await Promise.all([
+      exportDescriptions(db, ids),
       ids.length
          ? db
               .select()
@@ -90,7 +98,6 @@ export async function exportIssuesJson(db: Db, opts: IssueListOptions = {}): Pro
       ? await db.select().from(appUser).where(inArray(appUser.id, authorIds))
       : [];
    const authorById = new Map(authors.map((u) => [u.id, u]));
-   const descById = new Map(descriptions.map((d) => [d.issueId, d.description]));
 
    const commentsByIssue = new Map<string, ExportedComment[]>();
    for (const c of comments) {
