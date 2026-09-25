@@ -123,7 +123,13 @@ export default function ImportExportSettings() {
       if (!file || busy) return;
       setBusy(true);
       try {
-         const dto = await api.importIssues.preview(file, source);
+         // "Criar"/"Atualizar" da amostra é por time: usa o destino que será proposto.
+         const dto = await api.importIssues.preview(
+            file,
+            source,
+            undefined,
+            teamId || teams[0]?.id || undefined
+         );
          setFileName(file.name);
          setCsv(await file.text());
          setPreview(dto);

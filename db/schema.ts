@@ -1157,11 +1157,17 @@ export const issueImport = pgTable(
       issueId: varchar('issue_id', { length: 36 })
          .notNull()
          .references(() => issue.id),
+      /**
+       * Time de destino do import. A chave era global `(source, external_id)`: reimportar o
+       * arquivo em OUTRO time alterava as issues do primeiro. Nullable só pela migration
+       * (backfill de `issue.team_id`); todo insert novo grava.
+       */
+      teamId: varchar('team_id', { length: 16 }),
       createdAt: timestamp('created_at').notNull().defaultNow(),
       updatedAt: timestamp('updated_at').notNull().defaultNow(),
    },
    (t) => [
-      primaryKey({ columns: [t.source, t.externalId] }),
+      uniqueIndex('uq_issue_import_source_team_external').on(t.source, t.teamId, t.externalId),
       index('idx_issue_import_issue').on(t.issueId),
    ]
 );

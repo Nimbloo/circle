@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic';
 /** Lê o CSV do multipart (`file`) ou do corpo JSON (`csv`) — o wizard usa multipart. */
 async function readCsv(
    req: Request
-): Promise<{ csv: string; source: ImportSource; mapping?: ImportMapping }> {
+): Promise<{ csv: string; source: ImportSource; mapping?: ImportMapping; teamId?: string }> {
    const type = req.headers.get('content-type') ?? '';
    if (type.includes('multipart/form-data')) {
       const form = await req.formData();
@@ -33,15 +33,22 @@ async function readCsv(
             typeof rawMapping === 'string' && rawMapping
                ? (JSON.parse(rawMapping) as ImportMapping)
                : undefined,
+         teamId: typeof form.get('teamId') === 'string' ? String(form.get('teamId')) : undefined,
       };
    }
    const body = (await req.json().catch(() => null)) as {
       csv?: string;
       source?: ImportSource;
       mapping?: ImportMapping;
+      teamId?: string;
    } | null;
    if (!body?.csv) throw new ApiError(400, 'Informe `csv` (texto) ou envie multipart com `file`');
-   return { csv: body.csv, source: body.source ?? 'csv', mapping: body.mapping };
+   return {
+      csv: body.csv,
+      source: body.source ?? 'csv',
+      mapping: body.mapping,
+      teamId: typeof body.teamId === 'string' ? body.teamId : undefined,
+   };
 }
 
 /**
@@ -52,8 +59,8 @@ export async function POST(req: Request) {
    return handle(async () => {
       await requireEmail(req);
       validateImportRequestSize(req);
-      const { csv, source, mapping } = await readCsv(req);
+      const { csv, source, mapping, teamId } = await readCsv(req);
       validateImportCsv(csv);
-      return ok(await previewImport(db, { csv, source, mapping }));
+      return ok(await previewImport(db, { csv, source, mapping, teamId: teamId || undefined }));
    }, req);
 }

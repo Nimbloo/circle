@@ -75,6 +75,30 @@ describe('import: integridade', () => {
       await expect(run()).rejects.toMatchObject({ status: 400 });
       expect(await listIssues(db, { team: 'CORE' })).toHaveLength(0);
    });
+
+   it('o mesmo externalId em dois times gera duas issues; no mesmo time segue idempotente', async () => {
+      await seedTeam(db, 'OPS', 'Ops');
+      const csv = 'ID,Title\nEXT-1,Uma';
+      const mapping = { externalId: 'ID', title: 'Title' };
+      const run = (teamId: string, file = csv) =>
+         commitImport(db, { source: 'csv', csv: file, mapping, teamId }, ADMIN);
+
+      expect((await run('CORE')).created).toBe(1);
+      // Outro time: cria lá, NÃO altera a issue do CORE.
+      const ops = await run('OPS', 'ID,Title\nEXT-1,Uma (ops)');
+      expect(ops).toMatchObject({ created: 1, updated: 0 });
+      expect((await listIssues(db, { team: 'CORE' })).map((i) => i.title)).toEqual(['Uma']);
+      expect((await listIssues(db, { team: 'OPS' })).map((i) => i.title)).toEqual(['Uma (ops)']);
+
+      // Mesmo time: atualiza, não duplica.
+      const again = await run('CORE', 'ID,Title\nEXT-1,Uma (v2)');
+      expect(again).toMatchObject({ created: 0, updated: 1 });
+      expect((await listIssues(db, { team: 'CORE' })).map((i) => i.title)).toEqual(['Uma (v2)']);
+      expect((await listIssues(db, { team: 'OPS' })).map((i) => i.title)).toEqual(['Uma (ops)']);
+
+      const preview = await previewImport(db, { source: 'csv', csv, teamId: 'CORE' });
+      expect(preview.sample[0].existing).toBe(true);
+   });
 });
 
 describe('import: job', () => {

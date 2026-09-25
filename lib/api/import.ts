@@ -455,10 +455,14 @@ function mapRow(
    };
 }
 
-/** Ids externos desta origem já importados (para marcar a linha como atualização). */
+/**
+ * Ids externos desta origem já importados NO TIME (para marcar a linha como atualização).
+ * O rastro é por time: o mesmo arquivo em outro time cria issues lá, não altera as daqui.
+ */
 async function alreadyImported(
    db: Db,
    source: ImportSource,
+   teamId: string,
    externalIds: string[]
 ): Promise<Map<string, string>> {
    if (externalIds.length === 0) return new Map();
@@ -468,6 +472,7 @@ async function alreadyImported(
       .where(
          and(
             eq(issueImport.source, source),
+            eq(issueImport.teamId, teamId),
             inArray(issueImport.externalId, [...new Set(externalIds)])
          )!
       );
@@ -479,6 +484,8 @@ export interface PreviewImportInput {
    csv: string;
    /** Mapeamento explícito (o wizard reenvia o ajustado); omitido = proposto pelo preset. */
    mapping?: ImportMapping;
+   /** Time de destino: marca como "existente" o que já foi importado NELE. Sem time, nada é. */
+   teamId?: string;
 }
 
 /** Analisa o CSV sem escrever nada: colunas, mapeamento proposto, amostra e avisos. */
@@ -499,7 +506,11 @@ export async function previewImport(db: Db, input: PreviewImportInput): Promise<
    const externalIds = mapping.externalId
       ? rows.map((r) => cell(r, mapping.externalId)).filter(Boolean)
       : [];
-   const importedIds = new Set((await alreadyImported(db, input.source, externalIds)).keys());
+   const importedIds = new Set(
+      input.teamId
+         ? (await alreadyImported(db, input.source, input.teamId, externalIds)).keys()
+         : []
+   );
 
    const sample = rows
       .slice(0, PREVIEW_SAMPLE_SIZE)
@@ -608,6 +619,7 @@ export async function commitImport(
    const existingByExternal = await alreadyImported(
       db,
       input.source,
+      input.teamId,
       mapping.externalId ? rows.map((r) => cell(r, mapping.externalId)).filter(Boolean) : []
    );
 
@@ -701,12 +713,13 @@ export async function commitImport(
                .values({
                   source: input.source,
                   externalId: mapped.externalId,
+                  teamId: input.teamId,
                   issueId,
                   createdAt: now,
                   updatedAt: now,
                })
                .onConflictDoUpdate({
-                  target: [issueImport.source, issueImport.externalId],
+                  target: [issueImport.source, issueImport.teamId, issueImport.externalId],
                   set: { issueId, updatedAt: now },
                });
          }

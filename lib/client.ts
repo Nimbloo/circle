@@ -752,11 +752,12 @@ export const api = {
    /** Import de issues por CSV — wizard de Settings → Import/Export (#101). */
    importIssues: {
       /** Analisa o arquivo sem escrever: colunas, mapeamento proposto, amostra e avisos. */
-      preview: (file: File, source: ImportSource, mapping?: ImportMapping) => {
+      preview: (file: File, source: ImportSource, mapping?: ImportMapping, teamId?: string) => {
          const form = new FormData();
          form.set('file', file);
          form.set('source', source);
          if (mapping) form.set('mapping', JSON.stringify(mapping));
+         if (teamId) form.set('teamId', teamId);
          return postForm<ImportPreviewDto>('/import/preview', form);
       },
       /**
