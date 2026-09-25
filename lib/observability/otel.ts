@@ -12,13 +12,17 @@ import { SamplingDecision, type Sampler, type SamplingResult } from '@openteleme
  * "/api/healthz"/"/api/readyz" no nome desde a criação do span, então o sampler decide sem
  * precisar de atributos que só chegam depois (`next.route` só é setado perto do fim do
  * span raiz, tarde demais para influenciar a amostragem).
+ *
+ * Casa só o PATHNAME logo após o método/prefixo do span, nunca uma ocorrência na query
+ * (`GET /api/v1/issues?next=/api/healthz` é tráfego real e precisa ser amostrado).
  */
-const IGNORED_PATH_PATTERN = /\/api\/(healthz|readyz)\b/;
+const IGNORED_PATH_PATTERN =
+   /^(?:[A-Z]+|executing api route \(app\)) \/api\/(?:healthz|readyz)\/?(?:[?#]|$)/;
 
 const RECORD_AND_SAMPLE: SamplingResult = { decision: SamplingDecision.RECORD_AND_SAMPLED };
 const DO_NOT_RECORD: SamplingResult = { decision: SamplingDecision.NOT_RECORD };
 
-const ignoreHealthProbes: Sampler = {
+export const ignoreHealthProbes: Sampler = {
    shouldSample: (_context, _traceId, spanName) =>
       IGNORED_PATH_PATTERN.test(spanName) ? DO_NOT_RECORD : RECORD_AND_SAMPLE,
    toString: () => 'IgnoreHealthProbesSampler',
