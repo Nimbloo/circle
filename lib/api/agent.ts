@@ -545,7 +545,8 @@ export async function sendAgentMessage(
          .limit(1);
       // Colisão de id com chat de OUTRO usuário: recusa sem revelar nada sobre ele (nem
       // se existe) — mensagem genérica, sem chatId/title na resposta.
-      if (owner && owner.userId !== me.id) throw new ApiError(409, 'Identificador de chat já em uso');
+      if (owner && owner.userId !== me.id)
+         throw new ApiError(409, 'Identificador de chat já em uso');
       if (owner) existing = await getAgentChat(db, email, opts.clientChatId);
       chatKey = opts.clientChatId;
    } else {
@@ -596,7 +597,10 @@ export async function sendAgentMessage(
                error: true,
                createdAt: failedAt,
             });
-            await tx.update(agentChat).set({ updatedAt: failedAt }).where(eq(agentChat.id, chatKey));
+            await tx
+               .update(agentChat)
+               .set({ updatedAt: failedAt })
+               .where(eq(agentChat.id, chatKey));
          });
          // O chat já está gravado ANTES desta exceção: o cliente precisa do id de volta
          // pra o retry não criar um chat duplicado. Vale para QUALQUER falha aqui, não só
