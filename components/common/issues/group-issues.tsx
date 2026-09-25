@@ -104,7 +104,11 @@ const IssueGridList: FC<{ issues: Issue[]; group: IssueGroupDescriptor }> = ({ i
                </div>
             </div>
          )}
-         <div style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
+         {/* Mesma altura que recolhe com a animação da lista virtual (`.list-collapse`). */}
+         <div
+            className={cn(listMotion.moving && 'list-collapse')}
+            style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}
+         >
             {virtualizer.getVirtualItems().map((vi) => {
                const issue = issues[vi.index];
                return (
