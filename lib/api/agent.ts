@@ -421,14 +421,18 @@ export async function runAgent(
                { abortSignal: opts.signal }
             );
          } catch (e) {
-            if (opts.signal?.aborted) throw new AgentAbortedError(e);
-            if (writes.length === 0) throw new AgentProviderError(e);
+            // Com escrita já feita, nem o "Parar" pode virar só "Resposta interrompida.": o
+            // turno precisa listar o que foi feito, senão o usuário reenvia e repete a escrita.
+            if (writes.length === 0) {
+               if (opts.signal?.aborted) throw new AgentAbortedError(e);
+               throw new AgentProviderError(e);
+            }
             return null;
          }
       })();
       if (!res)
          return (
-            `Já fiz isto antes de o provedor do Agent falhar:\n${writes.map((w) => `- ${w}`).join('\n')}\n\n` +
+            `Já fiz isto antes de ${opts.signal?.aborted ? 'a resposta ser interrompida' : 'o provedor do Agent falhar'}:\n${writes.map((w) => `- ${w}`).join('\n')}\n\n` +
             'Não consegui terminar a resposta. Confira o resultado antes de pedir de novo.'
          );
 
