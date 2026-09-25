@@ -7,13 +7,17 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
- * Escapa um campo CSV (aspas + quebra de linha). Texto que começa com `= + - @` (ou tab/CR)
- * ganha um `'` na frente: sem isso o Excel/Sheets executa o título de uma issue como
- * fórmula (injeção de CSV, OWASP). Números ficam intactos.
+ * Escapa um campo CSV (aspas + quebra de linha). Texto que começa com `= + - @` (ou
+ * tab/CR/LF) ganha um `'` na frente: sem isso o Excel/Sheets executa o título de uma issue
+ * como fórmula (injeção de CSV, OWASP). Números ficam intactos.
+ *
+ * Reversível: texto que JÁ começa com `'` antes de um desses caracteres também ganha o
+ * prefixo, então o import (`decodeFormulaGuard` em `lib/api/import.ts`) tira exatamente
+ * um `'` e devolve o valor original.
  */
 function csvCell(v: string | number | null | undefined): string {
    let s = v == null ? '' : String(v);
-   if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+   if (typeof v === 'string' && /^'*[=+\-@\t\r\n]/.test(s)) s = `'${s}`;
    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 

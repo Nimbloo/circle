@@ -250,4 +250,62 @@ describe('Settings → Import/Export (#101)', () => {
       expect(await screen.findByText('Import concluído')).toBeTruthy();
       expect(screen.getByText('2 criada(s) · 0 atualizada(s) · 1 ignorada(s)')).toBeTruthy();
    });
+
+   it('trocar o time de destino refaz o preview: Criar/Atualizar é do time novo', async () => {
+      for (const m of ['hasPointerCapture', 'setPointerCapture', 'releasePointerCapture'])
+         Object.defineProperty(Element.prototype, m, { configurable: true, value: () => false });
+      useWorkspaceStore.setState({
+         teams: [
+            { id: 'CORE', name: 'Core' } as unknown as Team,
+            { id: 'OPS', name: 'Ops' } as unknown as Team,
+         ],
+      });
+      const user = userEvent.setup();
+      const dto = (existing: boolean) => ({
+         source: 'csv',
+         columns: ['ID', 'Title'],
+         mapping: { externalId: 'ID', title: 'Title' },
+         totalRows: 1,
+         sample: [
+            {
+               externalId: 'X-1',
+               title: 'Linha única',
+               statusRaw: null,
+               statusId: null,
+               priorityRaw: null,
+               priorityId: null,
+               assigneeRaw: null,
+               assigneeId: null,
+               labels: [],
+               dueDate: null,
+               estimate: null,
+               parentExternalId: null,
+               existing,
+               warnings: [],
+            },
+         ],
+         warnings: [],
+      });
+      // CORE já tem a issue importada; OPS não.
+      apiMocks.importPreview.mockImplementation(
+         async (_f: File, _s: string, _m: unknown, teamId?: string) => dto(teamId === 'CORE')
+      );
+
+      mount(<ImportExportSettings />);
+      await user.upload(
+         screen.getByLabelText('Arquivo CSV'),
+         new File(['ID,Title\nX-1,Linha única'], 'x.csv', { type: 'text/csv' })
+      );
+      expect(await screen.findByText('Atualizar')).toBeTruthy();
+
+      await user.click(screen.getByLabelText('Time de destino'));
+      await user.click(await screen.findByRole('option', { name: 'Ops' }));
+
+      expect(await screen.findByText('Criar')).toBeTruthy();
+      expect(screen.queryByText('Atualizar')).toBeNull();
+      const last = apiMocks.importPreview.mock.calls.at(-1)!;
+      expect(last[3]).toBe('OPS');
+      // O mapeamento que o usuário vê é preservado no novo preview.
+      expect(last[2]).toMatchObject({ externalId: 'ID', title: 'Title' });
+   });
 });

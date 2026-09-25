@@ -396,9 +396,18 @@ export interface ImportPreviewDto {
 
 export const PREVIEW_SAMPLE_SIZE = 20;
 
+/**
+ * Desfaz o `'` anti-fórmula que o export CSV (`app/api/v1/issues/export`) põe na frente
+ * de `= + - @`/tab/CR/LF. Só tira UM `'` e só antes desses caracteres: `'texto` comum
+ * fica intacto, e `''=x` (valor original `'=x`) volta como `'=x`.
+ */
+function decodeFormulaGuard(s: string): string {
+   return /^'+[=+\-@\t\r\n]/.test(s) ? s.slice(1).trim() : s;
+}
+
 function cell(row: Record<string, string>, column: string | null | undefined): string {
    if (!column) return '';
-   return (row[column] ?? '').trim();
+   return decodeFormulaGuard((row[column] ?? '').trim());
 }
 
 function mapRow(

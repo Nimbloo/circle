@@ -421,14 +421,18 @@ export async function runAgent(
                { abortSignal: opts.signal }
             );
          } catch (e) {
-            if (opts.signal?.aborted) throw new AgentAbortedError(e);
-            if (writes.length === 0) throw new AgentProviderError(e);
+            // Com escrita já feita, nem o "Parar" pode virar só "Resposta interrompida.": o
+            // turno precisa listar o que foi feito, senão o usuário reenvia e repete a escrita.
+            if (writes.length === 0) {
+               if (opts.signal?.aborted) throw new AgentAbortedError(e);
+               throw new AgentProviderError(e);
+            }
             return null;
          }
       })();
       if (!res)
          return (
-            `Já fiz isto antes de o provedor do Agent falhar:\n${writes.map((w) => `- ${w}`).join('\n')}\n\n` +
+            `Já fiz isto antes de ${opts.signal?.aborted ? 'a resposta ser interrompida' : 'o provedor do Agent falhar'}:\n${writes.map((w) => `- ${w}`).join('\n')}\n\n` +
             'Não consegui terminar a resposta. Confira o resultado antes de pedir de novo.'
          );
 
@@ -545,7 +549,8 @@ export async function sendAgentMessage(
          .limit(1);
       // Colisão de id com chat de OUTRO usuário: recusa sem revelar nada sobre ele (nem
       // se existe) — mensagem genérica, sem chatId/title na resposta.
-      if (owner && owner.userId !== me.id) throw new ApiError(409, 'Identificador de chat já em uso');
+      if (owner && owner.userId !== me.id)
+         throw new ApiError(409, 'Identificador de chat já em uso');
       if (owner) existing = await getAgentChat(db, email, opts.clientChatId);
       chatKey = opts.clientChatId;
    } else {
@@ -596,7 +601,10 @@ export async function sendAgentMessage(
                error: true,
                createdAt: failedAt,
             });
-            await tx.update(agentChat).set({ updatedAt: failedAt }).where(eq(agentChat.id, chatKey));
+            await tx
+               .update(agentChat)
+               .set({ updatedAt: failedAt })
+               .where(eq(agentChat.id, chatKey));
          });
          // O chat já está gravado ANTES desta exceção: o cliente precisa do id de volta
          // pra o retry não criar um chat duplicado. Vale para QUALQUER falha aqui, não só

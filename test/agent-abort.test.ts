@@ -14,7 +14,8 @@ vi.mock('@aws-sdk/client-bedrock-runtime', () => ({
 }));
 
 import { makeTestDb } from './helpers/db';
-import { agentMessage } from '@/db/schema';
+import { seedTeam } from './helpers/fixtures';
+import { agentMessage, issue as issueT } from '@/db/schema';
 import { getAgentChat, listAgentChats, sendAgentMessage } from '@/lib/api/agent';
 
 const ME = 'dev@nimbloo.ai';
@@ -96,5 +97,47 @@ describe('agent: parar resposta (AbortController)', () => {
       expect(chats).toHaveLength(1);
       const chat = await getAgentChat(db, ME, first.chatId);
       expect(chat?.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user', 'assistant']);
+   });
+
+   it('parar DEPOIS de uma escrita (create_issue): turno lista o que já foi feito, não só "interrompida"', async () => {
+      const db = await makeTestDb();
+      await seedTeam(db, 'CORE');
+      const controller = new AbortController();
+      sendMock
+         .mockResolvedValueOnce({
+            stopReason: 'tool_use',
+            output: {
+               message: {
+                  role: 'assistant',
+                  content: [
+                     {
+                        toolUse: {
+                           name: 'create_issue',
+                           toolUseId: 't1',
+                           input: { team: 'CORE', title: 'Bug do login' },
+                        },
+                     },
+                  ],
+               },
+            },
+         })
+         .mockImplementationOnce(async () => {
+            controller.abort();
+            const err = new Error('aborted');
+            err.name = 'AbortError';
+            throw err;
+         });
+
+      const res = await sendAgentMessage(db, ME, null, 'cria uma issue de bug do login', {
+         signal: controller.signal,
+      });
+
+      const issues = await db.select().from(issueT);
+      expect(issues).toHaveLength(1);
+      // Sem a lista, o usuário vê só "interrompida" e reenvia — criando a issue de novo.
+      expect(res.reply).toContain('Já fiz isto');
+      expect(res.reply).toContain(issues[0].identifier);
+      const chat = await getAgentChat(db, ME, res.chatId);
+      expect(chat?.messages.at(-1)?.error).toBeFalsy();
    });
 });

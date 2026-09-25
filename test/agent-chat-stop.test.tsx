@@ -100,7 +100,9 @@ describe('AgentChat — parar resposta em voo', () => {
       const [firstChatIdArg, , firstOpts] = apiMocks.send.mock.calls[0];
       expect(firstChatIdArg).toBeNull();
       const clientChatId = (firstOpts as { clientChatId?: string }).clientChatId;
-      expect(clientChatId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+      expect(clientChatId).toMatch(
+         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      );
 
       apiMocks.send.mockReset();
       apiMocks.send.mockResolvedValueOnce({ chatId: clientChatId, title: 'Oi', reply: 'Olá!' });

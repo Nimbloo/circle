@@ -1,5 +1,10 @@
 import { registerOTel } from '@vercel/otel';
-import { SamplingDecision, type Sampler, type SamplingResult } from '@opentelemetry/sdk-trace-base';
+import {
+   ParentBasedSampler,
+   SamplingDecision,
+   type Sampler,
+   type SamplingResult,
+} from '@opentelemetry/sdk-trace-base';
 
 /**
  * Probes do K8s (`/api/healthz`, `/api/readyz`) — o kubelet bate neles a cada poucos
@@ -12,17 +17,28 @@ import { SamplingDecision, type Sampler, type SamplingResult } from '@openteleme
  * "/api/healthz"/"/api/readyz" no nome desde a criação do span, então o sampler decide sem
  * precisar de atributos que só chegam depois (`next.route` só é setado perto do fim do
  * span raiz, tarde demais para influenciar a amostragem).
+ *
+ * Casa só o PATHNAME logo após o método/prefixo do span, nunca uma ocorrência na query
+ * (`GET /api/v1/issues?next=/api/healthz` é tráfego real e precisa ser amostrado).
  */
-const IGNORED_PATH_PATTERN = /\/api\/(healthz|readyz)\b/;
+const IGNORED_PATH_PATTERN =
+   /^(?:[A-Z]+|executing api route \(app\)) \/api\/(?:healthz|readyz)\/?(?:[?#]|$)/;
 
 const RECORD_AND_SAMPLE: SamplingResult = { decision: SamplingDecision.RECORD_AND_SAMPLED };
 const DO_NOT_RECORD: SamplingResult = { decision: SamplingDecision.NOT_RECORD };
 
-const ignoreHealthProbes: Sampler = {
+export const ignoreHealthProbes: Sampler = {
    shouldSample: (_context, _traceId, spanName) =>
       IGNORED_PATH_PATTERN.test(spanName) ? DO_NOT_RECORD : RECORD_AND_SAMPLE,
    toString: () => 'IgnoreHealthProbesSampler',
 };
+
+/**
+ * Só o span RAIZ passa pelo filtro das probes; os filhos herdam a decisão do pai. Sem
+ * isso, spans filhos de uma probe descartada (cujo nome não traz o path) seriam
+ * amostrados e chegariam ao Tempo órfãos.
+ */
+export const tracingSampler: Sampler = new ParentBasedSampler({ root: ignoreHealthProbes });
 
 /**
  * Traces do servidor Next.js (App Router, route handlers) via OpenTelemetry, exportados
@@ -50,6 +66,6 @@ export function registerTracing(): void {
 
    registerOTel({
       serviceName: 'circle',
-      traceSampler: ignoreHealthProbes,
+      traceSampler: tracingSampler,
    });
 }
