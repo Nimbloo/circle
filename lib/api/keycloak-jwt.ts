@@ -48,6 +48,11 @@ function isServiceAccount(payload: Record<string, unknown>): boolean {
    const azp = payload.azp;
    const username = payload.preferred_username;
    if (typeof azp !== 'string' || !azp) return false;
+   // O Keycloak (scope `service_account`) põe o client do grant em `client_id` (`clientId`
+   // nas versões antigas). Quando vier, tem que ser o próprio `azp`: token de pessoa com
+   // nome forjado `service-account-<azp>` não traz esse claim do grant de máquina.
+   const grantClient = payload.client_id ?? payload.clientId;
+   if (grantClient !== undefined && grantClient !== azp) return false;
    return (
       typeof username === 'string' &&
       username.toLowerCase() === `service-account-${azp.toLowerCase()}`
