@@ -736,6 +736,13 @@ html[data-underline-links='true'] [data-slot='view-bar'] a[href] {
 .list-move {
    transition: transform var(--dur-base) var(--ease-std);
 }
+/* Altura total da lista virtual (o div que dá o tamanho do scroll) na mesma janela: quando
+   uma linha sai perto do fim com a lista rolada até o fundo, a altura cai junto com o
+   `.list-move` em vez de na hora — o clamp do `scrollTop` acompanha a animação e as
+   vizinhas deslizam em vez de saltar. */
+.list-collapse {
+   transition: height var(--dur-base) var(--ease-std);
+}
 /* Linha que acabou de chegar: fade. Só `opacity` — o `transform` é da posição. */
 .list-enter {
    animation: motion-fade-in var(--dur-content) var(--ease-out) backwards;
@@ -803,7 +810,8 @@ html[data-underline-links='true'] [data-slot='view-bar'] a[href] {
    .list-grow {
       animation: none;
    }
-   .list-move {
+   .list-move,
+   .list-collapse {
       transition: none;
    }
 }

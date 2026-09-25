@@ -326,7 +326,12 @@ export function VirtualIssueList({ entries }: { entries: Entry[] }) {
 
    return (
       <div ref={parentRef} className="h-full overflow-y-auto pr-[5px] [scrollbar-gutter:stable]">
-         <div style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
+         {/* Na janela de motion a altura total recolhe com a animação (`.list-collapse`):
+             no fundo da lista, o clamp do scroll não faz as vizinhas saltarem. */}
+         <div
+            className={cn(listMotion.moving && 'list-collapse')}
+            style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}
+         >
             {/* Antes das linhas vivas: quem sobe passa por cima do fantasma. */}
             {ghosts.map(({ key, value }) => (
                <div
