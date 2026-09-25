@@ -85,6 +85,36 @@ describe('AgentChat — parar resposta em voo', () => {
       expect(message.streaming).toBeFalsy();
    });
 
+   it('chat NOVO: abortar a 1ª mensagem e reenviar usa o MESMO clientChatId (fecha o chat órfão)', async () => {
+      pendingUntilAborted();
+      render(<AgentChat />);
+      const textarea = () => screen.getByPlaceholderText('Ask the agent…');
+      fireEvent.change(textarea(), { target: { value: 'Oi' } });
+      await act(async () => {
+         fireEvent.keyDown(textarea(), { key: 'Enter' });
+      });
+      await act(async () => {
+         fireEvent.click(screen.getByRole('button', { name: 'Parar' }));
+      });
+
+      const [firstChatIdArg, , firstOpts] = apiMocks.send.mock.calls[0];
+      expect(firstChatIdArg).toBeNull();
+      const clientChatId = (firstOpts as { clientChatId?: string }).clientChatId;
+      expect(clientChatId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+
+      apiMocks.send.mockReset();
+      apiMocks.send.mockResolvedValueOnce({ chatId: clientChatId, title: 'Oi', reply: 'Olá!' });
+      fireEvent.change(textarea(), { target: { value: 'segue' } });
+      await act(async () => {
+         fireEvent.keyDown(textarea(), { key: 'Enter' });
+      });
+
+      const [secondChatIdArg, secondContentArg, secondOpts] = apiMocks.send.mock.calls[0];
+      expect(secondChatIdArg).toBeNull();
+      expect(secondContentArg).toBe('segue');
+      expect((secondOpts as { clientChatId?: string }).clientChatId).toBe(clientChatId);
+   });
+
    it('num chat já existente, o próximo envio depois de parar usa o MESMO chatId (não duplica)', async () => {
       pendingUntilAborted();
       useAgentChatStore.setState({

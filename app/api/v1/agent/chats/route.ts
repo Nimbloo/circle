@@ -18,6 +18,10 @@ export async function GET(req: Request) {
 
 const sendSchema = z.object({
    chatId: z.string().nullish(),
+   // Id gerado pelo CLIENTE ao abrir um chat novo (aditivo — ver `sendAgentMessage`):
+   // reusado em qualquer envio seguinte daquele chat, inclusive depois de um abort, pra
+   // não duplicar quando a resposta do 1º envio nunca chegou ao cliente.
+   clientChatId: z.string().uuid().nullish(),
    content: z.string().min(1).max(AGENT_MESSAGE_MAX_LENGTH),
 });
 
@@ -25,9 +29,14 @@ const sendSchema = z.object({
 export async function POST(req: Request) {
    return handle(async () => {
       const email = await requireEmail(req);
-      const { chatId, content } = sendSchema.parse(await req.json());
+      const { chatId, clientChatId, content } = sendSchema.parse(await req.json());
       // `req.signal` (Fetch API padrão): dispara se o cliente abortar o fetch ("Parar
       // resposta") — propagado pro turno, que repassa pro SDK do Bedrock se ele aceitar.
-      return ok(await sendAgentMessage(db, email, chatId ?? null, content, { signal: req.signal }));
+      return ok(
+         await sendAgentMessage(db, email, chatId ?? null, content, {
+            signal: req.signal,
+            clientChatId,
+         })
+      );
    }, req);
 }

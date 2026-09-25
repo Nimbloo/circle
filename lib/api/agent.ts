@@ -523,20 +523,38 @@ export async function sendAgentMessage(
    email: string,
    chatId: string | null,
    content: string,
-   opts: { signal?: AbortSignal } = {}
+   opts: { signal?: AbortSignal; clientChatId?: string | null } = {}
 ): Promise<{ chatId: string; title: string; reply: string }> {
    const me = await getOrCreateUser(db, email);
-   let title = '';
-   let history: AgentChatMessage[] = [];
+
+   // Chat existente: por `chatId` (contrato original) ou por `clientChatId` — o id que o
+   // CLIENTE já minta ao abrir um chat novo (aditivo). Sem isso, abortar a 1ª mensagem
+   // perdia a resposta com o chatId real (o fetch foi cancelado) e o próximo envio
+   // duplicava o chat — com o id vindo do cliente, o servidor sempre sabe onde gravar.
+   let existing: { id: string; title: string; messages: AgentChatMessage[] } | null = null;
+   let chatKey: string;
    if (chatId) {
-      const chat = await getAgentChat(db, email, chatId);
-      if (!chat) throw new ApiError(404, 'Chat não encontrado');
-      title = chat.title;
-      history = chat.messages.filter((m) => !m.error);
+      existing = await getAgentChat(db, email, chatId);
+      if (!existing) throw new ApiError(404, 'Chat não encontrado');
+      chatKey = chatId;
+   } else if (opts.clientChatId) {
+      const [owner] = await db
+         .select({ userId: agentChat.userId })
+         .from(agentChat)
+         .where(eq(agentChat.id, opts.clientChatId))
+         .limit(1);
+      // Colisão de id com chat de OUTRO usuário: recusa sem revelar nada sobre ele (nem
+      // se existe) — mensagem genérica, sem chatId/title na resposta.
+      if (owner && owner.userId !== me.id) throw new ApiError(409, 'Identificador de chat já em uso');
+      if (owner) existing = await getAgentChat(db, email, opts.clientChatId);
+      chatKey = opts.clientChatId;
+   } else {
+      chatKey = randomUUID();
    }
-   const isNew = !chatId;
-   const chatKey = chatId ?? randomUUID();
-   if (isNew) title = content.trim().slice(0, 80) || 'New chat';
+
+   const isNew = !existing;
+   const title = existing ? existing.title : content.trim().slice(0, 80) || 'New chat';
+   const history = existing ? existing.messages.filter((m) => !m.error) : [];
 
    const userAt = new Date();
    await db.transaction(async (tx) => {

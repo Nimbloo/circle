@@ -12,6 +12,10 @@ import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { LoadingArea } from '@/components/common/loading-area';
 import { AGENT_MESSAGE_MAX_LENGTH } from '@/lib/agent-limits';
 
+/** Chat local ainda não persistido, mintado com `crypto.randomUUID` (ver store):
+ * é seguro mandar como `clientChatId` — o servidor cria/anexa nesse id (aditivo). */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Status HTTP de um erro do cliente da API (sem depender da classe em runtime). */
 function httpStatusOf(error: unknown): number | undefined {
    if (!(error instanceof Error) || error.name !== 'ApiError') return undefined;
@@ -308,10 +312,15 @@ export default function AgentChat() {
       const { chatId, assistantMessageId } = useAgentChatStore.getState().sendMessage(input);
       const controller = new AbortController();
       activeAbortRef.current = controller;
+      // Chat novo (local, não persistido) com id mintado pelo cliente (UUID real):
+      // manda como `clientChatId` pro servidor já saber onde gravar mesmo que um "Parar"
+      // no 1º envio nunca traga o chatId de volta (o fetch é cancelado antes da resposta).
+      const clientChatId = !persisted && UUID_RE.test(chatId) ? chatId : undefined;
       try {
          // Persiste no servidor (cria o chat se for novo) e devolve a resposta.
          const res = await api.agent.send(persisted ? chatId : null, input, {
             signal: controller.signal,
+            clientChatId,
          });
          if (!persisted) rekeyChat(chatId, res.chatId, res.title);
          resolveMessage(res.chatId, assistantMessageId, res.reply);

@@ -256,10 +256,14 @@ export const api = {
             title: string;
             messages: { role: 'user' | 'assistant'; content: string; error?: boolean }[];
          }>(`/agent/chats/${id}`),
-      send: (chatId: string | null, content: string, opts?: { signal?: AbortSignal }) =>
+      send: (
+         chatId: string | null,
+         content: string,
+         opts?: { signal?: AbortSignal; clientChatId?: string }
+      ) =>
          post<{ chatId: string; title: string; reply: string }>(
             '/agent/chats',
-            { chatId, content },
+            { chatId, content, clientChatId: opts?.clientChatId },
             opts
          ),
    },
