@@ -44,4 +44,15 @@ describe('export CSV', () => {
       expect(titles).toHaveLength(4);
       for (const t of titles) expect(t).toMatch(/^'[=+\-@]/);
    });
+
+   it('começa com BOM UTF-8 para o Excel abrir os acentos certos', async () => {
+      await createIssue(
+         db,
+         { teamId: 'CORE', title: 'Revisão de ação', statusId: 'to-do', priorityId: 'medium' },
+         ANA
+      );
+      const csv = await exportCsv();
+      expect(csv.charCodeAt(0)).toBe(0xfeff);
+      expect(csv).toContain('Revisão de ação');
+   });
 });

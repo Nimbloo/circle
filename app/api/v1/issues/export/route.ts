@@ -81,7 +81,8 @@ export async function GET(req: Request) {
                .join(',')
          );
       }
-      const csv = lines.join('\n');
+      // BOM: sem ele o Excel lê o UTF-8 como Windows-1252 e quebra todo acento.
+      const csv = '﻿' + lines.join('\n');
       return new Response(csv, {
          headers: {
             'Content-Type': 'text/csv; charset=utf-8',
