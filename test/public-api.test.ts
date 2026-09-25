@@ -193,6 +193,19 @@ describe('rotas /api/public/v1', () => {
       expect(patched.status).toBe(400);
    });
 
+   it('description acima de 10000 caracteres é 400, como na API interna', async () => {
+      const jwt = token({ roles: ['member'] });
+      const post = (description: string) =>
+         createPublicIssue(
+            req('http://x/api/public/v1/issues', jwt, {
+               method: 'POST',
+               body: JSON.stringify({ teamId: 'CORE', title: 'Limite', description }),
+            })
+         );
+      expect((await post('x'.repeat(10001))).status).toBe(400);
+      expect((await post('x'.repeat(10000))).status).toBeLessThan(300);
+   });
+
    it('service account Guest fica preso aos times dele, na leitura e na escrita', async () => {
       await seedUser(db, {
          name: 'Bot convidado',

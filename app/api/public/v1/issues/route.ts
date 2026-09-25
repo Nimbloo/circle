@@ -45,7 +45,8 @@ const createSchema = z.object({
    labelIds: z.array(z.string()).optional(),
    dueDate: z.string().nullable().optional(),
    estimate: z.number().int().nullable().optional(),
-   description: z.string().nullable().optional(),
+   // Mesmo teto da API interna (`/api/v1/issues`): sem ele a pública aceitava texto ilimitado.
+   description: z.string().max(10000, 'description deve ter no máximo 10000 caracteres').nullable().optional(),
    parentId: z.string().nullable().optional(),
 });
 
