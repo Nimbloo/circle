@@ -541,10 +541,10 @@ export async function sendAgentMessage(
    try {
       reply = await runAgent(db, email, [...history, { role: 'user', content }]);
    } catch (e) {
-      const errorText =
-         e instanceof AgentProviderError
-            ? 'O provedor do Agent está indisponível. Tente de novo.'
-            : 'O Agent falhou ao responder. Tente de novo.';
+      const isProviderError = e instanceof AgentProviderError;
+      const errorText = isProviderError
+         ? 'O provedor do Agent está indisponível. Tente de novo.'
+         : 'O Agent falhou ao responder. Tente de novo.';
       const failedAt = new Date(userAt.getTime() + 1);
       await db.transaction(async (tx) => {
          await tx.insert(agentMessage).values({
@@ -557,10 +557,11 @@ export async function sendAgentMessage(
          });
          await tx.update(agentChat).set({ updatedAt: failedAt }).where(eq(agentChat.id, chatKey));
       });
-      // O chat já está gravado: o cliente recebe o id para o retry não criar outro.
-      if (e instanceof AgentProviderError)
-         throw new ApiError(503, errorText, { chatId: chatKey, title });
-      throw e;
+      // O chat já está gravado ANTES desta exceção: o cliente precisa do id de volta pra
+      // o retry não criar um chat duplicado. Vale para QUALQUER falha aqui, não só a do
+      // provedor (503) — um `throw e` cru perdia esse vínculo em erros genéricos (ex.:
+      // blip de DB), deixando o chat já persistido órfão até o próximo hydrate.
+      throw new ApiError(isProviderError ? 503 : 500, errorText, { chatId: chatKey, title });
    }
 
    const now = new Date(userAt.getTime() + 1);
