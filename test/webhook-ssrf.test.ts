@@ -59,6 +59,34 @@ describe('classificação de destino', () => {
          expect(isPrivateAddress(ip), ip).toBe(false);
    });
 
+   it('IPv4 embutido em IPv6 na forma HEX (a que o `new URL` normaliza) também é privado', () => {
+      // `new URL('http://[::ffff:169.254.169.254]/').hostname` vira `[::ffff:a9fe:a9fe]`:
+      // a régua só reconhecia a forma pontuada, e o IMDS passava pelo gate.
+      for (const ip of [
+         '::ffff:a9fe:a9fe', // IMDS mapeado
+         '::ffff:7f00:1', // 127.0.0.1 mapeado
+         '::ffff:0:a00:1', // 10.0.0.1 (SIIT)
+         '::7f00:1', // IPv4-compatível (127.0.0.1)
+         '64:ff9b::a9fe:a9fe', // NAT64 do IMDS
+         '0:0:0:0:0:ffff:a9fe:a9fe',
+      ])
+         expect(isPrivateAddress(ip), ip).toBe(true);
+      expect(isPrivateAddress('::ffff:808:808')).toBe(false); // 8.8.8.8 mapeado
+      expect(isPrivateAddress('64:ff9b::808:808')).toBe(false);
+   });
+
+   it('URL com IPv6 mapeado para o IMDS é recusada no cadastro', async () => {
+      for (const url of [
+         'http://[::ffff:169.254.169.254]/latest/meta-data/',
+         'http://[::ffff:127.0.0.1]:8080/x',
+         'http://[64:ff9b::169.254.169.254]/x',
+      ])
+         await expect(
+            createWebhook(db, { url, events: ['issue.created'] }, ownerId),
+            url
+         ).rejects.toMatchObject({ status: 400 });
+   });
+
    it('bloqueia nomes que só existem na rede interna', () => {
       for (const h of [
          'localhost',

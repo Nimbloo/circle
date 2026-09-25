@@ -156,6 +156,37 @@ function ipv4Octets(host: string): number[] | null {
    return parts.every((n) => n >= 0 && n <= 255) ? parts : null;
 }
 
+/** Os 8 grupos de 16 bits de um IPv6 em hex (sem sufixo pontuado), ou null. */
+function ipv6Groups(host: string): number[] | null {
+   const halves = host.split('::');
+   if (halves.length > 2) return null;
+   const parse = (s: string) => (s ? s.split(':') : []);
+   const head = parse(halves[0]);
+   const tail = halves.length === 2 ? parse(halves[1]) : [];
+   const fill = 8 - head.length - tail.length;
+   if (halves.length === 1 ? fill !== 0 : fill < 1) return null;
+   const groups = [...head, ...Array(halves.length === 2 ? fill : 0).fill('0'), ...tail];
+   if (!groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return null;
+   return groups.map((g) => parseInt(g, 16));
+}
+
+/**
+ * IPv4 embutido num IPv6 que o kernel roteia para a rede IPv4: mapeado
+ * (`::ffff:0:0/96`), SIIT (`::ffff:0:0:0/96`), compatível (`::/96`) e NAT64
+ * (`64:ff9b::/96`). Devolve o IPv4 pontuado, ou null.
+ */
+function embeddedIpv4(host: string): string | null {
+   const g = ipv6Groups(host);
+   if (!g) return null;
+   const zeros = (from: number, to: number) => g.slice(from, to).every((n) => n === 0);
+   const isMapped = zeros(0, 5) && g[5] === 0xffff;
+   const isSiit = zeros(0, 4) && g[4] === 0xffff && g[5] === 0;
+   const isCompat = zeros(0, 6);
+   const isNat64 = g[0] === 0x64 && g[1] === 0xff9b && zeros(2, 6);
+   if (!isMapped && !isSiit && !isCompat && !isNat64) return null;
+   return [g[6] >> 8, g[6] & 0xff, g[7] >> 8, g[7] & 0xff].join('.');
+}
+
 /**
  * `true` para endereços que nunca devem ser alvo de webhook: loopback, link-local
  * (169.254 — o metadata do EC2/IMDS mora aí), RFC1918, CGNAT, `0.0.0.0/8`, multicast
@@ -182,6 +213,10 @@ export function isPrivateAddress(address: string): boolean {
    // IPv4 mapeado/compatível (`::ffff:169.254.169.254`) reaproveita a régua acima.
    const mapped = /(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(host);
    if (mapped) return isPrivateAddress(mapped[1]);
+   // Mesma coisa na forma HEX — é a que o `new URL` produz: `[::ffff:169.254.169.254]`
+   // vira `[::ffff:a9fe:a9fe]`, e o kernel conecta no IPv4 embutido.
+   const embedded = embeddedIpv4(host);
+   if (embedded) return isPrivateAddress(embedded);
    const head = host.split(':')[0];
    if (/^f[cd]/.test(head)) return true; // fc00::/7 (ULA)
    if (/^fe[89ab]/.test(head)) return true; // fe80::/10 (link-local)
