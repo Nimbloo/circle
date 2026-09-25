@@ -388,8 +388,6 @@ function CommandPaletteBody({
          <CommandInput
             autoFocus
             placeholder="Digite um comando ou pesquise…"
-            // Espaço da dica "Perguntar ao Agent · Tab" (co#8): o texto não passa por baixo.
-            className={route === 'root' ? 'pr-40' : undefined}
             value={query}
             onValueChange={setQuery}
             onKeyDown={(event) => {
@@ -402,7 +400,11 @@ function CommandPaletteBody({
                }
             }}
          />
-         {route === 'root' && (
+         {/* Só com o campo vazio (co#8): reservar padding-right pro tamanho da dica é frágil
+             (a largura real do texto varia com fonte/idioma) e ficava sobrepondo o que o
+             usuário digitava. Sem texto, não há o que sobrepor — e Tab continua levando
+             pro Agent mesmo com o campo preenchido, só a dica visual some. */}
+         {route === 'root' && query === '' && (
             <span className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-xs text-muted-foreground pointer-events-none">
                Perguntar ao Agent
                <kbd className="h-5 px-1.5 inline-flex items-center rounded border bg-muted/50 text-[11px] font-sans">

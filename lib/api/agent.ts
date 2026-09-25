@@ -195,6 +195,14 @@ class AgentProviderError extends Error {
    }
 }
 
+/** "Parar resposta": o usuário abortou o turno (não é falha do provedor nem do app). */
+class AgentAbortedError extends Error {
+   constructor(cause: unknown) {
+      super('Resposta interrompida pelo usuário', { cause });
+      this.name = 'AgentAbortedError';
+   }
+}
+
 /** Resolve id de catálogo (status/priority) por nome, case-insensitive. */
 function findByName(rows: { id: string; name: string }[], name: string): string | undefined {
    const n = name.trim().toLowerCase();
@@ -373,7 +381,8 @@ const WRITE_TOOLS = new Set(['create_issue', 'update_issue']);
 export async function runAgent(
    db: Db,
    email: string,
-   history: AgentChatMessage[]
+   history: AgentChatMessage[],
+   opts: { signal?: AbortSignal } = {}
 ): Promise<string> {
    const me = await getOrCreateUser(db, email);
    const messages: Message[] = normalizeHistory(history).map((m) => ({
@@ -405,9 +414,14 @@ export async function runAgent(
                   messages,
                   toolConfig,
                   inferenceConfig: { maxTokens: 1024, temperature: 0.2 },
-               })
+               }),
+               // Propaga o "Parar" do cliente pro SDK do Bedrock (corta a chamada de rede
+               // em voo); se o handler não honrar o abort, a promise só resolve/rejeita
+               // normalmente mais tarde — sem efeito colateral, o resultado é descartado.
+               { abortSignal: opts.signal }
             );
          } catch (e) {
+            if (opts.signal?.aborted) throw new AgentAbortedError(e);
             if (writes.length === 0) throw new AgentProviderError(e);
             return null;
          }
@@ -508,20 +522,39 @@ export async function sendAgentMessage(
    db: Db,
    email: string,
    chatId: string | null,
-   content: string
+   content: string,
+   opts: { signal?: AbortSignal; clientChatId?: string | null } = {}
 ): Promise<{ chatId: string; title: string; reply: string }> {
    const me = await getOrCreateUser(db, email);
-   let title = '';
-   let history: AgentChatMessage[] = [];
+
+   // Chat existente: por `chatId` (contrato original) ou por `clientChatId` — o id que o
+   // CLIENTE já minta ao abrir um chat novo (aditivo). Sem isso, abortar a 1ª mensagem
+   // perdia a resposta com o chatId real (o fetch foi cancelado) e o próximo envio
+   // duplicava o chat — com o id vindo do cliente, o servidor sempre sabe onde gravar.
+   let existing: { id: string; title: string; messages: AgentChatMessage[] } | null = null;
+   let chatKey: string;
    if (chatId) {
-      const chat = await getAgentChat(db, email, chatId);
-      if (!chat) throw new ApiError(404, 'Chat não encontrado');
-      title = chat.title;
-      history = chat.messages.filter((m) => !m.error);
+      existing = await getAgentChat(db, email, chatId);
+      if (!existing) throw new ApiError(404, 'Chat não encontrado');
+      chatKey = chatId;
+   } else if (opts.clientChatId) {
+      const [owner] = await db
+         .select({ userId: agentChat.userId })
+         .from(agentChat)
+         .where(eq(agentChat.id, opts.clientChatId))
+         .limit(1);
+      // Colisão de id com chat de OUTRO usuário: recusa sem revelar nada sobre ele (nem
+      // se existe) — mensagem genérica, sem chatId/title na resposta.
+      if (owner && owner.userId !== me.id) throw new ApiError(409, 'Identificador de chat já em uso');
+      if (owner) existing = await getAgentChat(db, email, opts.clientChatId);
+      chatKey = opts.clientChatId;
+   } else {
+      chatKey = randomUUID();
    }
-   const isNew = !chatId;
-   const chatKey = chatId ?? randomUUID();
-   if (isNew) title = content.trim().slice(0, 80) || 'New chat';
+
+   const isNew = !existing;
+   const title = existing ? existing.title : content.trim().slice(0, 80) || 'New chat';
+   const history = existing ? existing.messages.filter((m) => !m.error) : [];
 
    const userAt = new Date();
    await db.transaction(async (tx) => {
@@ -539,28 +572,38 @@ export async function sendAgentMessage(
 
    let reply: string;
    try {
-      reply = await runAgent(db, email, [...history, { role: 'user', content }]);
+      reply = await runAgent(db, email, [...history, { role: 'user', content }], {
+         signal: opts.signal,
+      });
    } catch (e) {
-      const errorText =
-         e instanceof AgentProviderError
+      if (e instanceof AgentAbortedError) {
+         // "Parar resposta": não é falha do provedor nem do app — o usuário pediu pra
+         // parar. Cai no MESMO caminho de sucesso abaixo (grava um turno coerente, sem
+         // `error`, com o MESMO chatId), então não duplica nem deixa a pergunta órfã.
+         reply = 'Resposta interrompida.';
+      } else {
+         const isProviderError = e instanceof AgentProviderError;
+         const errorText = isProviderError
             ? 'O provedor do Agent está indisponível. Tente de novo.'
             : 'O Agent falhou ao responder. Tente de novo.';
-      const failedAt = new Date(userAt.getTime() + 1);
-      await db.transaction(async (tx) => {
-         await tx.insert(agentMessage).values({
-            id: randomUUID(),
-            chatId: chatKey,
-            role: 'assistant',
-            content: errorText,
-            error: true,
-            createdAt: failedAt,
+         const failedAt = new Date(userAt.getTime() + 1);
+         await db.transaction(async (tx) => {
+            await tx.insert(agentMessage).values({
+               id: randomUUID(),
+               chatId: chatKey,
+               role: 'assistant',
+               content: errorText,
+               error: true,
+               createdAt: failedAt,
+            });
+            await tx.update(agentChat).set({ updatedAt: failedAt }).where(eq(agentChat.id, chatKey));
          });
-         await tx.update(agentChat).set({ updatedAt: failedAt }).where(eq(agentChat.id, chatKey));
-      });
-      // O chat já está gravado: o cliente recebe o id para o retry não criar outro.
-      if (e instanceof AgentProviderError)
-         throw new ApiError(503, errorText, { chatId: chatKey, title });
-      throw e;
+         // O chat já está gravado ANTES desta exceção: o cliente precisa do id de volta
+         // pra o retry não criar um chat duplicado. Vale para QUALQUER falha aqui, não só
+         // a do provedor (503) — um `throw e` cru perdia esse vínculo em erros genéricos
+         // (ex.: blip de DB), deixando o chat já persistido órfão até o próximo hydrate.
+         throw new ApiError(isProviderError ? 503 : 500, errorText, { chatId: chatKey, title });
+      }
    }
 
    const now = new Date(userAt.getTime() + 1);

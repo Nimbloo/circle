@@ -156,6 +156,37 @@ function ipv4Octets(host: string): number[] | null {
    return parts.every((n) => n >= 0 && n <= 255) ? parts : null;
 }
 
+/** Os 8 grupos de 16 bits de um IPv6 em hex (sem sufixo pontuado), ou null. */
+function ipv6Groups(host: string): number[] | null {
+   const halves = host.split('::');
+   if (halves.length > 2) return null;
+   const parse = (s: string) => (s ? s.split(':') : []);
+   const head = parse(halves[0]);
+   const tail = halves.length === 2 ? parse(halves[1]) : [];
+   const fill = 8 - head.length - tail.length;
+   if (halves.length === 1 ? fill !== 0 : fill < 1) return null;
+   const groups = [...head, ...Array(halves.length === 2 ? fill : 0).fill('0'), ...tail];
+   if (!groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return null;
+   return groups.map((g) => parseInt(g, 16));
+}
+
+/**
+ * IPv4 embutido num IPv6 que o kernel roteia para a rede IPv4: mapeado
+ * (`::ffff:0:0/96`), SIIT (`::ffff:0:0:0/96`), compatível (`::/96`) e NAT64
+ * (`64:ff9b::/96`). Devolve o IPv4 pontuado, ou null.
+ */
+function embeddedIpv4(host: string): string | null {
+   const g = ipv6Groups(host);
+   if (!g) return null;
+   const zeros = (from: number, to: number) => g.slice(from, to).every((n) => n === 0);
+   const isMapped = zeros(0, 5) && g[5] === 0xffff;
+   const isSiit = zeros(0, 4) && g[4] === 0xffff && g[5] === 0;
+   const isCompat = zeros(0, 6);
+   const isNat64 = g[0] === 0x64 && g[1] === 0xff9b && zeros(2, 6);
+   if (!isMapped && !isSiit && !isCompat && !isNat64) return null;
+   return [g[6] >> 8, g[6] & 0xff, g[7] >> 8, g[7] & 0xff].join('.');
+}
+
 /**
  * `true` para endereços que nunca devem ser alvo de webhook: loopback, link-local
  * (169.254 — o metadata do EC2/IMDS mora aí), RFC1918, CGNAT, `0.0.0.0/8`, multicast
@@ -182,6 +213,10 @@ export function isPrivateAddress(address: string): boolean {
    // IPv4 mapeado/compatível (`::ffff:169.254.169.254`) reaproveita a régua acima.
    const mapped = /(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(host);
    if (mapped) return isPrivateAddress(mapped[1]);
+   // Mesma coisa na forma HEX — é a que o `new URL` produz: `[::ffff:169.254.169.254]`
+   // vira `[::ffff:a9fe:a9fe]`, e o kernel conecta no IPv4 embutido.
+   const embedded = embeddedIpv4(host);
+   if (embedded) return isPrivateAddress(embedded);
    const head = host.split(':')[0];
    if (/^f[cd]/.test(head)) return true; // fc00::/7 (ULA)
    if (/^fe[89ab]/.test(head)) return true; // fe80::/10 (link-local)
@@ -213,16 +248,89 @@ export async function assertSafeWebhookTarget(url: string): Promise<void> {
    if (isBlockedHostname(host)) throw new ApiError(400, 'Destino não permitido (host interno)');
    if (isPrivateAddress(host)) throw new ApiError(400, 'Destino não permitido (endereço privado)');
    if (ipv4Octets(host) || host.includes(':')) return; // literal público: nada a resolver
+   await resolvePublic(host);
+}
+
+/* ------------------------- Conexão com IP fixado -------------------------- */
+
+interface ResolvedAddress {
+   address: string;
+   family: number;
+}
+type Resolver = (host: string) => Promise<ResolvedAddress[]>;
+
+const systemResolver: Resolver = async (host) => {
    const { lookup } = await import('node:dns/promises');
-   let addresses: { address: string }[];
+   return lookup(host, { all: true });
+};
+let resolver: Resolver = systemResolver;
+
+/** Só para testes: troca o resolvedor de DNS (null restaura o do sistema). */
+export function __setWebhookResolver(fn: Resolver | null): void {
+   resolver = fn ?? systemResolver;
+}
+
+/** Resolve o host e exige que TODOS os IPs sejam públicos (salvo o escape de dev). */
+async function resolvePublic(host: string): Promise<ResolvedAddress[]> {
+   let addresses: ResolvedAddress[];
    try {
-      addresses = await lookup(host, { all: true });
+      addresses = await resolver(host);
    } catch {
       throw new ApiError(400, 'Destino não permitido (host não resolve)');
    }
-   if (addresses.length === 0 || addresses.some((a) => isPrivateAddress(a.address)))
+   if (addresses.length === 0) throw new ApiError(400, 'Destino não permitido (host não resolve)');
+   if (!privateTargetsAllowed() && addresses.some((a) => isPrivateAddress(a.address)))
       throw new ApiError(400, 'Destino não permitido (resolve para endereço privado)');
+   return addresses;
 }
+
+/**
+ * `lookup` do socket: a conexão usa EXATAMENTE os IPs que acabaram de ser validados.
+ * Sem isto o `fetch` resolvia o nome de novo depois do gate, e um DNS de TTL zero
+ * respondia público para o gate e privado para a conexão (rebind).
+ */
+function pinnedLookup(
+   hostname: string,
+   options: { all?: boolean },
+   callback: (...args: unknown[]) => void
+): void {
+   resolvePublic(hostname).then(
+      (addresses) => {
+         if (options.all) callback(null, addresses);
+         else callback(null, addresses[0].address, addresses[0].family);
+      },
+      (e: Error) => callback(Object.assign(e, { code: 'ENOTFOUND' }))
+   );
+}
+
+/**
+ * POST do webhook via `node:http(s)` com o `lookup` fixado. O Host e o SNI saem do
+ * hostname da URL (o `request` cuida dos dois), só o IP é o validado. Nunca segue
+ * redirect (o `node:http` não segue) e nunca lê o corpo da resposta.
+ */
+const pinnedFetch = (async (input: string | URL, init: RequestInit = {}) => {
+   const url = new URL(String(input));
+   const { request } =
+      url.protocol === 'https:' ? await import('node:https') : await import('node:http');
+   const status = await new Promise<number>((resolve, reject) => {
+      const req = request(
+         url,
+         {
+            method: init.method ?? 'POST',
+            headers: init.headers as Record<string, string>,
+            lookup: pinnedLookup as never,
+            signal: init.signal ?? undefined,
+         },
+         (res) => {
+            res.resume(); // descarta o corpo sem guardar
+            resolve(res.statusCode ?? 0);
+         }
+      );
+      req.on('error', reject);
+      req.end(init.body as string | undefined);
+   });
+   return new Response(null, { status });
+}) as unknown as typeof fetch;
 
 function assertValid(url: string, events: string[]): void {
    let parsed: URL;
@@ -330,7 +438,7 @@ export async function attemptDelivery(
    db: Db,
    delivery: DeliveryRow,
    hook: WebhookRow,
-   fetchImpl: typeof fetch = fetch
+   fetchImpl: typeof fetch = pinnedFetch
 ): Promise<boolean> {
    const body = JSON.stringify(delivery.payload);
    const attempts = delivery.attempts + 1;
@@ -390,7 +498,7 @@ export async function dispatchEvent(
    db: Db,
    event: WebhookEvent,
    payload: Record<string, unknown>,
-   fetchImpl: typeof fetch = fetch
+   fetchImpl: typeof fetch = pinnedFetch
 ): Promise<string[]> {
    const hooks = await db
       .select()
@@ -429,7 +537,7 @@ export async function dispatchEvent(
 export async function redeliver(
    db: Db,
    deliveryId: string,
-   fetchImpl: typeof fetch = fetch
+   fetchImpl: typeof fetch = pinnedFetch
 ): Promise<WebhookDeliveryDto> {
    const [row] = await db
       .select()
@@ -521,7 +629,7 @@ async function claimDue(db: Db, limit: number) {
  */
 export async function sweepWebhookDeliveries(
    db: Db,
-   fetchImpl: typeof fetch = fetch,
+   fetchImpl: typeof fetch = pinnedFetch,
    limit = 50
 ): Promise<number> {
    try {

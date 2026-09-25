@@ -7,9 +7,14 @@ import { cn } from '@/lib/utils';
 import { api } from '@/lib/client';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { useAgentChatStore, type AgentMessage } from '@/store/agent-chat-store';
-import { ArrowUp, Bot, CalendarClock, ListTodo, Sparkles, X } from 'lucide-react';
+import { ArrowUp, Bot, CalendarClock, ListTodo, Sparkles, Square, X } from 'lucide-react';
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { LoadingArea } from '@/components/common/loading-area';
+import { AGENT_MESSAGE_MAX_LENGTH } from '@/lib/agent-limits';
+
+/** Chat local ainda não persistido, mintado com `crypto.randomUUID` (ver store):
+ * é seguro mandar como `clientChatId` — o servidor cria/anexa nesse id (aditivo). */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Status HTTP de um erro do cliente da API (sem depender da classe em runtime). */
 function httpStatusOf(error: unknown): number | undefined {
@@ -166,19 +171,23 @@ const STICK_TO_BOTTOM_PX = 80;
 
 function ChatComposer({
    onSend,
+   onStop,
    autoFocus,
    large,
-   disabled,
+   streaming,
 }: {
    onSend: (input: string) => void;
+   /** Presente sempre que uma resposta pode estar em voo (mesmo sem `streaming` ainda). */
+   onStop?: () => void;
    autoFocus?: boolean;
    large?: boolean;
-   disabled?: boolean;
+   /** Uma resposta está em voo: o campo desabilita e o botão de enviar vira "Parar". */
+   streaming?: boolean;
 }) {
    const [value, setValue] = useState('');
 
    const submit = () => {
-      if (disabled || value.trim() === '') return;
+      if (streaming || value.trim() === '') return;
       onSend(value.trim());
       setValue('');
    };
@@ -188,12 +197,19 @@ function ChatComposer({
          <textarea
             value={value}
             autoFocus={autoFocus}
-            disabled={disabled}
+            disabled={streaming}
+            maxLength={AGENT_MESSAGE_MAX_LENGTH}
             onChange={(event) => setValue(event.target.value)}
             onKeyDown={(event) => {
                if (event.key === 'Enter' && !event.shiftKey) {
                   event.preventDefault();
                   submit();
+               }
+               // Esc também para (co pedido): funciona com o foco no campo; o
+               // container do chat cobre o resto (foco em qualquer outro lugar).
+               if (event.key === 'Escape' && streaming) {
+                  event.preventDefault();
+                  onStop?.();
                }
             }}
             placeholder="Ask the agent…"
@@ -203,15 +219,27 @@ function ChatComposer({
             )}
          />
          <div className="flex items-center justify-end px-2.5 pb-2.5">
-            <Button
-               size="icon"
-               className="size-7 rounded-full"
-               onClick={submit}
-               disabled={disabled || value.trim() === ''}
-               aria-label="Send"
-            >
-               <ArrowUp className="size-4" />
-            </Button>
+            {streaming ? (
+               <Button
+                  size="icon"
+                  variant="outline"
+                  className="size-7 rounded-full"
+                  onClick={onStop}
+                  aria-label="Parar"
+               >
+                  <Square className="size-3" fill="currentColor" />
+               </Button>
+            ) : (
+               <Button
+                  size="icon"
+                  className="size-7 rounded-full"
+                  onClick={submit}
+                  disabled={value.trim() === ''}
+                  aria-label="Send"
+               >
+                  <ArrowUp className="size-4" />
+               </Button>
+            )}
          </div>
       </div>
    );
@@ -237,10 +265,22 @@ export default function AgentChat() {
    const scrollRef = useRef<HTMLDivElement>(null);
    // Segue o fim só se o usuário já estava lá (não arranca quem rolou para ler acima).
    const stickToBottom = useRef(true);
+   // Controller da requisição em voo — "Parar" e Esc abortam por aqui.
+   const activeAbortRef = useRef<AbortController | null>(null);
 
    const messages = activeChat?.messages;
    const isStreaming = messages?.some((message) => message.streaming) ?? false;
    const messageCount = messages?.length ?? 0;
+
+   // Esc para a resposta em voo mesmo com o foco fora do composer.
+   useEffect(() => {
+      if (!isStreaming) return;
+      const onKeyDown = (event: KeyboardEvent) => {
+         if (event.key === 'Escape') activeAbortRef.current?.abort();
+      };
+      window.addEventListener('keydown', onKeyDown);
+      return () => window.removeEventListener('keydown', onKeyDown);
+   }, [isStreaming]);
 
    // Mensagem nova (envio/troca de chat): sempre vai para o fim.
    useLayoutEffect(() => {
@@ -270,12 +310,28 @@ export default function AgentChat() {
       const persisted = activeChat?.persisted ?? false;
       // Ação que devolve os ids criados: lida no handler, não assinada no render.
       const { chatId, assistantMessageId } = useAgentChatStore.getState().sendMessage(input);
+      const controller = new AbortController();
+      activeAbortRef.current = controller;
+      // Chat novo (local, não persistido) com id mintado pelo cliente (UUID real):
+      // manda como `clientChatId` pro servidor já saber onde gravar mesmo que um "Parar"
+      // no 1º envio nunca traga o chatId de volta (o fetch é cancelado antes da resposta).
+      const clientChatId = !persisted && UUID_RE.test(chatId) ? chatId : undefined;
       try {
          // Persiste no servidor (cria o chat se for novo) e devolve a resposta.
-         const res = await api.agent.send(persisted ? chatId : null, input);
+         const res = await api.agent.send(persisted ? chatId : null, input, {
+            signal: controller.signal,
+            clientChatId,
+         });
          if (!persisted) rekeyChat(chatId, res.chatId, res.title);
          resolveMessage(res.chatId, assistantMessageId, res.reply);
       } catch (error) {
+         if ((error as { name?: string })?.name === 'AbortError') {
+            // "Parar": não é falha — o servidor já persiste um turno coerente (a mesma
+            // mensagem chega no próximo hydrate); localmente só encerra o "pensando".
+            // Sem `error`, então não ganha o botão "Tentar de novo".
+            resolveMessage(chatId, assistantMessageId, 'Resposta interrompida.');
+            return;
+         }
          // 1º envio que falhou depois de o servidor gravar o chat: adota o id dele, senão
          // o retry mandaria `chatId: null` e criaria um segundo chat.
          const saved = (error as { problem?: { chatId?: unknown; title?: unknown } }).problem;
@@ -284,8 +340,12 @@ export default function AgentChat() {
          if (failedChatId !== chatId)
             rekeyChat(chatId, failedChatId, typeof saved?.title === 'string' ? saved.title : '');
          failMessage(failedChatId, assistantMessageId, agentErrorMessage(error));
+      } finally {
+         if (activeAbortRef.current === controller) activeAbortRef.current = null;
       }
    };
+
+   const handleStop = () => activeAbortRef.current?.abort();
 
    /* ------------------------------- Hero ------------------------------- */
    if (!activeChat) {
@@ -299,7 +359,13 @@ export default function AgentChat() {
                <div className="flex justify-center mb-8 text-muted-foreground/30">
                   <Bot className="size-24" strokeWidth={1} />
                </div>
-               <ChatComposer onSend={handleSend} autoFocus large disabled={isStreaming} />
+               <ChatComposer
+                  onSend={handleSend}
+                  onStop={handleStop}
+                  autoFocus
+                  large
+                  streaming={isStreaming}
+               />
 
                {!examplesDismissed && (
                   <div className="mt-6">
@@ -386,7 +452,14 @@ export default function AgentChat() {
          </div>
          <div className="shrink-0 border-t bg-container">
             <div className="max-w-2xl mx-auto px-6 py-4">
-               <ChatComposer onSend={handleSend} disabled={isStreaming} />
+               {/* `key`: força remontar ao trocar de chat — senão o texto ainda não
+                   enviado do chat anterior sobrevivia à troca e ia pro chat errado. */}
+               <ChatComposer
+                  key={activeChat.id}
+                  onSend={handleSend}
+                  onStop={handleStop}
+                  streaming={isStreaming}
+               />
             </div>
          </div>
       </div>

@@ -48,6 +48,22 @@ interface AgentChatState {
 let nextId = 1;
 const uid = (prefix: string) => `${prefix}-${nextId++}`;
 
+/**
+ * Id de um chat novo aberto pelo cliente: UUID de verdade quando o browser suporta —
+ * dobra como `clientChatId` no envio (aditivo, ver `lib/api/agent.ts`), então o servidor
+ * já sabe onde gravar mesmo que um "Parar" no 1º envio nunca traga o chatId de volta.
+ * Sem `crypto.randomUUID`, cai no id local antigo (aí o envio não manda `clientChatId`).
+ */
+function newLocalChatId(): string {
+   try {
+      const id = globalThis.crypto?.randomUUID?.();
+      if (id) return id;
+   } catch {
+      /* segue pro fallback abaixo */
+   }
+   return uid('chat');
+}
+
 /** Título curto a partir da 1ª mensagem (primeiras palavras, sem depender de mock). */
 function chatTitleFrom(input: string): string {
    const clean = input.trim().replace(/\s+/g, ' ');
@@ -167,7 +183,7 @@ export const useAgentChatStore = create<AgentChatState>((set) => ({
             };
          }
          const chat: AgentChat = {
-            id: uid('chat'),
+            id: newLocalChatId(),
             title: chatTitleFrom(input),
             messages: [userMessage, assistantMessage],
             persisted: false,

@@ -1,15 +1,20 @@
 import { db } from '@/db';
 import { handle, requireEmail, multi } from '@/lib/api/http';
-import { exportIssueRows, exportIssuesJson } from '@/lib/api/export';
+import { exportDescriptions, exportIssueRows, exportIssuesJson } from '@/lib/api/export';
 import { scopeForEmail } from '@/lib/api/scope';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/** Escapa um campo CSV (aspas + quebra de linha). */
+/**
+ * Escapa um campo CSV (aspas + quebra de linha). Texto que começa com `= + - @` (ou tab/CR)
+ * ganha um `'` na frente: sem isso o Excel/Sheets executa o título de uma issue como
+ * fórmula (injeção de CSV, OWASP). Números ficam intactos.
+ */
 function csvCell(v: string | number | null | undefined): string {
-   const s = v == null ? '' : String(v);
-   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+   let s = v == null ? '' : String(v);
+   if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 /**
@@ -43,6 +48,10 @@ export async function GET(req: Request) {
          });
       }
       const { issues, truncated } = await exportIssueRows(db, filters);
+      const descById = await exportDescriptions(
+         db,
+         issues.map((i) => i.id)
+      );
       const header = [
          'identifier',
          'title',
@@ -55,6 +64,12 @@ export async function GET(req: Request) {
          'dueDate',
          'labels',
          'createdAt',
+         // Aditivas no fim (a posição das antigas não muda): sem elas o CSV perdia a
+         // descrição e a hierarquia, e não voltava inteiro pelo import (aliases batem).
+         'description',
+         'parent',
+         'team',
+         'updatedAt',
       ];
       const lines = [header.join(',')];
       for (const i of issues) {
@@ -71,12 +86,17 @@ export async function GET(req: Request) {
                i.dueDate ?? '',
                i.labels.map((l) => l.name).join('; '),
                i.createdAt,
+               descById.get(i.id) ?? '',
+               i.parentIdentifier ?? '',
+               i.teamId,
+               i.updatedAt,
             ]
                .map(csvCell)
                .join(',')
          );
       }
-      const csv = lines.join('\n');
+      // BOM: sem ele o Excel lê o UTF-8 como Windows-1252 e quebra todo acento.
+      const csv = '\uFEFF' + lines.join('\n');
       return new Response(csv, {
          headers: {
             'Content-Type': 'text/csv; charset=utf-8',

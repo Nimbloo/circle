@@ -1,5 +1,7 @@
 import { db } from '@/db';
 import { ApiError } from '@/lib/api/errors';
+import { problem } from '@/lib/api/response';
+import { SENTRY_WEBHOOK_MAX_BYTES, payloadTooLarge, readBodyLimited } from '@/lib/api/http';
 import {
    createCardFromSentry,
    verifySignature,
@@ -17,13 +19,19 @@ function json(body: unknown, status = 200): Response {
    });
 }
 
+/** 400 em ProblemDetail, com o `error` do shape antigo junto (o Sentry lê esse campo). */
+function badField(detail: string): Response {
+   return problem(400, 'Bad Request', detail, { error: detail });
+}
+
 /**
  * Sentry Integration Platform — `issue-link.create`. Cria um card no Circle a partir do
  * formulário "Create" do Sentry. Body: `{fields:{title,description,teamId}, issueId, webUrl,
  * project, actor}`. Resposta: `{webUrl, project, identifier}` (o Sentry mostra `project#identifier`).
  */
 export async function POST(req: Request) {
-   const raw = await req.text();
+   const raw = await readBodyLimited(req, SENTRY_WEBHOOK_MAX_BYTES);
+   if (raw === null) return payloadTooLarge();
    const sig = signatureFrom(req.headers);
    if (!verifySignature(raw, sig)) return json({ error: 'assinatura inválida' }, 401);
 
@@ -34,8 +42,14 @@ export async function POST(req: Request) {
       return json({ error: 'JSON inválido' }, 400);
    }
 
+   const fields = body.fields ?? {};
+   // Assinado não quer dizer bem tipado: `.trim()` num número virava 500.
+   const wrong = (['title', 'description', 'teamId'] as const).find(
+      (k) => fields[k] != null && typeof fields[k] !== 'string'
+   );
+   if (wrong) return badField(`fields.${wrong} precisa ser texto`);
+
    try {
-      const fields = body.fields ?? {};
       const result = await createCardFromSentry(db, {
          title: fields.title,
          description: fields.description,
