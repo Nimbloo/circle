@@ -54,6 +54,13 @@ describe('import: CSV malformado', () => {
       ).rejects.toMatchObject({ status: 400 });
       expect(await listIssues(db, { team: 'CORE' })).toHaveLength(0);
    });
+
+   it('mapeamento para coluna inexistente é 400, não um lote "concluído" com tudo ignorado', async () => {
+      const csv = 'ID,Title\nA-1,Uma';
+      await expect(
+         commitImport(db, { source: 'csv', csv, mapping: { title: 'Nome' }, teamId: 'CORE' }, ADMIN)
+      ).rejects.toMatchObject({ status: 400 });
+   });
 });
 
 describe('import: integridade', () => {

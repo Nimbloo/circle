@@ -575,6 +575,13 @@ async function prepareImport(
    const mapping = input.mapping ?? {};
    if (!mapping.title) throw new ApiError(400, 'mapping.title é obrigatório');
    validateImportCsv(input.csv, mapping);
+   const { columns, rows } = csvToObjects(input.csv);
+   // Coluna mapeada que não existe no cabeçalho lia '' em toda linha: o título vazio
+   // ignorava o arquivo inteiro e o job terminava "concluído" sem criar nada.
+   for (const [field, column] of Object.entries(mapping)) {
+      if (column && !columns.includes(column))
+         throw new ApiError(400, `mapping.${field}: coluna '${column}' não existe no CSV`);
+   }
 
    const teamRows = await db.select().from(teamT).where(eq(teamT.id, input.teamId)).limit(1);
    if (teamRows.length === 0) throw new ApiError(400, `Team '${input.teamId}' não existe`);
@@ -584,7 +591,7 @@ async function prepareImport(
    if (input.createMissingLabels && !(await isAdmin(actorEmail, db)))
       throw new ApiError(403, 'Apenas admin pode criar labels pelo import');
 
-   return { mapping, rows: csvToObjects(input.csv).rows };
+   return { mapping, rows };
 }
 
 export async function commitImport(
