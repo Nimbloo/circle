@@ -2,8 +2,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
 import { __setTestDb, type Db } from '@/db';
-import { createIssue } from '@/lib/api/issues';
-import { parseCsv, previewImport } from '@/lib/api/import';
+import { and, eq } from 'drizzle-orm';
+import { issue as issueT, issueContent } from '@/db/schema';
+import { createIssue, listIssues } from '@/lib/api/issues';
+import { commitImport, parseCsv, previewImport } from '@/lib/api/import';
 import { GET as exportRoute } from '@/app/api/v1/issues/export/route';
 
 /** Auditoria de import/export: o CSV do `GET /issues/export` como o Excel o abre. */
@@ -59,6 +61,37 @@ describe('export CSV', () => {
       );
       const [header, ...rows] = parseCsv((await exportCsv()).replace(/^﻿/, ''));
       expect(rows[0][header.indexOf('description')]).toMatch(/^'\n=/);
+   });
+
+   it('o marcador anti-fórmula volta pelo import sem sujar título/descrição', async () => {
+      const titles = ['=1+1', "'=já tinha aspas", "'texto com aspas", '-lista'];
+      for (const title of titles)
+         await createIssue(
+            db,
+            {
+               teamId: 'CORE',
+               title,
+               description: title === '=1+1' ? '@menção' : null,
+               statusId: 'to-do',
+               priorityId: 'medium',
+            },
+            ANA
+         );
+      const csv = await exportCsv();
+      const preview = await previewImport(db, { source: 'csv', csv });
+      expect(preview.sample.map((r) => r.title).sort()).toEqual([...titles].sort());
+
+      // Importa num OUTRO time (cria issues novas) e confere a descrição gravada.
+      await seedTeam(db, 'COPY', 'Copy');
+      await commitImport(db, { source: 'csv', csv, mapping: preview.mapping, teamId: 'COPY' }, ANA);
+      const copied = await listIssues(db, { team: 'COPY' });
+      expect(copied.map((i) => i.title).sort()).toEqual([...titles].sort());
+      const [withDesc] = await db
+         .select({ description: issueContent.description })
+         .from(issueContent)
+         .innerJoin(issueT, eq(issueT.id, issueContent.issueId))
+         .where(and(eq(issueT.teamId, 'COPY'), eq(issueT.title, '=1+1')));
+      expect(withDesc.description).toBe('@menção');
    });
 
    it('começa com BOM UTF-8 para o Excel abrir os acentos certos', async () => {
