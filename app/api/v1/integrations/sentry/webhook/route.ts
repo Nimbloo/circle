@@ -1,3 +1,4 @@
+import { SENTRY_WEBHOOK_MAX_BYTES, payloadTooLarge, readBodyLimited } from '@/lib/api/http';
 import { verifySignature, signatureFrom } from '@/lib/api/integrations/sentry';
 
 export const runtime = 'nodejs';
@@ -10,7 +11,8 @@ export const dynamic = 'force-dynamic';
  * duplicados sem tabela de dedup). Logamos o resource pra observabilidade.
  */
 export async function POST(req: Request) {
-   const raw = await req.text();
+   const raw = await readBodyLimited(req, SENTRY_WEBHOOK_MAX_BYTES);
+   if (raw === null) return payloadTooLarge();
    const sig = signatureFrom(req.headers);
    if (!verifySignature(raw, sig)) {
       return new Response(JSON.stringify({ error: 'assinatura inválida' }), {

@@ -245,6 +245,45 @@ async function withProblemRequestId(res: Response, requestId: string): Promise<R
    }
 }
 
+/** Teto do corpo do webhook do GitHub — o próprio GitHub corta payloads em 25 MB. */
+export const GITHUB_WEBHOOK_MAX_BYTES = 25 * 1024 * 1024;
+/** Teto dos webhooks/UI components do Sentry (payloads de poucos KB). */
+export const SENTRY_WEBHOOK_MAX_BYTES = 1024 * 1024;
+
+/**
+ * Lê o corpo como texto até `maxBytes`; acima disso devolve null SEM terminar de ler.
+ * Para as rotas anônimas autenticadas por HMAC, que precisam do corpo cru inteiro antes
+ * de saber se o chamador é legítimo — sem teto, um corpo sem fim ocupava a memória do
+ * processo antes do 401.
+ */
+export async function readBodyLimited(req: Request, maxBytes: number): Promise<string | null> {
+   const declared = Number(req.headers.get('content-length'));
+   if (Number.isFinite(declared) && declared > maxBytes) return null;
+   if (!req.body) return '';
+   const reader = req.body.getReader();
+   const chunks: Uint8Array[] = [];
+   let size = 0;
+   for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) {
+         await reader.cancel().catch(() => undefined);
+         return null;
+      }
+      chunks.push(value);
+   }
+   return Buffer.concat(chunks).toString('utf8');
+}
+
+/** 413 dos webhooks (fora do `handle`: os emissores esperam JSON simples). */
+export function payloadTooLarge(): Response {
+   return new Response(JSON.stringify({ error: 'payload grande demais' }), {
+      status: 413,
+      headers: { 'content-type': 'application/json' },
+   });
+}
+
 /** Lê um parâmetro multivalorado: repetido (?x=a&x=b) ou CSV (?x=a,b). */
 export function multi(sp: URLSearchParams, key: string): string[] | undefined {
    const all = sp.getAll(key);
