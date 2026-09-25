@@ -68,14 +68,14 @@ describe('agent chat store (#50)', () => {
       await act(async () => {
          fireEvent.keyDown(textarea(), { key: 'Enter' });
       });
-      expect(apiMocks.send).toHaveBeenLastCalledWith(null, 'Oi');
+      expect(apiMocks.send).toHaveBeenLastCalledWith(null, 'Oi', expect.anything());
 
       apiMocks.send.mockResolvedValueOnce({ chatId: 'srv-1', title: 'Oi', reply: 'Olá!' });
       fireEvent.change(textarea(), { target: { value: 'Oi de novo' } });
       await act(async () => {
          fireEvent.keyDown(textarea(), { key: 'Enter' });
       });
-      expect(apiMocks.send).toHaveBeenLastCalledWith(null, 'Oi de novo');
+      expect(apiMocks.send).toHaveBeenLastCalledWith(null, 'Oi de novo', expect.anything());
       expect(useAgentChatStore.getState().activeChatId).toBe('srv-1');
    });
 
@@ -100,7 +100,7 @@ describe('agent chat store (#50)', () => {
       await act(async () => {
          fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
       });
-      expect(apiMocks.send).toHaveBeenLastCalledWith('srv-1', 'Oi');
+      expect(apiMocks.send).toHaveBeenLastCalledWith('srv-1', 'Oi', expect.anything());
    });
 
    it('"Tentar de novo" só aparece no erro que é a última mensagem', async () => {
@@ -169,7 +169,7 @@ describe('agent chat store (#50)', () => {
          fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
       });
 
-      expect(apiMocks.send).toHaveBeenCalledWith('chat-1', 'Oi, tudo bem?');
+      expect(apiMocks.send).toHaveBeenCalledWith('chat-1', 'Oi, tudo bem?', expect.anything());
       const messages = useAgentChatStore.getState().chats[0].messages;
       expect(messages.at(-1)).toMatchObject({ content: 'Tudo certo!' });
    });

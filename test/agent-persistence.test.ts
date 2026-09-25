@@ -13,12 +13,28 @@ vi.mock('@aws-sdk/client-bedrock-runtime', () => ({
    },
 }));
 
+// Espião para forçar uma falha que NÃO vem do provedor (ex.: erro lendo settings) —
+// simula um bug/blip fora do Bedrock, para provar que o chat já persistido não perde
+// o vínculo com o cliente nesse caso também.
+const settingsCtl = vi.hoisted(() => ({ shouldFail: false }));
+vi.mock('@/lib/api/settings', async (importOriginal) => {
+   const real = await importOriginal<typeof import('@/lib/api/settings')>();
+   return {
+      ...real,
+      getUserSettings: async (...args: Parameters<typeof real.getUserSettings>) => {
+         if (settingsCtl.shouldFail) throw new Error('falha inesperada, não é do provedor');
+         return real.getUserSettings(...args);
+      },
+   };
+});
+
 import { randomUUID } from 'node:crypto';
 import { makeTestDb } from './helpers/db';
 import { seedTeam } from './helpers/fixtures';
 import { __setTestDb } from '@/db';
 import { agentChat, agentMessage, issue as issueT } from '@/db/schema';
 import { getOrCreateUser } from '@/lib/api/users';
+import { ApiError } from '@/lib/api/errors';
 import { getAgentChat, listAgentChats, sendAgentMessage } from '@/lib/api/agent';
 import { POST as sendChat } from '@/app/api/v1/agent/chats/route';
 import { GET as getChat } from '@/app/api/v1/agent/chats/[id]/route';
@@ -43,7 +59,10 @@ const reply = (text: string) => ({
 type Sent = { messages: { role: string; content: { text?: string }[] }[] };
 const sentMessages = (call: number) => (sendMock.mock.calls[call][0].input as Sent).messages;
 
-beforeEach(() => sendMock.mockReset());
+beforeEach(() => {
+   sendMock.mockReset();
+   settingsCtl.shouldFail = false;
+});
 
 describe('agent: persistência robusta a falha do Bedrock (#50)', () => {
    it('falha no 1º envio cria o chat e grava o par user/assistant(error)', async () => {
@@ -209,6 +228,27 @@ describe('agent: persistência robusta a falha do Bedrock (#50)', () => {
       expect(msgs.length).toBeLessThanOrEqual(41);
       expect(msgs[0].role).toBe('user');
       expect(msgs.at(-1)?.content[0].text).toBe('última');
+   });
+
+   it('falha que NÃO é do provedor (ex.: erro lendo settings) também devolve o chatId — sem isso "Tentar de novo" duplicava o chat', async () => {
+      const db = await makeTestDb();
+      settingsCtl.shouldFail = true;
+      let caught: unknown;
+      try {
+         await sendAgentMessage(db, ME, null, 'oi');
+      } catch (e) {
+         caught = e;
+      }
+      expect(caught).toBeInstanceOf(ApiError);
+      const chats = await listAgentChats(db, ME);
+      expect(chats).toHaveLength(1);
+      expect((caught as ApiError).extensions).toMatchObject({ chatId: chats[0].id });
+      const msgs = await db.select().from(agentMessage);
+      expect(msgs).toHaveLength(2);
+      expect(msgs.map((m) => [m.role, m.error])).toEqual([
+         ['user', false],
+         ['assistant', true],
+      ]);
    });
 
    it('falha do provedor DEPOIS de criar uma issue: turno vira resposta com o que foi feito, sem retry', async () => {

@@ -155,7 +155,12 @@ async function parseResponse(res: Response): Promise<{ data: unknown; meta?: unk
    return { data: json?.data ?? json, meta: json?.meta };
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(
+   method: string,
+   path: string,
+   body?: unknown,
+   opts?: { signal?: AbortSignal }
+): Promise<T> {
    const res = await fetch(`/api/v1${path}`, {
       method,
       // Aba de origem (If#16): o servidor carimba no evento SSE e esta aba reconhece o eco.
@@ -166,6 +171,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
       body: body !== undefined ? JSON.stringify(body) : undefined,
       // DELETE sobrevive ao fechamento da página (exclusão com Undo enviada no `pagehide`).
       keepalive: method === 'DELETE',
+      signal: opts?.signal,
    });
    return (await parseResponse(res)).data as T;
 }
@@ -187,7 +193,8 @@ async function postForm<T>(path: string, form: FormData): Promise<T> {
 }
 
 const get = <T>(p: string) => request<T>('GET', p);
-const post = <T>(p: string, b?: unknown) => request<T>('POST', p, b ?? {});
+const post = <T>(p: string, b?: unknown, opts?: { signal?: AbortSignal }) =>
+   request<T>('POST', p, b ?? {}, opts);
 const patch = <T>(p: string, b: unknown) => request<T>('PATCH', p, b);
 const put = <T>(p: string, b: unknown) => request<T>('PUT', p, b);
 const del = <T>(p: string) => request<T>('DELETE', p);
@@ -249,11 +256,16 @@ export const api = {
             title: string;
             messages: { role: 'user' | 'assistant'; content: string; error?: boolean }[];
          }>(`/agent/chats/${id}`),
-      send: (chatId: string | null, content: string) =>
-         post<{ chatId: string; title: string; reply: string }>('/agent/chats', {
-            chatId,
-            content,
-         }),
+      send: (
+         chatId: string | null,
+         content: string,
+         opts?: { signal?: AbortSignal; clientChatId?: string }
+      ) =>
+         post<{ chatId: string; title: string; reply: string }>(
+            '/agent/chats',
+            { chatId, content, clientChatId: opts?.clientChatId },
+            opts
+         ),
    },
 
    settings: {
