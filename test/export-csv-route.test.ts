@@ -45,6 +45,22 @@ describe('export CSV', () => {
       for (const t of titles) expect(t).toMatch(/^'[=+\-@]/);
    });
 
+   it('neutraliza descrição que começa com quebra de linha seguida de fórmula', async () => {
+      await createIssue(
+         db,
+         {
+            teamId: 'CORE',
+            title: 'Com descrição',
+            description: '\n=HYPERLINK("http://evil","x")',
+            statusId: 'to-do',
+            priorityId: 'medium',
+         },
+         ANA
+      );
+      const [header, ...rows] = parseCsv((await exportCsv()).replace(/^﻿/, ''));
+      expect(rows[0][header.indexOf('description')]).toMatch(/^'\n=/);
+   });
+
    it('começa com BOM UTF-8 para o Excel abrir os acentos certos', async () => {
       await createIssue(
          db,
