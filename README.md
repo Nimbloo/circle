@@ -11,18 +11,18 @@ realtime por SSE e deploy contínuo no EKS da Nimbloo.
 
 ## Stack
 
-| Camada          | Escolha                                                                           |
-| --------------- | --------------------------------------------------------------------------------- |
-| Framework       | Next.js 15 (App Router, React 19, Turbopack no dev)                               |
-| Linguagem       | TypeScript (strict), alias `@/*` → raiz do repo                                   |
-| Estilo          | Tailwind CSS v4 — tokens em `app/globals.css` (paleta do Linear)                  |
-| UI              | shadcn/ui (Radix) em `components/ui/` + ícones `lucide-react`                     |
-| Estado          | Zustand (`store/`) + nuqs (filtros/sort na URL)                                   |
-| Banco           | PostgreSQL + drizzle-orm (`db/schema.ts`, migrations em `db/migrations/`)         |
-| Auth            | NextAuth v5 + provider Keycloak (SSO OIDC) — ver [Autenticação](#autenticação)    |
-| Realtime        | SSE sobre Postgres `LISTEN/NOTIFY` (`lib/api/events.ts` → `lib/use-live-sync.ts`) |
-| Testes          | Vitest + PGlite (Postgres em memória, sem banco externo)                          |
-| Observabilidade | Sentry (`@sentry/nextjs`), `/api/metrics` (Prometheus)                            |
+| Camada          | Escolha                                                                                                                                                  |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Framework       | Next.js 15 (App Router, React 19, Turbopack no dev)                                                                                                      |
+| Linguagem       | TypeScript (strict), alias `@/*` → raiz do repo                                                                                                          |
+| Estilo          | Tailwind CSS v4 — tokens em `app/globals.css` (paleta do Linear)                                                                                         |
+| UI              | shadcn/ui (Radix) em `components/ui/` + ícones `lucide-react`                                                                                            |
+| Estado          | Zustand (`store/`) + nuqs (filtros/sort na URL)                                                                                                          |
+| Banco           | PostgreSQL + drizzle-orm (`db/schema.ts`, migrations em `db/migrations/`)                                                                                |
+| Auth            | NextAuth v5 + provider Keycloak (SSO OIDC) — ver [Autenticação](#autenticação)                                                                           |
+| Realtime        | SSE sobre Postgres `LISTEN/NOTIFY` (`lib/api/events.ts` → `lib/use-live-sync.ts`)                                                                        |
+| Testes          | Vitest + PGlite (Postgres em memória, sem banco externo)                                                                                                 |
+| Observabilidade | Sentry (`@sentry/nextjs`), `/api/metrics` (Prometheus), tracing OpenTelemetry (`@vercel/otel`) → Grafana Tempo — ver [Observabilidade](#observabilidade) |
 
 ---
 
@@ -141,6 +141,34 @@ pnpm test
 Vitest sobe um Postgres **em memória (PGlite)** por teste (`test/helpers/db.ts` →
 `makeTestDb`), roda as migrations e usa fixtures (`test/helpers/fixtures.ts`). Escreva um
 teste por endpoint/serviço de `lib/api/` que você tocar. Padrão AAA.
+
+---
+
+## Observabilidade
+
+### Tracing (OpenTelemetry → Grafana Tempo)
+
+`instrumentation.ts` registra o tracing do servidor (`lib/observability/otel.ts`, via
+`@vercel/otel`) no runtime Node. **Inerte por padrão** — sem a env abaixo, `registerOTel`
+nem é chamado: zero instrumentação, zero overhead, zero erro. Quem liga é o chart
+(`nimbloo-k8s`, fora deste repo):
+
+| Env var                              | Obrigatória? | Efeito                                                                                                       |
+| ------------------------------------ | ------------ | ------------------------------------------------------------------------------------------------------------ |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`        | uma das duas | Base do collector OTLP/HTTP (ex.: `http://grafana-tempo.monitoring.svc.cluster.local:4318`). Liga o tracing. |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | uma das duas | Mesma coisa, específico de traces (inclui o path `/v1/traces` se usado sozinho). Também liga o tracing.      |
+| `OTEL_EXPORTER_OTLP_PROTOCOL`        | não          | `http/protobuf` (default) ou `http/json`. Precisa bater com o que o Tempo aceita.                            |
+| `OTEL_EXPORTER_OTLP_HEADERS`         | não          | Headers extras (ex.: auth do collector), formato `chave=valor,chave2=valor2`.                                |
+
+- `service.name` = `circle` (fixo no código).
+- Propagação **W3C Trace Context** (`traceparent`) é o default do pacote — sem config extra.
+- `/api/healthz` e `/api/readyz` (probes do K8s) são **excluídos do sampler** — nunca geram
+  span, mesmo com o tracing ligado.
+- O `traceId` do span ativo (Sentry hoje; OTel quando ligado — os dois publicam no mesmo
+  registro global da API do OTel) entra no log estruturado (`lib/api/log.ts`,
+  `currentTraceId()`), ao lado do `requestId` de sempre.
+- Passo 2 (fora deste repo): setar a env no chart `nimbloo-k8s` — sem `nodeSelector` nem
+  outra mudança de infra necessária para isso.
 
 ---
 
