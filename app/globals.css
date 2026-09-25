@@ -108,6 +108,11 @@
    --destructive-foreground: #ffffff;
    --border: #e6e7ea;
    --input: #dcdee2;
+   /* Borda dos botões `outline`/`secondary` (#98): dedicado porque `--border`/`--input`
+      têm contraste de 1,1-1,6:1 contra a página — ótimo para divisórias discretas,
+      ruim para o limite de um botão (parece desabilitado). ≥3:1 (WCAG 1.4.11) contra
+      `--background` e `--card` em todo tema — ver test/theme-contrast.test.ts. */
+   --button-border: #82858c;
    --ring: #5e6ad2;
    --chart-1: oklch(0.646 0.222 41.116);
    --chart-2: oklch(0.6 0.118 184.704);
@@ -180,6 +185,7 @@
    --destructive-foreground: #ffffff;
    --border: lch(9.84 1.48 272);
    --input: #2a2b2f;
+   --button-border: #6d7180;
    --ring: #5e6ad2;
    --chart-1: oklch(0.488 0.243 264.376);
    --chart-2: oklch(0.696 0.17 162.48);
@@ -237,6 +243,7 @@
    --color-media-overlay-foreground: var(--media-overlay-foreground);
    --color-border: var(--border);
    --color-input: var(--input);
+   --color-button-border: var(--button-border);
    --color-ring: var(--ring);
    --color-chart-1: var(--chart-1);
    --color-chart-2: var(--chart-2);
@@ -330,6 +337,7 @@ input[type='search'] {
    --muted: #f7f7f8;
    --border: #ececee;
    --input: #ececee;
+   --button-border: #82858c;
    --sidebar-border: #ececee;
    --sidebar-hover: #f7f7f8;
    --sidebar-accent: #f4f4f5;
@@ -352,6 +360,7 @@ input[type='search'] {
    --muted-foreground: #9d9bc7;
    --border: #34325a;
    --input: #34325a;
+   --button-border: #7d7bb0;
    --ring: #575bc7;
    --primary: #e4e4fb;
    --primary-foreground: #1c1b2e;
@@ -381,6 +390,7 @@ input[type='search'] {
    --muted-foreground: #8a8f98;
    --border: #2c2e35;
    --input: #2c2e35;
+   --button-border: #71768c;
    --ring: #6e79dd;
    --sidebar: #16171b;
    --sidebar-foreground: #eef0f3;
@@ -415,6 +425,7 @@ input[type='search'] {
    --muted-foreground: #96a1bf;
    --border: #3c3f51;
    --input: #44475a;
+   --button-border: #949dc7;
    --ring: #bd93f9;
    /* Roxo é a identidade do tema; o texto em cima dele volta a ser o fundo. */
    --primary: #bd93f9;
