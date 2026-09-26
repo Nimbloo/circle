@@ -12,6 +12,10 @@ describe('otel: sampler das probes de health', () => {
       'GET /api/readyz',
       'GET /api/readyz?probe=1',
       'executing api route (app) /api/healthz',
+      // Scrape do Prometheus a cada 30s — ruído, visto em prd nas duas formas de nome.
+      'GET /api/metrics',
+      'GET /app/api/metrics/route',
+      'GET /app/api/healthz/route',
    ])('descarta o span da probe: %s', (name) => {
       expect(decide(name)).toBe(SamplingDecision.NOT_RECORD);
    });
@@ -20,6 +24,8 @@ describe('otel: sampler das probes de health', () => {
       'GET /api/v1/issues?next=/api/healthz',
       'GET /api/v1/issues?redirect=x&y=/api/readyz',
       'GET /api/healthzfoo',
+      'GET /api/metricsfoo',
+      'GET /app/api/v1/issues/route',
       'executing api route (app) /api/v1/issues',
    ])('amostra requisição que só cita a probe fora do pathname: %s', (name) => {
       expect(decide(name)).toBe(SamplingDecision.RECORD_AND_SAMPLED);
