@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { ok } from '@/lib/api/response';
 import { handle, requireEmail } from '@/lib/api/http';
 import { bulkUpdateIssues } from '@/lib/api/issues';
+import { BULK_UPDATE_MAX } from '@/lib/issue-bulk';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -21,7 +22,7 @@ const BulkSchema = z.object({
    updates: z
       .array(z.object({ id: z.string().min(1).max(36), patch: PatchSchema }))
       .min(1)
-      .max(250),
+      .max(BULK_UPDATE_MAX, `no máximo ${BULK_UPDATE_MAX} issues por lote`),
 });
 
 /** Ações em lote (#30): um patch por issue, numa transação só (tudo ou nada). */

@@ -1011,6 +1011,8 @@ export async function bulkUpdateIssues(
       }
       return out;
    });
+   // Em sequência de propósito: em paralelo, duas irmãs concluídas juntas veriam o pai
+   // "com todas as filhas prontas" ao mesmo tempo e o auto-close o fecharia duas vezes.
    const dtos: IssueDto[] = [];
    for (let i = 0; i < ordered.length; i++) {
       const { id, patch } = ordered[i];

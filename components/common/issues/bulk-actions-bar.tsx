@@ -31,6 +31,7 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 import { BarChart3, CircleDot, Trash2, User as UserIcon, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { deleteIssuesWithUndo } from './delete-with-undo';
+import { BULK_UPDATE_MAX } from '@/lib/issue-bulk';
 
 /**
  * Barra de ações em lote (Linear-style): aparece quando há issues selecionadas
@@ -56,9 +57,16 @@ export function BulkActionsBar() {
 
    // Lote atômico (#30): uma requisição, tudo ou nada. Sucesso só quando o servidor
    // confirma; a falha já é avisada (e desfeita em todas) pelo store.
-   const withToast = (p: Promise<void>, msg: string) => {
+   const withToast = (run: () => Promise<void>, msg: string) => {
       setOpen(null);
-      p.then(
+      // Acima do teto a API recusaria o lote inteiro: avisa antes, sem mexer em nada.
+      if (ids.length > BULK_UPDATE_MAX) {
+         toast.error(
+            `Edição em lote aceita até ${BULK_UPDATE_MAX} issues por vez (${ids.length} selecionadas)`
+         );
+         return;
+      }
+      run().then(
          () => toast.success(msg),
          () => {}
       );
@@ -67,25 +75,19 @@ export function BulkActionsBar() {
    const applyStatus = (statusId: string) => {
       const s = allStatus.find((x) => x.id === statusId);
       if (!s) return;
-      withToast(
-         bulkUpdate(ids, () => ({ status: s })),
-         `${ids.length} issues → ${s.name}`
-      );
+      withToast(() => bulkUpdate(ids, () => ({ status: s })), `${ids.length} issues → ${s.name}`);
    };
 
    const applyPriority = (priorityId: string) => {
       const p = priorities.find((x) => x.id === priorityId);
       if (!p) return;
-      withToast(
-         bulkUpdate(ids, () => ({ priority: p })),
-         `${ids.length} issues → ${p.name}`
-      );
+      withToast(() => bulkUpdate(ids, () => ({ priority: p })), `${ids.length} issues → ${p.name}`);
    };
 
    const applyAssignee = (userId: string | null) => {
       const u = userId ? (users.find((x) => x.id === userId) ?? null) : null;
       withToast(
-         bulkUpdate(ids, (issue) => principalAssigneePatch(issue, u)),
+         () => bulkUpdate(ids, (issue) => principalAssigneePatch(issue, u)),
          u ? `Assigned ${ids.length} issues to ${u.name}` : `Unassigned ${ids.length} issues`
       );
    };

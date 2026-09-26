@@ -15,6 +15,7 @@ import { seedCatalog, status } from './helpers/catalog-fixture';
 import { useBulkSelectionStore } from '@/store/bulk-selection-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { BULK_UPDATE_MAX } from '@/lib/issue-bulk';
 
 const apiMocks = vi.hoisted(() => ({ update: vi.fn(), bulkUpdate: vi.fn(), remove: vi.fn() }));
 vi.mock('@/lib/client', () => ({
@@ -133,6 +134,21 @@ describe('#30 ações em lote', () => {
          { id: 'a', patch: { assigneeIds: [ana.id, lia.id] } },
          { id: 'b', patch: { assigneeIds: [ana.id] } },
       ]);
+   });
+
+   it('acima do teto do lote: avisa e não chama a API nem muda nada', async () => {
+      const many = Array.from({ length: BULK_UPDATE_MAX + 1 }, (_, i) => make(`i${i}`));
+      useIssuesStore.setState({ issues: many });
+      useBulkSelectionStore.getState().set(many.map((i) => i.id));
+      const u = userEvent.setup();
+      render(<BulkActionsBar />);
+      await u.click(screen.getByRole('button', { name: /Priority/ }));
+      await u.click(await screen.findByRole('option', { name: /Urgent/ }));
+      expect(apiMocks.bulkUpdate).not.toHaveBeenCalled();
+      expect(vi.mocked(toast.error).mock.lastCall?.[0]).toContain(`até ${BULK_UPDATE_MAX}`);
+      expect(
+         useIssuesStore.getState().issues.every((i) => i.priority.id === priorities[0].id)
+      ).toBe(true);
    });
 
    it('membros desativados não aparecem no seletor de responsável', async () => {
