@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import { Inter, Geist_Mono } from 'next/font/google';
 import { Toaster } from '@/components/ui/sonner';
 import './globals.css';
@@ -36,11 +37,14 @@ import { ThemeProvider } from '@/components/layout/theme-provider';
 import { applyStoredTheme } from '@/lib/theme-bootstrap';
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
 
-export default function RootLayout({
+export default async function RootLayout({
    children,
 }: Readonly<{
    children: React.ReactNode;
 }>) {
+   // Nonce da CSP (middleware): sem ele o script de tema seria bloqueado. Ler o header
+   // torna a renderização dinâmica, que a CSP por requisição exige.
+   const nonce = (await headers()).get('x-nonce') ?? undefined;
    return (
       <html lang="pt-BR" suppressHydrationWarning>
          <head>
@@ -50,7 +54,10 @@ export default function RootLayout({
                 O next-themes já faz isso para a classe claro/escuro; a camada de
                 variante do Circle não tinha equivalente e entrava só no `useEffect`,
                 depois da hidratação — daí o flash com o tema anterior. */}
-            <script dangerouslySetInnerHTML={{ __html: `(${applyStoredTheme.toString()})();` }} />
+            <script
+               nonce={nonce}
+               dangerouslySetInnerHTML={{ __html: `(${applyStoredTheme.toString()})();` }}
+            />
          </head>
          <body
             className={`${inter.variable} ${geistMono.variable} font-sans antialiased bg-background`}
@@ -62,7 +69,7 @@ export default function RootLayout({
                    escuro e só depois da hidratação o ThemeApplier chamava
                    `setTheme('system')` e corrigia — um segundo flash, agora de
                    claro/escuro. O estado final é o mesmo; o que sai é o flash. */}
-               <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+               <ThemeProvider attribute="class" defaultTheme="system" enableSystem nonce={nonce}>
                   {/* Sem SessionProvider: NADA no app consome `useSession` — quem
                       identifica o usuário é o `me` do bootstrap. O provider fazia um
                       GET /api/auth/session a cada carga de página (e outro a cada foco
