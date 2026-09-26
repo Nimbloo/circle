@@ -371,6 +371,22 @@ describe('useLiveSync — fetch direcionado coalescido e sequenciado (#11)', () 
       expect(seen[1]).toEqual({ id: 'i1' });
    });
 
+   it('mudança de automação na própria aba busca o DTO mesmo com a marca de eco (#30)', async () => {
+      const { getClientId, markOwnMutation } = await import('@/lib/client-id');
+      markOwnMutation('issue', 'i2');
+      api.issues.get.mockResolvedValue(issueDto('i2'));
+      const es = setup();
+      es.emit({
+         entity: 'issue',
+         action: 'updated',
+         id: 'i2',
+         clientId: getClientId(),
+         scope: 'automation',
+      });
+      await flush();
+      expect(api.issues.get).toHaveBeenCalledTimes(1);
+   });
+
    it('mudança só de conteúdo (descrição) não busca o DTO da lista (#18)', async () => {
       const seen: unknown[] = [];
       const on = (e: Event) => seen.push((e as CustomEvent).detail);

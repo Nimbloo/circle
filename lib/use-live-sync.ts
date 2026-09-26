@@ -99,8 +99,11 @@ interface CircleEventLike {
    recipientId?: string;
    /** Aba que originou a mutação (If#16). */
    clientId?: string;
-   /** `content`: só o conteúdo (descrição) mudou — o DTO da lista não (#18). */
-   scope?: 'content';
+   /**
+    * `content`: só o conteúdo (descrição) mudou — o DTO da lista não (#18).
+    * `automation`: mudança de automação, que a resposta da mutação não trouxe.
+    */
+   scope?: 'content' | 'automation';
    /** Subtipo do `catalog` (#53; aditivo). Ausente = dado do bootstrap (status). */
    kind?: string;
    /** Em `project`: milestone apagada (aditivo) — o detalhe de issue limpa o campo. */
@@ -369,7 +372,7 @@ export function useLiveSync(): void {
                if (!id) scheduleHydrate('issues');
                else if (deleted) useIssuesStore.getState().removeRemote(id);
                // Só o conteúdo (descrição) mudou: o DTO da lista é o mesmo (#18).
-               else if (parsed.scope === 'content' || ownEcho) {
+               else if (parsed.scope === 'content' || (ownEcho && parsed.scope !== 'automation')) {
                   /* nada a buscar */
                } else
                   enqueue(`issue:${id}`, {
