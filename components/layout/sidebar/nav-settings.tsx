@@ -17,7 +17,6 @@ import {
    LucideIcon,
    Settings,
    Smile,
-   Sparkles,
    Tag,
    ScrollText,
    Target,
@@ -69,7 +68,6 @@ export const settingsNav: SettingsNavGroup[] = [
    {
       label: 'Features',
       items: [
-         { name: 'AI & Agents', url: '/settings/ai', icon: Sparkles },
          { name: 'Pulse', url: '/settings/pulse', icon: Zap },
          { name: 'Emojis', url: '/settings/emojis', icon: Smile },
          { name: 'Integrations', url: '/settings/integrations', icon: Blocks },
