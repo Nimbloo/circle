@@ -24,14 +24,14 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { usePriorities, useStatuses } from '@/store/catalog-store';
 import { useBulkSelectionStore } from '@/store/bulk-selection-store';
-import { ISSUE_MUTATION_TOAST, useIssuesStore } from '@/store/issues-store';
+import { principalAssigneePatch, useIssuesStore } from '@/store/issues-store';
 import { activeUsers } from '@/data/users';
 import { useMemo, useState } from 'react';
-import { useShallow } from 'zustand/react/shallow';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { BarChart3, CircleDot, Trash2, User as UserIcon, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { deleteIssuesWithUndo } from './delete-with-undo';
+import { BULK_UPDATE_MAX } from '@/lib/issue-bulk';
 
 /**
  * Barra de ações em lote (Linear-style): aparece quando há issues selecionadas
@@ -44,13 +44,7 @@ export function BulkActionsBar() {
    const users = useMemo(() => activeUsers(allUsers), [allUsers]);
    const allStatus = useStatuses();
    const priorities = usePriorities();
-   const { updateIssueStatus, updateIssuePriority, updateIssueAssignee } = useIssuesStore(
-      useShallow((s) => ({
-         updateIssueStatus: s.updateIssueStatus,
-         updateIssuePriority: s.updateIssuePriority,
-         updateIssueAssignee: s.updateIssueAssignee,
-      }))
-   );
+   const bulkUpdate = useIssuesStore((s) => s.bulkUpdate);
    // Popover aberto (controlado): escolher uma opção fecha o seletor.
    const [open, setOpen] = useState<'status' | 'priority' | 'assignee' | null>(null);
    const openProps = (key: 'status' | 'priority' | 'assignee') => ({
@@ -61,42 +55,39 @@ export function BulkActionsBar() {
    const ids = [...selected];
    if (ids.length === 0) return null;
 
-   // UM toast por lote (#30): sucesso só quando todas confirmam; com falha, um erro
-   // agregado com o mesmo id do toast do store (as falhas por issue colapsam nele).
-   const withToast = (ps: Promise<void>[], msg: string) => {
+   // Lote atômico (#30): uma requisição, tudo ou nada. Sucesso só quando o servidor
+   // confirma; a falha já é avisada (e desfeita em todas) pelo store.
+   const withToast = (run: () => Promise<void>, msg: string) => {
       setOpen(null);
-      void Promise.allSettled(ps).then((results) => {
-         const failed = results.filter((r) => r.status === 'rejected').length;
-         if (failed === 0) toast.success(msg);
-         else
-            toast.error(`Falha em ${failed} de ${results.length} issues`, {
-               id: ISSUE_MUTATION_TOAST,
-            });
-      });
+      // Acima do teto a API recusaria o lote inteiro: avisa antes, sem mexer em nada.
+      if (ids.length > BULK_UPDATE_MAX) {
+         toast.error(
+            `Edição em lote aceita até ${BULK_UPDATE_MAX} issues por vez (${ids.length} selecionadas)`
+         );
+         return;
+      }
+      run().then(
+         () => toast.success(msg),
+         () => {}
+      );
    };
 
    const applyStatus = (statusId: string) => {
       const s = allStatus.find((x) => x.id === statusId);
       if (!s) return;
-      withToast(
-         ids.map((id) => updateIssueStatus(id, s)),
-         `${ids.length} issues → ${s.name}`
-      );
+      withToast(() => bulkUpdate(ids, () => ({ status: s })), `${ids.length} issues → ${s.name}`);
    };
 
    const applyPriority = (priorityId: string) => {
       const p = priorities.find((x) => x.id === priorityId);
       if (!p) return;
-      withToast(
-         ids.map((id) => updateIssuePriority(id, p)),
-         `${ids.length} issues → ${p.name}`
-      );
+      withToast(() => bulkUpdate(ids, () => ({ priority: p })), `${ids.length} issues → ${p.name}`);
    };
 
    const applyAssignee = (userId: string | null) => {
       const u = userId ? (users.find((x) => x.id === userId) ?? null) : null;
       withToast(
-         ids.map((id) => updateIssueAssignee(id, u)),
+         () => bulkUpdate(ids, (issue) => principalAssigneePatch(issue, u)),
          u ? `Assigned ${ids.length} issues to ${u.name}` : `Unassigned ${ids.length} issues`
       );
    };

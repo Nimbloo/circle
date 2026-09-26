@@ -1,4 +1,13 @@
-@import 'tailwindcss';
+/* Classes só das pastas de código: com a varredura automática, o Tailwind lia também
+   `docs/*.md`, e uma classe citada num spec (`origin-(--radix-*-…)`) virava CSS inválido
+   que o `next dev --turbopack` recusa. */
+@import 'tailwindcss' source(none);
+@source '../app';
+@source '../components';
+@source '../data';
+@source '../hooks';
+@source '../lib';
+@source '../store';
 
 @plugin "tailwindcss-animate";
 

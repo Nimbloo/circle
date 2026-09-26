@@ -1,7 +1,9 @@
 import NextAuth from 'next-auth';
+import { NextResponse, type NextRequest } from 'next/server';
 import { authConfig } from '@/auth.config';
 import { isPublicApiPath } from '@/lib/api/public-routes';
 import { loginRedirectUrl } from '@/lib/session-redirect';
+import { buildContentSecurityPolicy, createNonce } from '@/lib/security/content-security-policy';
 
 // Instância EDGE-SAFE (só a authConfig, sem Credentials/db) — evita puxar pg/bcrypt/
 // node:crypto pro bundle Edge do middleware.
@@ -25,6 +27,26 @@ const { auth } = NextAuth(authConfig);
 // `/invite/<token>`: landing do magic link — quem chega ainda nao tem sessao (e o
 // ponto). A pagina nao autoriza nada; quem autoriza e o `signIn` (ver auth.ts).
 const PUBLIC_PAGE_PREFIXES = ['/login', '/signup', '/invite'];
+
+/**
+ * CSP com nonce por requisição (sem `unsafe-inline` em script). O Next lê o nonce do
+ * header `content-security-policy` da REQUISIÇÃO e o aplica aos próprios scripts; o
+ * layout lê o `x-nonce` para o script de tema. Só páginas: JSON da API não executa script.
+ */
+function withCsp(req: NextRequest): NextResponse {
+   const nonce = createNonce();
+   const csp = buildContentSecurityPolicy({
+      cdnUrl: process.env.NEXT_PUBLIC_CIRCLE_CDN_URL ?? '',
+      isDevelopment: process.env.NODE_ENV === 'development',
+      nonce,
+   });
+   const headers = new Headers(req.headers);
+   headers.set('x-nonce', nonce);
+   headers.set('content-security-policy', csp);
+   const res = NextResponse.next({ request: { headers } });
+   res.headers.set('content-security-policy', csp);
+   return res;
+}
 
 function unauthorized(): Response {
    return new Response(JSON.stringify({ title: 'Unauthorized', status: 401 }), {
@@ -53,13 +75,14 @@ export default auth(async (req) => {
    const isPublicPage = PUBLIC_PAGE_PREFIXES.some(
       (p) => pathname === p || pathname.startsWith(`${p}/`)
    );
-   if (isPublicPage) return;
+   if (isPublicPage) return withCsp(req);
    if (!req.auth) {
       // Deep-link preservado (#12): depois do login, volta para onde estava.
       return Response.redirect(
          new URL(loginRedirectUrl(pathname, req.nextUrl.search), req.nextUrl.origin)
       );
    }
+   return withCsp(req);
 });
 
 export const config = {

@@ -7,6 +7,7 @@ import type {
    IssueListOptions,
    CreateIssueInput,
    UpdateIssueInput,
+   BulkIssuePatch,
 } from '@/lib/api/issues';
 import type { ProjectDto, CreateProjectInput, UpdateProjectInput } from '@/lib/api/projects';
 import type {
@@ -356,6 +357,9 @@ export const api = {
       create: (input: CreateIssueClientInput) => post<IssueDto>('/issues', input),
       update: (id: string, patchInput: UpdateIssueInput) =>
          patch<IssueDto>(`/issues/${id}`, patchInput),
+      /** Ações em lote (#30): um patch por issue, numa transação só (tudo ou nada). */
+      bulkUpdate: (updates: { id: string; patch: BulkIssuePatch }[]) =>
+         patch<{ issues: IssueDto[] }>('/issues/bulk', { updates }),
       remove: (id: string) => del<{ deleted: boolean }>(`/issues/${id}`),
       reorder: (id: string, beforeId?: string | null, afterId?: string | null) =>
          patch<IssueDto>(`/issues/${id}/rank`, { beforeId, afterId }),

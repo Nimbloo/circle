@@ -1,13 +1,24 @@
 interface ContentSecurityPolicyOptions {
    cdnUrl: string;
    isDevelopment: boolean;
+   /** Nonce da requisição: só scripts com ele (e os que eles carregam) executam. */
+   nonce: string;
+}
+
+/** Nonce aleatório por requisição (128 bits, base64), Edge-safe. */
+export function createNonce(): string {
+   const bytes = crypto.getRandomValues(new Uint8Array(16));
+   return btoa(String.fromCharCode(...bytes));
 }
 
 export function buildContentSecurityPolicy({
    cdnUrl,
    isDevelopment,
+   nonce,
 }: ContentSecurityPolicyOptions): string {
-   const scriptSources = ["'self'", "'unsafe-inline'"];
+   // Sem `unsafe-inline`: script injetado no HTML não tem o nonce e não roda. O
+   // `strict-dynamic` libera os chunks que os scripts do Next (com nonce) carregam.
+   const scriptSources = ["'self'", `'nonce-${nonce}'`, "'strict-dynamic'"];
    if (isDevelopment) scriptSources.push("'unsafe-eval'");
 
    return [

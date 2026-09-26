@@ -47,7 +47,6 @@ import {
    Radar,
    RefreshCcw,
    Settings,
-   Sparkles,
    Tag,
    Target,
    Users,
@@ -592,17 +591,10 @@ export default function TeamSettings({ teamId }: TeamSettingsProps) {
                </SettingsCard>
             </SettingsSection>
 
-            <SettingsSection title="AI & Agents">
+            <SettingsSection title="Agent">
                <SettingsCard>
                   <SettingsRow
                      icon={<Bot className="size-4" />}
-                     title="AI & Agents"
-                     description="Configuração de agentes do workspace"
-                     chevron
-                     onClick={() => router.push(`/${orgId}/settings/ai`)}
-                  />
-                  <SettingsRow
-                     icon={<Sparkles className="size-4" />}
                      title="Agent personalization"
                      description="Como os agentes devem trabalhar com você"
                      chevron

@@ -1,25 +1,17 @@
 import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs/config';
 import withBundleAnalyzer from '@next/bundle-analyzer';
-import { buildContentSecurityPolicy } from './lib/security/content-security-policy';
 
 // Headers de segurança em toda resposta (defesa em profundidade além do gateway Istio).
-// CSP permite o mínimo do Next (styles inline do runtime; imagens data:/blob: pro avatar
-// base64 + o CDN CloudFront pros custom emojis) e bloqueia embedding + framing de terceiros.
-// CDN: lido de env no build; fallback pro domínio da distribution (estável).
+// A CSP é por requisição (nonce) e sai do middleware (`lib/security/content-security-policy`).
+// CDN: lido de env no build; fallback pro domínio da distribution (estável). Chega ao
+// middleware e ao editor pelo `NEXT_PUBLIC_CIRCLE_CDN_URL` abaixo.
 const CDN = (process.env.CIRCLE_CDN_URL || 'https://d23ibma5syugvj.cloudfront.net').replace(
    /\/$/,
    ''
 );
-const CSP = buildContentSecurityPolicy({
-   cdnUrl: CDN,
-   // O React Refresh do Next usa avaliação dinâmica em desenvolvimento. Produção
-   // continua estrita e nunca recebe `unsafe-eval`.
-   isDevelopment: process.env.NODE_ENV === 'development',
-});
 
 const SECURITY_HEADERS = [
-   { key: 'Content-Security-Policy', value: CSP },
    { key: 'X-Frame-Options', value: 'DENY' },
    { key: 'X-Content-Type-Options', value: 'nosniff' },
    { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },

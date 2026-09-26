@@ -76,6 +76,14 @@ interface IssuesState {
    updateIssueAssignee: (issueId: string, newAssignee: User | null) => Promise<void>;
    /** Substitui o CONJUNTO de responsáveis; o 1º vira o principal. `[]` limpa todos. */
    updateIssueAssignees: (issueId: string, assignees: User[]) => Promise<void>;
+   /**
+    * Ações em lote (#30): o patch de cada issue sai de `patchFor`, tudo numa requisição
+    * e numa transação só. Otimista em todas; se o servidor recusar, todas voltam.
+    */
+   bulkUpdate: (
+      ids: readonly string[],
+      patchFor: (issue: Issue | undefined) => Partial<Issue>
+   ) => Promise<void>;
    addIssueLabel: (issueId: string, label: LabelInterface) => Promise<void>;
    removeIssueLabel: (issueId: string, labelId: string) => Promise<void>;
    updateIssueProject: (issueId: string, newProject: Project | undefined) => Promise<void>;
@@ -204,6 +212,19 @@ function withSelfOnStart(prev: Issue | undefined, patch: Partial<Issue>): Partia
    const { me, users } = useWorkspaceStore.getState();
    const self = me ? users.find((u) => u.id === me.id) : undefined;
    return self ? { ...patch, assignee: self, assignees: [self] } : patch;
+}
+
+/**
+ * Troca só o principal, espelhando a regra do servidor no otimista: novo principal +
+ * colaboradores atuais (sem o principal anterior); sem novo principal, o 1º colaborador
+ * é promovido.
+ */
+export function principalAssigneePatch(current: Issue | undefined, newAssignee: User | null) {
+   const collaborators = (current?.assignees ?? []).filter(
+      (a) => a.id !== current?.assignee?.id && a.id !== newAssignee?.id
+   );
+   const assignees = newAssignee ? [newAssignee, ...collaborators] : collaborators;
+   return { assignee: assignees[0] ?? null, assignees };
 }
 
 /** Mapeia um Partial<Issue> (objetos ricos) para o patch da API (ids). */
@@ -589,19 +610,47 @@ export const useIssuesStore = create<IssuesState>((set, get) => ({
    updateIssueStatus: (issueId, newStatus) => get().updateIssue(issueId, { status: newStatus }),
    updateIssuePriority: (issueId, newPriority) =>
       get().updateIssue(issueId, { priority: newPriority }),
-   // Espelha a regra do servidor no otimista: novo principal + colaboradores atuais (sem o
-   // principal anterior); sem novo principal, o 1º colaborador é promovido.
-   updateIssueAssignee: (issueId, newAssignee) => {
-      const current = get().getIssueById(issueId);
-      const collaborators = (current?.assignees ?? []).filter(
-         (a) => a.id !== current?.assignee?.id && a.id !== newAssignee?.id
-      );
-      const assignees = newAssignee ? [newAssignee, ...collaborators] : collaborators;
-      return get().updateIssue(issueId, { assignee: assignees[0] ?? null, assignees });
-   },
+   updateIssueAssignee: (issueId, newAssignee) =>
+      get().updateIssue(issueId, principalAssigneePatch(get().getIssueById(issueId), newAssignee)),
    updateIssueAssignees: (issueId, assignees) => {
       const unique = assignees.filter((a, i, arr) => arr.findIndex((b) => b.id === a.id) === i);
       return get().updateIssue(issueId, { assignee: unique[0] ?? null, assignees: unique });
+   },
+
+   bulkUpdate: (ids, patchFor) => {
+      const entries = ids.map((id) => {
+         const prev = get().getIssueById(id);
+         const updated = withSelfOnStart(prev, patchFor(prev));
+         const keys = Object.keys(updated) as (keyof Issue)[];
+         return { id, prev, updated, keys, done: beginMutation(id) };
+      });
+      const byId = new Map(entries.map((e) => [e.id, e.updated]));
+      set((state) => ({
+         issues: state.issues.map((issue) => {
+            const updated = byId.get(issue.id);
+            return updated ? { ...issue, ...updated } : issue;
+         }),
+      }));
+      return api.issues
+         .bulkUpdate(entries.map((e) => ({ id: e.id, patch: toUpdateInput(e.updated) })))
+         .catch((e) => {
+            for (const x of entries) {
+               x.done();
+               const prev = x.prev;
+               if (prev) set((state) => revertFields(state, x.id, prev, x.updated, x.keys));
+            }
+            toast.error(errorReason(e, 'Falha ao atualizar as issues'), {
+               id: ISSUE_MUTATION_TOAST,
+            });
+            throw e;
+         })
+         .then(({ issues }) => {
+            const dtos = new Map(issues.map((dto) => [dto.id, dto]));
+            for (const x of entries) {
+               const dto = dtos.get(x.id);
+               if (x.done() && dto) get().applyDto(dto);
+            }
+         });
    },
 
    addIssueLabel: (issueId, label) => {

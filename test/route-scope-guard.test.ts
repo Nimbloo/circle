@@ -145,13 +145,36 @@ function importedServices(src: string): { symbols: string[]; body: string }[] {
    return out;
 }
 
-/** Corpo da função `name` dentro do serviço (até o próximo `export` de topo). */
-function functionBody(src: string, name: string): string | null {
-   const start = src.search(new RegExp(`export\\s+(?:async\\s+)?function\\s+${name}\\s*[(<]`, 'm'));
+/**
+ * Corpo da função `name` dentro do serviço, até a próxima declaração de topo (exportada
+ * ou não) — senão o corpo "herdava" o gate da função local declarada logo abaixo.
+ */
+function functionBody(src: string, name: string, exported = true): string | null {
+   const prefix = exported ? 'export\\s+' : '^';
+   const start = src.search(new RegExp(`${prefix}(?:async\\s+)?function\\s+${name}\\s*[(<]`, 'm'));
    if (start < 0) return null;
    const rest = src.slice(start + 1);
-   const end = rest.search(/\nexport\s/);
+   const end = rest.search(/\n(?:export\s|(?:async\s+)?function\s|const\s|type\s|interface\s)/);
    return end < 0 ? rest : rest.slice(0, end);
+}
+
+const hasGate = (body: string) =>
+   SCOPE_GATE.test(body) || ROLE_GATE.test(body) || OWNER_GATE.test(body);
+
+/**
+ * O serviço faz o gate por dentro: no próprio corpo ou numa função LOCAL (não exportada)
+ * do mesmo módulo que ele chama — um nível, ex. a fase transacional do update de issue.
+ */
+function serviceIsGated(src: string, sym: string): boolean {
+   const body = functionBody(src, sym);
+   if (!body) return false;
+   const clean = stripComments(body);
+   if (hasGate(clean)) return true;
+   for (const m of clean.matchAll(/\b([A-Za-z_]\w*)\s*\(/g)) {
+      const local = functionBody(src, m[1], false);
+      if (local && hasGate(stripComments(local))) return true;
+   }
+   return false;
 }
 
 /** O handler chama algum serviço que faz o gate por dentro? */
@@ -159,10 +182,7 @@ function callsGatedService(handlerBody: string, services: ReturnType<typeof impo
    for (const svc of services) {
       for (const sym of svc.symbols) {
          if (!new RegExp(`\\b${sym}\\s*\\(`).test(handlerBody)) continue;
-         const body = functionBody(svc.body, sym);
-         if (!body) continue;
-         const clean = stripComments(body);
-         if (SCOPE_GATE.test(clean) || ROLE_GATE.test(clean) || OWNER_GATE.test(clean)) return true;
+         if (serviceIsGated(svc.body, sym)) return true;
       }
    }
    return false;
