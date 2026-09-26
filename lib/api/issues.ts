@@ -1003,22 +1003,45 @@ export async function bulkUpdateIssues(
    const actor = await getOrCreateUser(db, actorEmail);
    const ordered = [...updates].sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
    const applied = await db.transaction(async (tx) => {
+      const txDb = tx as unknown as Db;
+      // O escopo do ator é o mesmo para o lote inteiro: resolve uma vez, não por issue.
+      const teamIds = await visibleTeamIds(txDb, actor);
       const out: AppliedIssueUpdate[] = [];
       for (const { id, patch } of ordered) {
-         const r = await applyIssueUpdate(tx as unknown as Db, id, patch, actor);
+         const r = await applyIssueUpdate(txDb, id, patch, actor, teamIds);
          if (!r) throw new ApiError(404, `Issue '${id}' não encontrada`);
          out.push(r);
       }
       return out;
    });
-   // Em sequência de propósito: em paralelo, duas irmãs concluídas juntas veriam o pai
-   // "com todas as filhas prontas" ao mesmo tempo e o auto-close o fecharia duas vezes.
-   const dtos: IssueDto[] = [];
-   for (let i = 0; i < ordered.length; i++) {
-      const { id, patch } = ordered[i];
-      const dto = await afterIssueUpdate(db, id, patch, actor, actorEmail, applied[i]);
-      if (dto) dtos.push(dto);
-   }
+
+   // A resposta sai logo depois do commit, com os DTOs numa leitura só. Esperar os efeitos
+   // de até 250 issues podia estourar o timeout do gateway, e o cliente desfaria na tela
+   // um lote que o servidor já gravou.
+   const rows = await db
+      .select()
+      .from(issue)
+      .where(
+         inArray(
+            issue.id,
+            ordered.map((u) => u.id)
+         )
+      );
+   const dtos = await assemble(db, rows, await loadCatalogs(db));
+
+   // Efeitos (tempo real, notificações, automações) em segundo plano e em sequência de
+   // propósito: em paralelo, duas irmãs concluídas juntas veriam o pai "com todas as
+   // filhas prontas" ao mesmo tempo e o auto-close o fecharia duas vezes.
+   void (async () => {
+      for (let i = 0; i < ordered.length; i++) {
+         const { id, patch } = ordered[i];
+         try {
+            await afterIssueUpdate(db, id, patch, actor, actorEmail, applied[i]);
+         } catch (e) {
+            console.warn(`[circle] efeitos do lote na issue ${id} falharam:`, (e as Error).message);
+         }
+      }
+   })();
    return dtos;
 }
 
@@ -1027,7 +1050,9 @@ async function applyIssueUpdate(
    tx: Db,
    id: string,
    patch: UpdateIssueInput,
-   actor: Actor
+   actor: Actor,
+   /** Times visíveis do ator (`null` = todos), quando o chamador (lote) já resolveu. */
+   teamIds?: string[] | null
 ): Promise<AppliedIssueUpdate | null> {
    let nextAssigneeIds: string[] | null = null;
    let prevAssigneeIds: string[] = [];
@@ -1050,7 +1075,10 @@ async function applyIssueUpdate(
 
    // Escopo de escrita: a issue de ORIGEM e os alvos do movimento (projeto e pai) têm
    // que estar no escopo — mover para dentro/fora do próprio time é a escalação clássica.
-   const scope: ActorScope = { user: actor, teamIds: await visibleTeamIds(tx, actor) };
+   const scope: ActorScope = {
+      user: actor,
+      teamIds: teamIds !== undefined ? teamIds : await visibleTeamIds(tx, actor),
+   };
    assertTeamInScope(scope.teamIds, prev.teamId);
    if (patch.projectId) {
       await assertCanWriteProject(tx, scope, patch.projectId);

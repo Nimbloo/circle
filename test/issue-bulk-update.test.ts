@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import { makeTestDb } from './helpers/db';
 import { seedTeam, seedUser } from './helpers/fixtures';
 import type { Db } from '@/db';
-import { activityEvent, issue } from '@/db/schema';
+import { activityEvent, issue, notification } from '@/db/schema';
 import { bulkUpdateIssues, createIssue } from '@/lib/api/issues';
 
 /**
@@ -53,6 +53,18 @@ describe('bulkUpdateIssues (#30)', () => {
          .from(activityEvent)
          .where(and(eq(activityEvent.issueId, a.id), eq(activityEvent.event, 'status')));
       expect(events).toHaveLength(1);
+   });
+
+   it('efeitos por issue (notificação de atribuição) saem depois da resposta', async () => {
+      const a = await createIssue(db, { ...base, teamId: 'CORE' }, ADMIN);
+      await bulkUpdateIssues(db, [{ id: a.id, patch: { assigneeIds: [bob] } }], ADMIN);
+      await vi.waitFor(async () => {
+         const rows = await db
+            .select()
+            .from(notification)
+            .where(and(eq(notification.issueId, a.id), eq(notification.recipientId, bob)));
+         expect(rows).toHaveLength(1);
+      });
    });
 
    it('uma issue inexistente no lote desfaz todas (404)', async () => {
