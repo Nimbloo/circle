@@ -54,8 +54,11 @@ export default async function RootLayout({
                 O next-themes já faz isso para a classe claro/escuro; a camada de
                 variante do Circle não tinha equivalente e entrava só no `useEffect`,
                 depois da hidratação — daí o flash com o tema anterior. */}
+            {/* O navegador esconde o valor do `nonce` depois de carregar (""), e o React
+                acusaria diferença na hidratação. */}
             <script
                nonce={nonce}
+               suppressHydrationWarning
                dangerouslySetInnerHTML={{ __html: `(${applyStoredTheme.toString()})();` }}
             />
          </head>
