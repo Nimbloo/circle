@@ -1561,12 +1561,14 @@ async function applyAutoClose(
          createdAt: now,
       });
       if (opts.silent) return;
+      // Mesmo na aba de origem, a resposta do lote não trouxe este fechamento.
       publish({
          entity: 'issue',
          action: 'updated',
          id: target.id,
          actorEmail,
          teamId: target.teamId,
+         scope: 'automation',
       });
       publishRollups(target.teamId, [target.projectId], [target.cycleId], actorEmail);
    };

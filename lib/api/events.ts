@@ -103,8 +103,10 @@ export interface CircleEvent {
    /**
     * `content`: só o conteúdo (descrição) mudou — nada do DTO da lista (#18). O cliente
     * recarrega só o detalhe aberto, sem GET da issue em todos os clientes.
+    * `automation`: a mudança veio de uma automação (auto-close), não da resposta que a
+    * aba de origem recebeu — nem ela pode tratar o evento como eco já aplicado.
     */
-   scope?: 'content';
+   scope?: 'content' | 'automation';
    /**
     * Subtipo do `catalog` (#53). Ausente = dado que vive no bootstrap (status): o cliente
     * re-hidrata o workspace. Com kind, só quem exibe aquele dado recarrega.
