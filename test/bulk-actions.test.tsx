@@ -15,10 +15,17 @@ import { seedCatalog, status } from './helpers/catalog-fixture';
 import { useBulkSelectionStore } from '@/store/bulk-selection-store';
 import { useIssuesStore } from '@/store/issues-store';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { BULK_UPDATE_MAX } from '@/lib/issue-bulk';
 
-const apiMocks = vi.hoisted(() => ({ update: vi.fn(), remove: vi.fn() }));
+const apiMocks = vi.hoisted(() => ({ update: vi.fn(), bulkUpdate: vi.fn(), remove: vi.fn() }));
 vi.mock('@/lib/client', () => ({
-   api: { issues: { update: apiMocks.update, remove: apiMocks.remove } },
+   api: {
+      issues: {
+         update: apiMocks.update,
+         bulkUpdate: apiMocks.bulkUpdate,
+         remove: apiMocks.remove,
+      },
+   },
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('next/navigation', () => ({
@@ -81,33 +88,67 @@ beforeEach(() => {
 });
 
 describe('#30 ações em lote', () => {
-   it('sucesso: um toast só e o popover fecha', async () => {
-      apiMocks.update.mockResolvedValue({});
+   it('sucesso: uma requisição só, um toast e o popover fecha', async () => {
+      apiMocks.bulkUpdate.mockResolvedValue({ issues: [] });
       const u = userEvent.setup();
       render(<BulkActionsBar />);
       await u.click(screen.getByRole('button', { name: /Priority/ }));
       await u.click(await screen.findByRole('option', { name: /Urgent/ }));
       await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
-      expect(apiMocks.update).toHaveBeenCalledTimes(2);
+      expect(apiMocks.update).not.toHaveBeenCalled();
+      expect(apiMocks.bulkUpdate).toHaveBeenCalledTimes(1);
+      const urgent = priorities.find((p) => p.name === 'Urgent')!.id;
+      expect(apiMocks.bulkUpdate.mock.lastCall?.[0]).toEqual([
+         { id: 'a', patch: { priorityId: urgent } },
+         { id: 'b', patch: { priorityId: urgent } },
+      ]);
       expect(screen.queryByPlaceholderText('Set priority...')).toBeNull();
    });
 
-   it('falha parcial: um toast de erro agregado, nenhum de sucesso', async () => {
-      apiMocks.update.mockImplementation(async (id: string) => {
-         if (id === 'b') throw new Error('x');
-         return {};
-      });
+   it('falha: todas voltam ao valor anterior, um toast de erro e nenhum de sucesso', async () => {
+      apiMocks.bulkUpdate.mockRejectedValue(new Error('x'));
+      const before = useIssuesStore.getState().issues.map((i) => i.priority.id);
       const u = userEvent.setup();
       render(<BulkActionsBar />);
       await u.click(screen.getByRole('button', { name: /Priority/ }));
       await u.click(await screen.findByRole('option', { name: /Urgent/ }));
-      await waitFor(() => expect(toast.error).toHaveBeenCalled());
+      await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
       expect(toast.success).not.toHaveBeenCalled();
-      const ids = new Set(
-         vi.mocked(toast.error).mock.calls.map((c) => (c[1] as { id?: string })?.id)
-      );
-      expect(ids.size).toBe(1);
-      expect(vi.mocked(toast.error).mock.lastCall?.[0]).toContain('1 de 2');
+      expect(useIssuesStore.getState().issues.map((i) => i.priority.id)).toEqual(before);
+   });
+
+   it('responsável em lote mantém os colaboradores de cada issue', async () => {
+      apiMocks.bulkUpdate.mockResolvedValue({ issues: [] });
+      const ana = user('u1', 'Ana');
+      const rui = user('u4', 'Rui');
+      const lia = user('u3', 'Lia');
+      useIssuesStore.setState({
+         issues: [{ ...make('a'), assignee: rui, assignees: [rui, lia] }, make('b')],
+      });
+      const u = userEvent.setup();
+      render(<BulkActionsBar />);
+      await u.click(screen.getByRole('button', { name: /Assignee/ }));
+      await u.click(await screen.findByRole('option', { name: /Ana/ }));
+      await waitFor(() => expect(apiMocks.bulkUpdate).toHaveBeenCalledTimes(1));
+      expect(apiMocks.bulkUpdate.mock.lastCall?.[0]).toEqual([
+         { id: 'a', patch: { assigneeIds: [ana.id, lia.id] } },
+         { id: 'b', patch: { assigneeIds: [ana.id] } },
+      ]);
+   });
+
+   it('acima do teto do lote: avisa e não chama a API nem muda nada', async () => {
+      const many = Array.from({ length: BULK_UPDATE_MAX + 1 }, (_, i) => make(`i${i}`));
+      useIssuesStore.setState({ issues: many });
+      useBulkSelectionStore.getState().set(many.map((i) => i.id));
+      const u = userEvent.setup();
+      render(<BulkActionsBar />);
+      await u.click(screen.getByRole('button', { name: /Priority/ }));
+      await u.click(await screen.findByRole('option', { name: /Urgent/ }));
+      expect(apiMocks.bulkUpdate).not.toHaveBeenCalled();
+      expect(vi.mocked(toast.error).mock.lastCall?.[0]).toContain(`até ${BULK_UPDATE_MAX}`);
+      expect(
+         useIssuesStore.getState().issues.every((i) => i.priority.id === priorities[0].id)
+      ).toBe(true);
    });
 
    it('membros desativados não aparecem no seletor de responsável', async () => {
